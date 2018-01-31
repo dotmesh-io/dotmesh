@@ -1,0 +1,16 @@
+{
+  "name": "templateapp-api",
+  "private": true,
+  "version": "1.0.0",
+  "description": "api",
+  "main": "index.js",
+  "scripts": {
+    "test": "tape test/**/*.test.js"
+  },
+  "dependencies": {
+   
+  },
+  "devDependencies": {
+    "tape": "^4.6.3"
+  }
+}

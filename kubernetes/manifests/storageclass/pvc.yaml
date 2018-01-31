@@ -1,0 +1,14 @@
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: admin-grapes-pvc
+  annotations:
+    # Also available: datameshNamespace (defaults to the one from the storage class)
+    datameshVolume: dynamic-grapes
+spec:
+  storageClassName: datamesh
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

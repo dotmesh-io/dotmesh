@@ -1,0 +1,117 @@
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: dotmesh
+  #annotations:
+  #  dotmesh.io/key: value
+  labels:
+    name: dotmesh
+  namespace: dotmesh
+spec:
+  template:
+    metadata:
+      labels:
+        name: dotmesh
+    spec:
+      initContainers:
+        - name: modprobe-zfs
+          image: busybox
+          command: ['modprobe', 'zfs']
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: system-lib
+              mountPath: /lib
+      containers:
+        - name: dotmesh-outer
+          command:
+            - /require_zfs.sh
+            - dotmesh-server
+          ports:
+          - containerPort: 6969
+            hostPort: 6969
+          env:
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+            - name: DOTMESH_ETCD_ENDPOINT
+              # etcd deployed by etcd operator.
+              value: "http://dotmesh-etcd-cluster-client.dotmesh.svc.cluster.local:2379"
+            - name: DOTMESH_DOCKER_IMAGE
+              value: "${GCLOUD_SERVER_IMAGE}"
+            - name: PATH
+              value: "/bundled-lib/sbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            - name: LD_LIBRARY_PATH
+              value: "/bundled-lib/lib:/bundled-lib/usr/lib/"
+            # XXX some duplication here wrt dotmesh/cmd/dm/pkg/commands/cluster.go
+            - name: INITIAL_ADMIN_PASSWORD_FILE
+              value: /secret/dotmesh-admin-password.txt
+            - name: INITIAL_ADMIN_API_KEY_FILE
+              value: /secret/dotmesh-admin-api-key.txt
+            - name: USE_POOL_NAME
+              value: pool
+            - name: USE_POOL_DIR
+              value: /var/lib/dotmesh
+            - name: LOG_ADDR
+              value: "" # LOG_ADDR
+          image: "${GCLOUD_SERVER_IMAGE}"
+          imagePullPolicy: Always
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: 6969
+            initialDelaySeconds: 30
+          resources:
+            requests:
+              cpu: 10m
+          securityContext:
+            privileged: true
+          volumeMounts:
+          #  - name: foo
+          #    mountPath: /bar
+            - name: docker-sock
+              mountPath: /var/run/docker.sock
+            - name: run-docker
+              mountPath: /run/docker
+            - name: var-lib-docker
+              mountPath: /var/lib/docker
+            - name: system-lib
+              mountPath: /system-lib/lib
+            - name: dotmesh-kernel-modules
+              mountPath: /bundled-lib
+            - name: dotmesh-secret
+              mountPath: /secret
+      nodeSelector:
+        dotmesh-enabled: "true"
+      #hostNetwork: true
+      #hostPID: true
+      restartPolicy: Always
+      securityContext:
+        seLinuxOptions: {}
+      #serviceAccountName: dotmesh
+      tolerations:
+        - effect: NoSchedule
+          operator: Exists
+      volumes:
+        - name: docker-sock
+          hostPath:
+            path: /var/run/docker.sock
+        - name: run-docker
+          hostPath:
+            path: /run/docker
+        - name: var-lib-docker
+          hostPath:
+            path: /var/lib/docker
+        - name: system-lib
+          hostPath:
+            path: /lib
+        - name: dotmesh-kernel-modules
+          emptyDir: {}
+        - name: dotmesh-secret
+          secret:
+            secretName: dotmesh
+  updateStrategy:
+    type: RollingUpdate
+  

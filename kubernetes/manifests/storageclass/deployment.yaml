@@ -1,0 +1,21 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: grape-deployment
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: grape-server
+    spec:
+      volumes:
+      - name: grape-storage
+        persistentVolumeClaim:
+         claimName: admin-grapes-pvc
+      containers:
+      - name: grape-server
+        image: nginx:1.12.1
+        volumeMounts:
+        - mountPath: "/usr/share/nginx/html"
+          name: grape-storage

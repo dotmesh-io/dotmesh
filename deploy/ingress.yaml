@@ -1,0 +1,85 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: ingress
+  namespace: dotmesh
+  annotations:
+    kubernetes.io/tls-acme: "true"
+    kubernetes.io/ingress.class: "nginx"
+spec:
+  tls:
+  - hosts:
+    - saas.dotmesh.io
+    - dothub.com
+    - www.dothub.com
+    secretName: dotmesh-ingress
+  rules:
+  - host: saas.dotmesh.io
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: frontend
+          servicePort: 80
+      - path: /api/v1
+        backend:
+          serviceName: billing
+          servicePort: 80
+      - path: /filesystems
+        backend:
+          serviceName: dotmesh
+          servicePort: 6969      
+      - path: /status
+        backend:
+          serviceName: dotmesh
+          servicePort: 6969
+      - path: /rpc
+        backend:
+          serviceName: dotmesh
+          servicePort: 6969
+  - host: dothub.com
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: frontend
+          servicePort: 80
+      - path: /api/v1
+        backend:
+          serviceName: billing
+          servicePort: 80
+      - path: /filesystems
+        backend:
+          serviceName: dotmesh
+          servicePort: 6969
+      - path: /status
+        backend:
+          serviceName: dotmesh
+          servicePort: 6969
+      - path: /rpc
+        backend:
+          serviceName: dotmesh
+          servicePort: 6969
+  - host: www.dothub.com
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: frontend
+          servicePort: 80
+      - path: /api/v1
+        backend:
+          serviceName: billing
+          servicePort: 80
+      - path: /filesystems
+        backend:
+          serviceName: dotmesh
+          servicePort: 6969
+      - path: /status
+        backend:
+          serviceName: dotmesh
+          servicePort: 6969
+      - path: /rpc
+        backend:
+          serviceName: dotmesh
+          servicePort: 6969

@@ -1,0 +1,41 @@
+---
+apiVersion: v1
+kind: List
+items:
+  - apiVersion: apps/v1beta1 # for versions <1.8.0; use apps/v1beta2 for versions >=1.8.0
+    kind: Deployment
+    metadata:
+      name: datamesh-dynamic-provisioner
+      namespace: datamesh
+      labels:
+        app: datamesh-dynamic-provisioner
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: datamesh-dynamic-provisioner
+      template:
+        metadata:
+          labels:
+            app: datamesh-dynamic-provisioner
+        spec:
+          containers:
+          - name: datamesh-dynamic-provisioner
+            image: 'quay.io/datamesh/datamesh-dynamic-provisioner:latest'
+            imagePullPolicy: "IfNotPresent"
+            env:
+            - name: DATAMESH_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: datamesh
+                  key: datamesh-admin-password.txt
+  - apiVersion: storage.k8s.io/v1
+    kind: StorageClass
+    metadata:
+      name: datamesh
+    provisioner: datamesh/datamesh-dynamic-provisioner
+    parameters:
+      # Sensible defaults
+      #datameshNode: "datamesh"
+      datameshUser: "admin"
+      datameshNamespace: "admin"

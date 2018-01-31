@@ -1,0 +1,17 @@
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: admin-apples
+  labels:
+    apples: tree
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  flexVolume:
+    driver: datamesh.io/dm
+    options:
+      namespace: admin
+      name: apples

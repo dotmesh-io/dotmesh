@@ -1,0 +1,35 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: communications
+  namespace: dotmesh
+spec:
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: communications
+    spec:
+      containers:
+        - name: communications
+          image: ${GCLOUD_COMMUNICATIONS_IMAGE}
+          ports:
+            - containerPort: 80
+          env:
+            - name: MAILGUN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: dotmesh-credentials
+                  key: MAILGUN_API_KEY
+            - name: MAILGUN_DOMAIN
+              valueFrom:
+                secretKeyRef:
+                  name: dotmesh-credentials
+                  key: MAILGUN_DOMAIN
+            - name: NODE_ENV
+              value: production
+            - name: ACTIVATED
+              value: "1"

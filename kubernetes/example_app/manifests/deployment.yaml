@@ -1,0 +1,22 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  namespace: ${NAMESPACE}
+  name: test-deployment
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: test-server
+    spec:
+      volumes:
+      - name: test-storage
+        persistentVolumeClaim:
+         claimName: test-pvc
+      containers:
+      - name: test-server
+        image: ${FULLIMAGE}
+        volumeMounts:
+        - mountPath: "/data"
+          name: test-storage

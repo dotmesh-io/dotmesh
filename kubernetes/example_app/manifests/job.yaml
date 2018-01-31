@@ -1,0 +1,20 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  namespace: ${NAMESPACE}
+  name: test-job
+spec:
+  template:
+    metadata:
+      name: test-job
+    spec:
+      volumes:
+      - name: test-storage
+        persistentVolumeClaim:
+         claimName: test-pvc
+      containers:
+      - name: test-runner
+        image: ${FULLIMAGE}
+        volumeMounts:
+        - mountPath: "/data"
+          name: test-storage

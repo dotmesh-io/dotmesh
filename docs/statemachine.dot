@@ -1,0 +1,77 @@
+digraph {
+	 label="Dotmesh state transitions";
+	 rankdir=LR;
+
+	 node[shape=record;];
+	 handoff[label="{<in>handoff|{<error>error|<hc>Handoff complete}}";];
+	 handoff:error -> backoff[color=red;];
+	 handoff:hc -> inactive:in[label="Handoff complete";];
+
+	 active[label="{<in>active|{<error>error|<transfer>GOT transfer|<peertransfer>GOT peer-transfer|<move>GOT move|<snapshot>GOT snapshot|<rollback>GOT rollback|<clone>GOT clone|<unmount>GOT unmount}}";];
+	 active:error -> backoff[color=red;];
+	 active:transfer -> pushInitiatorState:in[label="GOT transfer";color=blue;];
+	 active:transfer -> pullInitiatorState:in[label="GOT transfer";color=blue;];
+	 active:peertransfer -> pullPeerState[label="GOT peer-transfer";color=blue;];
+	 active:peertransfer -> pushPeerState:in[label="GOT peer-transfer";color=blue;];
+	 active:move -> handoff:in[label="GOT move";color=blue;];
+	 active:snapshot -> active:in[label="GOT snapshot";color=blue;]
+	 active:rollback -> active:in[label="GOT rollback";color=blue;];
+	 active:clone -> active:in[label="GOT clone";color=blue;];
+	 active:unmount -> inactive:in[label="GOT unmount";color=blue;];
+
+	 inactive[label="{<in>inactive|{<error>error|<mount>GOT mount|<ar>attemptReceive()}}";];
+	 inactive:error -> backoff[color=red;];
+	 inactive:mount -> active:in[label="GOT mount";color=blue;];
+	 inactive:ar -> receiving:in[label="attemptReceive()";];
+
+	 backoff -> discovering:in[label="1s sleep";];
+
+	 discovering[label="{<in>discovering|{<error>error|<m>doesn't exist|<a>mounted|<i>not mounted}}";];
+	 discovering:error -> backoff[color=red;];
+	 discovering:m -> missing[label="doesn't exist";];
+	 discovering:a -> active:in[label="mounted";];
+	 discovering:i -> inactive:in[label="not mounted";];
+
+	 receiving[label="{<in>receiving|{<error>error|<psre>plausibleSnapRange errors|<done>receive done}}";];
+	 receiving:error -> backoff[color=red;];
+	 receiving:psre -> discovering:in[color=red; label="plausibleSnapRange errors";];
+	 receiving:done -> discovering:in[label="receive done";];
+
+	 pushInitiatorState[label="{<in>pushInitiatorState|{<error>error|<ps>push succeeds}}";];
+	 pushInitiatorState:error -> backoff[color=red;];
+	 pushInitiatorState:ps -> discovering:in[label="push succeeds";];
+
+#		  pull; is mentioned in transitionTo, but does not exist.
+
+	 pushPeerState[label="{<in>pushPeerState|{<error>error|<done>done}}";];
+	 pushPeerState:error -> backoff[color=red;];
+	 pushPeerState:done -> active:in[label="done";];
+
+	 pullInitiatorState[label="{<in>pullInitiatorState|{<error>error|<ps>pull succeeds}}";];
+	 pullInitiatorState:error -> backoff[color=red;];
+	 pullInitiatorState:ps -> discovering:in[label="finished-pull";];
+
+	 pullPeerState -> discovering:in;
+
+	 missing[label="{<in>missing|{<error>error|<ar>attemptReceive()|<nsom>&lt;-newSnapsOnMaster|<transfer>GOT transfer|<peertransfer>GOT peer-transfer|<create>GOT create}}";];
+	 missing:error -> backoff[color=red;];
+	 missing:ar -> receiving:in[label="attemptReceive()";];
+	 missing:nsom -> receiving:in[label="newSnapsOnMaster";];
+	 missing:transfer -> pullInitiatorState:in[label="GOT transfer";color=blue;];
+	 missing:peertransfer -> pushPeerState:in[label="GOT peer-transfer";color=blue;];
+	 missing:create -> active:in[label="GOT create"];
+
+#	 { rank=same; active, inactive, missing, discovering }
+
+#	 subgraph cluster_0 {
+#		  label="Active";
+#
+#		  active;
+#		  pullInitiatorState;
+#		  pullPeerState;
+#		  pushInitiatorState;
+#		  pushPeerState;
+#
+#	 }
+	 nil [shape=box; label=""; ];
+}

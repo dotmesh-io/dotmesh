@@ -1,0 +1,44 @@
+#!/bin/sh
+
+COMMAND=bash
+
+case $# in
+	 0)
+		  CLUSTER=0
+		  NODE=0
+		  ;;
+	 1)
+		  CLUSTER=$1
+		  NODE=0
+		  ;;
+	 2)
+		  CLUSTER=$1
+		  NODE=$2
+		  ;;
+	 *)
+		  CLUSTER=$1
+		  NODE=$2
+		  shift # Remote cluster/node args from "$@"
+		  shift
+		  COMMAND=args
+		  ;;
+esac
+
+# Find all the cluster container names, remove the cluster- prefix,
+# sort them, put the cluster- prefix back on, and take the last (which
+# is the most recently created one)
+CONTAINER=`docker ps --format '{{.Names}}' | egrep "^cluster-[0-9]+-$CLUSTER-node-$NODE\$" | sed s/^cluster-// | sort -n | sed s/^/cluster-/ | tail -1`
+
+if [ -z $CONTAINER ]
+then
+	 echo "No container for that node could be found... Here's what we've got:"
+	 docker ps --format '{{.Names}}' | egrep "^cluster-"
+	 exit 1
+fi
+
+if [ $COMMAND = bash ]
+then
+	 docker exec -ti $CONTAINER bash
+else
+	 docker exec -ti $CONTAINER "$@"
+fi

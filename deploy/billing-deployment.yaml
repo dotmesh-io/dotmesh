@@ -1,0 +1,60 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: billing
+  namespace: dotmesh
+spec:
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: billing
+    spec:
+      containers:
+        - name: billing
+          image: ${GCLOUD_BILLING_IMAGE}
+          ports:
+            - containerPort: 80
+          env:
+            - name: STRIPE_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: dotmesh-credentials
+                  key: STRIPE_PUBLIC_KEY
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: dotmesh-credentials
+                  key: STRIPE_SECRET_KEY
+            - name: STRIPE_SIGNATURE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: dotmesh-credentials
+                  key: STRIPE_SIGNATURE_SECRET
+            - name: SEGMENT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: dotmesh-credentials
+                  key: SEGMENT_API_KEY
+            - name: DOTMESH_SERVER_HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: DOTMESH_SERVER_PORT
+              value: "6969"
+            - name: DOTMESH_SERVER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: dotmesh
+                  key: dotmesh-admin-api-key.txt
+            - name: COMMUNICATIONS_SERVER_HOSTNAME
+              value: communications.dotmesh.svc.cluster.local
+            - name: COMMUNICATIONS_ACTIVE
+              value: "1"
+            - name: CORS_DOMAINS
+              value: https://saas.dotmesh.io
+            - name: NODE_ENV
+              value: production

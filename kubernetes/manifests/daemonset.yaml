@@ -1,0 +1,139 @@
+---
+apiVersion: v1
+kind: List
+items:
+  - apiVersion: "etcd.database.coreos.com/v1beta2"
+    kind: "EtcdCluster"
+    metadata:
+      name: "dotmesh-etcd-cluster"
+      namespace: ${NAMESPACE}
+    spec:
+      size: 3
+      version: "3.1.8"
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: dotmesh
+      namespace: dotmesh
+    spec:
+      type: ClusterIP
+      ports:
+      - port: 6969
+        protocol: TCP
+      selector:
+        name: dotmesh
+  - apiVersion: extensions/v1beta1
+    kind: DaemonSet
+    metadata:
+      name: dotmesh
+      #annotations:
+      #  dotmesh.io/key: value
+      labels:
+        name: dotmesh
+      namespace: dotmesh
+    spec:
+      template:
+        metadata:
+          labels:
+            name: dotmesh
+        spec:
+          initContainers:
+            - name: modprobe-zfs
+              image: busybox
+              command: ['modprobe', 'zfs']
+              securityContext:
+                privileged: true
+              volumeMounts:
+                - name: system-lib
+                  mountPath: /lib
+          containers:
+            - name: dotmesh-outer
+              command:
+                - /require_zfs.sh
+                - dotmesh-server
+              ports:
+              - containerPort: 6969
+                hostPort: 6969
+              env:
+                - name: HOSTNAME
+                  valueFrom:
+                    fieldRef:
+                      apiVersion: v1
+                      fieldPath: spec.nodeName
+                - name: DOTMESH_ETCD_ENDPOINT
+                  # etcd deployed by etcd operator.
+                  value: "http://dotmesh-etcd-cluster-client.dotmesh.svc.cluster.local:2379"
+                - name: DATAMESH_DOCKER_IMAGE
+                  value: "binocarlos/k8s-datamesh:v2"
+                - name: PATH
+                  value: "/bundled-lib/sbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+                - name: LD_LIBRARY_PATH
+                  value: "/bundled-lib/lib:/bundled-lib/usr/lib/"
+                - name: ALLOW_PUBLIC_REGISTRATION
+                  value: "1"
+                # XXX some duplication here wrt datamesh/cmd/dm/pkg/commands/cluster.go
+                - name: INITIAL_ADMIN_PASSWORD_FILE
+                  value: /secret/datamesh-admin-password.txt
+                - name: USE_POOL_NAME
+                  value: pool
+                - name: USE_POOL_DIR
+                  value: /var/lib/docker/datamesh
+                - name: LOG_ADDR
+                  value: "" # LOG_ADDR
+              image: 'binocarlos/k8s-datamesh:v2'
+              imagePullPolicy: Always
+              livenessProbe:
+                httpGet:
+                  path: /status
+                  port: 6969
+                initialDelaySeconds: 30
+              resources:
+                requests:
+                  cpu: 10m
+              securityContext:
+                privileged: true
+              volumeMounts:
+              #  - name: foo
+              #    mountPath: /bar
+                - name: docker-sock
+                  mountPath: /var/run/docker.sock
+                - name: run-docker
+                  mountPath: /run/docker
+                - name: var-lib-docker
+                  mountPath: /var/lib/docker
+                - name: system-lib
+                  mountPath: /system-lib/lib
+                - name: datamesh-kernel-modules
+                  mountPath: /bundled-lib
+                - name: datamesh-secret
+                  mountPath: /secret
+          #hostNetwork: true
+          #hostPID: true
+          restartPolicy: Always
+          securityContext:
+            seLinuxOptions: {}
+          #serviceAccountName: datamesh
+          tolerations:
+            - effect: NoSchedule
+              operator: Exists
+          volumes:
+            - name: docker-sock
+              hostPath:
+                path: /var/run/docker.sock
+            - name: run-docker
+              hostPath:
+                path: /run/docker
+            - name: var-lib-docker
+              hostPath:
+                path: /var/lib/docker
+            - name: system-lib
+              hostPath:
+                path: /lib
+            - name: datamesh-kernel-modules
+              emptyDir: {}
+            - name: datamesh-secret
+              secret:
+                secretName: datamesh
+      updateStrategy:
+        type: RollingUpdate
+  

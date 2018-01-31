@@ -1,0 +1,20 @@
+{
+	"ImportPath": "github.com/dotmesh-io/dotmesh/tests",
+	"GoVersion": "go1.7",
+	"GodepVersion": "v79",
+	"Packages": [
+		"./..."
+	],
+	"Deps": [
+		{
+			"ImportPath": "github.com/gorilla/rpc/v2",
+			"Comment": "v1.1.0",
+			"Rev": "22c016f3df3febe0c1f6727598b6389507e03a18"
+		},
+		{
+			"ImportPath": "github.com/gorilla/rpc/v2/json2",
+			"Comment": "v1.1.0",
+			"Rev": "22c016f3df3febe0c1f6727598b6389507e03a18"
+		}
+	]
+}

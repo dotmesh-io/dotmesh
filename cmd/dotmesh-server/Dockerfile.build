@@ -1,0 +1,17 @@
+# Build with:
+FROM ubuntu:artful
+ENV SECURITY_UPDATES 2018-01-19
+RUN apt-get -y update && apt-get -y install zfsutils-linux curl golang-1.7 iproute kmod
+RUN mkdir /target
+RUN mkdir /tmp/d && \
+    curl -o /tmp/d/docker.tgz \
+        https://download.docker.com/linux/static/edge/x86_64/docker-17.10.0-ce.tgz && \
+    cd /tmp/d && \
+    tar zxfv /tmp/d/docker.tgz && \
+    cp /tmp/d/docker/docker /target && \
+    chmod +x /target/docker && \
+    rm -rf /tmp/d
+# Offline after this stage
+ARG VERSION=local
+ENV VERSION ${VERSION}
+ADD . /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server

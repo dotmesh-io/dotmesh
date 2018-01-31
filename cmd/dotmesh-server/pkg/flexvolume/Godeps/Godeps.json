@@ -1,0 +1,15 @@
+{
+	"ImportPath": "github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/flexvolume",
+	"GoVersion": "go1.7",
+	"GodepVersion": "v79",
+	"Deps": [
+		{
+			"ImportPath": "github.com/gorilla/rpc/v2",
+			"Rev": "e592e2e099465ae27afa66ec089d570904cd2d53"
+		},
+		{
+			"ImportPath": "github.com/gorilla/rpc/v2/json2",
+			"Rev": "e592e2e099465ae27afa66ec089d570904cd2d53"
+		}
+	]
+}
