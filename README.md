@@ -38,7 +38,7 @@ dm version
 ```
 
 If the installation fails, please [report an issue](https://github.com/dotmesh-io/dotmesh).
-You can also experiment in our [online learning environment](https://docs.dotmesh.com/install-setup/katacoda/).
+You can also experiment in our [online learning environment](https://dotmesh.com/try-dotmesh/).
 Thanks!
 
 See [the installation docs](https://docs.dotmesh.com/install-setup/) for more details, including installing dotmesh on Kubernetes.
