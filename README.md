@@ -55,9 +55,9 @@ Alternatively, try the [hello Dotmesh on Docker](https://docs.dotmesh.com/tutori
 
 ## what is a datadot?
 
-A Datadot allows you to capture your application's state and treat it like a `git` repo.
+A **datadot** allows you to capture your application's state and treat it like a `git` repo.
 
-A simple example is to start a PostgreSQL container using a Datadot called `myapp`:
+A simple example is to start a PostgreSQL container using a datadot called `myapp`:
 
 ```bash
 docker run -d --volume-driver dm \
