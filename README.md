@@ -1,9 +1,11 @@
 # dotmesh: git for data
 
 Dotmesh is a **git-like CLI for capturing, organizing and sharing application states**.
+
 The application states that dotmesh captured are stored in **datadots**.
 
 In other words, it's a **snapshotting tool for databases** and other filesystem states.
+
 It can capture the state of multiple databases, each one in a [subdot](https://docs.dotmesh.com/concepts/what-is-a-datadot/#subdots), in a single atomic commit.
 
 ## installing on docker (Mac or Ubuntu 16.04+)
