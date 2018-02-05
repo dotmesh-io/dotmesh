@@ -1,6 +1,6 @@
 # dotmesh: git for data
 
-Dotmesh is a git-like CLI for capturing, organizing and sharing application states.
+Dotmesh is a **git-like CLI for capturing, organizing and sharing application states**.
 The application states that dotmesh captured are stored in **datadots**.
 
 In other words, it's a **snapshotting tool for databases** and other filesystem states.
