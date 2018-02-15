@@ -4,7 +4,7 @@ npm-error.log
 dist
 dotmesh_install_log.txt
 binaries
-yaml
+/yaml/
 .media
 *.sw*
 *.log
