@@ -117,7 +117,7 @@ func testSetup(f Federation, stamp int64) error {
 		return err
 	}
 
-	err = ioutil.WriteFile("./dind-cluster-v1.7.sh", []byte(DIND_SCRIPT), 0644)
+	err = ioutil.WriteFile("./dind-cluster-v1.7.sh", []byte(DIND_SCRIPT), 0755)
 	if err != nil {
 		return err
 	}
