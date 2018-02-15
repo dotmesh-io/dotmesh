@@ -1,0 +1,42 @@
+image: binocarlos/cibase:v6
+
+# NOTE - this assumes the runner is using the host docker and there is only one runner
+# (i.e. it expects images it built in one job to be there for the next job)
+
+# TODO - we should use some kind of registry to solve above and that this has to all be on the same runner
+
+variables:
+  DOCKER_API_VERSION: "1.23"
+  DOCKER_REGISTRY: gcr.io
+  GCP_PROJECT_ID: webkit-servers
+  GCP_ZONE: europe-west1-b
+  GCP_CLUSTER_ID: testdm
+  IMAGENAME: testdm
+  
+stages:
+  - build
+  - test
+
+build_app:
+  stage: build
+  before_script:
+    - bash scripts/ci_connect.sh
+    - export SHA_TAG=$(echo $CI_COMMIT_SHA | cut -c1-8)
+  script:  
+    - docker build -t $DOCKER_REGISTRY/$GCP_PROJECT_ID/$IMAGENAME:$SHA_TAG .
+    - gcloud docker -- push $DOCKER_REGISTRY/$GCP_PROJECT_ID/$IMAGENAME:$SHA_TAG
+
+test:
+  stage: test
+  before_script:
+    - bash scripts/ci_connect.sh
+    - export SHA_TAG=$(echo $CI_COMMIT_SHA | cut -c1-8)
+    - export NAMESPACE=dmtest$SHA_TAG
+    - export FULLIMAGE=$DOCKER_REGISTRY/$GCP_PROJECT_ID/$IMAGENAME:$SHA_TAG
+  script:
+    - kubectl create ns $NAMESPACE
+    - cat manifests/pvc.yaml | envsubst
+    - cat manifests/pvc.yaml | envsubst | kubectl apply -f -
+    - sleep 5
+    - cat manifests/deployment.yaml | envsubst
+    - cat manifests/deployment.yaml | envsubst | kubectl apply -f -

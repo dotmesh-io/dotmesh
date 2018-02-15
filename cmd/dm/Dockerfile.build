@@ -1,0 +1,11 @@
+# Build with:
+FROM ubuntu:artful
+ENV SECURITY_UPDATES 2018-01-25
+ARG VERSION=local
+ENV VERSION ${VERSION}
+RUN apt-get -y update && apt-get -y install curl golang-1.7 git
+ENV PATH=$PATH:/go/bin:/usr/lib/go-1.7/bin
+ENV GOPATH=/go
+RUN mkdir /target
+ADD . /go/src/github.com/dotmesh-io/dotmesh/cmd/dm
+WORKDIR /go/src/github.com/dotmesh-io/dotmesh/cmd/dm

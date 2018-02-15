@@ -1,0 +1,21 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: apple-deployment
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: apple-server
+    spec:
+      volumes:
+      - name: apple-storage
+        persistentVolumeClaim:
+         claimName: admin-apples-pvc
+      containers:
+      - name: apple-server
+        image: nginx:1.12.1
+        volumeMounts:
+        - mountPath: "/usr/share/nginx/html"
+          name: apple-storage

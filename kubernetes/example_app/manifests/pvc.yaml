@@ -1,0 +1,15 @@
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  namespace: ${NAMESPACE}
+  name: test-pvc
+  annotations:
+    # Also available: datameshNamespace (defaults to the one from the storage class)
+    datameshVolume: test-${NAMESPACE}
+spec:
+  storageClassName: datamesh
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

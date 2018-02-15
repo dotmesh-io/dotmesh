@@ -1,0 +1,50 @@
+---
+apiVersion: v1
+kind: List
+items:
+  - apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: datamesh
+      #annotations:
+      #  datamesh.io/key: value
+      labels:
+        name: datamesh
+      namespace: datamesh
+  - apiVersion: rbac.authorization.k8s.io/v1beta1
+    kind: ClusterRole
+    metadata:
+      name: datamesh
+      #annotations:
+      #  datamesh.io/key: value
+      labels:
+        name: datamesh
+    rules:
+      - apiGroups:
+          - ''
+        resources:
+          - pods
+          - namespaces
+          - nodes
+        verbs:
+          - get
+          - list
+          - watch
+  # TODO: bind to system:persistent-volume-provisioner?
+  # https://kubernetes.io/docs/admin/authorization/rbac/#other-component-roles
+  - apiVersion: rbac.authorization.k8s.io/v1beta1
+    kind: ClusterRoleBinding
+    metadata:
+      name: datamesh
+      #annotations:
+      #  datamesh.io/key: value
+      labels:
+        name: datamesh
+    roleRef:
+      kind: ClusterRole
+      name: datamesh
+      apiGroup: rbac.authorization.k8s.io
+    subjects:
+      - kind: ServiceAccount
+        name: datamesh
+        namespace: datamesh

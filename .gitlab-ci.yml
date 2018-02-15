@@ -1,0 +1,298 @@
+variables:
+
+    SERVER_NAME: dotmesh-server
+    PROVISIONER_NAME: dotmesh-dynamic-provisioner
+
+    CI_DOCKER_REGISTRY: quay.io/dotmesh
+    CI_DOCKER_TAG: $CI_COMMIT_SHA
+
+    CI_DOCKER_SERVER_IMAGE: $CI_DOCKER_REGISTRY/dotmesh-server:$CI_COMMIT_SHA
+    CI_DOCKER_PROVISIONER_IMAGE: $CI_DOCKER_REGISTRY/dotmesh-dynamic-provisioner:$CI_COMMIT_SHA
+
+stages:
+    - build
+    - test
+    - deploy
+    - manual_deploy
+
+before_script:
+    - mkdir -p gopath
+    - export GOPATH=$(pwd)/gopath
+    - cd gopath
+    - mkdir -p src/github.com/dotmesh-io
+    - ln -s `realpath ..` ./src/github.com/dotmesh-io/dotmesh
+    - cd src/github.com/dotmesh-io/dotmesh
+    - docker login -u $QUAY_USER -p $QUAY_PASSWORD quay.io
+
+build_client_linux:
+    stage: build
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - git checkout $CI_COMMIT_REF_NAME && git reset --hard $CI_COMMIT_SHA 
+        - (cd cmd/dm && ./rebuild.sh Linux)
+    artifacts:
+        paths:
+            - binaries
+        expire_in: 1 week
+
+build_client_macos:
+    stage: build
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - git checkout $CI_COMMIT_REF_NAME && git reset --hard $CI_COMMIT_SHA 
+        - (cd cmd/dm && ./rebuild.sh Darwin)
+    artifacts:
+        paths:
+            - binaries
+        expire_in: 1 week
+
+build_yaml:
+    stage: build
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - (cd kubernetes && ./rebuild.sh)
+    artifacts:
+        paths:
+            - yaml
+        expire_in: 1 week
+
+build_server:
+    stage: build
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - git checkout $CI_COMMIT_REF_NAME && git reset --hard $CI_COMMIT_SHA 
+        - (cd cmd/dotmesh-server && ./rebuild.sh) # also pushes
+        - echo "pushed $CI_DOCKER_SERVER_IMAGE"
+        - echo "pushed $CI_DOCKER_PROVISIONER_IMAGE"
+    artifacts:
+        paths:
+            - cmd/dotmesh-server/target
+        expire_in: 1 week
+
+# run sanity check that things still work on Windows and macOS
+#windows_docker_stable:
+#    stage: test
+#    tags:
+#        - windows
+#        - docker-stable
+#    before_script:
+#        - |
+#          bash -c "
+#          mkdir -p gopath
+#          export GOPATH=$(pwd)/gopath
+#          cd gopath
+#          mkdir -p src/github.com/dotmesh-io
+#          ln -s `realpath ..` ./src/github.com/dotmesh-io/dotmesh
+#          cd src/github.com/dotmesh-io/dotmesh
+#          "
+#    script:
+#        - |
+#          bash -c "
+#          cd cmd/dotmesh-server;
+#          docker build -t dotmesh-server . || (sleep 30; docker build -t dotmesh-server .)
+#          cd ../..
+#          ./smoke.sh $(pwd)/binaries/Linux/dm dotmesh-server
+#          docker system prune -fa
+#          "
+
+macos_docker_stable:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_macos
+    tags:
+        - macos
+        - docker-stable
+    script:
+        - cd cmd/dotmesh-server
+        # Possible to build just the "prod" image because binaries got passed
+        # as artifact in cmd/dotmesh-server/target
+        # TODO: pull the built image from $CI_DOCKER_REGISTRY, rather than
+        # rebuilding it here.
+        - docker build -t dotmesh-server . || (sleep 30; docker build -t dotmesh-server .)
+        - cd ../..
+        - ./smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
+        - docker version
+        - which docker
+        - docker container prune -f
+
+macos_docker_edge:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_macos
+    tags:
+        - macos
+        - docker-edge
+    script:
+        - cd cmd/dotmesh-server
+        # Possible to build just the "prod" image because binaries got passed
+        # as artifact in cmd/dotmesh-server/target
+        # TODO: pull the built image from $CI_DOCKER_REGISTRY, rather than
+        # rebuilding it here.
+        - docker build -t dotmesh-server . || (sleep 30; docker build -t dotmesh-server .)
+        - cd ../..
+        - ./smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
+        - docker version
+        - which docker
+        - docker container prune -f
+
+versioner_unit_tests:
+    stage: test
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - cd cmd/versioner && go test
+
+# run full dind tests on linux
+linux_default_dot:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - ./test.sh -run TestDefaultDot
+
+linux_single_node:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - ./test.sh -run TestSingleNode
+
+linux_two_nodes_same_cluster:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - ./test.sh -run TestTwoNodesSameCluster
+
+linux_kubernetes:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - ./test.sh -run TestKubernetes
+
+linux_deletion_simple:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - ./test.sh -run TestDeletionSimple
+
+linux_deletion_complex:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - ./test.sh -run TestDeletionComplex
+    allow_failure: true
+
+linux_two_single_node_clusters:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - ./test.sh -run TestTwoSingleNodeClusters
+
+linux_three_single_node_clusters:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - ./test.sh -run TestThreeSingleNodeClusters
+
+linux_stress:
+   stage: test
+   dependencies:
+       - build_server
+       - build_client_linux
+   tags:
+       - ubuntu
+       - fast
+   script:
+       - ./test.sh -timeout 30m -run TestStress
+   when: manual
+
+deploy_master_build:
+    stage: deploy
+    dependencies:
+        - build_client_linux
+        - build_client_macos
+        - build_yaml
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no releases@get.dotmesh.io mkdir -p /pool/releases/unstable/$CI_COMMIT_REF_NAME"
+        - "rsync -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' -avz binaries/{Linux,Darwin} yaml releases@get.dotmesh.io:/pool/releases/unstable/$CI_COMMIT_REF_NAME"
+    except:
+        - /^release-.*$/
+
+deploy_release_build:
+    stage: deploy
+    dependencies:
+        - build_client_linux
+        - build_client_macos
+        - build_yaml
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - git checkout $CI_COMMIT_REF_NAME && git reset --hard $CI_COMMIT_SHA 
+        - VERSION=`cd cmd/versioner; go run versioner.go`
+        - "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no releases@get.dotmesh.io mkdir -p /pool/releases/$VERSION"
+        - "rsync -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' -avz binaries/{Linux,Darwin} yaml releases@get.dotmesh.io:/pool/releases/$VERSION"
+    only:
+        - /^release-.*$/
+
+mark_release_as_stable:
+  stage: manual_deploy
+  script:
+    - git checkout $CI_COMMIT_REF_NAME && git reset --hard $CI_COMMIT_SHA 
+    - VERSION=`cd cmd/versioner; go run versioner.go`
+    - "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no releases@get.dotmesh.io sh -c \"rm -f /pool/releases/Linux ; ln -s $VERSION/Linux /pool/releases; rm -f /pool/releases/Darwin; ln -s $VERSION/Darwin /pool/releases; rm -f /pool/releases/yaml; ln -fs $VERSION/yaml /pool/releases\""
+  only:
+    - /^release-.*$/
+  when: manual

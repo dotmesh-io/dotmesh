@@ -1,0 +1,25 @@
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: etcd-browser
+  namespace: dotmesh
+spec:
+  replicas: 1
+  template:
+    metadata:
+      name: etcd-browser
+      labels:
+        app: etcd-browser
+      namespace: dotmesh
+    spec:
+      containers:
+      - name: etcd-browser
+        image: lmarsden/etcd-browser:latest
+        env:
+        - name: ETCD_HOST
+          value: "dotmesh-etcd-cluster-client.dotmesh.svc.cluster.local"
+        - name: ETCD_PORT
+          value: "2379"
+        ports:
+        - containerPort: 8000
