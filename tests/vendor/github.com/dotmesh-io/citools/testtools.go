@@ -52,7 +52,7 @@ func dumpTiming() {
 	timings = map[string]float64{}
 }
 
-func system(cmd string, args ...string) error {
+func System(cmd string, args ...string) error {
 	log.Printf("[system] running %s %s", cmd, args)
 	c := exec.Command(cmd, args...)
 	c.Stdout = os.Stdout
@@ -60,7 +60,7 @@ func system(cmd string, args ...string) error {
 	return c.Run()
 }
 
-func silentSystem(cmd string, args ...string) error {
+func SilentSystem(cmd string, args ...string) error {
 	log.Printf("[silentSystem] running %s %s", cmd, args)
 	c := exec.Command(cmd, args...)
 	return c.Run()
@@ -89,7 +89,7 @@ func TestMarkForCleanup(f Federation) {
 		for _, n := range c.GetNodes() {
 			node := n.Container
 			err := TryUntilSucceeds(func() error {
-				return system("bash", "-c", fmt.Sprintf(
+				return System("bash", "-c", fmt.Sprintf(
 					`docker exec -t %s bash -c 'touch /CLEAN_ME_UP'`, node,
 				))
 			}, fmt.Sprintf("marking %s for cleanup", node))
@@ -102,7 +102,7 @@ func TestMarkForCleanup(f Federation) {
 }
 
 func testSetup(f Federation, stamp int64) error {
-	err := system("bash", "-c", `
+	err := System("bash", "-c", `
 		# Create a home for the test pools to live that can have the same path
 		# both from ZFS's perspective and that of the inner container.
 		# (Bind-mounts all the way down.)
@@ -123,7 +123,7 @@ func testSetup(f Federation, stamp int64) error {
 			fmt.Printf(">>> Using RunArgs %s\n", c.RunArgs(i, j))
 
 			// XXX the following only works if overlay is working
-			err := system("bash", "-c", fmt.Sprintf(`
+			err := System("bash", "-c", fmt.Sprintf(`
 			set -xe
 			mkdir -p /dotmesh-test-pools
 			MOUNTPOINT=/dotmesh-test-pools
@@ -137,7 +137,7 @@ func testSetup(f Federation, stamp int64) error {
 			EXTRA_DOCKER_ARGS="-v /dotmesh-test-pools:/dotmesh-test-pools:rshared" \
 			DIND_IMAGE="quay.io/lukemarsden/kubeadm-dind-cluster:v1.7-hostport" \
 			CNI_PLUGIN=weave \
-				../kubernetes/dind-cluster-v1.7.sh bare $NODE %s
+				$GOPATH/src/github.com/dotmesh-io/citools/kubernetes/dind-cluster-v1.7.sh bare $NODE %s
 			sleep 1
 			echo "About to run docker exec on $NODE"
 			docker exec -t $NODE bash -c '
@@ -165,8 +165,28 @@ func testSetup(f Federation, stamp int64) error {
 					systemctl restart docker
 				'
 			fi
-			docker cp ../binaries/Linux/dm $NODE:/usr/local/bin/dm
 			`, node, c.RunArgs(i, j), HOST_IP_FROM_CONTAINER))
+			if err != nil {
+				return err
+			}
+
+			// if we are testing dotmesh - then the binary under test will have
+			// already been created - otherwise, download the latest master build
+			// this is to be consistent with LocalImage()
+			serviceBeingTested := os.Getenv("CI_SERVICE_BEING_TESTED")
+			getDmCommand := fmt.Sprintf("NODE=%s\n", node)
+
+			if serviceBeingTested == "dotmesh" {
+				getDmCommand += "docker cp ../binaries/Linux/dm $NODE:/usr/local/bin/dm"
+			} else {
+				getDmCommand += `
+					curl -L -o /tmp/dm https://get.dotmesh.io/unstable/master/Linux/dm
+					chmod a+x /tmp/dm
+					docker cp /tmp/dm $NODE:/usr/local/bin/dm
+				`
+			}
+
+			err = System("bash", "-c", getDmCommand)
 			if err != nil {
 				return err
 			}
@@ -201,9 +221,9 @@ func testSetup(f Federation, stamp int64) error {
 					continue
 				}
 				if !strings.Contains(image, "/") {
-					image = localImage(image)
+					image = LocalImage(image)
 				}
-				err := system("bash", "-c", fmt.Sprintf(`
+				err := System("bash", "-c", fmt.Sprintf(`
 					set -xe
 					docker pull %s
 					docker save %s | docker exec -i %s docker load
@@ -250,7 +270,7 @@ func TeardownFinishedTestRuns() {
 
 	// Containers that weren't marked as CLEAN_ME_UP but which are older than
 	// an hour, assume they should be cleaned up.
-	err := system("../scripts/mark-old-cleanup.sh")
+	err := System("../scripts/mark-old-cleanup.sh")
 	if err != nil {
 		log.Printf("Error running mark-old-cleanup.sh: %s", err)
 	}
@@ -303,7 +323,7 @@ func TeardownFinishedTestRuns() {
 				}
 
 				node := nodeName(stamp, cn, nn)
-				existsErr := silentSystem("docker", "inspect", node)
+				existsErr := SilentSystem("docker", "inspect", node)
 				notExists := false
 				if existsErr != nil {
 					// must have been a single-node test, don't return on our
@@ -311,7 +331,7 @@ func TeardownFinishedTestRuns() {
 					notExists = true
 				}
 
-				err = system("docker", "exec", "-i", node, "test", "-e", "/CLEAN_ME_UP")
+				err = System("docker", "exec", "-i", node, "test", "-e", "/CLEAN_ME_UP")
 				if err != nil {
 					fmt.Printf("not cleaning up %s because /CLEAN_ME_UP not found\n", node)
 					if !notExists {
@@ -319,19 +339,19 @@ func TeardownFinishedTestRuns() {
 					}
 				}
 
-				err = system("docker", "rm", "-f", "-v", node)
+				err = System("docker", "rm", "-f", "-v", node)
 				if err != nil {
 					fmt.Printf("erk during teardown %s\n", err)
 				}
 
 				// workaround https://github.com/docker/docker/issues/20398
-				err = system("docker", "network", "disconnect", "-f", "bridge", node)
+				err = System("docker", "network", "disconnect", "-f", "bridge", node)
 				if err != nil {
 					fmt.Printf("erk during network force-disconnect %s\n", err)
 				}
 
 				// cleanup after a previous test run; this is a pretty gross hack
-				err = system("bash", "-c", fmt.Sprintf(`
+				err = System("bash", "-c", fmt.Sprintf(`
 					for X in $(findmnt -P -R /tmpfs |grep %s); do
 						eval $X
 						if [ "$TARGET" != "/tmpfs" ]; then
@@ -385,7 +405,7 @@ func TeardownFinishedTestRuns() {
 			fmt.Printf("unable to prune docker volumes: %s, %s\n", err, out)
 		}
 	}
-	err = system("docker", "container", "prune", "-f")
+	err = System("docker", "container", "prune", "-f")
 	if err != nil {
 		fmt.Printf("Error from docker container prune -f: %v", err)
 	}
@@ -414,7 +434,7 @@ func docker(node string, cmd string, env map[string]string) (string, error) {
 }
 
 func dockerSystem(node string, cmd string) error {
-	return system("docker", "exec", "-i", node, "sh", "-c", cmd)
+	return System("docker", "exec", "-i", node, "sh", "-c", cmd)
 }
 
 func RunOnNode(t *testing.T, node string, cmd string) {
@@ -460,7 +480,7 @@ func OutputFromRunOnNode(t *testing.T, node string, cmd string) string {
 	return s
 }
 
-func helperImage(service string) string {
+func HelperImage(service string) string {
 	var registry string
 	// expected format: quay.io/dotmesh for example
 	if reg := os.Getenv("CI_DOCKER_REGISTRY"); reg != "" {
@@ -476,7 +496,7 @@ func helperImage(service string) string {
 	return fmt.Sprintf("%s/%s:%s", registry, service, tag)
 }
 
-func localImage(service string) string {
+func LocalImage(service string) string {
 	var registry string
 	// expected format: quay.io/dotmesh for example
 	if reg := os.Getenv("CI_DOCKER_REGISTRY"); reg != "" {
@@ -490,10 +510,17 @@ func localImage(service string) string {
 	}
 
 	tag := os.Getenv("CI_DOCKER_TAG")
+	serviceBeingTested := os.Getenv("CI_SERVICE_BEING_TESTED")
 	if tag == "" {
 		tag = "latest"
 	}
-
+	// this means that if the X service is the one being tested - then
+	// use the GIT_HASH from CI for that service and master for everything else
+	// (which is the last build of that repo that passed the tests on master)
+	if serviceBeingTested != service {
+		// TODO : this should master but we havn't got that building yet
+		tag = "latest"
+	}
 	return fmt.Sprintf("%s/%s:%s", registry, service, tag)
 }
 
@@ -515,7 +542,7 @@ func localImageArgs() string {
 		traceSuffix = fmt.Sprintf(" --trace %s", HOST_IP_FROM_CONTAINER)
 	}
 	regSuffix := ""
-	return ("--image " + localImage("dotmesh-server") + " --etcd-image " + localEtcdImage() +
+	return ("--image " + LocalImage("dotmesh-server") + " --etcd-image " + localEtcdImage() +
 		" --docker-api-version 1.23 --discovery-url http://" + HOST_IP_FROM_CONTAINER + ":8087" +
 		logSuffix + traceSuffix + regSuffix)
 }
@@ -831,7 +858,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 
 	// TODO regex the following yamels to refer to the newly pushed
 	// dotmesh container image, rather than the latest stable
-	err = system("bash", "-c",
+	err = System("bash", "-c",
 		fmt.Sprintf(
 			`MASTER=%s
 			docker exec $MASTER mkdir /dotmesh-kube-yaml
@@ -844,8 +871,8 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			docker exec $MASTER sed -i 's/size: 3/size: 1/' /dotmesh-kube-yaml/dotmesh.yaml
 			`,
 			nodeName(now, i, 0),
-			strings.Replace(localImage("dotmesh-server"), "/", "\\/", -1),
-			strings.Replace(localImage("dotmesh-dynamic-provisioner"), "/", "\\/", -1),
+			strings.Replace(LocalImage("dotmesh-server"), "/", "\\/", -1),
+			strings.Replace(LocalImage("dotmesh-dynamic-provisioner"), "/", "\\/", -1),
 			// need to somehow number the instances, did this by modifying
 			// require_zfs.sh to include the hostname in the pool name to make
 			// them unique... TODO: make sure we clear these up
@@ -1048,7 +1075,7 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 	return nil
 }
 
-func createDockerNetwork(t *testing.T, node string) {
+func CreateDockerNetwork(t *testing.T, node string) {
 	fmt.Printf("Creating Docker network on %s", node)
 	RunOnNode(t, node, fmt.Sprintf(`
 		docker network create dotmesh-dev  &>/dev/null || true
@@ -1066,7 +1093,7 @@ type UserLogin struct {
 
 var uniqUserNumber int
 
-func uniqLogin() UserLogin {
+func UniqLogin() UserLogin {
 	uniqUserNumber++
 	return UserLogin{
 		Email:    fmt.Sprintf("test%d@test.com", uniqUserNumber),
