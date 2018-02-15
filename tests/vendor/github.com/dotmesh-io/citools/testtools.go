@@ -117,6 +117,11 @@ func testSetup(f Federation, stamp int64) error {
 		return err
 	}
 
+	err = ioutil.WriteFile("./dind-cluster-v1.7.sh", DIND_SCRIPT, 0644)
+	if err != nil {
+		return err
+	}
+
 	for i, c := range f {
 		for j := 0; j < c.GetDesiredNodeCount(); j++ {
 			node := nodeName(stamp, i, j)
@@ -137,7 +142,7 @@ func testSetup(f Federation, stamp int64) error {
 			EXTRA_DOCKER_ARGS="-v /dotmesh-test-pools:/dotmesh-test-pools:rshared" \
 			DIND_IMAGE="quay.io/lukemarsden/kubeadm-dind-cluster:v1.7-hostport" \
 			CNI_PLUGIN=weave \
-				$GOPATH/src/github.com/dotmesh-io/citools/kubernetes/dind-cluster-v1.7.sh bare $NODE %s
+				./dind-cluster-v1.7.sh bare $NODE %s
 			sleep 1
 			echo "About to run docker exec on $NODE"
 			docker exec -t $NODE bash -c '
