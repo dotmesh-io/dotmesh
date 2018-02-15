@@ -9,6 +9,8 @@ variables:
     CI_DOCKER_SERVER_IMAGE: $CI_DOCKER_REGISTRY/dotmesh-server:$CI_COMMIT_SHA
     CI_DOCKER_PROVISIONER_IMAGE: $CI_DOCKER_REGISTRY/dotmesh-dynamic-provisioner:$CI_COMMIT_SHA
 
+    CI_SERVICE_BEING_TESTED: dotmesh
+
 stages:
     - build
     - test
