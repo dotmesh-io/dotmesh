@@ -180,15 +180,22 @@ func testSetup(f Federation, stamp int64) error {
 			// this is to be consistent with LocalImage()
 			serviceBeingTested := os.Getenv("CI_SERVICE_BEING_TESTED")
 			getDmCommand := fmt.Sprintf("NODE=%s\n", node)
+			ciJobId := os.Getenv("CI_JOB_ID")
+
+			if ciJobId == "" {
+				ciJobId = "local"
+			}
 
 			if serviceBeingTested == "dotmesh" {
 				getDmCommand += "docker cp ../binaries/Linux/dm $NODE:/usr/local/bin/dm"
 			} else {
-				getDmCommand += `
-					curl -L -o /tmp/dm https://get.dotmesh.io/unstable/master/Linux/dm
-					chmod a+x /tmp/dm
-					docker cp /tmp/dm $NODE:/usr/local/bin/dm
-				`
+				getDmCommand += fmt.Sprintf(`
+					CI_JOB_ID=%s
+					curl -L -o /tmp/dm-$CI_JOB_ID https://get.dotmesh.io/unstable/master/Linux/dm
+					chmod a+x /tmp/dm-$CI_JOB_ID
+					docker cp /tmp/dm-$CI_JOB_ID $NODE:/usr/local/bin/dm
+					rm -f /tmp/dm-$CI_JOB_ID
+				`, ciJobId)
 			}
 
 			err = System("bash", "-c", getDmCommand)
