@@ -186,7 +186,8 @@ func testSetup(f Federation, stamp int64) error {
 				ciJobId = "local"
 			}
 
-			if serviceBeingTested == "dotmesh" {
+			// if the CI_SERVICE_BEING_TESTED is empty it means we are in local testing mode
+			if serviceBeingTested == "dotmesh" || serviceBeingTested == "" {
 				getDmCommand += "docker cp ../binaries/Linux/dm $NODE:/usr/local/bin/dm"
 			} else {
 				getDmCommand += fmt.Sprintf(`
