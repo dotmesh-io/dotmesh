@@ -27,6 +27,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/gorilla/rpc/v2/json2"
@@ -69,17 +70,14 @@ func (d *FlexVolumeDriver) mount(targetMountDir, jsonOptions string) (map[string
 
 	var mountPath string
 
-	// XXX Assumes that the "local" remote authenticates as "admin". How can we
-	// auth better from kube to dotmesh? Answer! Use the Kubernetes secret!
-	config, err := ioutil.ReadFile("/root/.dotmesh/config")
+	// Load the API key
+	binaryDir := filepath.Dir(os.Args[0])
+	keyBytes, err := ioutil.ReadFile(binaryDir + "/admin-api-key")
 	if err != nil {
-		return opts, err
+		return nil, err
 	}
 
-	m := struct {
-		Remotes struct{ Local struct{ ApiKey string } }
-	}{}
-	json.Unmarshal([]byte(config), &m)
+	apiKey := string(keyBytes)
 
 	namespace := opts["namespace"].(string)
 
@@ -101,7 +99,7 @@ func (d *FlexVolumeDriver) mount(targetMountDir, jsonOptions string) (map[string
 	err = doRPC(
 		"127.0.0.1",
 		"admin",
-		m.Remotes.Local.ApiKey,
+		apiKey,
 		"DotmeshRPC.Procure",
 		struct {
 			Namespace string
@@ -244,8 +242,6 @@ func main() {
 	driver := NewFlexVolumeDriver()
 	os.Stdout.WriteString(driver.Run(os.Args[1:]))
 }
-
-// TODO read config from /root/.dotmesh/config to learn how to auth as admin
 
 // RPC client
 
