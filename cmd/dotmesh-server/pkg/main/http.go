@@ -82,6 +82,15 @@ func (state *InMemoryState) runServer() {
 }
 
 func (state *InMemoryState) runUnixDomainServer() {
+	r := rpc.NewServer()
+	r.RegisterCodec(rpcjson.NewCodec(), "application/json")
+	r.RegisterCodec(rpcjson.NewCodec(), "application/json;charset=UTF-8")
+	d := NewDotmeshRPC(state)
+	err := r.RegisterService(d, "") // deduces name from type name
+	if err != nil {
+		log.Printf("Error while registering services %s", err)
+	}
+
 	// UNIX socket for flexvolume driver to talk to us
 	FV_SOCKET := FLEXVOLUME_DIR + "/dm.sock"
 	listener, err := net.Listen("unix", FV_SOCKET)
