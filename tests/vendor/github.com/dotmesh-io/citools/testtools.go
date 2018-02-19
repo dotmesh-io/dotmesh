@@ -962,7 +962,8 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			// install dotmesh once on the master (retry because etcd operator
 			// needs to initialize)
 			"sleep 1 && "+
-			"while ! kubectl apply -f /dotmesh-kube-yaml/dotmesh.yaml; do sleep 1; done",
+			"while ! kubectl apply -f /dotmesh-kube-yaml/dotmesh-etcd-cluster.yaml; do sleep 1; done && "+
+			"kubectl apply -f /dotmesh-kube-yaml/dotmesh.yaml",
 		nil,
 	)
 	if err != nil {

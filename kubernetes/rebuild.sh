@@ -4,7 +4,7 @@ OUT=../yaml
 
 mkdir -p $OUT
 
-cp etcd-operator-clusterrole.yaml etcd-operator-dep.yaml $OUT
+cp etcd-operator-clusterrole.yaml etcd-operator-dep.yaml dotmesh-etcd-cluster.yaml $OUT
 
 if [ -z "$CI_DOCKER_TAG" ]
 then
