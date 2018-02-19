@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -32,6 +33,8 @@ import (
 
 	"github.com/gorilla/rpc/v2/json2"
 )
+
+var logger *log.Logger
 
 // flexVolumeDebug indicates whether flexvolume debugging should be enabled
 var flexVolumeDebug = false
@@ -66,7 +69,7 @@ func (d *FlexVolumeDriver) mount(targetMountDir, jsonOptions string) (map[string
 	if err := json.Unmarshal([]byte(jsonOptions), &opts); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal json options: %v", err)
 	}
-	logIt(fmt.Sprintf("targetMountDir: %v, jsonOptions: %+v", targetMountDir, jsonOptions))
+	logger.Printf("MOUNT: targetMountDir: %v, jsonOptions: %+v", targetMountDir, jsonOptions)
 
 	var mountPath string
 
@@ -113,33 +116,33 @@ func (d *FlexVolumeDriver) mount(targetMountDir, jsonOptions string) (map[string
 		&mountPath,
 	)
 	if err != nil {
-		logIt(fmt.Sprintf("Procure of %s/%s.%s failed: %+v", namespace, name, subvolume, err))
+		logger.Printf("MOUNT: Procure of %s/%s.%s failed: %+v", namespace, name, subvolume, err)
 		return opts, err
 	}
 
-	logIt(fmt.Sprintf("Procured %s/%s.%s at %s", namespace, name, subvolume, mountPath))
+	logger.Printf("MOUNT: Procured %s/%s.%s at %s", namespace, name, subvolume, mountPath)
 
 	// hackity hack, let's see how kube feels about being given a symlink
 	_, err = os.Stat(targetMountDir)
 	if os.IsNotExist(err) {
 		err = os.Symlink(mountPath, targetMountDir)
 		if err != nil {
-			logIt(fmt.Sprintf("symlink err: %v", err))
+			logger.Printf("MOUNT: symlink err: %v", err)
 			return nil, err
 		}
 	} else if err != nil {
-		logIt(fmt.Sprintf("stat err: %v", err))
+		logger.Printf("MOUNT: stat err: %v", err)
 		return nil, err
 	} else if err == nil {
-		logIt(fmt.Sprintf("existed!"))
+		logger.Printf("MOUNT: symlink already existed!")
 		err = os.Remove(targetMountDir)
 		if err != nil {
-			logIt(fmt.Sprintf("remove err: %v", err))
+			logger.Printf("MOUNT: remove err: %v", err)
 			return nil, err
 		}
 		err = os.Symlink(mountPath, targetMountDir)
 		if err != nil {
-			logIt(fmt.Sprintf("symlink err: %v", err))
+			logger.Printf("MOUNT: symlink err: %v", err)
 			return nil, err
 		}
 	}
@@ -196,12 +199,6 @@ func (d *FlexVolumeDriver) doRun(args []string) (map[string]interface{}, error) 
 	}
 }
 
-func logIt(s string) {
-	f, _ := os.OpenFile("/tmp/flexvolume.log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0666)
-	defer f.Close()
-	fmt.Fprintf(f, "%s\n", s)
-}
-
 func (d *FlexVolumeDriver) Run(args []string) string {
 	r := formatResult(d.doRun(args))
 
@@ -210,7 +207,7 @@ func (d *FlexVolumeDriver) Run(args []string) string {
 		// The problem is that kubelet grabs CombinedOutput() from the process
 		// and tries to parse it as JSON (need to recheck this,
 		// maybe submit a PS to fix it)
-		logIt(fmt.Sprintf("flexvolume %s -> %s\n", strings.Join(args, " "), r))
+		logger.Printf("DEBUG: %s -> %s", strings.Join(args, " "), r)
 	}
 
 	return r
@@ -239,6 +236,13 @@ func formatResult(fields map[string]interface{}, err error) string {
 }
 
 func main() {
+	f, err := os.OpenFile("/var/log/dotmesh-flexvolume.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+
+	logger = log.New(f, fmt.Sprintf("%d: ", os.Getpid()), log.Ldate+log.Ltime+log.Lmicroseconds)
 	driver := NewFlexVolumeDriver()
 	os.Stdout.WriteString(driver.Run(os.Args[1:]))
 }
@@ -263,21 +267,24 @@ func doRPC(hostname, user, apiKey, method string, args interface{}, result inter
 	resp, err := client.Do(req)
 
 	if err != nil {
-		logIt(fmt.Sprintf("Test RPC FAIL: %+v -> %s -> %+v\n", args, method, err))
+		logger.Printf("RPC FAIL: %+v -> %s -> %+v", args, method, err)
 		return err
 	}
 
 	defer resp.Body.Close()
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		logIt(fmt.Sprintf("Test RPC FAIL: %+v -> %s -> %+v\n", args, method, err))
+		logger.Printf("RPC FAIL: %+v -> %s -> %+v", args, method, err)
 		return fmt.Errorf("Error reading body: %s", err)
 	}
 	err = json2.DecodeClientResponse(bytes.NewBuffer(b), &result)
 	if err != nil {
-		logIt(fmt.Sprintf("Test RPC FAIL: %+v -> %s -> %+v\n", args, method, err))
+		logger.Printf("RPC FAIL: %+v -> %s -> %+v", args, method, err)
 		return fmt.Errorf("Couldn't decode response '%s': %s", string(b), err)
 	}
-	logIt(fmt.Sprintf("Test RPC: %+v -> %s -> %+v\n", args, method, result))
+
+	if flexVolumeDebug {
+		logger.Printf("RPC: %+v -> %s -> %v", args, method, result)
+	}
 	return nil
 }
