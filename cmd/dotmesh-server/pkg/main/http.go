@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -92,7 +93,7 @@ func (state *InMemoryState) runServer() {
 	// pre-authenticated-as-admin rpc server for clever unix socket clients
 	// only. intended for use by the flexvolume driver, hence the location on
 	// disk.
-	http.Serve(NewAdminHandler(unixSocketRouter), nil)
+	http.Serve(listener, NewAdminHandler(unixSocketRouter))
 
 }
 

@@ -21,11 +21,13 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -93,7 +95,7 @@ func (d *FlexVolumeDriver) mount(targetMountDir, jsonOptions string) (map[string
 	binaryDir := filepath.Dir(os.Args[0])
 	fvSocket := binaryDir + "/dm.sock"
 
-	err = doRPC(
+	err := doRPC(
 		fvSocket,
 		"DotmeshRPC.Procure",
 		struct {
@@ -243,7 +245,7 @@ func main() {
 
 func doRPC(socketPath, method string, args interface{}, result interface{}) error {
 
-	url := fmt.Sprintf("http://%s:6969/rpc", hostname)
+	url := fmt.Sprintf("http://unix-socket/rpc")
 	message, err := json2.EncodeClientRequest(method, args)
 	if err != nil {
 		return err
@@ -254,7 +256,6 @@ func doRPC(socketPath, method string, args interface{}, result interface{}) erro
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.SetBasicAuth(user, apiKey)
 
 	client := http.Client{
 		Transport: &http.Transport{

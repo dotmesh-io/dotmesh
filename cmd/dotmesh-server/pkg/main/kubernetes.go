@@ -1,8 +1,6 @@
 package main
 
 import (
-	"encoding/base64"
-	"io/ioutil"
 	"os"
 )
 
