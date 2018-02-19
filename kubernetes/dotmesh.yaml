@@ -151,7 +151,7 @@ items:
                 - name: test-pools-dir
                   mountPath: /dotmesh-test-pools
           #hostNetwork: true
-          #hostPID: true
+          hostPID: true
           restartPolicy: Always
           securityContext:
             seLinuxOptions: {}
