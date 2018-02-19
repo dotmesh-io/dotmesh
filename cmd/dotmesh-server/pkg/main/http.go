@@ -78,6 +78,22 @@ func (state *InMemoryState) runServer() {
 		out(fmt.Sprintf("Unable to listen on port 6969: '%s'\n", err))
 		log.Fatalf("Unable to listen on port 6969: '%s'", err)
 	}
+
+	// UNIX socket for flexvolume driver to talk to us
+	FV_SOCKET := FLEXVOLUME_DIR + "/dm.sock"
+	listener, err := net.Listen("unix", FV_SOCKET)
+	if err != nil {
+		log.Fatalf("Could not listen on %s: %v", FV_SOCKET, err)
+	}
+
+	unixSocketRouter := mux.NewRouter()
+	unixSocketRouter.Handle("/rpc", r)
+
+	// pre-authenticated-as-admin rpc server for clever unix socket clients
+	// only. intended for use by the flexvolume driver, hence the location on
+	// disk.
+	http.Serve(NewAdminHandler(unixSocketRouter), nil)
+
 }
 
 type AuthHandler struct {
@@ -144,4 +160,19 @@ func authHandlerFunc(f func(w http.ResponseWriter, r *http.Request)) func(w http
 		}
 		f(w, r)
 	}
+}
+
+// handler which makes all requests appear as the admin user!
+// DANGER - only use for unix domain sockets.
+func NewAdminHandler(handler http.Handler) http.Handler {
+	return AdminHandler{subHandler: handler}
+}
+
+type AdminHandler struct {
+	subHandler http.Handler
+}
+
+func (a AdminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	r = r.WithContext(AdminContext(r.Context()))
+	a.subHandler.ServeHTTP(w, r)
 }

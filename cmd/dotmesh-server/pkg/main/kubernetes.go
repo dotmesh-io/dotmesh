@@ -8,7 +8,6 @@ import (
 
 var FLEXVOLUME_DIR = "/system-usr/usr/libexec/kubernetes/kubelet-plugins/volume/exec/dotmesh.io~dm"
 var FLEXVOLUME_BIN = "dm"
-var FLEXVOLUME_KEYFILE = "admin-api-key"
 var FLEXVOLUME_SOURCE = "/usr/local/bin/flexvolume"
 
 func installKubernetesPlugin() error {
@@ -36,16 +35,6 @@ func installKubernetesPlugin() error {
 	)
 	if err != nil {
 		return err
-	}
-
-	// Save admin API key into the file the FV driver reads it from
-	key64, ok := os.LookupEnv("INITIAL_ADMIN_API_KEY")
-	if ok {
-		key, err := base64.StdEncoding.DecodeString(key64)
-		err = ioutil.WriteFile(FLEXVOLUME_DIR+"/"+FLEXVOLUME_KEYFILE, []byte(key), 0600)
-		if err != nil {
-			return err
-		}
 	}
 
 	return nil

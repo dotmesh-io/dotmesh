@@ -73,15 +73,6 @@ func (d *FlexVolumeDriver) mount(targetMountDir, jsonOptions string) (map[string
 
 	var mountPath string
 
-	// Load the API key
-	binaryDir := filepath.Dir(os.Args[0])
-	keyBytes, err := ioutil.ReadFile(binaryDir + "/admin-api-key")
-	if err != nil {
-		return nil, err
-	}
-
-	apiKey := string(keyBytes)
-
 	namespace := opts["namespace"].(string)
 
 	name := opts["name"].(string)
@@ -99,10 +90,11 @@ func (d *FlexVolumeDriver) mount(targetMountDir, jsonOptions string) (map[string
 		subvolume = ""
 	}
 
+	binaryDir := filepath.Dir(os.Args[0])
+	fvSocket := binaryDir + "/dm.sock"
+
 	err = doRPC(
-		"127.0.0.1",
-		"admin",
-		apiKey,
+		fvSocket,
 		"DotmeshRPC.Procure",
 		struct {
 			Namespace string
@@ -249,7 +241,8 @@ func main() {
 
 // RPC client
 
-func doRPC(hostname, user, apiKey, method string, args interface{}, result interface{}) error {
+func doRPC(socketPath, method string, args interface{}, result interface{}) error {
+
 	url := fmt.Sprintf("http://%s:6969/rpc", hostname)
 	message, err := json2.EncodeClientRequest(method, args)
 	if err != nil {
@@ -262,7 +255,14 @@ func doRPC(hostname, user, apiKey, method string, args interface{}, result inter
 
 	req.Header.Set("Content-Type", "application/json")
 	req.SetBasicAuth(user, apiKey)
-	client := new(http.Client)
+
+	client := http.Client{
+		Transport: &http.Transport{
+			DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+				return net.Dial("unix", socketPath)
+			},
+		},
+	}
 
 	resp, err := client.Do(req)
 

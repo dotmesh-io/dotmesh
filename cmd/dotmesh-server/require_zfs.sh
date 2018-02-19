@@ -169,6 +169,13 @@ if [ "$DOTMESH_ETCD_ENDPOINT" != "" ]; then
         exit 1
     fi
     net="--net=container:$self_containers"
+    # When running in a pod network, assuming we're not on a cluster that
+    # supports hostPort networking, it's preferable for the nodes to report
+    # their pod IPs to eachother, rather than the external IPs calculated above
+    # in `--guess-ipv4-addresses`. So, unset this environment variable so that
+    # dotmesh-server has to calculate the IP from inside the container in the
+    # Kubernetes pod.
+    unset YOUR_IPV4_ADDRS
 fi
 
 secret=""
