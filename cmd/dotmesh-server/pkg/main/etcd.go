@@ -1211,6 +1211,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 	// before we're fully up.
 	onceAgain.Do(func() {
 		go s.runServer()
+		go s.runUnixDomainServer()
 		go s.runPlugin()
 		go func() {
 			err := s.insertInitialAdminPassword()

@@ -79,7 +79,9 @@ func (state *InMemoryState) runServer() {
 		out(fmt.Sprintf("Unable to listen on port 6969: '%s'\n", err))
 		log.Fatalf("Unable to listen on port 6969: '%s'", err)
 	}
+}
 
+func (state *InMemoryState) runUnixDomainServer() {
 	// UNIX socket for flexvolume driver to talk to us
 	FV_SOCKET := FLEXVOLUME_DIR + "/dm.sock"
 	listener, err := net.Listen("unix", FV_SOCKET)
@@ -94,7 +96,6 @@ func (state *InMemoryState) runServer() {
 	// only. intended for use by the flexvolume driver, hence the location on
 	// disk.
 	http.Serve(listener, NewAdminHandler(unixSocketRouter))
-
 }
 
 type AuthHandler struct {
