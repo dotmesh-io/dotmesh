@@ -93,6 +93,14 @@ func (state *InMemoryState) runUnixDomainServer() {
 
 	// UNIX socket for flexvolume driver to talk to us
 	FV_SOCKET := FLEXVOLUME_DIR + "/dm.sock"
+
+	// Unlink any old socket lingering there
+	if _, err := os.Stat(FV_SOCKET); err == nil {
+		if err = os.Remove(FV_SOCKET); err != nil {
+			log.Fatalf("Could not clean up existing socket at %s: %v", FV_SOCKET, err)
+		}
+	}
+
 	listener, err := net.Listen("unix", FV_SOCKET)
 	if err != nil {
 		log.Fatalf("Could not listen on %s: %v", FV_SOCKET, err)
