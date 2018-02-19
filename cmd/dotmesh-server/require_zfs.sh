@@ -54,7 +54,7 @@ BUNDLED_LIB=/bundled-lib
 SYSTEM_LIB=/system-lib
 
 # Set up mounts that are needed
-nsenter -t 1 -m -u -n -i sh -c \
+nsenter -t 1 -m -u -n -i /bin/sh -c \
     "set -xe
     $EXTRA_HOST_COMMANDS
     if [ $(mount |grep $MOUNTPOINT |wc -l) -eq 0 ]; then
