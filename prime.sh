@@ -25,10 +25,6 @@ docker pull mysql:5.7.17
 docker tag mysql:5.7.17 $(hostname).local:80/mysql:5.7.17
 docker push $(hostname).local:80/mysql:5.7.17
 
-docker pull quay.io/dotmesh/dotmesh-gotty:latest
-docker tag quay.io/dotmesh/dotmesh-gotty:latest $(hostname).local:80/dotmesh/dotmesh-gotty:latest
-docker push $(hostname).local:80/dotmesh/dotmesh-gotty:latest
-
 cd ~/dotmesh-instrumentation/etcd-browser
 docker build -t $(hostname).local:80/dotmesh/etcd-browser:v1 .
 docker push $(hostname).local:80/dotmesh/etcd-browser:v1
