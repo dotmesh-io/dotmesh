@@ -173,11 +173,19 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(fmt.Sprintf("Can't find state of filesystem %s.\n", z.filesystem)))
 		return
 	}
-	if z.state.masterFor(z.filesystem) == z.state.myNodeId &&
-		state != "pushPeerState" {
+	if z.state.masterFor(z.filesystem) == z.state.myNodeId {
+		if state != "pushPeerState" {
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte(fmt.Sprintf(
+				"Host is master for this filesystem (%s), can't write to it. "+
+					"State is %s.\n", z.filesystem, state)))
+			return
+		}
+		// else OK, we can proceed
+	} else {
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte(fmt.Sprintf(
-			"Host is master for this filesystem (%s), can't write to it. "+
+			"Host is not master for this filesystem (%s), can't write to it. "+
 				"State is %s.\n", z.filesystem, state)))
 		return
 	}
