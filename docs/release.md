@@ -132,3 +132,8 @@ This currently needs to be manually updates.
 
 Try the latest binary on https://dotmesh.com/try-dotmesh/ with a dm
 version to check that it's all deployed correctly.
+
+### Re-releasing
+In the event of a failure during the release process, for example, CI failures, or an embarassing bug fix on the same tag, it is possible to re-release by triggering the pipeline on http://gitlab.dotmesh.io:9999/dotmesh/dotmesh-sync/pipelines on the commit on the release branch. If the commit is on a pre-exisiting release tag, it will preserve the version of the tag.
+
+In rare cases where there is a requirement to re-do a release with different code, this can be done by resetting the branch and preserving the relese-x.y.z tag on the commit and force-pushing.
