@@ -42,7 +42,7 @@ if [ -z "${SKIP_K8S}" ]; then
     -e GOPATH=/go \
     -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/flexvolume \
     dotmesh-builder:$CI_DOCKER_TAG \
-    /usr/lib/go-1.7/bin/go build -o /target/flexvolume
+    go build -o /target/flexvolume
   echo "copy binary: /target/flexvolume"
   docker cp dotmesh-builder-flexvolume-$CI_DOCKER_TAG:/target/flexvolume target/
   docker rm -f dotmesh-builder-flexvolume-$CI_DOCKER_TAG
@@ -56,7 +56,7 @@ if [ -z "${SKIP_K8S}" ]; then
     -e CGO_ENABLED=0 \
     -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dynamic-provisioning \
     dotmesh-builder:$CI_DOCKER_TAG \
-    /usr/lib/go-1.7/bin/go build -a -ldflags '-extldflags "-static"' -o /target/dm-provisioner .
+    go build -a -ldflags '-extldflags "-static"' -o /target/dm-provisioner .
   echo "copy binary: /target/dm-provisioner"
   docker cp dotmesh-builder-dm-provisioner-$CI_DOCKER_TAG:/target/dm-provisioner target/
   docker rm -f dotmesh-builder-dm-provisioner-$CI_DOCKER_TAG
@@ -73,7 +73,7 @@ docker run \
   -e GOPATH=/go \
   -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/main \
   dotmesh-builder:$CI_DOCKER_TAG \
-  /usr/lib/go-1.7/bin/go build -ldflags "-X main.serverVersion=${VERSION}" -o /target/dotmesh-server
+  go build -ldflags "-X main.serverVersion=${VERSION}" -o /target/dotmesh-server
 echo "copy binary: /target/dotmesh-server"
 docker cp dotmesh-builder-server-$CI_DOCKER_TAG:/target/dotmesh-server target/
 docker rm -f dotmesh-builder-server-$CI_DOCKER_TAG

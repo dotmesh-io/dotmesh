@@ -1,7 +1,8 @@
 # Build with:
-FROM ubuntu:artful
-ENV SECURITY_UPDATES 2018-01-19
-RUN apt-get -y update && apt-get -y install zfsutils-linux curl golang-1.7 iproute kmod
+FROM ubuntu:bionic
+ENV SECURITY_UPDATES 2018-02-20
+RUN apt-get -y update && apt-get -y install zfsutils-linux curl golang-1.10-go iproute kmod
+ENV PATH=$PATH:/go/bin:/usr/lib/go-1.10/bin
 RUN mkdir /target
 RUN mkdir /tmp/d && \
     curl -o /tmp/d/docker.tgz \

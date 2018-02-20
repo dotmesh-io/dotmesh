@@ -1,10 +1,8 @@
 # Build with:
-FROM ubuntu:artful
-ENV SECURITY_UPDATES 2018-01-25
-ARG VERSION=local
-ENV VERSION ${VERSION}
-RUN apt-get -y update && apt-get -y install curl golang-1.7 git
-ENV PATH=$PATH:/go/bin:/usr/lib/go-1.7/bin
+FROM ubuntu:bionic
+ENV SECURITY_UPDATES 2018-02-20
+RUN apt-get -y update && apt-get -y install zfsutils-linux curl golang-1.10-go iproute kmod
+ENV PATH=$PATH:/go/bin:/usr/lib/go-1.10/bin
 ENV GOPATH=/go
 RUN mkdir /target
 ADD . /go/src/github.com/dotmesh-io/dotmesh/cmd/dm
