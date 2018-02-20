@@ -245,6 +245,17 @@ linux_three_single_node_clusters:
     script:
         - ./test.sh -run TestThreeSingleNodeClusters
 
+linux_two_double_node_clusters:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - ./test.sh -run TestTwoDoubleNodeClusters
+
 linux_stress:
    stage: test
    dependencies:
