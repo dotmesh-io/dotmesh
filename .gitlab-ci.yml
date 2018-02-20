@@ -257,6 +257,20 @@ linux_stress:
        - ./test.sh -timeout 30m -run TestStress
    when: manual
 
+trigger_e2e_test:
+    stage: deploy
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - curl -X POST \
+             -F "token=$E2E_TRIGGER_TOKEN" \
+             -F "ref=$CI_BUILD_REF_NAME" \
+             -F "variables[DOTMESH_CI_COMMIT_SHA]=$CI_COMMIT_SHA" \
+             http://gitlab.dotmesh.io:9999/api/v4/projects/30/trigger/pipeline
+    except:
+        - /^release-.*$/
+
 deploy_master_build:
     stage: deploy
     dependencies:
