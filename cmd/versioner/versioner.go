@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -17,6 +18,11 @@ type Git interface {
 	getNumberOfCommitsSinceMaster() (int, error)
 }
 
+func alreadyReleased(branch string) bool {
+	var validVersion = regexp.MustCompile(`release-[0-9]+.[0-9]+.[0-9]+`)
+	return validVersion.MatchString(branch)
+}
+
 func calculateVersion(git Git) (string, error) {
 	branch, err := git.getBranch()
 	if err != nil {
@@ -24,6 +30,11 @@ func calculateVersion(git Git) (string, error) {
 	}
 
 	if strings.Contains(branch, "release-") {
+
+		if alreadyReleased(branch) {
+			return branch, nil
+		}
+
 		commitNumber, err := git.getNumberOfCommitsSinceMaster()
 		if err != nil {
 			handleError(err)

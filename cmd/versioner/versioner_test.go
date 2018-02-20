@@ -9,6 +9,8 @@ type MockGit struct {
 func (git MockGit) getBranch() (string, error) {
 	if git.mode == "release" {
 		return "release-1.0", nil
+	} else if git.mode == "re-release" {
+		return "release-1.10.9", nil
 	} else {
 		return "master", nil
 	}
@@ -46,6 +48,17 @@ func TestVersionerRelease(t *testing.T) {
 		t.Error(err)
 	}
 	if release != "release-1.0.10" {
+		t.Errorf("Version does not include the semver: %s", release)
+	}
+}
+
+func TestVersionerAlreadyReleasedBranch(t *testing.T) {
+	releaseBranchCase := MockGit{mode: "re-release"}
+	release, err := calculateVersion(releaseBranchCase)
+	if err != nil {
+		t.Error(err)
+	}
+	if release != "release-1.10.9" {
 		t.Errorf("Version does not include the semver: %s", release)
 	}
 }
