@@ -121,7 +121,7 @@ We direct people here to see the release history:
 
 https://github.com/dotmesh-io/dotmesh/releases
 
-This currently needs to be manually updates.
+This currently needs to be manually updated.
 
  * Create a commit in the github repo with the source code on the correct branch. AIUI this is current impossible!
  * Create a new release tag in the github UI. This opens up a window to enter details.
@@ -129,6 +129,17 @@ This currently needs to be manually updates.
  * Upload tarballs of the binaries from `get.dotmesh.io`.
  * Press the button to create the release
 
+I created the binary tarballs like so:
+
+```
+mybox$ ssh releases@get.dotmesh.io
+get$ cd /pool/releases/release-0.2.0
+get$ tar -czvf ~/Darwin.tar.gz Darwin/
+get$ tar -czvf ~/Linux.tar.gz Linux/
+get$ tar -czvf ~/kubernetes-cluster-yamls.tar.gz yaml/
+get$ ^D
+mybox$ scp releases@get.dotmesh.io:*.tar.gz .
+```
 
 Try the latest binary on https://dotmesh.com/try-dotmesh/ with a dm
 version to check that it's all deployed correctly.
