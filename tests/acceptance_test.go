@@ -825,6 +825,71 @@ func TestTwoNodesSameCluster(t *testing.T) {
 	})
 }
 
+func TestTwoDoubleNodeClusters(t *testing.T) {
+
+	f := citools.Federation{
+		citools.NewCluster(2),
+		citools.NewCluster(2),
+	}
+	citools.StartTiming()
+	err := f.Start(t)
+	defer citools.TestMarkForCleanup(f)
+	if err != nil {
+		t.Error(err)
+	}
+	// c = cluster; n = node
+	c0n0 := f[0].GetNode(0).Container
+	c0n1 := f[0].GetNode(1).Container
+	c1n0 := f[1].GetNode(0).Container
+	c1n1 := f[1].GetNode(1).Container
+
+	t.Run("PushWrongNode", func(t *testing.T) {
+		// put a branch on c0n0, with a commit.
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, c0n0, citools.DockerRun(fsname)+" touch /foo/X")
+		citools.RunOnNode(t, c0n0, "dm switch "+fsname)
+		citools.RunOnNode(t, c0n0, "dm commit -m 'hello'")
+
+		// ask c0n1 to push it to c1n0.
+		// (c1n0 becomes the master for the branch on c1; the pull should be initiated by the current master).
+		citools.RunOnNode(t, c0n1, "dm push cluster_1_node_0")
+
+		// put more commits on it, on c0n0.
+		citools.RunOnNode(t, c0n0, citools.DockerRun(fsname)+" touch /foo/Y")
+		citools.RunOnNode(t, c0n0, "dm switch "+fsname)
+		citools.RunOnNode(t, c0n0, "dm commit -m 'world'")
+
+		// try to push those commits to c1n1.
+		citools.RunOnNode(t, c0n1, "dm push cluster_1_node_1")
+
+		// the commits should show up on c1n0! (the push should have been proxied to the current master)
+		resp := citools.OutputFromRunOnNode(t, c1n0, "dm log")
+		if !strings.Contains(resp, "world") {
+			t.Error("unable to find commit message remote's log output")
+		}
+
+		// and on the other node on the other cluster, for good measure.
+		resp = citools.OutputFromRunOnNode(t, c1n1, "dm log")
+		if !strings.Contains(resp, "world") {
+			t.Error("unable to find commit message remote's log output")
+		}
+
+	})
+
+	t.Run("PullWrongNode", func(t *testing.T) {
+		// put a branch on c0n0.
+		// ask c1n0 to pull it from c0n1.
+		// (c1n0 becomes the master for the branch on c1; c0n1 had to proxy the pull).
+		// put more commits on it, on c0n0.
+		// try to pull those commits from c1n1.
+		// the commits should show up on c1n0! (the pull should have been initiated by the current master)
+	})
+
+	// TODO something with branches.
+	// TODO arrange for push/pulls to happen while the branch was being migrated to another master
+
+}
+
 func TestTwoSingleNodeClusters(t *testing.T) {
 	citools.TeardownFinishedTestRuns()
 

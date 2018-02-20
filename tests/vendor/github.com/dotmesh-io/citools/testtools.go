@@ -117,10 +117,17 @@ func testSetup(f Federation, stamp int64) error {
 		return err
 	}
 
+	// we write the dind-script.sh file out from go because we need to distribute
+	// that .sh script as a go package using dep
 	err = ioutil.WriteFile("./dind-cluster-v1.7.sh", []byte(DIND_SCRIPT), 0755)
 	if err != nil {
 		return err
 	}
+
+	// don't leave copies of the script around once we have used it
+	defer func() {
+		os.Remove("./dind-cluster-v1.7.sh")
+	}()
 
 	for i, c := range f {
 		for j := 0; j < c.GetDesiredNodeCount(); j++ {
@@ -139,7 +146,7 @@ func testSetup(f Federation, stamp int64) error {
 				mount --bind $MOUNTPOINT $MOUNTPOINT && \
 				mount --make-shared $MOUNTPOINT;
 			fi
-			EXTRA_DOCKER_ARGS="-v /dotmesh-test-pools:/dotmesh-test-pools:rshared" \
+			EXTRA_DOCKER_ARGS="-v /dotmesh-test-pools:/dotmesh-test-pools:rshared -v /var/run/docker.sock:/hostdocker.sock " \
 			DIND_IMAGE="quay.io/lukemarsden/kubeadm-dind-cluster:v1.7-hostport" \
 			CNI_PLUGIN=weave \
 				./dind-cluster-v1.7.sh bare $NODE %s
@@ -188,8 +195,10 @@ func testSetup(f Federation, stamp int64) error {
 
 			// if the CI_SERVICE_BEING_TESTED is empty it means we are in local testing mode
 			if serviceBeingTested == "dotmesh" || serviceBeingTested == "" {
+				// use the dm binary we have as part of the CI build
 				getDmCommand += "docker cp ../binaries/Linux/dm $NODE:/usr/local/bin/dm"
 			} else {
+				// otherwise download the dm binary from our release url
 				getDmCommand += fmt.Sprintf(`
 					CI_JOB_ID=%s
 					curl -L -o /tmp/dm-$CI_JOB_ID https://get.dotmesh.io/unstable/master/Linux/dm
@@ -202,48 +211,6 @@ func testSetup(f Federation, stamp int64) error {
 			err = System("bash", "-c", getDmCommand)
 			if err != nil {
 				return err
-			}
-
-			// a trick to speed up CI builds where we slurp a tarball
-			// from the host docker into the dind container after pulling
-			// it first to make sure we have the latest based on CI_HASH
-			//
-			// we get the speed boost of the existing layers that way
-			// and sometimes the builder will have just built the image
-			// NOTE: we pull on the host to make sure that we pull latest CI
-			// images from quay even if we did not build it - that is done before
-			// sending the tarball into the dind container
-			//
-			// TODO: test if streaming the tarball like this is actualy quicker
-			// than downloading from the remote registry
-
-			injectImages := []string{}
-			// allow the injected images to be overriden by a comma-delimeted string
-			// useful for frontend test where there are lots of images
-			INJECT_HOST_IMAGES := os.Getenv("INJECT_HOST_IMAGES")
-			if INJECT_HOST_IMAGES != "" {
-				injectImages = strings.Split(INJECT_HOST_IMAGES, ",")
-			}
-
-			// make sure the host has the latest image in case it was not the builder
-			// the tests are read-only in terms of images so we mount the host
-			// docker images /var/lib folder on the strict assumption we are not
-			// building anything from inside the tests
-			for _, image := range injectImages {
-				if image == "" {
-					continue
-				}
-				if !strings.Contains(image, "/") {
-					image = LocalImage(image)
-				}
-				err := System("bash", "-c", fmt.Sprintf(`
-					set -xe
-					docker pull %s
-					docker save %s | docker exec -i %s docker load
-				`, image, image, node))
-				if err != nil {
-					return err
-				}
 			}
 
 			fmt.Printf("=== Started up %s\n", node)
@@ -493,22 +460,6 @@ func OutputFromRunOnNode(t *testing.T, node string, cmd string) string {
 	return s
 }
 
-func HelperImage(service string) string {
-	var registry string
-	// expected format: quay.io/dotmesh for example
-	if reg := os.Getenv("CI_DOCKER_REGISTRY"); reg != "" {
-		registry = reg
-	} else {
-		hostname, err := os.Hostname()
-		if err != nil {
-			panic(err)
-		}
-		registry = fmt.Sprintf("%s.local:80/dotmesh", hostname)
-	}
-	tag := "latest"
-	return fmt.Sprintf("%s/%s:%s", registry, service, tag)
-}
-
 func LocalImage(service string) string {
 	var registry string
 	// expected format: quay.io/dotmesh for example
@@ -523,16 +474,15 @@ func LocalImage(service string) string {
 	}
 
 	tag := os.Getenv("CI_DOCKER_TAG")
-	serviceBeingTested := os.Getenv("CI_SERVICE_BEING_TESTED")
 	if tag == "" {
 		tag = "latest"
 	}
 	// this means that if the X service is the one being tested - then
-	// use the GIT_HASH from CI for that service and master for everything else
+	// use the GIT_HASH from CI for that service and 'latest-passing-tests' for everything else
 	// (which is the last build of that repo that passed the tests on master)
-	if serviceBeingTested != service {
-		// TODO : this should master but we havn't got that building yet
-		tag = "latest"
+	serviceBeingTested := os.Getenv("CI_SERVICE_BEING_TESTED")
+	if serviceBeingTested != "dotmesh" {
+		tag = "latest-passing-tests"
 	}
 	return fmt.Sprintf("%s/%s:%s", registry, service, tag)
 }
@@ -650,8 +600,9 @@ type Kubernetes struct {
 }
 
 type Pair struct {
-	From Node
-	To   Node
+	From       Node
+	To         Node
+	RemoteName string
 }
 
 func NewCluster(desiredNodeCount int) *Cluster {
@@ -744,9 +695,17 @@ func (f Federation) Start(t *testing.T) error {
 			for _, otherCluster := range f {
 				first := otherCluster.GetNode(0)
 				pairs = append(pairs, Pair{
-					From: node,
-					To:   first,
+					From:       node,
+					To:         first,
+					RemoteName: first.ClusterName,
 				})
+				for i, oNode := range otherCluster.GetNodes() {
+					pairs = append(pairs, Pair{
+						From:       node,
+						To:         oNode,
+						RemoteName: fmt.Sprintf("%s_node_%d", first.ClusterName, i),
+					})
+				}
 			}
 		}
 	}
@@ -754,7 +713,7 @@ func (f Federation) Start(t *testing.T) error {
 		found := false
 		for _, remote := range strings.Split(OutputFromRunOnNode(t,
 			pair.From.Container, "dm remote"), "\n") {
-			if remote == pair.To.ClusterName {
+			if remote == pair.RemoteName {
 				found = true
 			}
 		}
@@ -762,12 +721,12 @@ func (f Federation) Start(t *testing.T) error {
 			RunOnNode(t, pair.From.Container, fmt.Sprintf(
 				"echo %s |dm remote add %s admin@%s",
 				pair.To.ApiKey,
-				pair.To.ClusterName,
+				pair.RemoteName,
 				pair.To.IP,
 			))
 			res := OutputFromRunOnNode(t, pair.From.Container, "dm remote -v")
-			if !strings.Contains(res, pair.To.ClusterName) {
-				t.Errorf("can't find %s in %s's remote config", pair.To.ClusterName, pair.From.ClusterName)
+			if !strings.Contains(res, pair.RemoteName) {
+				t.Errorf("can't find %s in %s's remote config", pair.RemoteName, pair.From.ClusterName)
 			}
 			RunOnNode(t, pair.From.Container, "dm remote switch local")
 		}

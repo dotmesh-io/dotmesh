@@ -28,5 +28,3 @@ func TestDefaultDot(t *testing.T) {
   citools.startTiming()
 }
 ```
-
-
