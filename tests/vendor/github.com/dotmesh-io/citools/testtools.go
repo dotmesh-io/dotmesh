@@ -134,6 +134,16 @@ func testSetup(f Federation, stamp int64) error {
 			node := nodeName(stamp, i, j)
 			fmt.Printf(">>> Using RunArgs %s\n", c.RunArgs(i, j))
 
+			dockerAuthFile := os.Getenv("MOUNT_DOCKER_AUTH")
+
+			mountDockerAuth := ""
+
+			if dockerAuthFile != "" {
+				if _, err := os.Stat(dockerAuthFile); err == nil {
+					mountDockerAuth = fmt.Sprintf(" -v %s:/root/.dockercfg ", dockerAuthFile)
+				}
+			}
+
 			// XXX the following only works if overlay is working
 			err := System("bash", "-c", fmt.Sprintf(`
 			set -xe
@@ -146,7 +156,7 @@ func testSetup(f Federation, stamp int64) error {
 				mount --bind $MOUNTPOINT $MOUNTPOINT && \
 				mount --make-shared $MOUNTPOINT;
 			fi
-			EXTRA_DOCKER_ARGS="-v /dotmesh-test-pools:/dotmesh-test-pools:rshared -v /var/run/docker.sock:/hostdocker.sock " \
+			EXTRA_DOCKER_ARGS="-v /dotmesh-test-pools:/dotmesh-test-pools:rshared -v /var/run/docker.sock:/hostdocker.sock %s " \
 			DIND_IMAGE="quay.io/lukemarsden/kubeadm-dind-cluster:v1.7-hostport" \
 			CNI_PLUGIN=weave \
 				./dind-cluster-v1.7.sh bare $NODE %s
@@ -177,7 +187,7 @@ func testSetup(f Federation, stamp int64) error {
 					systemctl restart docker
 				'
 			fi
-			`, node, c.RunArgs(i, j), HOST_IP_FROM_CONTAINER))
+			`, node, mountDockerAuth, c.RunArgs(i, j), HOST_IP_FROM_CONTAINER))
 			if err != nil {
 				return err
 			}
@@ -481,7 +491,7 @@ func LocalImage(service string) string {
 	// use the GIT_HASH from CI for that service and 'latest-passing-tests' for everything else
 	// (which is the last build of that repo that passed the tests on master)
 	serviceBeingTested := os.Getenv("CI_SERVICE_BEING_TESTED")
-	if serviceBeingTested != "dotmesh" {
+	if serviceBeingTested != "" && serviceBeingTested != "dotmesh" {
 		tag = "latest-passing-tests"
 	}
 	return fmt.Sprintf("%s/%s:%s", registry, service, tag)
@@ -627,6 +637,10 @@ type Federation []Startable
 
 func nodeName(now int64, i, j int) string {
 	return fmt.Sprintf("cluster-%d-%d-node-%d", now, i, j)
+}
+
+func NodeName(now int64, i, j int) string {
+	return nodeName(now, i, j)
 }
 
 func poolId(now int64, i, j int) string {
