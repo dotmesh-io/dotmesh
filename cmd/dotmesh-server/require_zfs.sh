@@ -202,7 +202,7 @@ docker run -i $rm_opt --privileged --name=dotmesh-server-inner \
     -v /run/docker/plugins:/run/docker/plugins \
     -v $MOUNTPOINT:$MOUNTPOINT:rshared \
     -v /var/dotmesh:/var/dotmesh \
-    -v /usr:/system-usr/usr \
+    -v /home/kubernetes/flexvolume:/system-flexvolume \
     -l traefik.port=6969 \
     -l traefik.frontend.rule=Host:cloud.dotmesh.io \
     $net \

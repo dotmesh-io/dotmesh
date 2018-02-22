@@ -4,7 +4,7 @@ import (
 	"os"
 )
 
-var FLEXVOLUME_DIR = "/system-usr/usr/libexec/kubernetes/kubelet-plugins/volume/exec/dotmesh.io~dm"
+var FLEXVOLUME_DIR = "/system-flexvolume"
 var FLEXVOLUME_BIN = "dm"
 var FLEXVOLUME_SOURCE = "/usr/local/bin/flexvolume"
 
