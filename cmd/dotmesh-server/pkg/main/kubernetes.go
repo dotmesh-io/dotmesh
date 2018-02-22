@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"os"
 )
 
@@ -11,6 +12,8 @@ var FLEXVOLUME_SOURCE = "/usr/local/bin/flexvolume"
 func installKubernetesPlugin() error {
 	// Just atomically install the flexvolume binary every time we start up.
 	// This way we'll always handle upgrades.
+
+	log.Printf("[flexvolume] Installing driver into %s...", FLEXVOLUME_DIR)
 
 	_, err := os.Stat(FLEXVOLUME_DIR)
 	if os.IsNotExist(err) {
@@ -34,6 +37,8 @@ func installKubernetesPlugin() error {
 	if err != nil {
 		return err
 	}
+
+	log.Printf("[flexvolume] Installed into %s.", FLEXVOLUME_DIR)
 
 	return nil
 }
