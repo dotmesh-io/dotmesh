@@ -4,7 +4,7 @@ import (
 	"os"
 )
 
-var FLEXVOLUME_DIR = "/system-flexvolume"
+var FLEXVOLUME_DIR = "/system-flexvolume/dotmesh.io~dm"
 var FLEXVOLUME_BIN = "dm"
 var FLEXVOLUME_SOURCE = "/usr/local/bin/flexvolume"
 
