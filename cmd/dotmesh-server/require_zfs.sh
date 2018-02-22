@@ -42,7 +42,7 @@ FILE=${DIR}/dotmesh_data
 POOL=${USE_POOL_NAME:-pool}
 POOL=$(echo $POOL |sed s/\#HOSTNAME\#/$(hostname)/)
 MOUNTPOINT=${MOUNTPOINT:-$DIR/mnt}
-FLEXVOLUME_DRVER_DIR=${FLEXVOLUME_DRIVER_DIR:-/usr/libexec/kubernetes/kubelet-plugins/volume/exec}
+FLEXVOLUME_DRIVER_DIR=${FLEXVOLUME_DRIVER_DIR:-/usr/libexec/kubernetes/kubelet-plugins/volume/exec}
 INHERIT_ENVIRONMENT_NAMES=( "FILESYSTEM_METADATA_TIMEOUT" "DOTMESH_UPGRADES_URL" "DOTMESH_UPGRADES_INTERVAL_SECONDS")
 
 echo "=== Using mountpoint $MOUNTPOINT"
