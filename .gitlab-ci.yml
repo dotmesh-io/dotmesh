@@ -189,16 +189,16 @@ linux_two_nodes_same_cluster:
     script:
         - ./test.sh -run TestTwoNodesSameCluster
 
-#linux_kubernetes:
-#    stage: test
-#    dependencies:
-#        - build_server
-#        - build_client_linux
-#    tags:
-#        - ubuntu
-#        - fast
-#    script:
-#        - ./test.sh -run TestKubernetes
+linux_kubernetes:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - ./test.sh -run TestKubernetes
 
 linux_deletion_simple:
     stage: test
