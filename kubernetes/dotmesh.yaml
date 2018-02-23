@@ -115,6 +115,8 @@ items:
                   value: "https://checkpoint.dotmesh.com/"
                 - name: DOTMESH_UPGRADES_INTERVAL_SECONDS
                   value: "14400" # 4 hours
+                - name: FLEXVOLUME_DRIVER_DIR
+                  value: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec"
               image: 'quay.io/dotmesh/dotmesh-server:DOCKER_TAG'
               imagePullPolicy: Always
               livenessProbe:
@@ -181,7 +183,7 @@ items:
       labels:
         name: dotmesh-provisioner
       namespace: dotmesh
-  - apiVersion: rbac.authorization.k8s.io/v1alpha1
+  - apiVersion: rbac.authorization.k8s.io/v1beta1
     kind: ClusterRole
     metadata:
       name: dotmesh-provisioner-runner
@@ -198,7 +200,7 @@ items:
       - apiGroups: [""]
         resources: ["events"]
         verbs: ["list", "watch", "create", "update", "patch"]
-  - apiVersion: rbac.authorization.k8s.io/v1alpha1
+  - apiVersion: rbac.authorization.k8s.io/v1beta1
     kind: ClusterRoleBinding
     metadata:
       name: dotmesh-provisioner

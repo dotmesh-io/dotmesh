@@ -1,10 +1,11 @@
 package main
 
 import (
+	"log"
 	"os"
 )
 
-var FLEXVOLUME_DIR = "/system-usr/usr/libexec/kubernetes/kubelet-plugins/volume/exec/dotmesh.io~dm"
+var FLEXVOLUME_DIR = "/system-flexvolume/dotmesh.io~dm"
 var FLEXVOLUME_BIN = "dm"
 var FLEXVOLUME_SOURCE = "/usr/local/bin/flexvolume"
 
@@ -15,6 +16,7 @@ func installKubernetesPlugin() error {
 	if os.Getenv("DISABLE_FLEXVOLUME") != "" {
 		return nil
 	}
+	log.Printf("[flexvolume] Installing driver into %s...", FLEXVOLUME_DIR)
 
 	_, err := os.Stat(FLEXVOLUME_DIR)
 	if os.IsNotExist(err) {
@@ -38,6 +40,8 @@ func installKubernetesPlugin() error {
 	if err != nil {
 		return err
 	}
+
+	log.Printf("[flexvolume] Installed into %s.", FLEXVOLUME_DIR)
 
 	return nil
 }

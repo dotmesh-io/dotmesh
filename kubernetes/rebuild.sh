@@ -1,5 +1,7 @@
 #!/bin/sh
 
+set -ex
+
 OUT=../yaml
 
 mkdir -p $OUT
@@ -12,7 +14,7 @@ then
 	 CI_DOCKER_TAG=latest
 fi
 
-for YAML in dotmesh.yaml dotmesh-k8s-1.8.yaml dotmesh-k8s-1.7.yaml
-do
-	 sed "s/DOCKER_TAG/$CI_DOCKER_TAG/" < $YAML > $OUT/$YAML
-done
+sed "s/DOCKER_TAG/$CI_DOCKER_TAG/" < dotmesh.yaml > $OUT/dotmesh-k8s-1.7.yaml
+sed "s_rbac.authorization.k8s.io/v1beta1_rbac.authorization.k8s.io/v1_"< $OUT/dotmesh-k8s-1.7.yaml > $OUT/dotmesh-k8s-1.8.yaml
+sed "s_/usr/libexec/kubernetes/kubelet-plugins/volume/exec_/home/kubernetes/flexvolume_" < $OUT/dotmesh-k8s-1.8.yaml > $OUT/dotmesh-k8s-1.8.gke.yaml
+cp $OUT/dotmesh-k8s-1.7.yaml $OUT/dotmesh-k8s-1.7.gke.yaml

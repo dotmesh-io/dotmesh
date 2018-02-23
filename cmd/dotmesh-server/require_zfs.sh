@@ -42,6 +42,7 @@ FILE=${DIR}/dotmesh_data
 POOL=${USE_POOL_NAME:-pool}
 POOL=$(echo $POOL |sed s/\#HOSTNAME\#/$(hostname)/)
 MOUNTPOINT=${MOUNTPOINT:-$DIR/mnt}
+FLEXVOLUME_DRIVER_DIR=${FLEXVOLUME_DRIVER_DIR:-/usr/libexec/kubernetes/kubelet-plugins/volume/exec}
 INHERIT_ENVIRONMENT_NAMES=( "FILESYSTEM_METADATA_TIMEOUT" "DOTMESH_UPGRADES_URL" "DOTMESH_UPGRADES_INTERVAL_SECONDS")
 
 echo "=== Using mountpoint $MOUNTPOINT"
@@ -202,7 +203,7 @@ docker run -i $rm_opt --privileged --name=dotmesh-server-inner \
     -v /run/docker/plugins:/run/docker/plugins \
     -v $MOUNTPOINT:$MOUNTPOINT:rshared \
     -v /var/dotmesh:/var/dotmesh \
-    -v /usr:/system-usr/usr \
+    -v $FLEXVOLUME_DRIVER_DIR:/system-flexvolume \
     -l traefik.port=6969 \
     -l traefik.frontend.rule=Host:cloud.dotmesh.io \
     $net \
