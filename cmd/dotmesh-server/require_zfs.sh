@@ -42,6 +42,7 @@ FILE=${DIR}/dotmesh_data
 POOL=${USE_POOL_NAME:-pool}
 POOL=$(echo $POOL |sed s/\#HOSTNAME\#/$(hostname)/)
 MOUNTPOINT=${MOUNTPOINT:-$DIR/mnt}
+DOTMESH_INNER_SERVER_NAME=${DOTMESH_INNER_SERVER_NAME:-dotmesh-server-inner}
 FLEXVOLUME_DRIVER_DIR=${FLEXVOLUME_DRIVER_DIR:-/usr/libexec/kubernetes/kubelet-plugins/volume/exec}
 INHERIT_ENVIRONMENT_NAMES=( "FILESYSTEM_METADATA_TIMEOUT" "DOTMESH_UPGRADES_URL" "DOTMESH_UPGRADES_INTERVAL_SECONDS")
 
@@ -148,46 +149,64 @@ fi
 
 net="-p 6969:6969"
 link=""
-if [ "$DOTMESH_ETCD_ENDPOINT" == "" ]; then
-    # If etcd endpoint is overridden, then don't try to link to a local
-    # dotmesh-etcd container (etcd probably is being provided externally, e.g.
-    # by etcd operator on Kubernetes).
-    link="--link dotmesh-etcd:dotmesh-etcd"
+
+# this setting means we have set DOTMESH_ETCD_ENDPOINT to a known working
+# endpoint and we don't want any links for --net flags passed to Docker
+if [ -z "$DOTMESH_MANUAL_NETWORKING" ]; then
+    if [ "$DOTMESH_ETCD_ENDPOINT" == "" ]; then
+        # If etcd endpoint is overridden, then don't try to link to a local
+        # dotmesh-etcd container (etcd probably is being provided externally, e.g.
+        # by etcd operator on Kubernetes).
+        link="--link dotmesh-etcd:dotmesh-etcd"
+    fi
+    if [ "$DOTMESH_ETCD_ENDPOINT" != "" ]; then
+        # When running in a pod network, calculate the id of the current container
+        # in scope, and pass that as --net=container:<id> so that dotmesh-server
+        # itself runs in the same network namespace.
+        self_containers=$(docker ps -q --filter="ancestor=$DOTMESH_DOCKER_IMAGE")
+        array_containers=( $self_containers )
+        num_containers=${#array_containers[@]}
+        if [ $num_containers -eq 0 ]; then
+            echo "Cannot find id of own container!"
+            exit 1
+        fi
+        if [ $num_containers -gt 1 ]; then
+            echo "Found more than one id of own container! $self_containers"
+            exit 1
+        fi
+        net="--net=container:$self_containers"
+        # When running in a pod network, assuming we're not on a cluster that
+        # supports hostPort networking, it's preferable for the nodes to report
+        # their pod IPs to eachother, rather than the external IPs calculated above
+        # in `--guess-ipv4-addresses`. So, unset this environment variable so that
+        # dotmesh-server has to calculate the IP from inside the container in the
+        # Kubernetes pod.
+        unset YOUR_IPV4_ADDRS
+    fi
 fi
-if [ "$DOTMESH_ETCD_ENDPOINT" != "" ]; then
-    # When running in a pod network, calculate the id of the current container
-    # in scope, and pass that as --net=container:<id> so that dotmesh-server
-    # itself runs in the same network namespace.
-    self_containers=$(docker ps -q --filter="ancestor=$DOTMESH_DOCKER_IMAGE")
-    array_containers=( $self_containers )
-    num_containers=${#array_containers[@]}
-    if [ $num_containers -eq 0 ]; then
-        echo "Cannot find id of own container!"
-        exit 1
-    fi
-    if [ $num_containers -gt 1 ]; then
-        echo "Found more than one id of own container! $self_containers"
-        exit 1
-    fi
-    net="--net=container:$self_containers"
-    # When running in a pod network, assuming we're not on a cluster that
-    # supports hostPort networking, it's preferable for the nodes to report
-    # their pod IPs to eachother, rather than the external IPs calculated above
-    # in `--guess-ipv4-addresses`. So, unset this environment variable so that
-    # dotmesh-server has to calculate the IP from inside the container in the
-    # Kubernetes pod.
-    unset YOUR_IPV4_ADDRS
+
+if [ -n "$DOTMESH_JOIN_DOCKER_NETWORK" ]; then
+    net="$net --net=$DOTMESH_JOIN_DOCKER_NETWORK"
 fi
 
 secret=""
-if [[ "$INITIAL_ADMIN_PASSWORD_FILE" != "" && \
-      -e $INITIAL_ADMIN_PASSWORD_FILE && \
-      "$INITIAL_ADMIN_API_KEY_FILE" != "" && \
-      -e $INITIAL_ADMIN_API_KEY_FILE ]]; then
-    pw=$(cat $INITIAL_ADMIN_PASSWORD_FILE |tr -d '\n' |base64 -w 0)
-    ak=$(cat $INITIAL_ADMIN_API_KEY_FILE |tr -d '\n' |base64 -w 0)
-    secret="-e INITIAL_ADMIN_PASSWORD=$pw -e INITIAL_ADMIN_API_KEY=$ak"
-    echo "set secret: $secret"
+
+# if both env vars are set then just use them
+if [ -n "$INITIAL_ADMIN_PASSWORD" ] && [ -n "$INITIAL_ADMIN_API_KEY" ]; then
+    export INITIAL_ADMIN_PASSWORD=$(echo -n "$INITIAL_ADMIN_PASSWORD" | base64)
+    export INITIAL_ADMIN_API_KEY=$(echo -n "$INITIAL_ADMIN_API_KEY" | base64)
+    secret="-e INITIAL_ADMIN_PASSWORD=$INITIAL_ADMIN_PASSWORD -e INITIAL_ADMIN_API_KEY=$INITIAL_ADMIN_API_KEY"
+# otherwise we gonna use the filepaths given
+else
+    if [[ "$INITIAL_ADMIN_PASSWORD_FILE" != "" && \
+          -e $INITIAL_ADMIN_PASSWORD_FILE && \
+          "$INITIAL_ADMIN_API_KEY_FILE" != "" && \
+          -e $INITIAL_ADMIN_API_KEY_FILE ]]; then
+        pw=$(cat $INITIAL_ADMIN_PASSWORD_FILE |tr -d '\n' |base64 -w 0)
+        ak=$(cat $INITIAL_ADMIN_API_KEY_FILE |tr -d '\n' |base64 -w 0)
+        secret="-e INITIAL_ADMIN_PASSWORD=$pw -e INITIAL_ADMIN_API_KEY=$ak"
+        echo "set secret: $secret"
+    fi
 fi
 
 INHERIT_ENVIRONMENT_ARGS=""
@@ -197,17 +216,16 @@ do
     INHERIT_ENVIRONMENT_ARGS="$INHERIT_ENVIRONMENT_ARGS -e $name=$(eval "echo \$$name")"
 done
 
-docker run -i $rm_opt --privileged --name=dotmesh-server-inner \
-    -v /var/lib/dotmesh:/var/lib/dotmesh \
+docker run -i $rm_opt --privileged --name=$DOTMESH_INNER_SERVER_NAME \
+    -v $DIR:/var/lib/dotmesh \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v /run/docker/plugins:/run/docker/plugins \
     -v $MOUNTPOINT:$MOUNTPOINT:rshared \
     -v /var/dotmesh:/var/dotmesh \
     -v $FLEXVOLUME_DRIVER_DIR:/system-flexvolume \
-    -l traefik.port=6969 \
-    -l traefik.frontend.rule=Host:cloud.dotmesh.io \
     $net \
     $link \
+    -e DISABLE_FLEXVOLUME \
     -e "PATH=$PATH" \
     -e "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" \
     -e "MOUNT_PREFIX=$MOUNTPOINT" \
