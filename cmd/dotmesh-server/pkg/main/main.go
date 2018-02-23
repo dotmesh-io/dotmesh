@@ -52,12 +52,6 @@ func main() {
 		FilesystemMetadataTimeout: FILESYSTEM_METADATA_TIMEOUT_INT,
 	}
 
-	err = installKubernetesPlugin()
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-
 	POOL = os.Getenv("POOL")
 	if POOL == "" {
 		POOL = "pool"
@@ -103,6 +97,12 @@ func main() {
 		LOG_TO_STDOUT = true
 	}
 	setupLogging()
+
+	err = installKubernetesPlugin()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 
 	localPoolId, err := findLocalPoolId()
 	if err != nil {

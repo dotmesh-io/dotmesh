@@ -278,7 +278,7 @@ trigger_e2e_test:
     except:
         - /^release-.*$/
 
-deploy_master_build:
+deploy_unstable_build:
     stage: deploy
     dependencies:
         - build_client_linux
@@ -290,6 +290,7 @@ deploy_master_build:
     script:
         - "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no releases@get.dotmesh.io mkdir -p /pool/releases/unstable/$CI_COMMIT_REF_NAME"
         - "rsync -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' -avz binaries/{Linux,Darwin} yaml releases@get.dotmesh.io:/pool/releases/unstable/$CI_COMMIT_REF_NAME"
+        - "echo \"Deployed to https://get.dotmesh.io/unstable/$CI_COMMIT_REF_NAME\""
     except:
         - /^release-.*$/
 

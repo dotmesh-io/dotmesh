@@ -1596,3 +1596,39 @@ func (d *DotmeshRPC) SetDebugFlag(
 	log.Printf("DEBUG FLAG: %s <- %s (was %s)", args.FlagName, args.FlagValue, *result)
 	return nil
 }
+
+func (d *DotmeshRPC) DumpEtcd(
+	r *http.Request,
+	args *struct {
+		Prefix string
+	},
+	result *string,
+) error {
+	err := ensureAdminUser(r)
+
+	if err != nil {
+		return err
+	}
+
+	kapi, err := getEtcdKeysApi()
+	if err != nil {
+		return err
+	}
+
+	node, err := kapi.Get(context.Background(),
+		fmt.Sprintf("%s/%s", ETCD_PREFIX, args.Prefix),
+		&client.GetOptions{Recursive: true, Sort: false, Quorum: false},
+	)
+	if err != nil {
+		return err
+	}
+
+	resultBytes, err := json.Marshal(node)
+	if err != nil {
+		return err
+	}
+
+	*result = string(resultBytes)
+
+	return nil
+}
