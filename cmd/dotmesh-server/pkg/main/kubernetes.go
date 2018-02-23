@@ -12,6 +12,10 @@ func installKubernetesPlugin() error {
 	// Just atomically install the flexvolume binary every time we start up.
 	// This way we'll always handle upgrades.
 
+	if os.Getenv("DISABLE_FLEXVOLUME") != "" {
+		return nil
+	}
+
 	_, err := os.Stat(FLEXVOLUME_DIR)
 	if os.IsNotExist(err) {
 		err = os.MkdirAll(FLEXVOLUME_DIR, 0700)
