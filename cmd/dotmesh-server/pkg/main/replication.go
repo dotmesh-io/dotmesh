@@ -173,20 +173,70 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(fmt.Sprintf("Can't find state of filesystem %s.\n", z.filesystem)))
 		return
 	}
-	if z.state.masterFor(z.filesystem) == z.state.myNodeId {
+	master := z.state.masterFor(z.filesystem)
+	if master == z.state.myNodeId {
 		if state != "pushPeerState" {
 			w.WriteHeader(http.StatusNotFound)
 			w.Write([]byte(fmt.Sprintf(
-				"Host is master for this filesystem (%s), can't write to it. "+
-					"State is %s.\n", z.filesystem, state)))
+				"Host is master for this filesystem (%s), but can't write to it "+
+					"because state is %s.\n", z.filesystem, state)))
 			return
 		}
 		// else OK, we can proceed
 	} else {
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte(fmt.Sprintf(
-			"Host is not master for this filesystem (%s), can't write to it. "+
-				"State is %s.\n", z.filesystem, state)))
+		addresses := z.state.addressesFor(master)
+		// XXX hack, IPv4 happens to come before IPv6 and happens to be routeable
+		// on my network (whereas IPv6 isn't), but this depends on the enumeration
+		// order of network cards in servers :/
+		// TODO we should really attempt each address in turn until we find one
+		// that works.
+		peerAddress := addresses[0]
+
+		url := fmt.Sprintf(
+			"%s/filesystems/%s/%s/%s",
+			deduceUrl(peerAddress, "internal"), // FIXME, need master->name mapping, see how handover works normally
+			z.filesystem,
+			z.fromSnap,
+			z.toSnap,
+		)
+
+		// Proxy request to the master
+		req, err := http.NewRequest(
+			"POST", url,
+			r.Body,
+		)
+
+		_, _, apiKey, err := getPasswords("admin")
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(fmt.Sprintf("Can't establish API key to proxy push: %+v.\n", err)))
+			return
+		}
+
+		req.SetBasicAuth(
+			"admin",
+			apiKey,
+		)
+		postClient := new(http.Client)
+		log.Printf("Proxying push to %s", url)
+		resp, err := postClient.Do(req)
+		finished := make(chan bool)
+		go pipe(resp.Body, "Incoming proxy push",
+			w, "Outgoing proxy push",
+			finished,
+			make(chan *Event),
+			func(e *Event, c chan *Event) {},
+			func(bytes int64, t int64) {},
+			"compress",
+		)
+		defer resp.Body.Close()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(fmt.Sprintf("Can't proxy push to %s: %+v.\n", url, err)))
+			return
+		}
+
+		w.WriteHeader(resp.StatusCode)
 		return
 	}
 
