@@ -878,11 +878,33 @@ func TestTwoDoubleNodeClusters(t *testing.T) {
 
 	t.Run("PullWrongNode", func(t *testing.T) {
 		// put a branch on c0n0.
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, c0n0, citools.DockerRun(fsname)+" touch /foo/X")
+		citools.RunOnNode(t, c0n0, "dm switch "+fsname)
+		citools.RunOnNode(t, c0n0, "dm commit -m 'hello'")
+
 		// ask c1n0 to pull it from c0n1.
+		citools.RunOnNode(t, c1n0, "dm clone cluster_0_node_1 "+fsname)
 		// (c1n0 becomes the master for the branch on c1; c0n1 had to proxy the pull).
+
 		// put more commits on it, on c0n0.
+		citools.RunOnNode(t, c0n0, citools.DockerRun(fsname)+" touch /foo/Y")
+		citools.RunOnNode(t, c0n0, "dm commit -m 'world'")
+
 		// try to pull those commits from c1n1.
+		citools.RunOnNode(t, c1n1, "dm clone cluster_0_node_1 "+fsname)
+
 		// the commits should show up on c1n0! (the pull should have been initiated by the current master)
+		resp := citools.OutputFromRunOnNode(t, c1n0, "dm log")
+		if !strings.Contains(resp, "world") {
+			t.Error("unable to find commit message remote's log output")
+		}
+
+		// and on the other node on the other cluster, for good measure.
+		resp = citools.OutputFromRunOnNode(t, c1n1, "dm log")
+		if !strings.Contains(resp, "world") {
+			t.Error("unable to find commit message remote's log output")
+		}
 	})
 
 	// TODO something with branches.

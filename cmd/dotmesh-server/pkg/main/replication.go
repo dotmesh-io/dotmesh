@@ -36,14 +36,64 @@ func (z ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// z.state.lockFilesystem(z.filesystem)
 	// defer z.state.unlockFilesystem(z.filesystem)
 
-	if z.state.masterFor(z.filesystem) != z.state.myNodeId {
-		msg := fmt.Sprintf(
-			"Host not master for this filesystem (%v), can't send it to you.\n",
+	master := z.state.masterFor(z.filesystem)
+
+	if master != z.state.myNodeId {
+		addresses := z.state.addressesFor(master)
+		// XXX hack, IPv4 happens to come before IPv6 and happens to be routeable
+		// on my network (whereas IPv6 isn't), but this depends on the enumeration
+		// order of network cards in servers :/
+		// TODO we should really attempt each address in turn until we find one
+		// that works.
+		peerAddress := addresses[0]
+
+		url := fmt.Sprintf(
+			"%s/filesystems/%s/%s/%s",
+			deduceUrl(peerAddress, "internal"), // FIXME, need master->name mapping, see how handover works normally
 			z.filesystem,
+			z.fromSnap,
+			z.toSnap,
 		)
-		log.Printf("[ZFSSender:ServeHTTP] %s", msg)
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte(msg))
+
+		// Proxy request to the master
+		req, err := http.NewRequest(
+			"GET", url,
+			r.Body,
+		)
+
+		_, _, apiKey, err := getPasswords("admin")
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(fmt.Sprintf("Can't establish API key to proxy pull: %+v.\n", err)))
+			return
+		}
+
+		req.SetBasicAuth(
+			"admin",
+			apiKey,
+		)
+		postClient := new(http.Client)
+		log.Printf("[ZFSSender:ServeHTTP] Proxying pull from %s: %s", master, url)
+		resp, err := postClient.Do(req)
+		finished := make(chan bool)
+		log.Printf("[ZFSSender:ServeHTTP] Got HTTP response +v", resp.StatusCode)
+		w.WriteHeader(resp.StatusCode)
+		go pipe(resp.Body, url,
+			w, "proxied pull recipient",
+			finished,
+			make(chan *Event),
+			func(e *Event, c chan *Event) {},
+			func(bytes int64, t int64) {},
+			"compress",
+		)
+		defer resp.Body.Close()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(fmt.Sprintf("Can't proxy pull from %s: %+v.\n", url, err)))
+			return
+		}
+		log.Printf("[ZFSSender:ServeHTTP] Waiting for finish signal...")
+		_ = <-finished
 		return
 	}
 
@@ -218,11 +268,13 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			apiKey,
 		)
 		postClient := new(http.Client)
-		log.Printf("Proxying push to %s", url)
+		log.Printf("[ZFSReceiver] Proxying push to %s: %s", master, url)
 		resp, err := postClient.Do(req)
 		finished := make(chan bool)
-		go pipe(resp.Body, "Incoming proxy push",
-			w, "Outgoing proxy push",
+		log.Printf("[ZFSReceiver] Got HTTP response +v", resp.StatusCode)
+		w.WriteHeader(resp.StatusCode)
+		go pipe(resp.Body, url,
+			w, "proxied push recipient",
 			finished,
 			make(chan *Event),
 			func(e *Event, c chan *Event) {},
@@ -235,8 +287,8 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(fmt.Sprintf("Can't proxy push to %s: %+v.\n", url, err)))
 			return
 		}
-
-		w.WriteHeader(resp.StatusCode)
+		log.Printf("[ZFSReceiver] Waiting for finish signal...")
+		_ = <-finished
 		return
 	}
 
