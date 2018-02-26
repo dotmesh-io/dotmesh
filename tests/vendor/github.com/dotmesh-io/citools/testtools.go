@@ -492,7 +492,7 @@ func LocalImage(service string) string {
 	// (which is the last build of that repo that passed the tests on master)
 	serviceBeingTested := os.Getenv("CI_SERVICE_BEING_TESTED")
 	if serviceBeingTested != "" && serviceBeingTested != "dotmesh" {
-		tag = "latest-passing-tests"
+		tag = "test-latest"
 	}
 	return fmt.Sprintf("%s/%s:%s", registry, service, tag)
 }
