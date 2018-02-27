@@ -6,15 +6,14 @@
 # without k8s - export DISABLE_K8S=1 disables the k8s build
 set -xe
 
+CI_DOCKER_SERVER_IMAGE=${CI_DOCKER_SERVER_IMAGE:=$(hostname).local:80/dotmesh/dotmesh-server:latest}
+CI_DOCKER_PROVISIONER_IMAGE=${CI_DOCKER_PROVISIONER_IMAGE:=$(hostname).local:80/dotmesh/dotmesh-dynamic-provisioner:latest}
 VERSION="$(cd ../versioner && go run versioner.go)"
-
-CI_DOCKER_SERVER_IMAGE=${CI_DOCKER_SERVER_IMAGE:=$(hostname).local:80/dotmesh/dotmesh-server:$VERSION}
-CI_DOCKER_PROVISIONER_IMAGE=${CI_DOCKER_PROVISIONER_IMAGE:=$(hostname).local:80/dotmesh/dotmesh-dynamic-provisioner:$VERSION}
 
 if [ x$CI_DOCKER_TAG == x ]
 then
          # Non-CI build
-         CI_DOCKER_TAG=$VERSION
+         CI_DOCKER_TAG=latest
 fi
 
 mkdir -p target
