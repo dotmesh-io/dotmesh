@@ -84,7 +84,7 @@ func (z ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			make(chan *Event),
 			func(e *Event, c chan *Event) {},
 			func(bytes int64, t int64) {},
-			"compress",
+			"none",
 		)
 		defer resp.Body.Close()
 		if err != nil {
