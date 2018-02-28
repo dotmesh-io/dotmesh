@@ -93,7 +93,7 @@ func NewUser(name, email, password string) (User, error) {
 		Salt:     salt,
 		Password: hashedPassword,
 		ApiKey:   apiKey,
-		MetaData: make(map[string]string),
+		Metadata: make(map[string]string),
 	}, nil
 }
 
@@ -258,7 +258,7 @@ func GetUserByCustomerId(id string) (User, error) {
 		return User{}, err
 	}
 	for _, u := range us {
-		if u.MetaData.CustomerId == id {
+		if u.Metadata["CustomerId"] == id {
 			return u, nil
 		}
 	}

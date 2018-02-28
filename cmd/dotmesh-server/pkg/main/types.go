@@ -13,7 +13,7 @@ type User struct {
 	Salt     []byte
 	Password []byte
 	ApiKey   string
-	MetaData map[string]string
+	Metadata map[string]string
 }
 
 type SafeUser struct {
@@ -21,7 +21,7 @@ type SafeUser struct {
 	Name      string
 	Email     string
 	EmailHash string
-	MetaData  map[string]string
+	Metadata  map[string]string
 }
 
 type CloneWithName struct {

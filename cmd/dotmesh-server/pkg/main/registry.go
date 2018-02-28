@@ -335,7 +335,7 @@ func safeUser(u User) SafeUser {
 		Name:      u.Name,
 		Email:     u.Email,
 		EmailHash: emailHash,
-		MetaData:  u.MetaData,
+		Metadata:  u.Metadata,
 	}
 }
 

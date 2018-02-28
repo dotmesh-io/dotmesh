@@ -10,7 +10,6 @@ import (
 
 	"github.com/coreos/etcd/client"
 	"golang.org/x/net/context"
-	"gopkg.in/oleiade/reflections.v1"
 )
 
 // TODO ensure contexts are threaded through in all RPC calls for correct
@@ -308,14 +307,17 @@ func (d *DotmeshRPC) UserFromEmail(
 	return nil
 }
 
-// update the CustomerId and CurrentPlan fields of a given user id
-func (d *DotmeshRPC) UpdateUserMetaData(
+// set a single value for the user Metadata
+func (d *DotmeshRPC) SetUserMetadataField(
 	r *http.Request,
-	args *struct{ Id, MetaData map[string]string },
+	args *struct {
+		Id    string
+		Field string
+		Value string
+	},
 	result *SafeUser,
 ) error {
 
-	// this must be the admin user (probably from the billing service)
 	err := ensureAdminUser(r)
 	if err != nil {
 		return err
@@ -325,12 +327,36 @@ func (d *DotmeshRPC) UpdateUserMetaData(
 		return err
 	}
 
-	for field, value := range args.MetaData {
-		err = reflection.SetField(&user.MetaData, field, value)
-		if err != nil {
-			return err
-		}
+	user.Metadata[args.Field] = args.Value
+
+	err = user.Save()
+	if err != nil {
+		return err
 	}
+	*result = safeUser(user)
+	return nil
+}
+
+// delete a value for the user Metadata
+func (d *DotmeshRPC) DeleteUserMetadataField(
+	r *http.Request,
+	args *struct {
+		Id    string
+		Field string
+	},
+	result *SafeUser,
+) error {
+
+	err := ensureAdminUser(r)
+	if err != nil {
+		return err
+	}
+	user, err := GetUserById(args.Id)
+	if err != nil {
+		return err
+	}
+
+	delete(user.Metadata, args.Field)
 
 	err = user.Save()
 	if err != nil {
