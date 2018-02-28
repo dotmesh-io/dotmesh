@@ -151,7 +151,7 @@ func AdminContext(ctx context.Context) context.Context {
 }
 
 func (state *InMemoryState) runPlugin() {
-	log.Print("Starting dm plugin")
+	log.Printf("[runPlugin] Starting dm plugin with socket: %s", DM_SOCKET)
 
 	// docker acts like the admin user, for now.
 	ctx := AdminContext(context.Background())
@@ -395,7 +395,7 @@ func (state *InMemoryState) runPlugin() {
 
 	listener, err := net.Listen("unix", DM_SOCKET)
 	if err != nil {
-		log.Fatalf("Could not listen on %s: %v", DM_SOCKET, err)
+		log.Fatalf("[runPlugin] Could not listen on %s: %v", DM_SOCKET, err)
 	}
 
 	http.Serve(listener, nil)
@@ -404,7 +404,7 @@ func (state *InMemoryState) runPlugin() {
 func (state *InMemoryState) runErrorPlugin() {
 	// A variant of the normal plugin which just returns immediately with
 	// errors. For bootstrapping.
-	log.Print("Starting dm temporary bootstrap plugin")
+	log.Printf("[bootstrap] Starting dm temporary bootstrap plugin on %s", DM_SOCKET)
 	state.mustCleanupSocket()
 	http.HandleFunc("/Plugin.Activate", func(w http.ResponseWriter, r *http.Request) {
 		log.Print("[bootstrap] /Plugin.Activate")
@@ -468,7 +468,7 @@ func (state *InMemoryState) runErrorPlugin() {
 	})
 	listener, err := net.Listen("unix", DM_SOCKET)
 	if err != nil {
-		log.Fatalf("Could not listen on %s: %v", DM_SOCKET, err)
+		log.Fatalf("[bootstrap] Could not listen on %s: %v", DM_SOCKET, err)
 	}
 	http.Serve(listener, nil)
 }

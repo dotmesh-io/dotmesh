@@ -82,13 +82,18 @@ func (state *InMemoryState) runServer() {
 }
 
 func (state *InMemoryState) runUnixDomainServer() {
+	// if we have disabled flexvolume then we are not running inside Kubernetes
+	// and do not need the unix domain socket
+	if os.Getenv("DISABLE_FLEXVOLUME") != "" {
+		return
+	}
 	r := rpc.NewServer()
 	r.RegisterCodec(rpcjson.NewCodec(), "application/json")
 	r.RegisterCodec(rpcjson.NewCodec(), "application/json;charset=UTF-8")
 	d := NewDotmeshRPC(state)
 	err := r.RegisterService(d, "") // deduces name from type name
 	if err != nil {
-		log.Printf("Error while registering services %s", err)
+		log.Printf("[runUnixDomainServer] Error while registering services %s", err)
 	}
 
 	// UNIX socket for flexvolume driver to talk to us
@@ -97,13 +102,13 @@ func (state *InMemoryState) runUnixDomainServer() {
 	// Unlink any old socket lingering there
 	if _, err := os.Stat(FV_SOCKET); err == nil {
 		if err = os.Remove(FV_SOCKET); err != nil {
-			log.Fatalf("Could not clean up existing socket at %s: %v", FV_SOCKET, err)
+			log.Fatalf("[runUnixDomainServer] Could not clean up existing socket at %s: %v", FV_SOCKET, err)
 		}
 	}
 
 	listener, err := net.Listen("unix", FV_SOCKET)
 	if err != nil {
-		log.Fatalf("Could not listen on %s: %v", FV_SOCKET, err)
+		log.Fatalf("[runUnixDomainServer] Could not listen on %s: %v", FV_SOCKET, err)
 	}
 
 	unixSocketRouter := mux.NewRouter()

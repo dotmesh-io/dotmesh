@@ -225,7 +225,7 @@ docker run -i $rm_opt --privileged --name=$DOTMESH_INNER_SERVER_NAME \
     -v $FLEXVOLUME_DRIVER_DIR:/system-flexvolume \
     $net \
     $link \
-    -e DISABLE_FLEXVOLUME \
+    -e "DISABLE_FLEXVOLUME=$DISABLE_FLEXVOLUME" \
     -e "PATH=$PATH" \
     -e "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" \
     -e "MOUNT_PREFIX=$MOUNTPOINT" \
