@@ -7,23 +7,21 @@ import (
 )
 
 type User struct {
-	Id          string
-	Name        string
-	Email       string
-	Salt        []byte
-	Password    []byte
-	ApiKey      string
-	CustomerId  string
-	CurrentPlan string
+	Id       string
+	Name     string
+	Email    string
+	Salt     []byte
+	Password []byte
+	ApiKey   string
+	MetaData map[string]string
 }
 
 type SafeUser struct {
-	Id          string
-	Name        string
-	Email       string
-	EmailHash   string
-	CustomerId  string
-	CurrentPlan string
+	Id        string
+	Name      string
+	Email     string
+	EmailHash string
+	MetaData  map[string]string
 }
 
 type CloneWithName struct {

@@ -331,12 +331,11 @@ func safeUser(u User) SafeUser {
 	io.WriteString(h, u.Email)
 	emailHash := fmt.Sprintf("%x", h.Sum(nil))
 	return SafeUser{
-		Id:          u.Id,
-		Name:        u.Name,
-		Email:       u.Email,
-		EmailHash:   emailHash,
-		CustomerId:  u.CustomerId,
-		CurrentPlan: u.CurrentPlan,
+		Id:        u.Id,
+		Name:      u.Name,
+		Email:     u.Email,
+		EmailHash: emailHash,
+		MetaData:  u.MetaData,
 	}
 }
 

@@ -86,7 +86,15 @@ func NewUser(name, email, password string) (User, error) {
 	}
 
 	apiKey := base32.StdEncoding.EncodeToString(apiKeyBytes)
-	return User{Id: id.String(), Name: name, Email: email, Salt: salt, Password: hashedPassword, ApiKey: apiKey}, nil
+	return User{
+		Id:       id.String(),
+		Name:     name,
+		Email:    email,
+		Salt:     salt,
+		Password: hashedPassword,
+		ApiKey:   apiKey,
+		MetaData: make(map[string]string),
+	}, nil
 }
 
 func (u *User) ResetApiKey() error {
@@ -250,7 +258,7 @@ func GetUserByCustomerId(id string) (User, error) {
 		return User{}, err
 	}
 	for _, u := range us {
-		if u.CustomerId == id {
+		if u.MetaData.CustomerId == id {
 			return u, nil
 		}
 	}

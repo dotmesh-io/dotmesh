@@ -8,9 +8,9 @@ import (
 	"sort"
 	"strings"
 
-	"golang.org/x/net/context"
-
 	"github.com/coreos/etcd/client"
+	"golang.org/x/net/context"
+	"gopkg.in/oleiade/reflections.v1"
 )
 
 // TODO ensure contexts are threaded through in all RPC calls for correct
@@ -309,9 +309,9 @@ func (d *DotmeshRPC) UserFromEmail(
 }
 
 // update the CustomerId and CurrentPlan fields of a given user id
-func (d *DotmeshRPC) UpdateUserPaymentDetails(
+func (d *DotmeshRPC) UpdateUserMetaData(
 	r *http.Request,
-	args *struct{ Id, CustomerId, CurrentPlan string },
+	args *struct{ Id, MetaData map[string]string },
 	result *SafeUser,
 ) error {
 
@@ -324,13 +324,14 @@ func (d *DotmeshRPC) UpdateUserPaymentDetails(
 	if err != nil {
 		return err
 	}
-	if args.CustomerId != "" {
-		user.CustomerId = args.CustomerId
+
+	for field, value := range args.MetaData {
+		err = reflection.SetField(&user.MetaData, field, value)
+		if err != nil {
+			return err
+		}
 	}
 
-	if args.CurrentPlan != "" {
-		user.CurrentPlan = args.CurrentPlan
-	}
 	err = user.Save()
 	if err != nil {
 		return err
