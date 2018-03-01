@@ -12,7 +12,7 @@ fi
 
 VERSION=$(cd ../versioner && go run versioner.go)
 
-export GOOS=${1,,}
+export GOOS=${GOOS:="$1"}
 export PATH=/usr/local/go/bin:$PATH
 mkdir -p ../../binaries/$1
 
