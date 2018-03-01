@@ -43,7 +43,7 @@ func LogTiming(tag string) {
 	lastTiming = now
 }
 
-func dumpTiming() {
+func DumpTiming() {
 	fmt.Printf("=== TIMING ===\n")
 	for tag, timing := range timings {
 		fmt.Printf("%s => %.2f\n", tag, timing)

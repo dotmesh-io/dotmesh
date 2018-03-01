@@ -198,6 +198,7 @@ linux_kubernetes:
         - ubuntu
         - fast
     script:
+        - pwd
         - ./test.sh -run TestKubernetes
 
 linux_deletion_simple:
