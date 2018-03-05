@@ -4,6 +4,7 @@ set -ex
 
 OUT=../yaml
 
+rm -rf $OUT
 mkdir -p $OUT
 
 cp etcd-operator-clusterrole.yaml etcd-operator-dep.yaml dotmesh-etcd-cluster.yaml $OUT

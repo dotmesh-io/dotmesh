@@ -4,7 +4,7 @@ Dotmesh is a **git-like CLI for capturing, organizing and sharing application st
 
 In other words, it's a **snapshotting tool for databases** and other filesystem states.
 
-The application states that dotmesh captured are stored in **datadots**.
+The application states that dotmesh captures are stored in **datadots**.
 
 It can capture the state of multiple databases, each one in a [subdot](https://docs.dotmesh.com/concepts/what-is-a-datadot/#subdots), in a single atomic commit.
 

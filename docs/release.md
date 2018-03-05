@@ -123,8 +123,8 @@ https://github.com/dotmesh-io/dotmesh/releases
 
 This currently needs to be manually updated.
 
- * Create a commit in the github repo with the source code on the correct branch. AIUI this is current impossible!
  * Create a new release tag in the github UI. This opens up a window to enter details.
+ * Call the tag `release-X.Y.Z` and pick the correct release branch
  * Write a description and release notes, by copying the pattern from an existing tag.
  * Upload tarballs of the binaries from `get.dotmesh.io`.
  * Press the button to create the release
