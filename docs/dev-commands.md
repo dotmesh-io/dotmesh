@@ -86,6 +86,7 @@ environment.systemPackages = with pkgs; [
   tmate
   gnumake
   git
+  moreutils
 ];
 boot.kernel.sysctl."vm.max_map_count" = 262144; # for elasticsearch
 virtualisation.docker = {
@@ -120,7 +121,7 @@ Replacing `$(hostname)` with your hostname, and then `systemctl restart docker`.
 
 Run (as root):
 ```
-apt install zfsutils-linux jq
+apt install zfsutils-linux jq moreutils
 echo 'vm.max_map_count=262144' >> /etc/sysctl.conf
 sysctl vm.max_map_count=262144
 ```
@@ -175,7 +176,7 @@ deb-src http://ftp.us.debian.org/debian/ stretch-updates main contrib
 Run (as root):
 ```
 apt-get update
-apt-get -y install zfsutils-linux jq golang
+apt-get -y install zfsutils-linux jq golang moreutils
 echo 'vm.max_map_count=262144' >> /etc/sysctl.conf
 sysctl vm.max_map_count=262144
 ```
