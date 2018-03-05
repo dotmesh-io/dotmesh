@@ -532,7 +532,7 @@ func DockerRun(v ...string) string {
 		panic(err)
 	}
 	image := "busybox"
-	if len(v) == 3 {
+	if len(v) >= 3 {
 		image = v[2]
 	}
 	path := "/foo"
@@ -951,7 +951,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			// gets activated.  This won't be necessary after Kubernetes 1.8.
 			// https://github.com/Mirantis/kubeadm-dind-cluster/issues/40
 			`while ! (
-					echo secret123 | dm remote add local admin@127.0.0.1 &&
+					echo FAKEAPIKEY | dm remote add local admin@127.0.0.1 &&
 					systemctl restart kubelet
 				); do
 				echo 'retrying...' && sleep 1
