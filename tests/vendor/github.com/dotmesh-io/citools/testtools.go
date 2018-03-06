@@ -18,6 +18,17 @@ import (
 	"github.com/gorilla/rpc/v2/json2"
 )
 
+// props to https://github.com/kubernetes/kubernetes/issues/49387
+var KUBE_DEBUG_CMD = `kubectl get pods --all-namespaces 2>/dev/null
+for INTERESTING_POD in $(kubectl get pods --all-namespaces -o json 2>/dev/null | jq -r '.items[] | select(.status.phase != "Running" or ([ .status.conditions[] | select(.type == "Ready" and .state == false) ] | length ) == 1 ) | .metadata.name + "/" + .metadata.namespace'); do
+   NAME=$(echo $INTERESTING_POD |cut -d "/" -f 1)
+   NS=$(echo $INTERESTING_POD |cut -d "/" -f 2)
+   echo "status of $INTERESTING_POD"
+   kubectl describe pod $NAME -n $NS
+   echo "logs of $INTERESTING_POD"
+   kubectl logs --tail 10 $NAME -n $NS
+done`
+
 var timings map[string]float64
 var lastTiming int64
 
@@ -842,6 +853,11 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		_ = <-finishing
 	}
 
+	logAddr := ""
+	if os.Getenv("DISABLE_LOG_AGGREGATION") == "" {
+		logAddr = HOST_IP_FROM_CONTAINER
+	}
+
 	// TODO regex the following yamels to refer to the newly pushed
 	// dotmesh container image, rather than the latest stable
 	err = System("bash", "-c",
@@ -853,7 +869,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			docker exec $MASTER sed -i 's/quay.io\/dotmesh\/dotmesh-dynamic-provisioner:DOCKER_TAG/%s/' /dotmesh-kube-yaml/dotmesh.yaml
 			docker exec $MASTER sed -i 's/value: pool/value: %s-\#HOSTNAME\#/' /dotmesh-kube-yaml/dotmesh.yaml
 			docker exec $MASTER sed -i 's/value: \/var\/lib\/dotmesh/value: %s-\#HOSTNAME\#/' /dotmesh-kube-yaml/dotmesh.yaml
-			docker exec $MASTER sed -i 's/"" \# LOG_ADDR/%s/' /dotmesh-kube-yaml/dotmesh.yaml
+			docker exec $MASTER sed -i 's/"" \# LOG_ADDR/"%s"/' /dotmesh-kube-yaml/dotmesh.yaml
 			docker exec $MASTER sed -i 's/size: 3/size: 1/' /dotmesh-kube-yaml/dotmesh-etcd-cluster.yaml
 			`,
 			nodeName(now, i, 0),
@@ -864,7 +880,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			// them unique... TODO: make sure we clear these up
 			poolId(now, i, 0),
 			"\\/dotmesh-test-pools\\/"+poolId(now, i, 0),
-			HOST_IP_FROM_CONTAINER,
+			logAddr,
 		),
 	)
 	if err != nil {
@@ -935,7 +951,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			// install dotmesh once on the master (retry because etcd operator
 			// needs to initialize)
 			"sleep 1 && "+
-			"while ! kubectl apply -f /dotmesh-kube-yaml/dotmesh-etcd-cluster.yaml; do sleep 1; kubectl get pods -n dotmesh; done && "+
+			"while ! kubectl apply -f /dotmesh-kube-yaml/dotmesh-etcd-cluster.yaml; do sleep 1; "+KUBE_DEBUG_CMD+"; done && "+
 			"kubectl apply -f /dotmesh-kube-yaml/dotmesh.yaml",
 		nil,
 	)
@@ -954,7 +970,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 					echo FAKEAPIKEY | dm remote add local admin@127.0.0.1 &&
 					systemctl restart kubelet
 				); do
-				echo 'retrying...' && sleep 1; kubectl get pods -n dotmesh;
+				echo 'retrying...' && sleep 1; `+KUBE_DEBUG_CMD+`;
 			done`,
 			nil,
 		)
@@ -981,7 +997,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		time.Sleep(time.Second)
 		st, err = docker(
 			nodeName(now, i, 0),
-			"kubectl get pods -n dotmesh",
+			KUBE_DEBUG_CMD,
 			nil,
 		)
 		if err != nil {
