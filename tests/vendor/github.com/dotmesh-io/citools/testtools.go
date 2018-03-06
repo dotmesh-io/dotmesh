@@ -618,6 +618,7 @@ type Cluster struct {
 type Kubernetes struct {
 	DesiredNodeCount int
 	Nodes            []Node
+	Env              map[string]string
 }
 
 type Pair struct {
@@ -628,20 +629,23 @@ type Pair struct {
 
 func NewCluster(desiredNodeCount int) *Cluster {
 	emptyEnv := make(map[string]string)
-	return &Cluster{DesiredNodeCount: desiredNodeCount, Env: emptyEnv, ClusterArgs: ""}
+	return NewClusterWithArgs(desiredNodeCount, emptyEnv, "")
 }
 
 func NewClusterWithEnv(desiredNodeCount int, env map[string]string) *Cluster {
-	return &Cluster{DesiredNodeCount: desiredNodeCount, Env: env, ClusterArgs: ""}
+	return NewClusterWithArgs(desiredNodeCount, env, "")
 }
 
 // custom arguments that are passed through to `dm cluster {init,join}`
 func NewClusterWithArgs(desiredNodeCount int, env map[string]string, args string) *Cluster {
+	env["CHECKPOINT_DISABLE"] = "true" //set default test env vars
 	return &Cluster{DesiredNodeCount: desiredNodeCount, Env: env, ClusterArgs: args}
 }
 
 func NewKubernetes(desiredNodeCount int) *Kubernetes {
-	return &Kubernetes{DesiredNodeCount: desiredNodeCount}
+	defaultEnv := map[string]string{
+		"CHECKPOINT_DISABLE": "true"}
+	return &Kubernetes{DesiredNodeCount: desiredNodeCount, Env: defaultEnv}
 }
 
 type Federation []Startable
@@ -823,8 +827,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 						"quay.io/dotmesh/dotmesh-server:latest", // ABS FIXME: What is this for, and can we get rid of it safely?
 					hostname, hostname,
 				),
-				nil,
-			)
+				c.Env)
 			if err != nil {
 				panic(st)
 			}
