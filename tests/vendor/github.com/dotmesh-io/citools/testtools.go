@@ -827,7 +827,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 						"quay.io/dotmesh/dotmesh-server:latest", // ABS FIXME: What is this for, and can we get rid of it safely?
 					hostname, hostname,
 				),
-				c.Env)
+				nil)
 			if err != nil {
 				panic(st)
 			}
@@ -956,7 +956,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			"sleep 1 && "+
 			"while ! kubectl apply -f /dotmesh-kube-yaml/dotmesh-etcd-cluster.yaml; do sleep 1; "+KUBE_DEBUG_CMD+"; done && "+
 			"kubectl apply -f /dotmesh-kube-yaml/dotmesh.yaml",
-		nil,
+		c.Env,
 	)
 	if err != nil {
 		return err
