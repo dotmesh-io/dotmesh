@@ -61,6 +61,8 @@ shell
 
 Add the `gitlab-runner` user's SSH public key to `authorized_hosts` on releases@get.dotmesh.io
 
+Edit  /etc/gitlab-runner/config.toml to set the concurrency to 4 (it's obvious how)
+
 ## setup - nixos
 
 Use a config like this:
