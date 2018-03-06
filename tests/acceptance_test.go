@@ -19,22 +19,16 @@ Take a look at docs/dev-commands.md to see how to run these tests.
 
 */
 
-func addFuncToCleanups(f func()) {
-	globalCleanupFuncs = append(globalCleanupFuncs, f)
-}
-
-var globalCleanupFuncs []func()
-
 func TestDefaultDot(t *testing.T) {
 	// Test default dot select on a totally fresh cluster
 	citools.TeardownFinishedTestRuns()
 
 	f := citools.Federation{citools.NewCluster(1)}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 
 	citools.StartTiming()
 	err := f.Start(t)
-	defer citools.TestMarkForCleanup(f)
-	addFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 	if err != nil {
 		t.Error(err)
 	}
@@ -92,11 +86,11 @@ func TestSingleNode(t *testing.T) {
 	citools.TeardownFinishedTestRuns()
 
 	f := citools.Federation{citools.NewCluster(1)}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 
 	citools.StartTiming()
 	err := f.Start(t)
-	defer citools.TestMarkForCleanup(f)
-	addFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 	if err != nil {
 		t.Error(err)
 	}
@@ -634,11 +628,11 @@ func TestDeletionSimple(t *testing.T) {
 
 	// Our cluster gets a metadata timeout of 5s
 	f := citools.Federation{citools.NewClusterWithEnv(2, clusterEnv)}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 
 	citools.StartTiming()
 	err := f.Start(t)
-	defer citools.TestMarkForCleanup(f)
-	addFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 	if err != nil {
 		t.Error(err)
 	}
@@ -766,11 +760,11 @@ func TestDeletionComplex(t *testing.T) {
 
 	// Our cluster gets a metadata timeout of 5s
 	f := citools.Federation{citools.NewClusterWithEnv(2, clusterEnv)}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 
 	citools.StartTiming()
 	err := f.Start(t)
-	defer citools.TestMarkForCleanup(f)
-	addFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 	if err != nil {
 		t.Error(err)
 	}
@@ -808,11 +802,11 @@ func TestTwoNodesSameCluster(t *testing.T) {
 	citools.TeardownFinishedTestRuns()
 
 	f := citools.Federation{citools.NewCluster(2)}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 
 	citools.StartTiming()
 	err := f.Start(t)
-	defer citools.TestMarkForCleanup(f)
-	addFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 	if err != nil {
 		t.Error(err)
 	}
@@ -839,10 +833,11 @@ func TestTwoDoubleNodeClusters(t *testing.T) {
 		citools.NewCluster(2),
 		citools.NewCluster(2),
 	}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
+
 	citools.StartTiming()
 	err := f.Start(t)
-	defer citools.TestMarkForCleanup(f)
-	addFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 	if err != nil {
 		t.Error(err)
 	}
@@ -928,10 +923,11 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		citools.NewCluster(1), // cluster_0_node_0
 		citools.NewCluster(1), // cluster_1_node_0
 	}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
+
 	citools.StartTiming()
 	err := f.Start(t)
-	defer citools.TestMarkForCleanup(f)
-	addFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 	if err != nil {
 		t.Error(err)
 	}
@@ -1238,10 +1234,11 @@ func TestThreeSingleNodeClusters(t *testing.T) {
 		citools.NewCluster(1), // cluster_1_node_0 - alice
 		citools.NewCluster(1), // cluster_2_node_0 - bob
 	}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
+
 	citools.StartTiming()
 	err := f.Start(t)
-	defer citools.TestMarkForCleanup(f)
-	addFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 	if err != nil {
 		t.Error(err)
 	}
@@ -1572,11 +1569,11 @@ func TestKubernetes(t *testing.T) {
 	citools.TeardownFinishedTestRuns()
 
 	f := citools.Federation{citools.NewKubernetes(3)}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 
 	citools.StartTiming()
 	err := f.Start(t)
-	defer citools.TestMarkForCleanup(f)
-	addFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 	if err != nil {
 		t.Error(err)
 	}
@@ -1825,10 +1822,11 @@ func TestStress(t *testing.T) {
 	f := citools.Federation{
 		citools.NewCluster(5),
 	}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
+
 	citools.StartTiming()
 	err := f.Start(t)
-	defer citools.TestMarkForCleanup(f)
-	addFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 	if err != nil {
 		t.Error(err)
 	}
