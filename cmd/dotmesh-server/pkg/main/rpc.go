@@ -1124,58 +1124,66 @@ func (d *DotmeshRPC) Transfer(
 
 		var cs []DockerContainer
 		var dirtyBytes int64
-		// TODO Add a check that the filesystem hasn't diverged snapshot-wise.
 
-		if args.Direction == "push" {
-			// Ask the remote
-			var v DotmeshVolume
-			err := client.CallRemote(r.Context(), "DotmeshRPC.Get", filesystemId, &v)
-			if err != nil {
-				return err
+		err = tryUntilSucceedsN(func() error {
+			// TODO Add a check that the filesystem hasn't diverged snapshot-wise.
+
+			if args.Direction == "push" {
+				// Ask the remote
+				var v DotmeshVolume
+				err := client.CallRemote(r.Context(), "DotmeshRPC.Get", filesystemId, &v)
+				if err != nil {
+					return err
+				}
+				log.Printf("[TransferIt] for %s, got dotmesh volume: %s", filesystemId, v)
+				dirtyBytes = v.DirtyBytes
+				log.Printf("[TransferIt] got %d dirty bytes for %s from peer", dirtyBytes, filesystemId)
+
+				err = client.CallRemote(r.Context(), "DotmeshRPC.ContainersById", filesystemId, &cs)
+				if err != nil {
+					return err
+				}
+				log.Printf("[TransferIt] got %+v remote containers for %s from peer", cs, filesystemId)
+
+			} else if args.Direction == "pull" {
+				// Consult ourselves
+				v, err := d.state.getOne(r.Context(), filesystemId)
+				if err != nil {
+					return err
+				}
+				dirtyBytes = v.DirtyBytes
+				log.Printf("[TransferIt] got %d dirty bytes for %s from local", dirtyBytes, filesystemId)
+
+				d.state.globalContainerCacheLock.Lock()
+				defer d.state.globalContainerCacheLock.Unlock()
+				c, _ := (*d.state.globalContainerCache)[filesystemId]
+				cs = c.Containers
 			}
-			log.Printf("[TransferIt] for %s, got dotmesh volume: %s", filesystemId, v)
-			dirtyBytes = v.DirtyBytes
-			log.Printf("[TransferIt] got %d dirty bytes for %s from peer", dirtyBytes, filesystemId)
 
-			err = client.CallRemote(r.Context(), "DotmeshRPC.ContainersById", filesystemId, &cs)
-			if err != nil {
-				return err
+			if dirtyBytes > 0 {
+				// TODO backoff and retry above
+				return fmt.Errorf(
+					"Aborting because there are %.2f MiB of uncommitted changes on volume "+
+						"where data would be written. Use 'dm reset' to roll back.",
+					float64(dirtyBytes)/(1024*1024),
+				)
 			}
-			log.Printf("[TransferIt] got %+v remote containers for %s from peer", cs, filesystemId)
 
-		} else if args.Direction == "pull" {
-			// Consult ourselves
-			v, err := d.state.getOne(r.Context(), filesystemId)
-			if err != nil {
-				return err
+			if len(cs) > 0 {
+				containersRunning := []string{}
+				for _, c := range cs {
+					containersRunning = append(containersRunning, string(c.Name))
+				}
+				return fmt.Errorf(
+					"Aborting because there are active containers running on "+
+						"volume where data would be written: %s. Stop the containers.",
+					strings.Join(containersRunning, ", "),
+				)
 			}
-			dirtyBytes = v.DirtyBytes
-			log.Printf("[TransferIt] got %d dirty bytes for %s from local", dirtyBytes, filesystemId)
-
-			d.state.globalContainerCacheLock.Lock()
-			defer d.state.globalContainerCacheLock.Unlock()
-			c, _ := (*d.state.globalContainerCache)[filesystemId]
-			cs = c.Containers
-		}
-
-		if dirtyBytes > 0 {
-			return fmt.Errorf(
-				"Aborting because there are %.2f MiB of uncommitted changes on volume "+
-					"where data would be written. Use 'dm reset' to roll back.",
-				float64(dirtyBytes)/(1024*1024),
-			)
-		}
-
-		if len(cs) > 0 {
-			containersRunning := []string{}
-			for _, c := range cs {
-				containersRunning = append(containersRunning, string(c.Name))
-			}
-			return fmt.Errorf(
-				"Aborting because there are active containers running on "+
-					"volume where data would be written: %s. Stop the containers.",
-				strings.Join(containersRunning, ", "),
-			)
+			return nil
+		}, "checking for dirty data and running containers", 2)
+		if err != nil {
+			return err
 		}
 
 	} else {
