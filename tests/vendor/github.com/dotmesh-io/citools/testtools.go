@@ -114,8 +114,9 @@ func TestMarkForCleanup(f Federation) {
 				))
 			}, fmt.Sprintf("marking %s for cleanup", node))
 			if err != nil {
-				fmt.Printf("Error marking %s for cleanup: %s, giving up.\n", node, err)
-				panic("This is bad. Stop everything and clean up manually!")
+				log.Printf("Error marking %s for cleanup: %s, giving up.\n", node, err)
+			} else {
+				log.Printf("Marked %s for cleanup.", node)
 			}
 		}
 	}
@@ -281,6 +282,14 @@ func TeardownFinishedTestRuns() {
 
 	}()
 
+	cs, err := exec.Command(
+		"bash", "-c", "docker ps --format {{.Names}} |grep cluster- || true",
+	).Output()
+	if err != nil {
+		panic(err)
+	}
+	log.Printf("============\nContainers running before	cleanup:\n%s\n============", cs)
+
 	// There maybe other teardown processes running in parallel with this one.
 	// Check, and if there are, wait for it to complete and then return.
 	lockfile := "/dotmesh-test-cleanup.lock"
@@ -305,12 +314,12 @@ func TeardownFinishedTestRuns() {
 
 	// Containers that weren't marked as CLEAN_ME_UP but which are older than
 	// an hour, assume they should be cleaned up.
-	err := System("../scripts/mark-old-cleanup.sh")
+	err = System("../scripts/mark-old-cleanup.sh")
 	if err != nil {
 		log.Printf("Error running mark-old-cleanup.sh: %s", err)
 	}
 
-	cs, err := exec.Command(
+	cs, err = exec.Command(
 		"bash", "-c", "docker ps --format {{.Names}} |grep cluster- || true",
 	).Output()
 	if err != nil {
@@ -444,6 +453,15 @@ func TeardownFinishedTestRuns() {
 	if err != nil {
 		fmt.Printf("Error from docker container prune -f: %v", err)
 	}
+
+	cs, err = exec.Command(
+		"bash", "-c", "docker ps --format {{.Names}} |grep cluster- || true",
+	).Output()
+	if err != nil {
+		panic(err)
+	}
+	log.Printf("============\nContainers running after cleanup:\n%s\n============", cs)
+
 }
 
 func docker(node string, cmd string, env map[string]string) (string, error) {
