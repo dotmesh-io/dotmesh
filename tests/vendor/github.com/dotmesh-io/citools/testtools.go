@@ -294,6 +294,16 @@ func TeardownFinishedTestRuns() {
 	}
 	fmt.Printf("============\nContainers running before cleanup:\n%s\n============\n", cs)
 
+	defer func() {
+		cs, err = exec.Command(
+			"bash", "-c", "docker ps |grep cluster- || true",
+		).Output()
+		if err != nil {
+			panic(err)
+		}
+		fmt.Printf("============\nContainers running after cleanup:\n%s\n============\n", cs)
+	}()
+
 	// There maybe other teardown processes running in parallel with this one.
 	// Check, and if there are, wait for it to complete and then return.
 	lockfile := "/dotmesh-test-cleanup.lock"
@@ -457,14 +467,6 @@ func TeardownFinishedTestRuns() {
 	if err != nil {
 		fmt.Printf("Error from docker container prune -f: %v", err)
 	}
-
-	cs, err = exec.Command(
-		"bash", "-c", "docker ps |grep cluster- || true",
-	).Output()
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf("============\nContainers running after cleanup:\n%s\n============\n", cs)
 
 }
 
