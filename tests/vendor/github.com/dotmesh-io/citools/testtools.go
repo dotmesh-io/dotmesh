@@ -21,15 +21,19 @@ import (
 )
 
 // props to https://github.com/kubernetes/kubernetes/issues/49387
-var KUBE_DEBUG_CMD = `kubectl get pods --all-namespaces 2>/dev/null
-for INTERESTING_POD in $(kubectl get pods --all-namespaces -o json 2>/dev/null | jq -r '.items[] | select(.status.phase != "Running" or ([ .status.conditions[] | select(.type == "Ready" and .state == false) ] | length ) == 1 ) | .metadata.name + "/" + .metadata.namespace'); do
+var KUBE_DEBUG_CMD = `(kubectl get pods --all-namespaces 2>/dev/null
+for INTERESTING_POD in $(kubectl get pods --all-namespaces -o json 2>/dev/null | jq -r '.items[] | select(.status.phase != "Running" or ([ .status.conditions[] | select(.type == "Ready" and .state == false) ] | length ) == 1 ) | .metadata.name + "/" + .metadata.namespace' + "/" + .status.phase); do
    NAME=$(echo $INTERESTING_POD |cut -d "/" -f 1)
    NS=$(echo $INTERESTING_POD |cut -d "/" -f 2)
+   PHASE=$(echo $INTERESTING_POD |cut -d "/" -f 3)
    echo "status of $INTERESTING_POD"
    kubectl describe pod $NAME -n $NS
-   echo "logs of $INTERESTING_POD"
-   kubectl logs --tail 10 $NAME -n $NS
-done`
+   if [ "$PHASE" != "ContainerCreating" ]; then
+	   echo "logs of $INTERESTING_POD"
+	   kubectl logs --tail 10 $NAME -n $NS
+   fi
+done
+exit 0)` // never let the debug command failing cause us to fail the tests!
 
 var timings map[string]float64
 var lastTiming int64
@@ -1006,7 +1010,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			// install dotmesh once on the master (retry because etcd operator
 			// needs to initialize)
 			"sleep 1 && "+
-			"while ! kubectl apply -f /dotmesh-kube-yaml/dotmesh-etcd-cluster.yaml; do sleep 1; "+KUBE_DEBUG_CMD+"; done && "+
+			"while ! kubectl apply -f /dotmesh-kube-yaml/dotmesh-etcd-cluster.yaml; do sleep 2; "+KUBE_DEBUG_CMD+"; done && "+
 			"kubectl apply -f /dotmesh-kube-yaml/dotmesh.yaml",
 		c.Env,
 	)
@@ -1025,7 +1029,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 					echo FAKEAPIKEY | dm remote add local admin@127.0.0.1 &&
 					systemctl restart kubelet
 				); do
-				echo 'retrying...' && sleep 1; `+KUBE_DEBUG_CMD+`;
+				echo 'retrying...' && sleep 2; `+KUBE_DEBUG_CMD+`;
 			done`,
 			nil,
 		)
@@ -1049,7 +1053,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			break
 		}
 		fmt.Printf("etcd is not up... %#v\n", resp)
-		time.Sleep(time.Second)
+		time.Sleep(time.Second * 2)
 		st, err = docker(
 			nodeName(now, i, 0),
 			KUBE_DEBUG_CMD,

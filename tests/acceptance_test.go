@@ -1576,6 +1576,7 @@ func TestKubernetes(t *testing.T) {
 	err := f.Start(t)
 	if err != nil {
 		t.Error(err)
+		return // there's no point carrying on
 	}
 	node1 := f[0].GetNode(0)
 
