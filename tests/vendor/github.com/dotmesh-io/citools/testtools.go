@@ -283,12 +283,12 @@ func TeardownFinishedTestRuns() {
 	}()
 
 	cs, err := exec.Command(
-		"bash", "-c", "docker ps --format {{.Names}} |grep cluster- || true",
+		"bash", "-c", "docker ps |grep cluster- || true",
 	).Output()
 	if err != nil {
 		panic(err)
 	}
-	log.Printf("============\nContainers running before	cleanup:\n%s\n============", cs)
+	fmt.Printf("============\nContainers running before cleanup:\n%s\n============", cs)
 
 	// There maybe other teardown processes running in parallel with this one.
 	// Check, and if there are, wait for it to complete and then return.
@@ -455,12 +455,12 @@ func TeardownFinishedTestRuns() {
 	}
 
 	cs, err = exec.Command(
-		"bash", "-c", "docker ps --format {{.Names}} |grep cluster- || true",
+		"bash", "-c", "docker ps |grep cluster- || true",
 	).Output()
 	if err != nil {
 		panic(err)
 	}
-	log.Printf("============\nContainers running after cleanup:\n%s\n============", cs)
+	fmt.Printf("============\nContainers running after cleanup:\n%s\n============", cs)
 
 }
 
