@@ -22,7 +22,7 @@ import (
 
 // props to https://github.com/kubernetes/kubernetes/issues/49387
 var KUBE_DEBUG_CMD = `(kubectl get pods --all-namespaces 2>/dev/null
-for INTERESTING_POD in $(kubectl get pods --all-namespaces -o json 2>/dev/null | jq -r '.items[] | select(.status.phase != "Running" or ([ .status.conditions[] | select(.type == "Ready" and .state == false) ] | length ) == 1 ) | .metadata.name + "/" + .metadata.namespace' + "/" + .status.phase); do
+for INTERESTING_POD in $(kubectl get pods --all-namespaces -o json 2>/dev/null | jq -r '.items[] | select(.status.phase != "Running" or ([ .status.conditions[] | select(.type == "Ready" and .state == false) ] | length ) == 1 ) | .metadata.name + "/" + .metadata.namespace + "/" + .status.phase'); do
    NAME=$(echo $INTERESTING_POD |cut -d "/" -f 1)
    NS=$(echo $INTERESTING_POD |cut -d "/" -f 2)
    PHASE=$(echo $INTERESTING_POD |cut -d "/" -f 3)
