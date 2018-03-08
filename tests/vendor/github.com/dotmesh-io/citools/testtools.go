@@ -109,6 +109,7 @@ func TryUntilSucceeds(f func() error, desc string) error {
 }
 
 func TestMarkForCleanup(f Federation) {
+	log.Printf("Entering TestMarkForCleanup")
 	for _, c := range f {
 		for _, n := range c.GetNodes() {
 			node := n.Container
