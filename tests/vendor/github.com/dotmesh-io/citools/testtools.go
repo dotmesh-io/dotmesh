@@ -10,13 +10,30 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/gorilla/rpc/v2/json2"
 )
+
+// props to https://github.com/kubernetes/kubernetes/issues/49387
+var KUBE_DEBUG_CMD = `(kubectl get pods --all-namespaces 2>/dev/null
+for INTERESTING_POD in $(kubectl get pods --all-namespaces -o json 2>/dev/null | jq -r '.items[] | select(.status.phase != "Running" or ([ .status.conditions[] | select(.type == "Ready" and .state == false) ] | length ) == 1 ) | .metadata.name + "/" + .metadata.namespace + "/" + .status.phase'); do
+   NAME=$(echo $INTERESTING_POD |cut -d "/" -f 1)
+   NS=$(echo $INTERESTING_POD |cut -d "/" -f 2)
+   PHASE=$(echo $INTERESTING_POD |cut -d "/" -f 3)
+   echo "--> status of $INTERESTING_POD"
+   kubectl describe pod $NAME -n $NS
+   if [ "$PHASE" != "ContainerCreating" ]; then
+	   echo "--> logs of $INTERESTING_POD"
+	   kubectl logs --tail 10 $NAME -n $NS
+   fi
+done
+exit 0)` // never let the debug command failing cause us to fail the tests!
 
 var timings map[string]float64
 var lastTiming int64
@@ -32,6 +49,13 @@ func Contains(arr []string, str string) bool {
 	return false
 }
 
+func AddFuncToCleanups(f func()) {
+	log.Printf("ADDING CLEANUP FUNC %+v", f)
+	globalCleanupFuncs = append(globalCleanupFuncs, f)
+}
+
+var globalCleanupFuncs []func()
+
 func StartTiming() {
 	lastTiming = time.Now().UnixNano()
 	timings = make(map[string]float64)
@@ -43,7 +67,7 @@ func LogTiming(tag string) {
 	lastTiming = now
 }
 
-func dumpTiming() {
+func DumpTiming() {
 	fmt.Printf("=== TIMING ===\n")
 	for tag, timing := range timings {
 		fmt.Printf("%s => %.2f\n", tag, timing)
@@ -85,6 +109,7 @@ func TryUntilSucceeds(f func() error, desc string) error {
 }
 
 func TestMarkForCleanup(f Federation) {
+	log.Printf("Entering TestMarkForCleanup")
 	for _, c := range f {
 		for _, n := range c.GetNodes() {
 			node := n.Container
@@ -94,14 +119,15 @@ func TestMarkForCleanup(f Federation) {
 				))
 			}, fmt.Sprintf("marking %s for cleanup", node))
 			if err != nil {
-				fmt.Printf("Error marking %s for cleanup: %s, giving up.\n", node, err)
-				panic("This is bad. Stop everything and clean up manually!")
+				log.Printf("Error marking %s for cleanup: %s, giving up.\n", node, err)
+			} else {
+				log.Printf("Marked %s for cleanup.", node)
 			}
 		}
 	}
 }
 
-func testSetup(f Federation, stamp int64) error {
+func testSetup(t *testing.T, f Federation, stamp int64) error {
 	err := System("bash", "-c", `
 		# Create a home for the test pools to live that can have the same path
 		# both from ZFS's perspective and that of the inner container.
@@ -191,6 +217,12 @@ func testSetup(f Federation, stamp int64) error {
 			if err != nil {
 				return err
 			}
+			// as soon as this completes, add it to c.Nodes. more detail gets
+			// filled in later (eg dotmesh secrets), but it's important that
+			// the basics are in here so that the nodes get marked for cleanup
+			// if the setup fails (common w/kubernetes)
+			clusterName := fmt.Sprintf("cluster_%d", i)
+			c.AppendNode(NodeFromNodeName(t, stamp, i, j, clusterName))
 
 			// if we are testing dotmesh - then the binary under test will have
 			// already been created - otherwise, download the latest master build
@@ -236,6 +268,49 @@ type N struct {
 }
 
 func TeardownFinishedTestRuns() {
+
+	// Handle SIGQUIT and mark tests for cleanup in that case, then immediately
+	// exit.
+
+	go func() {
+		// From https://golang.org/pkg/os/signal/#Notify
+		// Set up channel on which to send signal notifications.
+		// We must use a buffered channel or risk missing the signal
+		// if we're not ready to receive when the signal is sent.
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, syscall.SIGQUIT)
+
+		// Block until a signal is received.
+		log.Printf("WAITING FOR THE SIGNAL")
+		s := <-c
+		log.Printf("Got signal:", s)
+		for _, f := range globalCleanupFuncs {
+			log.Printf("RUNNING CLEANUP FUNC")
+			f()
+		}
+		log.Printf("DONE CLEANUP")
+		os.Exit(131)
+
+	}()
+
+	cs, err := exec.Command(
+		"bash", "-c", "docker ps |grep cluster- || true",
+	).Output()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("============\nContainers running before cleanup:\n%s\n============\n", cs)
+
+	defer func() {
+		cs, err = exec.Command(
+			"bash", "-c", "docker ps |grep cluster- || true",
+		).Output()
+		if err != nil {
+			panic(err)
+		}
+		fmt.Printf("============\nContainers running after cleanup:\n%s\n============\n", cs)
+	}()
+
 	// There maybe other teardown processes running in parallel with this one.
 	// Check, and if there are, wait for it to complete and then return.
 	lockfile := "/dotmesh-test-cleanup.lock"
@@ -260,12 +335,12 @@ func TeardownFinishedTestRuns() {
 
 	// Containers that weren't marked as CLEAN_ME_UP but which are older than
 	// an hour, assume they should be cleaned up.
-	err := System("../scripts/mark-old-cleanup.sh")
+	err = System("../scripts/mark-old-cleanup.sh")
 	if err != nil {
 		log.Printf("Error running mark-old-cleanup.sh: %s", err)
 	}
 
-	cs, err := exec.Command(
+	cs, err = exec.Command(
 		"bash", "-c", "docker ps --format {{.Names}} |grep cluster- || true",
 	).Output()
 	if err != nil {
@@ -399,6 +474,7 @@ func TeardownFinishedTestRuns() {
 	if err != nil {
 		fmt.Printf("Error from docker container prune -f: %v", err)
 	}
+
 }
 
 func docker(node string, cmd string, env map[string]string) (string, error) {
@@ -532,7 +608,7 @@ func DockerRun(v ...string) string {
 		panic(err)
 	}
 	image := "busybox"
-	if len(v) == 3 {
+	if len(v) >= 3 {
 		image = v[2]
 	}
 	path := "/foo"
@@ -607,6 +683,7 @@ type Cluster struct {
 type Kubernetes struct {
 	DesiredNodeCount int
 	Nodes            []Node
+	Env              map[string]string
 }
 
 type Pair struct {
@@ -617,20 +694,23 @@ type Pair struct {
 
 func NewCluster(desiredNodeCount int) *Cluster {
 	emptyEnv := make(map[string]string)
-	return &Cluster{DesiredNodeCount: desiredNodeCount, Env: emptyEnv, ClusterArgs: ""}
+	return NewClusterWithArgs(desiredNodeCount, emptyEnv, "")
 }
 
 func NewClusterWithEnv(desiredNodeCount int, env map[string]string) *Cluster {
-	return &Cluster{DesiredNodeCount: desiredNodeCount, Env: env, ClusterArgs: ""}
+	return NewClusterWithArgs(desiredNodeCount, env, "")
 }
 
 // custom arguments that are passed through to `dm cluster {init,join}`
 func NewClusterWithArgs(desiredNodeCount int, env map[string]string, args string) *Cluster {
+	env["CHECKPOINT_DISABLE"] = "true" //set default test env vars
 	return &Cluster{DesiredNodeCount: desiredNodeCount, Env: env, ClusterArgs: args}
 }
 
 func NewKubernetes(desiredNodeCount int) *Kubernetes {
-	return &Kubernetes{DesiredNodeCount: desiredNodeCount}
+	defaultEnv := map[string]string{
+		"CHECKPOINT_DISABLE": "true"}
+	return &Kubernetes{DesiredNodeCount: desiredNodeCount, Env: defaultEnv}
 }
 
 type Federation []Startable
@@ -652,11 +732,22 @@ func NodeFromNodeName(t *testing.T, now int64, i, j int, clusterName string) Nod
 		nodeName(now, i, j),
 		`ifconfig eth0 | grep "inet addr" | cut -d ':' -f 2 | cut -d ' ' -f 1`,
 	))
-	dotmeshConfig := OutputFromRunOnNode(t,
+	dotmeshConfig, err := docker(
 		nodeName(now, i, j),
 		"cat /root/.dotmesh/config",
+		nil,
 	)
-	fmt.Printf("dm config on %s: %s\n", nodeName(now, i, j), dotmeshConfig)
+	var apiKey string
+	if err != nil {
+		fmt.Printf("no dm config found, proceeding without recording apiKey\n")
+	} else {
+		fmt.Printf("dm config on %s: %s\n", nodeName(now, i, j), dotmeshConfig)
+		m := struct {
+			Remotes struct{ Local struct{ ApiKey string } }
+		}{}
+		json.Unmarshal([]byte(dotmeshConfig), &m)
+		apiKey = m.Remotes.Local.ApiKey
+	}
 
 	// /root/.dotmesh/admin-password.txt is created on docker
 	// clusters, but k8s clusters are configured from k8s secrets so
@@ -664,28 +755,24 @@ func NodeFromNodeName(t *testing.T, now int64, i, j int, clusterName string) Nod
 	// is what we hardcode as the password.
 	password := OutputFromRunOnNode(t,
 		nodeName(now, i, j),
-		"sh -c 'if [ -f /root/.dotmesh/admin-password.txt ]; then cat /root/.dotmesh/admin-password.txt; else echo -n FAKEAPIKEY; fi'",
+		"sh -c 'if [ -f /root/.dotmesh/admin-password.txt ]; then "+
+			"cat /root/.dotmesh/admin-password.txt; else echo -n FAKEAPIKEY; fi'",
 	)
 
 	fmt.Printf("dm password on %s: %s\n", nodeName(now, i, j), password)
-
-	m := struct {
-		Remotes struct{ Local struct{ ApiKey string } }
-	}{}
-	json.Unmarshal([]byte(dotmeshConfig), &m)
 
 	return Node{
 		ClusterName: clusterName,
 		Container:   nodeName(now, i, j),
 		IP:          nodeIP,
-		ApiKey:      m.Remotes.Local.ApiKey,
+		ApiKey:      apiKey,
 		Password:    password,
 	}
 }
 
 func (f Federation) Start(t *testing.T) error {
 	now := time.Now().UnixNano()
-	err := testSetup(f, now)
+	err := testSetup(t, f, now)
 	if err != nil {
 		return err
 	}
@@ -751,6 +838,7 @@ func (f Federation) Start(t *testing.T) error {
 type Startable interface {
 	GetNode(int) Node
 	GetNodes() []Node
+	AppendNode(Node)
 	GetDesiredNodeCount() int
 	Start(*testing.T, int64, int) error
 	RunArgs(int, int) string
@@ -769,6 +857,10 @@ func (c *Kubernetes) GetNode(i int) Node {
 
 func (c *Kubernetes) GetNodes() []Node {
 	return c.Nodes
+}
+
+func (c *Kubernetes) AppendNode(n Node) {
+	c.Nodes = append(c.Nodes, n)
 }
 
 func (c *Kubernetes) GetDesiredNodeCount() int {
@@ -812,8 +904,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 						"quay.io/dotmesh/dotmesh-server:latest", // ABS FIXME: What is this for, and can we get rid of it safely?
 					hostname, hostname,
 				),
-				nil,
-			)
+				nil)
 			if err != nil {
 				panic(st)
 			}
@@ -842,6 +933,11 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		_ = <-finishing
 	}
 
+	logAddr := ""
+	if os.Getenv("DISABLE_LOG_AGGREGATION") == "" {
+		logAddr = HOST_IP_FROM_CONTAINER
+	}
+
 	// TODO regex the following yamels to refer to the newly pushed
 	// dotmesh container image, rather than the latest stable
 	err = System("bash", "-c",
@@ -853,8 +949,8 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			docker exec $MASTER sed -i 's/quay.io\/dotmesh\/dotmesh-dynamic-provisioner:DOCKER_TAG/%s/' /dotmesh-kube-yaml/dotmesh.yaml
 			docker exec $MASTER sed -i 's/value: pool/value: %s-\#HOSTNAME\#/' /dotmesh-kube-yaml/dotmesh.yaml
 			docker exec $MASTER sed -i 's/value: \/var\/lib\/dotmesh/value: %s-\#HOSTNAME\#/' /dotmesh-kube-yaml/dotmesh.yaml
-			docker exec $MASTER sed -i 's/"" \# LOG_ADDR/%s/' /dotmesh-kube-yaml/dotmesh.yaml
-			docker exec $MASTER sed -i 's/size: 3/size: 1/' /dotmesh-kube-yaml/dotmesh.yaml
+			docker exec $MASTER sed -i 's/"" \# LOG_ADDR/"%s"/' /dotmesh-kube-yaml/dotmesh.yaml
+			docker exec $MASTER sed -i 's/size: 3/size: 1/' /dotmesh-kube-yaml/dotmesh-etcd-cluster.yaml
 			`,
 			nodeName(now, i, 0),
 			strings.Replace(LocalImage("dotmesh-server"), "/", "\\/", -1),
@@ -864,7 +960,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			// them unique... TODO: make sure we clear these up
 			poolId(now, i, 0),
 			"\\/dotmesh-test-pools\\/"+poolId(now, i, 0),
-			HOST_IP_FROM_CONTAINER,
+			logAddr,
 		),
 	)
 	if err != nil {
@@ -935,9 +1031,9 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			// install dotmesh once on the master (retry because etcd operator
 			// needs to initialize)
 			"sleep 1 && "+
-			"while ! kubectl apply -f /dotmesh-kube-yaml/dotmesh-etcd-cluster.yaml; do sleep 1; done && "+
+			"while ! kubectl apply -f /dotmesh-kube-yaml/dotmesh-etcd-cluster.yaml; do sleep 2; "+KUBE_DEBUG_CMD+"; done && "+
 			"kubectl apply -f /dotmesh-kube-yaml/dotmesh.yaml",
-		nil,
+		c.Env,
 	)
 	if err != nil {
 		return err
@@ -951,17 +1047,17 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			// gets activated.  This won't be necessary after Kubernetes 1.8.
 			// https://github.com/Mirantis/kubeadm-dind-cluster/issues/40
 			`while ! (
-					echo secret123 | dm remote add local admin@127.0.0.1 &&
+					echo FAKEAPIKEY | dm remote add local admin@127.0.0.1 &&
 					systemctl restart kubelet
 				); do
-				echo 'retrying...' && sleep 1
+				echo 'retrying...' && sleep 2; `+KUBE_DEBUG_CMD+`;
 			done`,
 			nil,
 		)
 		if err != nil {
 			return err
 		}
-		c.Nodes = append(c.Nodes, NodeFromNodeName(t, now, i, j, clusterName))
+		c.Nodes[j] = NodeFromNodeName(t, now, i, j, clusterName)
 	}
 
 	// Wait for etcd to settle before firing up volumes. This works
@@ -978,7 +1074,15 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			break
 		}
 		fmt.Printf("etcd is not up... %#v\n", resp)
-		time.Sleep(time.Second)
+		time.Sleep(time.Second * 2)
+		st, err = docker(
+			nodeName(now, i, 0),
+			KUBE_DEBUG_CMD,
+			nil,
+		)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -997,6 +1101,10 @@ func (c *Cluster) GetNode(i int) Node {
 
 func (c *Cluster) GetNodes() []Node {
 	return c.Nodes
+}
+
+func (c *Cluster) AppendNode(n Node) {
+	c.Nodes = append(c.Nodes, n)
 }
 
 func (c *Cluster) GetDesiredNodeCount() int {
@@ -1024,7 +1132,7 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 		return err
 	}
 	clusterName := fmt.Sprintf("cluster_%d", i)
-	c.Nodes = append(c.Nodes, NodeFromNodeName(t, now, i, 0, clusterName))
+	c.Nodes[0] = NodeFromNodeName(t, now, i, 0, clusterName)
 	fmt.Printf("(just added) Here are my nodes: %+v\n", c.Nodes)
 
 	lines := strings.Split(st, "\n")
@@ -1055,7 +1163,7 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 		if err != nil {
 			return err
 		}
-		c.Nodes = append(c.Nodes, NodeFromNodeName(t, now, i, j, clusterName))
+		c.Nodes[j] = NodeFromNodeName(t, now, i, j, clusterName)
 
 		LogTiming("join_" + poolId(now, i, j))
 	}

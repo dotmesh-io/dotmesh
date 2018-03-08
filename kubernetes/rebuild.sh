@@ -4,6 +4,7 @@ set -ex
 
 OUT=../yaml
 
+rm -rf $OUT
 mkdir -p $OUT
 
 cp etcd-operator-clusterrole.yaml etcd-operator-dep.yaml dotmesh-etcd-cluster.yaml $OUT
@@ -17,4 +18,5 @@ fi
 sed "s/DOCKER_TAG/$CI_DOCKER_TAG/" < dotmesh.yaml > $OUT/dotmesh-k8s-1.7.yaml
 sed "s_rbac.authorization.k8s.io/v1beta1_rbac.authorization.k8s.io/v1_"< $OUT/dotmesh-k8s-1.7.yaml > $OUT/dotmesh-k8s-1.8.yaml
 sed "s_/usr/libexec/kubernetes/kubelet-plugins/volume/exec_/home/kubernetes/flexvolume_" < $OUT/dotmesh-k8s-1.8.yaml > $OUT/dotmesh-k8s-1.8.gke.yaml
+sed "s_/usr/libexec/kubernetes/kubelet-plugins/volume/exec_/etc/kubernetes/volumeplugins_;s_ClusterIP_LoadBalancer_" < $OUT/dotmesh-k8s-1.8.yaml > $OUT/dotmesh-k8s-1.8.aks.yaml
 cp $OUT/dotmesh-k8s-1.7.yaml $OUT/dotmesh-k8s-1.7.gke.yaml

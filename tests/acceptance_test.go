@@ -19,19 +19,16 @@ Take a look at docs/dev-commands.md to see how to run these tests.
 
 */
 
-func TestTeardownFinished(t *testing.T) {
-	citools.TeardownFinishedTestRuns()
-}
-
 func TestDefaultDot(t *testing.T) {
 	// Test default dot select on a totally fresh cluster
 	citools.TeardownFinishedTestRuns()
 
 	f := citools.Federation{citools.NewCluster(1)}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 
 	citools.StartTiming()
 	err := f.Start(t)
-	defer citools.TestMarkForCleanup(f)
 	if err != nil {
 		t.Error(err)
 	}
@@ -89,10 +86,11 @@ func TestSingleNode(t *testing.T) {
 	citools.TeardownFinishedTestRuns()
 
 	f := citools.Federation{citools.NewCluster(1)}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 
 	citools.StartTiming()
 	err := f.Start(t)
-	defer citools.TestMarkForCleanup(f)
 	if err != nil {
 		t.Error(err)
 	}
@@ -630,10 +628,11 @@ func TestDeletionSimple(t *testing.T) {
 
 	// Our cluster gets a metadata timeout of 5s
 	f := citools.Federation{citools.NewClusterWithEnv(2, clusterEnv)}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 
 	citools.StartTiming()
 	err := f.Start(t)
-	defer citools.TestMarkForCleanup(f)
 	if err != nil {
 		t.Error(err)
 	}
@@ -654,12 +653,14 @@ func TestDeletionSimple(t *testing.T) {
 
 	t.Run("DeleteInUseFails", func(t *testing.T) {
 		fsname := citools.UniqName()
+
 		go func() {
-			citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO; sleep 10'")
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO; tail -f /dev/null'")
 		}()
 
-		// Give time for the container to start
-		time.Sleep(5 * time.Second)
+		for !strings.Contains(citools.OutputFromRunOnNode(t, node1, "docker ps"), "busybox") {
+			time.Sleep(1)
+		}
 
 		// Delete, while the container is running! Which should fail!
 		st := citools.OutputFromRunOnNode(t, node1, "if dm dot delete -f "+fsname+"; then false; else true; fi")
@@ -761,10 +762,11 @@ func TestDeletionComplex(t *testing.T) {
 
 	// Our cluster gets a metadata timeout of 5s
 	f := citools.Federation{citools.NewClusterWithEnv(2, clusterEnv)}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 
 	citools.StartTiming()
 	err := f.Start(t)
-	defer citools.TestMarkForCleanup(f)
 	if err != nil {
 		t.Error(err)
 	}
@@ -802,10 +804,11 @@ func TestTwoNodesSameCluster(t *testing.T) {
 	citools.TeardownFinishedTestRuns()
 
 	f := citools.Federation{citools.NewCluster(2)}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 
 	citools.StartTiming()
 	err := f.Start(t)
-	defer citools.TestMarkForCleanup(f)
 	if err != nil {
 		t.Error(err)
 	}
@@ -826,14 +829,17 @@ func TestTwoNodesSameCluster(t *testing.T) {
 }
 
 func TestTwoDoubleNodeClusters(t *testing.T) {
+	citools.TeardownFinishedTestRuns()
 
 	f := citools.Federation{
 		citools.NewCluster(2),
 		citools.NewCluster(2),
 	}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
+
 	citools.StartTiming()
 	err := f.Start(t)
-	defer citools.TestMarkForCleanup(f)
 	if err != nil {
 		t.Error(err)
 	}
@@ -919,9 +925,11 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		citools.NewCluster(1), // cluster_0_node_0
 		citools.NewCluster(1), // cluster_1_node_0
 	}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
+
 	citools.StartTiming()
 	err := f.Start(t)
-	defer citools.TestMarkForCleanup(f)
 	if err != nil {
 		t.Error(err)
 	}
@@ -1100,6 +1108,7 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		if strings.Contains(resp, "node1 commit") {
 			t.Error("found 'node1 commit' in dm log when i shouldn't have")
 		}
+
 		citools.RunOnNode(t, node2, "dm push cluster_0")
 		resp = citools.OutputFromRunOnNode(t, node1, "dm log")
 
@@ -1228,9 +1237,11 @@ func TestThreeSingleNodeClusters(t *testing.T) {
 		citools.NewCluster(1), // cluster_1_node_0 - alice
 		citools.NewCluster(1), // cluster_2_node_0 - bob
 	}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
+
 	citools.StartTiming()
 	err := f.Start(t)
-	defer citools.TestMarkForCleanup(f)
 	if err != nil {
 		t.Error(err)
 	}
@@ -1561,15 +1572,18 @@ func TestKubernetes(t *testing.T) {
 	citools.TeardownFinishedTestRuns()
 
 	f := citools.Federation{citools.NewKubernetes(3)}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 
 	citools.StartTiming()
 	err := f.Start(t)
-	defer citools.TestMarkForCleanup(f)
 	if err != nil {
 		t.Error(err)
+		return // there's no point carrying on
 	}
 	node1 := f[0].GetNode(0)
 
+	citools.LogTiming("setup")
 	t.Run("FlexVolume", func(t *testing.T) {
 
 		// dm list should succeed in connecting to the dotmesh cluster
@@ -1581,6 +1595,7 @@ func TestKubernetes(t *testing.T) {
 				"busybox sh -c \"echo 'apples' > /foo/on-the-tree\"",
 		)
 
+		citools.LogTiming("FlexVolume: init")
 		// create a PV referencing the data
 		citools.KubectlApply(t, node1.Container, `
 kind: PersistentVolume
@@ -1601,6 +1616,8 @@ spec:
       namespace: admin
       name: apples
 `)
+
+		citools.LogTiming("FlexVolume: create PV")
 		// run a pod with a PVC which lists the data (web server)
 		// check that the output of querying the pod is that we can see
 		// that the apples are on the tree
@@ -1620,6 +1637,7 @@ spec:
     matchLabels:
       apples: tree
 `)
+		citools.LogTiming("FlexVolume: PV Claim")
 
 		citools.KubectlApply(t, node1.Container, `
 apiVersion: extensions/v1beta1
@@ -1645,6 +1663,7 @@ spec:
           name: apple-storage
 `)
 
+		citools.LogTiming("FlexVolume: apple Deployment")
 		citools.KubectlApply(t, node1.Container, `
 apiVersion: v1
 kind: Service
@@ -1658,6 +1677,8 @@ spec:
      - port: 80
        nodePort: 30003
 `)
+
+		citools.LogTiming("FlexVolume: apple Service")
 
 		err = citools.TryUntilSucceeds(func() error {
 			resp, err := http.Get(fmt.Sprintf("http://%s:30003/on-the-tree", node1.IP))
@@ -1677,6 +1698,8 @@ spec:
 		if err != nil {
 			t.Error(err)
 		}
+
+		citools.LogTiming("FlexVolume: Apples on the Tree")
 	})
 
 	t.Run("DynamicProvisioning", func(t *testing.T) {
@@ -1703,6 +1726,7 @@ spec:
       storage: 1Gi
 `)
 
+		citools.LogTiming("DynamicProvisioning: PV Claim")
 		err = citools.TryUntilSucceeds(func() error {
 			result := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pv")
 			// We really want a line like:
@@ -1715,6 +1739,8 @@ spec:
 		if err != nil {
 			t.Error(err)
 		}
+
+		citools.LogTiming("DynamicProvisioning: finding grapes PV")
 
 		// Now let's see if a container can see it, and put content there that a k8s container can pick up
 		citools.RunOnNode(t, node1.Container,
@@ -1746,6 +1772,7 @@ spec:
           name: grape-storage
 `)
 
+		citools.LogTiming("DynamicProvisioning: grape Deployment")
 		citools.KubectlApply(t, node1.Container, `
 apiVersion: v1
 kind: Service
@@ -1760,6 +1787,7 @@ spec:
        nodePort: 30050
 `)
 
+		citools.LogTiming("DynamicProvisioning: grape Service")
 		err = citools.TryUntilSucceeds(func() error {
 			resp, err := http.Get(fmt.Sprintf("http://%s:30050/on-the-vine", node1.IP))
 			if err != nil {
@@ -1778,8 +1806,10 @@ spec:
 		if err != nil {
 			t.Error(err)
 		}
-	})
 
+		citools.LogTiming("DynamicProvisioning: Grapes on the vine")
+	})
+	citools.DumpTiming()
 }
 
 func TestStress(t *testing.T) {
@@ -1796,9 +1826,11 @@ func TestStress(t *testing.T) {
 	f := citools.Federation{
 		citools.NewCluster(5),
 	}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
+
 	citools.StartTiming()
 	err := f.Start(t)
-	defer citools.TestMarkForCleanup(f)
 	if err != nil {
 		t.Error(err)
 	}

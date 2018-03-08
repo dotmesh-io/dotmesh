@@ -198,6 +198,7 @@ linux_kubernetes:
         - ubuntu
         - fast
     script:
+        - pwd
         - ./test.sh -run TestKubernetes
 
 linux_deletion_simple:
@@ -316,7 +317,7 @@ mark_release_as_stable:
   script:
     - git checkout $CI_COMMIT_REF_NAME && git reset --hard $CI_COMMIT_SHA 
     - VERSION=`cd cmd/versioner; go run versioner.go`
-    - "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no releases@get.dotmesh.io sh -c \"rm -f /pool/releases/Linux ; ln -s $VERSION/Linux /pool/releases; rm -f /pool/releases/Darwin; ln -s $VERSION/Darwin /pool/releases; rm -f /pool/releases/yaml; ln -fs $VERSION/yaml /pool/releases\""
+    - "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no releases@get.dotmesh.io sh -c \"true && rm -f /pool/releases/Linux && ln -s $VERSION/Linux /pool/releases && rm -f /pool/releases/Darwin && ln -s $VERSION/Darwin /pool/releases && rm -f /pool/releases/yaml && ln -fs $VERSION/yaml /pool/releases\""
   only:
     - /^release-.*$/
   when: manual

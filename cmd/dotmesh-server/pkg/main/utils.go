@@ -537,11 +537,15 @@ func Copy(src, dst string, fileMode os.FileMode) error {
 
 // TODO dedupe this wrt testtools
 func tryUntilSucceeds(f func() error, desc string) error {
+	return tryUntilSucceedsN(f, desc, 5)
+}
+
+func tryUntilSucceedsN(f func() error, desc string, retries int) error {
 	attempt := 0
 	for {
 		err := f()
 		if err != nil {
-			if attempt > 5 {
+			if attempt > retries {
 				return err
 			} else {
 				fmt.Printf("Error %s: %v, pausing and trying again...\n", desc, err)
