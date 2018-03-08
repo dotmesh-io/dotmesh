@@ -653,12 +653,14 @@ func TestDeletionSimple(t *testing.T) {
 
 	t.Run("DeleteInUseFails", func(t *testing.T) {
 		fsname := citools.UniqName()
+
 		go func() {
-			citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO; sleep 10'")
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO; tail -f /dev/null'")
 		}()
 
-		// Give time for the container to start
-		time.Sleep(5 * time.Second)
+		for !strings.Contains(citools.OutputFromRunOnNode(t, node1, "docker ps"), "busybox") {
+			time.Sleep(1)
+		}
 
 		// Delete, while the container is running! Which should fail!
 		st := citools.OutputFromRunOnNode(t, node1, "if dm dot delete -f "+fsname+"; then false; else true; fi")
@@ -1106,6 +1108,7 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		if strings.Contains(resp, "node1 commit") {
 			t.Error("found 'node1 commit' in dm log when i shouldn't have")
 		}
+
 		citools.RunOnNode(t, node2, "dm push cluster_0")
 		resp = citools.OutputFromRunOnNode(t, node1, "dm log")
 
