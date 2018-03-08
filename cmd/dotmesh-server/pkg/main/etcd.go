@@ -90,7 +90,7 @@ func getEtcd() (client.Client, error) {
 			Transport: transport,
 			// set timeout per request to fail fast when the target endpoint is
 			// unavailable
-			HeaderTimeoutPerRequest: time.Second,
+			HeaderTimeoutPerRequest: time.Second * 10,
 		}
 		etcdClient, err = client.New(cfg)
 		if err != nil {
