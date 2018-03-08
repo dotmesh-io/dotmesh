@@ -783,10 +783,13 @@ func (s *InMemoryState) CreateFilesystem(
 		return nil, nil, err
 	}
 
-	//update mastersCache with what we know
-	s.mastersCacheLock.Lock()
-	defer s.mastersCacheLock.Unlock()
-	(*s.mastersCache)[filesystemId] = s.myNodeId
+	// update mastersCache with what we know. Do it in a func so that we
+	// don't hold the mutex for longer than we need to.
+	func() {
+		s.mastersCacheLock.Lock()
+		defer s.mastersCacheLock.Unlock()
+		(*s.mastersCache)[filesystemId] = s.myNodeId
+	}()
 
 	// go ahead and create the filesystem
 	fs := s.initFilesystemMachine(filesystemId)
