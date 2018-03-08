@@ -430,7 +430,7 @@ func getEtcd() (client.KeysAPI, error) {
 		Transport: transport,
 		// set timeout per request to fail fast when the target endpoint is
 		// unavailable
-		HeaderTimeoutPerRequest: time.Second * 5,
+		HeaderTimeoutPerRequest: time.Second * 30,
 	}
 	c, err := client.New(cfg)
 	if err != nil {
