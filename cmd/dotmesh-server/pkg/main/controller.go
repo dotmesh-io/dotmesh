@@ -782,6 +782,11 @@ func (s *InMemoryState) CreateFilesystem(
 		)
 		return nil, nil, err
 	}
+
+	// TODO: update our own knowledge of mastersCache with what we just
+	// updated, so that we don't have to wait for the echo from etcd (which
+	// causes race conditions)
+
 	// go ahead and create the filesystem
 	fs := s.initFilesystemMachine(filesystemId)
 
