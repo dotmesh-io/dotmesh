@@ -493,9 +493,12 @@ func setTokenIfNotExists(adminPassword, adminKey string) error {
 		string(encoded),
 		&client.SetOptions{PrevExist: client.PrevNoExist},
 	)
-	if err != nil && err.(client.Error).Code == client.ErrorCodeNodeExist {
-		// if it already exists, proceed without error
-		return nil
+	if err != nil {
+		e, ok := err.(client.Error)
+		if ok && e.Code == client.ErrorCodeNodeExist {
+			// if it already exists, proceed without error
+			return nil
+		}
 	}
 	return err
 }
