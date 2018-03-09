@@ -426,6 +426,15 @@ func (s *InMemoryState) findRelatedContainers() error {
 		if err != nil {
 			return err
 		}
+
+		// update our local globalContainerCache immediately, so that we reduce
+		// the window for races against setting this cache value.
+		func() {
+			s.globalContainerCacheLock.Lock()
+			defer s.globalContainerCacheLock.Unlock()
+			(*s.globalContainerCache)[filesystemId] = value
+		}()
+
 		log.Printf(
 			"findRelatedContainers setting %s to %s",
 			fmt.Sprintf("%s/filesystems/containers/%s", ETCD_PREFIX, filesystemId),
