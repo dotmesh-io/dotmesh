@@ -426,6 +426,15 @@ func (s *InMemoryState) findRelatedContainers() error {
 		if err != nil {
 			return err
 		}
+
+		// update our local globalContainerCache immediately, so that we reduce
+		// the window for races against setting this cache value.
+		func() {
+			s.globalContainerCacheLock.Lock()
+			defer s.globalContainerCacheLock.Unlock()
+			(*s.globalContainerCache)[filesystemId] = value
+		}()
+
 		log.Printf(
 			"findRelatedContainers setting %s to %s",
 			fmt.Sprintf("%s/filesystems/containers/%s", ETCD_PREFIX, filesystemId),
@@ -782,6 +791,15 @@ func (s *InMemoryState) CreateFilesystem(
 		)
 		return nil, nil, err
 	}
+
+	// update mastersCache with what we know. Do it in a func so that we
+	// don't hold the mutex for longer than we need to.
+	func() {
+		s.mastersCacheLock.Lock()
+		defer s.mastersCacheLock.Unlock()
+		(*s.mastersCache)[filesystemId] = s.myNodeId
+	}()
+
 	// go ahead and create the filesystem
 	fs := s.initFilesystemMachine(filesystemId)
 

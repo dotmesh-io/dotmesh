@@ -430,7 +430,7 @@ func getEtcd() (client.KeysAPI, error) {
 		Transport: transport,
 		// set timeout per request to fail fast when the target endpoint is
 		// unavailable
-		HeaderTimeoutPerRequest: time.Second * 5,
+		HeaderTimeoutPerRequest: time.Second * 30,
 	}
 	c, err := client.New(cfg)
 	if err != nil {
@@ -493,6 +493,13 @@ func setTokenIfNotExists(adminPassword, adminKey string) error {
 		string(encoded),
 		&client.SetOptions{PrevExist: client.PrevNoExist},
 	)
+	if err != nil {
+		e, ok := err.(client.Error)
+		if ok && e.Code == client.ErrorCodeNodeExist {
+			// if it already exists, proceed without error
+			return nil
+		}
+	}
 	return err
 }
 

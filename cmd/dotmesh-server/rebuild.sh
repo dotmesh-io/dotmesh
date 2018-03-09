@@ -11,79 +11,79 @@ VERSION="$(cd ../versioner && go run versioner.go)"
 CI_DOCKER_SERVER_IMAGE=${CI_DOCKER_SERVER_IMAGE:=$(hostname).local:80/dotmesh/dotmesh-server:latest}
 CI_DOCKER_PROVISIONER_IMAGE=${CI_DOCKER_PROVISIONER_IMAGE:=$(hostname).local:80/dotmesh/dotmesh-dynamic-provisioner:latest}
 
-if [ x$CI_DOCKER_TAG == x ]
-then
-         # Non-CI build
-         CI_DOCKER_TAG=$VERSION
+if [ -z "$CI_DOCKER_TAG" ]; then
+    # Non-CI build
+    ARTEFACT_CONTAINER=$VERSION
+else
+    ARTEFACT_CONTAINER="${CI_DOCKER_TAG}_${CI_JOB_ID}"
 fi
 
 mkdir -p target
 
-echo "building image: dotmesh-builder:$CI_DOCKER_TAG"
-docker build --build-arg VERSION="${VERSION}" -f Dockerfile.build -t dotmesh-builder:$CI_DOCKER_TAG .
+echo "building image: dotmesh-builder:$ARTEFACT_CONTAINER"
+docker build --build-arg VERSION="${VERSION}" -f Dockerfile.build -t dotmesh-builder:$ARTEFACT_CONTAINER .
 
 # docker
-echo "creating container: dotmesh-builder-docker-$CI_DOCKER_TAG"
-docker rm -f dotmesh-builder-docker-$CI_DOCKER_TAG || true
+echo "creating container: dotmesh-builder-docker-$ARTEFACT_CONTAINER"
+docker rm -f dotmesh-builder-docker-$ARTEFACT_CONTAINER || true
 docker create \
-  --name dotmesh-builder-docker-$CI_DOCKER_TAG \
-  dotmesh-builder:$CI_DOCKER_TAG
+    --name dotmesh-builder-docker-$ARTEFACT_CONTAINER \
+    dotmesh-builder:$ARTEFACT_CONTAINER
 echo "copy binary: /target/docker"
-docker cp dotmesh-builder-docker-$CI_DOCKER_TAG:/target/docker target/
-docker rm -f dotmesh-builder-docker-$CI_DOCKER_TAG
+docker cp dotmesh-builder-docker-$ARTEFACT_CONTAINER:/target/docker target/
+docker rm -f dotmesh-builder-docker-$ARTEFACT_CONTAINER
 
 # skip rebuilding Kubernetes components if not using them
 if [ -z "${SKIP_K8S}" ]; then
+    # flexvolume
+    echo "creating container: dotmesh-builder-flexvolume-$ARTEFACT_CONTAINER"
+    docker rm -f dotmesh-builder-flexvolume-$ARTEFACT_CONTAINER || true
+    docker run \
+        --name dotmesh-builder-flexvolume-$ARTEFACT_CONTAINER \
+        -e GOPATH=/go \
+        -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/flexvolume \
+        dotmesh-builder:$ARTEFACT_CONTAINER \
+        go build -o /target/flexvolume
+    echo "copy binary: /target/flexvolume"
+    docker cp dotmesh-builder-flexvolume-$ARTEFACT_CONTAINER:/target/flexvolume target/
+    docker rm -f dotmesh-builder-flexvolume-$ARTEFACT_CONTAINER
 
-  # flexvolume
-  echo "creating container: dotmesh-builder-flexvolume-$CI_DOCKER_TAG"
-  docker rm -f dotmesh-builder-flexvolume-$CI_DOCKER_TAG || true
-  docker run \
-    --name dotmesh-builder-flexvolume-$CI_DOCKER_TAG \
-    -e GOPATH=/go \
-    -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/flexvolume \
-    dotmesh-builder:$CI_DOCKER_TAG \
-    go build -o /target/flexvolume
-  echo "copy binary: /target/flexvolume"
-  docker cp dotmesh-builder-flexvolume-$CI_DOCKER_TAG:/target/flexvolume target/
-  docker rm -f dotmesh-builder-flexvolume-$CI_DOCKER_TAG
+    # dm-provisioner
+    echo "creating container: dotmesh-builder-dm-provisioner-$ARTEFACT_CONTAINER"
+    docker rm -f dotmesh-builder-dm-provisioner-$ARTEFACT_CONTAINER || true
+    docker run \
+        --name dotmesh-builder-dm-provisioner-$ARTEFACT_CONTAINER \
+        -e GOPATH=/go \
+        -e CGO_ENABLED=0 \
+        -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dynamic-provisioning \
+        dotmesh-builder:$ARTEFACT_CONTAINER \
+        go build -a -ldflags '-extldflags "-static"' -o /target/dm-provisioner .
+    echo "copy binary: /target/dm-provisioner"
+    docker cp dotmesh-builder-dm-provisioner-$ARTEFACT_CONTAINER:/target/dm-provisioner target/
+    docker rm -f dotmesh-builder-dm-provisioner-$ARTEFACT_CONTAINER
 
-  # dm-provisioner
-  echo "creating container: dotmesh-builder-dm-provisioner-$CI_DOCKER_TAG"
-  docker rm -f dotmesh-builder-dm-provisioner-$CI_DOCKER_TAG || true
-  docker run \
-    --name dotmesh-builder-dm-provisioner-$CI_DOCKER_TAG \
-    -e GOPATH=/go \
-    -e CGO_ENABLED=0 \
-    -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dynamic-provisioning \
-    dotmesh-builder:$CI_DOCKER_TAG \
-    go build -a -ldflags '-extldflags "-static"' -o /target/dm-provisioner .
-  echo "copy binary: /target/dm-provisioner"
-  docker cp dotmesh-builder-dm-provisioner-$CI_DOCKER_TAG:/target/dm-provisioner target/
-  docker rm -f dotmesh-builder-dm-provisioner-$CI_DOCKER_TAG
-
-  echo "building image: ${CI_DOCKER_PROVISIONER_IMAGE}"
-  docker build -f pkg/dynamic-provisioning/Dockerfile -t "${CI_DOCKER_PROVISIONER_IMAGE}" .
+    echo "building image: ${CI_DOCKER_PROVISIONER_IMAGE}"
+    docker build -f pkg/dynamic-provisioning/Dockerfile -t "${CI_DOCKER_PROVISIONER_IMAGE}" .
 fi
 
 # dotmesh-server
-echo "creating container: dotmesh-builder-server-$CI_DOCKER_TAG"
-docker rm -f dotmesh-builder-server-$CI_DOCKER_TAG || true
+echo "creating container: dotmesh-builder-server-$ARTEFACT_CONTAINER"
+docker rm -f dotmesh-builder-server-$ARTEFACT_CONTAINER || true
 docker run \
-  --name dotmesh-builder-server-$CI_DOCKER_TAG \
-  -e GOPATH=/go \
-  -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/main \
-  dotmesh-builder:$CI_DOCKER_TAG \
-  go build -ldflags "-X main.serverVersion=${VERSION}" -o /target/dotmesh-server
+    --name dotmesh-builder-server-$ARTEFACT_CONTAINER \
+    -e GOPATH=/go \
+    -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/main \
+    dotmesh-builder:$ARTEFACT_CONTAINER \
+    go build -ldflags "-X main.serverVersion=${VERSION}" -o /target/dotmesh-server
 echo "copy binary: /target/dotmesh-server"
-docker cp dotmesh-builder-server-$CI_DOCKER_TAG:/target/dotmesh-server target/
-docker rm -f dotmesh-builder-server-$CI_DOCKER_TAG
+docker cp dotmesh-builder-server-$ARTEFACT_CONTAINER:/target/dotmesh-server target/
+docker rm -f dotmesh-builder-server-$ARTEFACT_CONTAINER
 echo "building image: ${CI_DOCKER_SERVER_IMAGE}"
 
 docker build -t "${CI_DOCKER_SERVER_IMAGE}" .
 
 # allow disabling of registry push
 if [ -z "${NO_PUSH}" ]; then
-   docker push ${CI_DOCKER_SERVER_IMAGE}
-   docker push ${CI_DOCKER_PROVISIONER_IMAGE}
+    docker push ${CI_DOCKER_SERVER_IMAGE}
+    docker push ${CI_DOCKER_PROVISIONER_IMAGE}
 fi
