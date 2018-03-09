@@ -1041,21 +1041,32 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 	// Add the nodes at the end, because NodeFromNodeName expects dotmesh
 	// config to be set up.
 	for j := 0; j < c.DesiredNodeCount; j++ {
-		st, err = docker(
-			nodeName(now, i, j),
-			// Restart kubelet so that dotmesh-installed flexvolume driver
-			// gets activated.  This won't be necessary after Kubernetes 1.8.
-			// https://github.com/Mirantis/kubeadm-dind-cluster/issues/40
-			`while ! (
-					echo FAKEAPIKEY | dm remote add local admin@127.0.0.1 &&
-					systemctl restart kubelet
-				); do
-				echo 'retrying...' && sleep 2; `+KUBE_DEBUG_CMD+`;
-			done`,
-			nil,
-		)
-		if err != nil {
-			return err
+		for {
+			st, err = docker(
+				nodeName(now, i, j),
+				// Restart kubelet so that dotmesh-installed flexvolume driver
+				// gets activated.  This won't be necessary after Kubernetes 1.8.
+				// https://github.com/Mirantis/kubeadm-dind-cluster/issues/40
+				`echo FAKEAPIKEY | dm remote add local admin@127.0.0.1 &&
+					systemctl restart kubelet`,
+				nil,
+			)
+
+			if err != nil {
+				time.Sleep(time.Second * 2)
+				st, debugErr := docker(
+					nodeName(now, i, 0),
+					KUBE_DEBUG_CMD,
+					nil,
+				)
+				if debugErr != nil {
+					log.Printf("Error debugging kubctl status:  %v, %s", debugErr, st)
+				}
+
+				log.Printf("Error adding remote:  %v, retrying..", err)
+			} else {
+				break
+			}
 		}
 		c.Nodes[j] = NodeFromNodeName(t, now, i, j, clusterName)
 	}
