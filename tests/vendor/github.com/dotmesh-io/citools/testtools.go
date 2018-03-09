@@ -683,7 +683,6 @@ type Cluster struct {
 type Kubernetes struct {
 	DesiredNodeCount int
 	Nodes            []Node
-	Env              map[string]string
 }
 
 type Pair struct {
@@ -703,14 +702,12 @@ func NewClusterWithEnv(desiredNodeCount int, env map[string]string) *Cluster {
 
 // custom arguments that are passed through to `dm cluster {init,join}`
 func NewClusterWithArgs(desiredNodeCount int, env map[string]string, args string) *Cluster {
-	env["CHECKPOINT_DISABLE"] = "true" //set default test env vars
+	env["DOTMESH_UPGRADES_URL"] = "" //set default test env vars
 	return &Cluster{DesiredNodeCount: desiredNodeCount, Env: env, ClusterArgs: args}
 }
 
 func NewKubernetes(desiredNodeCount int) *Kubernetes {
-	defaultEnv := map[string]string{
-		"CHECKPOINT_DISABLE": "true"}
-	return &Kubernetes{DesiredNodeCount: desiredNodeCount, Env: defaultEnv}
+	return &Kubernetes{DesiredNodeCount: desiredNodeCount}
 }
 
 type Federation []Startable
@@ -947,6 +944,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			for X in ../kubernetes/*.yaml; do docker cp $X $MASTER:/dotmesh-kube-yaml/; done
 			docker exec $MASTER sed -i 's/quay.io\/dotmesh\/dotmesh-server:DOCKER_TAG/%s/' /dotmesh-kube-yaml/dotmesh.yaml
 			docker exec $MASTER sed -i 's/quay.io\/dotmesh\/dotmesh-dynamic-provisioner:DOCKER_TAG/%s/' /dotmesh-kube-yaml/dotmesh.yaml
+			docker exec $MASTER sed -i 's/DOTMESH_UPGRADES_URL/DISABLED_DOTMESH_UPGRADES_URL/' /dotmesh-kube-yaml/dotmesh.yaml
 			docker exec $MASTER sed -i 's/value: pool/value: %s-\#HOSTNAME\#/' /dotmesh-kube-yaml/dotmesh.yaml
 			docker exec $MASTER sed -i 's/value: \/var\/lib\/dotmesh/value: %s-\#HOSTNAME\#/' /dotmesh-kube-yaml/dotmesh.yaml
 			docker exec $MASTER sed -i 's/"" \# LOG_ADDR/"%s"/' /dotmesh-kube-yaml/dotmesh.yaml
@@ -1033,7 +1031,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			"sleep 1 && "+
 			"while ! kubectl apply -f /dotmesh-kube-yaml/dotmesh-etcd-cluster.yaml; do sleep 2; "+KUBE_DEBUG_CMD+"; done && "+
 			"kubectl apply -f /dotmesh-kube-yaml/dotmesh.yaml",
-		c.Env,
+		nil,
 	)
 	if err != nil {
 		return err
