@@ -23,7 +23,7 @@ then
 fi
 
 OUTPUT_DIR="${DIR}/../../binaries/$1"
-ARTEFACT_CONTAINER="${CI_DOCKER_TAG}_${GOOS}"
+ARTEFACT_CONTAINER="${CI_DOCKER_TAG}_${GOOS}_${CI_JOB_ID}"
 
 docker rm -f $ARTEFACT_CONTAINER || true
 docker build -t dotmesh-cli-builder:$CI_DOCKER_TAG -f Dockerfile.build .
