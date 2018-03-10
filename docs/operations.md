@@ -92,4 +92,3 @@ done
 ```
 
 This should run continuously.
-If it doesn't, look at the UI at [http://node-1:6969/ux](http://node-1:6969/ux) and then look at the logs and fix the code.

@@ -74,10 +74,10 @@ func (state *InMemoryState) runServer() {
 	).Methods("POST")
 
 	loggedRouter := handlers.LoggingHandler(getLogfile("requests"), router)
-	err = http.ListenAndServe(":6969", loggedRouter)
+	err = http.ListenAndServe(":32607", loggedRouter)
 	if err != nil {
-		out(fmt.Sprintf("Unable to listen on port 6969: '%s'\n", err))
-		log.Fatalf("Unable to listen on port 6969: '%s'", err)
+		out(fmt.Sprintf("Unable to listen on port 32607: '%s'\n", err))
+		log.Fatalf("Unable to listen on port 32607: '%s'", err)
 	}
 }
 

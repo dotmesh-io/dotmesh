@@ -25,7 +25,7 @@ func deduceUrl(hostname, mode string) string {
 	// directly to another node's IP address), or "external" if you're trying
 	// to connect an external cluster.
 	scheme := "http"
-	port := "6969"
+	port := "32607"
 
 	if mode == "external" && (hostname == "saas.dotmesh.io" || hostname == "dothub.com") {
 		scheme = "https"

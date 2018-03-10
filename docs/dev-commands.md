@@ -567,7 +567,7 @@ open http://localhost:8080/ui
 If you want to see the cluster server directly - you can:
 
 ```bash
-open http://localhost:6969
+open http://localhost:32607
 ```
 
 #### frontend CLI
@@ -757,7 +757,7 @@ make cluster.start
 
 and end up with the same as `cluster.start` but with the frontend code built into the server.
 
-The difference in this mode is you need to hit `localhost:6969` to see it in the browser.
+The difference in this mode is you need to hit `localhost:32607` to see it in the browser.
 
 ## running frontend tests
 

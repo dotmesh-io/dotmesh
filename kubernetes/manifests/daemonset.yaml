@@ -18,7 +18,7 @@ items:
     spec:
       type: ClusterIP
       ports:
-      - port: 6969
+      - port: 32607
         protocol: TCP
       selector:
         name: dotmesh
@@ -52,8 +52,8 @@ items:
                 - /require_zfs.sh
                 - dotmesh-server
               ports:
-              - containerPort: 6969
-                hostPort: 6969
+              - containerPort: 32607
+                hostPort: 32607
               env:
                 - name: HOSTNAME
                   valueFrom:
@@ -85,7 +85,7 @@ items:
               livenessProbe:
                 httpGet:
                   path: /status
-                  port: 6969
+                  port: 32607
                 initialDelaySeconds: 30
               resources:
                 requests:
