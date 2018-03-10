@@ -1848,6 +1848,8 @@ func (f *fsMachine) pull(
 	url, err := deduceUrl(
 		context.Background(),
 		[]string{transferRequest.Peer},
+		// pulls are between clusters, so use external address where
+		// appropriate
 		"external",
 		transferRequest.User,
 		transferRequest.ApiKey,
@@ -1861,8 +1863,6 @@ func (f *fsMachine) pull(
 
 	url = fmt.Sprintf(
 		"%s/filesystems/%s/%s/%s",
-		// pulls are between clusters, so use external address where
-		// appropriate
 		url,
 		toFilesystemId,
 		fromSnapshotId,
@@ -2120,6 +2120,8 @@ func (f *fsMachine) push(
 	url, err := deduceUrl(
 		context.Background(),
 		[]string{transferRequest.Peer},
+		// pushes are between clusters, so use external address where
+		// appropriate
 		"external",
 		transferRequest.User,
 		transferRequest.ApiKey,
@@ -2132,9 +2134,8 @@ func (f *fsMachine) push(
 	}
 
 	url = fmt.Sprintf(
-		// pushes are between clusters, so use external address where
-		// appropriate
 		"%s/filesystems/%s/%s/%s",
+		url,
 		filesystemId,
 		fromSnapshotId,
 		snapRange.toSnap.Id,
