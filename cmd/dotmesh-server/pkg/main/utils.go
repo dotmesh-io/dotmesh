@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -20,21 +21,38 @@ import (
 	//"github.com/djherbis/nio"
 )
 
-// TODO return a list, which the caller has to try.
-// or make the DotmeshRPC.Ping calls inline...
-func deduceUrl(hostname, mode string) string {
+func deduceUrl(ctx context.Context, hostnames []string, mode, user, apiKey string) (string, error) {
 	// "mode" is "internal" if you're trying to connect within a cluster (e.g.
 	// directly to another node's IP address), or "external" if you're trying
 	// to connect an external cluster.
-	scheme := "http"
-	port := "32607"
 
-	if mode == "external" && (hostname == "saas.dotmesh.io" || hostname == "dothub.com") {
-		scheme = "https"
-		port = "443"
+	for _, hostname := range hostnames {
+		var urlsToTry []string
+		if mode == "external" && (hostname == "saas.dotmesh.io" || hostname == "dothub.com") {
+			urlsToTry = []string{
+				fmt.Sprintf("https://%s:443", hostname),
+			}
+		} else {
+			urlsToTry = []string{
+				fmt.Sprintf("http://%s:%d", hostname, 32607),
+				fmt.Sprintf("http://%s:%d", hostname, 6969),
+			}
+		}
+
+		for _, urlToTry := range urlsToTry {
+			// hostname (2nd arg) doesn't matter because we're just calling
+			// reallyCallRemote which doesn't use it.
+			j := NewJsonRpcClient(user, "", apiKey)
+			var result bool
+			err := j.reallyCallRemote(ctx, "DotmeshRPC.Ping", nil, &result, urlToTry)
+			if err == nil {
+				return urlToTry, nil
+			}
+		}
 	}
 
-	return fmt.Sprintf("%s://%s:%s", scheme, hostname, port)
+	return "", fmt.Errorf("Unable to connect to any of the addresses attempted: %+v", hostnames)
+
 }
 
 // NB: It's important that the following includes characters _not_ included in
