@@ -319,14 +319,15 @@ type Address struct {
 }
 
 func (j *JsonRpcClient) tryAddresses(ctx context.Context, as []Address) (Address, error) {
+	var err error
 	for _, a := range as {
 		var result bool
-		err := j.reallyCallRemote(ctx, "DotmeshRPC.Ping", nil, &result, a)
+		err = j.reallyCallRemote(ctx, "DotmeshRPC.Ping", nil, &result, a)
 		if err == nil {
 			return a, nil
 		}
 	}
-	return Address{}, fmt.Errorf("Unable to connect to any of the addresses attempted: %+v", as)
+	return Address{}, fmt.Errorf("Unable to connect to any of the addresses attempted: %+v, last err: %s", as, err)
 }
 
 // call a method with string args, and attempt to decode it into result
