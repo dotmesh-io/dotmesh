@@ -20,6 +20,8 @@ import (
 	//"github.com/djherbis/nio"
 )
 
+// TODO return a list, which the caller has to try.
+// or make the DotmeshRPC.Ping calls inline...
 func deduceUrl(hostname, mode string) string {
 	// "mode" is "internal" if you're trying to connect within a cluster (e.g.
 	// directly to another node's IP address), or "external" if you're trying

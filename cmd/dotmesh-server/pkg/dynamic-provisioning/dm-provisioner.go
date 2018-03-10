@@ -17,14 +17,9 @@ limitations under the License.
 package main
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
-	"io/ioutil"
-	"net/http"
 	"time"
-
-	"github.com/gorilla/rpc/v2/json2"
 
 	"github.com/golang/glog"
 	"github.com/kubernetes-incubator/external-storage/lib/controller"

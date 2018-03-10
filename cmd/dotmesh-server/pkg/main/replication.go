@@ -47,6 +47,8 @@ func (z ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// that works.
 		peerAddress := addresses[0]
 
+		// TODO use logic from tryAddresses in cmd/dm/pkg/remotes/remotes.go
+
 		url := fmt.Sprintf(
 			"%s/filesystems/%s/%s/%s",
 			deduceUrl(peerAddress, "internal"), // FIXME, need master->name mapping, see how handover works normally
