@@ -312,9 +312,58 @@ type JsonRpcClient struct {
 	ApiKey   string
 }
 
+type Address struct {
+	Scheme   string
+	Hostname string
+	Port     int
+}
+
+func (j *JsonRpcClient) tryAddresses(ctx context.Context, as []Address) (Address, error) {
+	for _, a := range as {
+		var result bool
+		err := j.reallyCallRemote(ctx, "DotmeshRPC.Ping", nil, &result, a)
+		if err == nil {
+			return a, nil
+		}
+	}
+	return Address{}, fmt.Errorf("Unable to connect to any of the addresses attempted: %+v", as)
+}
+
 // call a method with string args, and attempt to decode it into result
 func (j *JsonRpcClient) CallRemote(
 	ctx context.Context, method string, args interface{}, result interface{},
+) error {
+	if j == nil {
+		return fmt.Errorf(
+			"No remote cluster specified. List remotes with 'dm remote -v'. " +
+				"Choose one with 'dm remote switch' or create one with 'dm remote " +
+				"add'. Try 'dm cluster init' if you don't have a cluster yet.",
+		)
+	}
+
+	addressesToTry := []Address{}
+
+	if j.Hostname == "saas.dotmesh.io" || j.Hostname == "dothub.com" {
+		scheme := "https"
+		port := 443
+		addressesToTry = append(addressesToTry, Address{scheme, j.Hostname, port})
+	} else {
+		scheme := "http"
+		addressesToTry = append(addressesToTry, Address{scheme, j.Hostname, 6969})
+		addressesToTry = append(addressesToTry, Address{scheme, j.Hostname, 36969})
+	}
+
+	addressToUse, err := j.tryAddresses(ctx, addressesToTry)
+	if err != nil {
+		return err
+	}
+
+	return j.reallyCallRemote(ctx, method, args, result, addressToUse)
+}
+
+func (j *JsonRpcClient) reallyCallRemote(
+	ctx context.Context, method string, args interface{}, result interface{},
+	addressToUse Address,
 ) error {
 	// create new span using span found in context as parent (if none is found,
 	// our span becomes the trace root).
@@ -326,23 +375,11 @@ func (j *JsonRpcClient) CallRemote(
 	)
 	defer span.Finish()
 
-	if j == nil {
-		return fmt.Errorf(
-			"No remote cluster specified. List remotes with 'dm remote -v'. " +
-				"Choose one with 'dm remote switch' or create one with 'dm remote " +
-				"add'. Try 'dm cluster init' if you don't have a cluster yet.",
-		)
-	}
+	scheme := addressToUse.Scheme
+	hostname := addressToUse.Hostname
+	port := addressToUse.Port
 
-	scheme := "http"
-	port := "6969"
-
-	if j.Hostname == "saas.dotmesh.io" || j.Hostname == "dothub.com" {
-		scheme = "https"
-		port = "443"
-	}
-
-	url := fmt.Sprintf("%s://%s:%s/rpc", scheme, j.Hostname, port)
+	url := fmt.Sprintf("%s://%s:%d/rpc", scheme, hostname, port)
 	message, err := json2.EncodeClientRequest(method, args)
 	if err != nil {
 		return err

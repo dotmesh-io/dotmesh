@@ -54,9 +54,11 @@ items:
       name: dotmesh
       namespace: dotmesh
     spec:
-      type: ClusterIP
+      type: NodePort
       ports:
       - port: 6969
+        # TODO find a better way to do this, ingress on port 6969?
+        nodePort: 36969
         protocol: TCP
       selector:
         name: dotmesh
@@ -82,7 +84,6 @@ items:
                 - dotmesh-server
               ports:
               - containerPort: 6969
-                hostPort: 6969
               env:
                 - name: HOSTNAME
                   valueFrom:
