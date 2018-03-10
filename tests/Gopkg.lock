@@ -5,7 +5,7 @@
   branch = "master"
   name = "github.com/dotmesh-io/citools"
   packages = ["."]
-  revision = "8377c11aed7e7af87e9a67bd152aa974757d2abf"
+  revision = "8a0e2f45ccb721d1bc6d4136766d859081c8ae2a"
 
 [[projects]]
   name = "github.com/gorilla/rpc"

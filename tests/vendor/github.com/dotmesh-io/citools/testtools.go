@@ -1078,11 +1078,7 @@ apiServerExtraArgs:
 		for {
 			st, err = docker(
 				nodeName(now, i, j),
-				// Restart kubelet so that dotmesh-installed flexvolume driver
-				// gets activated.  This won't be necessary after Kubernetes 1.8.
-				// https://github.com/Mirantis/kubeadm-dind-cluster/issues/40
-				`echo FAKEAPIKEY | dm remote add local admin@127.0.0.1 &&
-					systemctl restart kubelet`,
+				"echo FAKEAPIKEY | dm remote add local admin@127.0.0.1",
 				nil,
 			)
 
