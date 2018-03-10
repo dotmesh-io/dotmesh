@@ -1271,7 +1271,7 @@ func RegisterUser(node Node, username, email, password string) error {
 }
 
 func DoRPC(hostname, user, apiKey, method string, args interface{}, result interface{}) error {
-	url := fmt.Sprintf("http://%s:6969/rpc", hostname)
+	url := fmt.Sprintf("http://%s:32607/rpc", hostname)
 	message, err := json2.EncodeClientRequest(method, args)
 	if err != nil {
 		return err
