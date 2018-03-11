@@ -26,7 +26,7 @@ func deduceUrl(ctx context.Context, hostnames []string, mode, user, apiKey strin
 	// directly to another node's IP address), or "external" if you're trying
 	// to connect an external cluster.
 
-	var err error
+	var errs []error
 	for _, hostname := range hostnames {
 		var urlsToTry []string
 		if mode == "external" && (hostname == "saas.dotmesh.io" || hostname == "dothub.com") {
@@ -45,14 +45,16 @@ func deduceUrl(ctx context.Context, hostnames []string, mode, user, apiKey strin
 			// reallyCallRemote which doesn't use it.
 			j := NewJsonRpcClient(user, "", apiKey)
 			var result bool
-			err = j.reallyCallRemote(ctx, "DotmeshRPC.Ping", nil, &result, urlToTry)
+			err := j.reallyCallRemote(ctx, "DotmeshRPC.Ping", nil, &result, urlToTry)
 			if err == nil {
 				return urlToTry, nil
+			} else {
+				errs = append(errs, err)
 			}
 		}
 	}
 
-	return "", fmt.Errorf("Unable to connect to any of the addresses attempted: %+v, last err: %s", hostnames, err)
+	return "", fmt.Errorf("Unable to connect to any of the addresses attempted: %+v, errs: %v", hostnames, errs)
 
 }
 
