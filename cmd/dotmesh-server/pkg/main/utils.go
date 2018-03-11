@@ -31,12 +31,12 @@ func deduceUrl(ctx context.Context, hostnames []string, mode, user, apiKey strin
 		var urlsToTry []string
 		if mode == "external" && (hostname == "saas.dotmesh.io" || hostname == "dothub.com") {
 			urlsToTry = []string{
-				fmt.Sprintf("https://%s:443/rpc", hostname),
+				fmt.Sprintf("https://%s:443", hostname),
 			}
 		} else {
 			urlsToTry = []string{
-				fmt.Sprintf("http://%s:%d/rpc", hostname, 32607),
-				fmt.Sprintf("http://%s:%d/rpc", hostname, 6969),
+				fmt.Sprintf("http://%s:%d", hostname, 32607),
+				fmt.Sprintf("http://%s:%d", hostname, 6969),
 			}
 		}
 
@@ -45,7 +45,7 @@ func deduceUrl(ctx context.Context, hostnames []string, mode, user, apiKey strin
 			// reallyCallRemote which doesn't use it.
 			j := NewJsonRpcClient(user, "", apiKey)
 			var result bool
-			err := j.reallyCallRemote(ctx, "DotmeshRPC.Ping", nil, &result, urlToTry)
+			err := j.reallyCallRemote(ctx, "DotmeshRPC.Ping", nil, &result, urlToTry+"/rpc")
 			if err == nil {
 				return urlToTry, nil
 			} else {
