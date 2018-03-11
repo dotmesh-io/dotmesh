@@ -352,8 +352,8 @@ func (j *JsonRpcClient) CallRemote(
 		addressesToTry = append(addressesToTry, Address{scheme, j.Hostname, port})
 	} else {
 		scheme := "http"
-		addressesToTry = append(addressesToTry, Address{scheme, j.Hostname, 6969})
 		addressesToTry = append(addressesToTry, Address{scheme, j.Hostname, 32607})
+		addressesToTry = append(addressesToTry, Address{scheme, j.Hostname, 6969})
 	}
 
 	addressToUse, err := j.tryAddresses(ctx, addressesToTry)
