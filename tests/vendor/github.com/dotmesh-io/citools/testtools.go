@@ -828,12 +828,25 @@ func (f Federation) Start(t *testing.T) error {
 			}
 		}
 		if !found {
-			RunOnNode(t, pair.From.Container, fmt.Sprintf(
-				"echo %s |dm remote add %s admin@%s",
-				pair.To.ApiKey,
-				pair.RemoteName,
-				pair.To.IP,
-			))
+			err := TryUntilSucceeds(
+				func() error {
+					_, err := docker(
+						pair.From.Container,
+						fmt.Sprintf(
+							"echo %s |dm remote add %s admin@%s",
+							pair.To.ApiKey,
+							pair.RemoteName,
+							pair.To.IP,
+						),
+						nil,
+					)
+					return err
+				},
+				fmt.Sprintf("adding remote to %s", pair.From.Container),
+			)
+			if err != nil {
+				t.Error(err)
+			}
 			res := OutputFromRunOnNode(t, pair.From.Container, "dm remote -v")
 			if !strings.Contains(res, pair.RemoteName) {
 				t.Errorf("can't find %s in %s's remote config", pair.RemoteName, pair.From.ClusterName)
@@ -979,30 +992,9 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 	if err != nil {
 		return err
 	}
-	// TODO: I am worried about pod network cidr collisions between concurrent
-	// test runs. But maybe network namespaces make it OK?
-	/*kubeadmConf :*/ _ = `
-apiVersion: kubeadm.k8s.io/v1alpha1
-unifiedControlPlaneImage: mirantis/hypokube:final
-kind: MasterConfiguration
-kubernetesVersion: 1.9.3
-#api:
-#  advertiseAddress: "10.192.0.2"
-networking:
-  podSubnet: "10.244.0.0/16"
-  # serviceSubnet: "10.96.0.0/12"
-tokenTTL: 0s
-nodeName: kube-master
-apiServerExtraArgs:
-  insecure-bind-address: "0.0.0.0"
-  insecure-port: "8080"
-`
 	st, err := docker(
 		nodeName(now, i, 0),
 		"touch /dind/flexvolume_driver && "+
-			/*fmt.Sprintf(
-				"printf '%s' > /etc/kubeadm.conf && ", strings.Replace(kubeadmConf, "\n", "\\n", -1),
-			)*/"true && "+
 			"systemctl start kubelet && "+
 			"wrapkubeadm init --ignore-preflight-errors=all && "+
 			"mkdir /root/.kube && cp /etc/kubernetes/admin.conf /root/.kube/config && "+
