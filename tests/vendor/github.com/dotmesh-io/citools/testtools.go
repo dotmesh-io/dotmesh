@@ -511,6 +511,10 @@ func docker(node string, cmd string, env map[string]string) (string, error) {
 
 }
 
+func RunOnNodeErr(node string, cmd string) (string, error) {
+	return docker(node, cmd, nil)
+}
+
 func dockerSystem(node string, cmd string) error {
 	return System("docker", "exec", "-i", node, "sh", "-c", cmd)
 }
@@ -1113,6 +1117,29 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			KUBE_DEBUG_CMD,
 			nil,
 		)
+		if err != nil {
+			return err
+		}
+	}
+
+	// For each node, wait until we can talk to dm from that node before
+	// proceeding.
+	for j := 0; j < c.DesiredNodeCount; j++ {
+		nodeName := nodeName(now, i, j)
+		err := TryUntilSucceeds(func() error {
+			// Check that the dm API works
+			_, err := RunOnNodeErr(nodeName, "dm list")
+			if err != nil {
+				return err
+			}
+
+			// Check that the docker volume plugin socket works
+			_, err := RunOnNodeErr(
+				nodeName,
+				"echo 'GET / HTTP/1.0' | socat /run/docker/plugins/dm.sock -",
+			)
+			return err
+		}, fmt.Sprintf("running dm list on %s", nodeName))
 		if err != nil {
 			return err
 		}

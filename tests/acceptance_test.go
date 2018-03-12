@@ -1578,17 +1578,12 @@ func TestKubernetes(t *testing.T) {
 	citools.StartTiming()
 	err := f.Start(t)
 	if err != nil {
-		t.Error(err)
-		return // there's no point carrying on
+		t.Fatal(err) // there's no point carrying on
 	}
 	node1 := f[0].GetNode(0)
 
 	citools.LogTiming("setup")
 	t.Run("FlexVolume", func(t *testing.T) {
-
-		// dm list should succeed in connecting to the dotmesh cluster
-		citools.RunOnNode(t, node1.Container, "dm list")
-
 		// init a dotmesh volume and put some data in it
 		citools.RunOnNode(t, node1.Container,
 			"docker run --rm -i -v apples:/foo --volume-driver dm "+
@@ -1703,9 +1698,6 @@ spec:
 	})
 
 	t.Run("DynamicProvisioning", func(t *testing.T) {
-		// dm list should succeed in connecting to the dotmesh cluster
-		citools.RunOnNode(t, node1.Container, "dm list")
-
 		// Ok, now we have the plumbing set up, try creating a PVC and see if it gets a PV dynamically provisioned
 		citools.KubectlApply(t, node1.Container, `
 kind: PersistentVolumeClaim
