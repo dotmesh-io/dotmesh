@@ -113,11 +113,22 @@ func TryUntilSucceeds(f func() error, desc string) error {
 	}
 }
 
-func TestMarkForCleanup(f Federation) {
+// debugParams variadic args to enable optional feature to specify more debugging
+func TestMarkForCleanup(f Federation, debugParams ...bool) {
 	log.Printf("Entering TestMarkForCleanup")
 	for _, c := range f {
 		for _, n := range c.GetNodes() {
 			node := n.Container
+			if len(debugParams) != 0 && debugParams[0] {
+				err := TryUntilSucceeds(func() error {
+					return System("bash", "-c", fmt.Sprintf(
+						`docker logs %s`, node,
+					))
+				}, fmt.Sprintf("marking %s for cleanup", node))
+				if err != nil {
+					log.Printf("Error %s getting logs from node %s. giving up.\n", node, err)
+				}
+			}
 			err := TryUntilSucceeds(func() error {
 				return System("bash", "-c", fmt.Sprintf(
 					`docker exec -t %s bash -c 'touch /CLEAN_ME_UP'`, node,
@@ -415,10 +426,15 @@ func TeardownFinishedTestRuns() {
 						return
 					}
 				}
-
 				err = System("docker", "rm", "-f", "-v", node)
 				if err != nil {
 					fmt.Printf("erk during teardown %s\n", err)
+				}
+
+				volumeName := "kubeadm-dind-cluster-" + node
+				err = System("docker", "volume", "rm", "-f", volumeName)
+				if err != nil {
+					fmt.Printf("erk during volume cleanup of %s: %s\n", volumeName, err)
 				}
 
 				// workaround https://github.com/docker/docker/issues/20398
@@ -509,6 +525,10 @@ func docker(node string, cmd string, env map[string]string) (string, error) {
 	err := c.Run()
 	return string(b.Bytes()), err
 
+}
+
+func RunOnNodeErr(node string, cmd string) (string, error) {
+	return docker(node, cmd, nil)
 }
 
 func dockerSystem(node string, cmd string) error {
@@ -1113,6 +1133,29 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			KUBE_DEBUG_CMD,
 			nil,
 		)
+		if err != nil {
+			return err
+		}
+	}
+
+	// For each node, wait until we can talk to dm from that node before
+	// proceeding.
+	for j := 0; j < c.DesiredNodeCount; j++ {
+		nodeName := nodeName(now, i, j)
+		err := TryUntilSucceeds(func() error {
+			// Check that the dm API works
+			_, err := RunOnNodeErr(nodeName, "dm list")
+			if err != nil {
+				return err
+			}
+
+			// Check that the docker volume plugin socket works
+			_, err = RunOnNodeErr(
+				nodeName,
+				"echo 'GET / HTTP/1.0' | socat /run/docker/plugins/dm.sock -",
+			)
+			return err
+		}, fmt.Sprintf("running dm list on %s", nodeName))
 		if err != nil {
 			return err
 		}
