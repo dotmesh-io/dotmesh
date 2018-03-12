@@ -7,9 +7,7 @@ Dotmesh supports:
 
 ## Prerequisites
 
-You need a Kubernetes 1.7.0+ cluster with working `hostPort` support.
-
-If you are using a `kubeadm` cluster with Weave Net, following the instructions [here](https://github.com/weaveworks/weave/issues/3016#issuecomment-321337923) on each of your nodes may help.
+You need a Kubernetes 1.6.0+ cluster.
 
 ## Getting started
 
@@ -22,8 +20,6 @@ kubectl create secret generic dotmesh --from-file=dotmesh-admin-password.txt -n 
 rm dotmesh-admin-password.txt
 kubectl apply -f manifests/
 ```
-
-Then load http://`<address-of-cluster-nodes>`:6969/ux in your browser and log in with username `admin` and the password you specified (`secret123` in the example above) to see the Dotmesh UI.
 
 Now you can use your Kubernetes cluster as a Dotmesh remote!
 

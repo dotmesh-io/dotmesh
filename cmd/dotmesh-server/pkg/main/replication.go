@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -40,16 +41,23 @@ func (z ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if master != z.state.myNodeId {
 		addresses := z.state.addressesFor(master)
-		// XXX hack, IPv4 happens to come before IPv6 and happens to be routeable
-		// on my network (whereas IPv6 isn't), but this depends on the enumeration
-		// order of network cards in servers :/
-		// TODO we should really attempt each address in turn until we find one
-		// that works.
-		peerAddress := addresses[0]
 
-		url := fmt.Sprintf(
+		_, _, apiKey, err := getPasswords("admin")
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(fmt.Sprintf("Can't establish API key to proxy pull: %+v.\n", err)))
+			return
+		}
+
+		url, err := deduceUrl(context.Background(), addresses, "internal", "admin", apiKey) // FIXME, need master->name mapping, see how handover works normally
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(fmt.Sprintf("%s", err)))
+			return
+		}
+		url = fmt.Sprintf(
 			"%s/filesystems/%s/%s/%s",
-			deduceUrl(peerAddress, "internal"), // FIXME, need master->name mapping, see how handover works normally
+			url,
 			z.filesystem,
 			z.fromSnap,
 			z.toSnap,
@@ -60,13 +68,6 @@ func (z ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"GET", url,
 			r.Body,
 		)
-
-		_, _, apiKey, err := getPasswords("admin")
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(fmt.Sprintf("Can't establish API key to proxy pull: %+v.\n", err)))
-			return
-		}
 
 		req.SetBasicAuth(
 			"admin",
@@ -235,16 +236,23 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// else OK, we can proceed
 	} else {
 		addresses := z.state.addressesFor(master)
-		// XXX hack, IPv4 happens to come before IPv6 and happens to be routeable
-		// on my network (whereas IPv6 isn't), but this depends on the enumeration
-		// order of network cards in servers :/
-		// TODO we should really attempt each address in turn until we find one
-		// that works.
-		peerAddress := addresses[0]
 
-		url := fmt.Sprintf(
+		_, _, apiKey, err := getPasswords("admin")
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(fmt.Sprintf("Can't establish API key to proxy push: %+v.\n", err)))
+			return
+		}
+
+		url, err := deduceUrl(context.Background(), addresses, "internal", "admin", apiKey)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(fmt.Sprintf("%s", err)))
+			return
+		}
+		url = fmt.Sprintf(
 			"%s/filesystems/%s/%s/%s",
-			deduceUrl(peerAddress, "internal"), // FIXME, need master->name mapping, see how handover works normally
+			url, // FIXME, need master->name mapping, see how handover works normally
 			z.filesystem,
 			z.fromSnap,
 			z.toSnap,
@@ -255,13 +263,6 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"POST", url,
 			r.Body,
 		)
-
-		_, _, apiKey, err := getPasswords("admin")
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(fmt.Sprintf("Can't establish API key to proxy push: %+v.\n", err)))
-			return
-		}
 
 		req.SetBasicAuth(
 			"admin",

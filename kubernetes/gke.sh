@@ -21,7 +21,7 @@ if [ "$COMMAND" == "create" ]; then
     --cluster-version=$GKE_K8S_VERSION
 
   echo "opening firewall"
-  gcloud compute firewall-rules create datamesh --allow tcp:6969 --target-tags=datamesh || true
+  gcloud compute firewall-rules create datamesh --allow tcp:32607 --target-tags=datamesh || true
 
 elif [ "$COMMAND" == "delete" ]; then
 

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -16,21 +17,45 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+	//niobuffer "github.com/djherbis/buffer"
+	//"github.com/djherbis/nio"
 )
 
-func deduceUrl(hostname, mode string) string {
+func deduceUrl(ctx context.Context, hostnames []string, mode, user, apiKey string) (string, error) {
 	// "mode" is "internal" if you're trying to connect within a cluster (e.g.
 	// directly to another node's IP address), or "external" if you're trying
 	// to connect an external cluster.
-	scheme := "http"
-	port := "6969"
 
-	if mode == "external" && (hostname == "saas.dotmesh.io" || hostname == "dothub.com") {
-		scheme = "https"
-		port = "443"
+	var errs []error
+	for _, hostname := range hostnames {
+		var urlsToTry []string
+		if mode == "external" && (hostname == "saas.dotmesh.io" || hostname == "dothub.com") {
+			urlsToTry = []string{
+				fmt.Sprintf("https://%s:443", hostname),
+			}
+		} else {
+			urlsToTry = []string{
+				fmt.Sprintf("http://%s:%d", hostname, 32607),
+				fmt.Sprintf("http://%s:%d", hostname, 6969),
+			}
+		}
+
+		for _, urlToTry := range urlsToTry {
+			// hostname (2nd arg) doesn't matter because we're just calling
+			// reallyCallRemote which doesn't use it.
+			j := NewJsonRpcClient(user, "", apiKey)
+			var result bool
+			err := j.reallyCallRemote(ctx, "DotmeshRPC.Ping", nil, &result, urlToTry+"/rpc")
+			if err == nil {
+				return urlToTry, nil
+			} else {
+				errs = append(errs, err)
+			}
+		}
 	}
 
-	return fmt.Sprintf("%s://%s:%s", scheme, hostname, port)
+	return "", fmt.Errorf("Unable to connect to any of the addresses attempted: %+v, errs: %v", hostnames, errs)
+
 }
 
 // NB: It's important that the following includes characters _not_ included in
@@ -295,6 +320,8 @@ func waitForFilesystemDeath(filesystemId string) {
 //
 // if the writer implements http.Flusher, Flush() is called after each write.
 
+// TODO: pipe would be better named Copy
+
 func pipe(
 	r io.Reader, rDesc string, w io.Writer, wDesc string,
 	finished chan bool, canceller chan *Event,
@@ -303,8 +330,34 @@ func pipe(
 	compressMode string,
 ) {
 	startTime := time.Now().UnixNano()
+	var lastUpdate int64 // in UnixNano
 	var totalBytes int64
 	buffer := make([]byte, BUF_LEN)
+
+	// Incomplete idea below.
+	/*
+		// async buffer e.g. let the network read up to 32MiB of data that's
+		// already been written to the buffer without blocking the buffer, or let
+		// zfs write 32MiB of data that hasn't been read yet without stalling it
+		nioBufOut := niobuffer.New(1024 * 1024 * 1024 * 32)
+		bufROut, w := nio.Pipe(nioBufOut)
+		go func() {
+			nio.Copy(originalW, bufROut, nioBufOut)
+		}()
+		nioBufIn := niobuffer.New(1024 * 1024 * 1024 * 32)
+		r, bufWIn := nio.Pipe(nioBufIn)
+		go func() {
+			nio.Copy(bufWIn, originalR, nioBufIn)
+		}()
+	*/
+
+	// only call f() if 1 sec of nanosecs elapsed since last call to f()
+	rateLimit := func(f func()) {
+		if time.Now().UnixNano()-lastUpdate > 1e+9 {
+			f()
+			lastUpdate = time.Now().UnixNano()
+		}
+	}
 
 	handleErr := func(message string, r io.Reader, w io.Writer, r2 io.Reader, w2 io.Writer) {
 		if message != "" {
@@ -356,7 +409,6 @@ func pipe(
 		return
 	}
 
-	// TODO: add buffering, to smooth things out
 	for {
 		select {
 		case e := <-canceller:
@@ -390,7 +442,11 @@ func pipe(
 				f.Flush()
 			}
 			totalBytes += int64(nr)
-			notifyFunc(totalBytes, time.Now().UnixNano()-startTime)
+			rateLimit(func() {
+				// rate limit to once per second to avoid hammering notifyFunc
+				// on fast connections.
+				notifyFunc(totalBytes, time.Now().UnixNano()-startTime)
+			})
 			if wErr != nil {
 				handleErr(fmt.Sprintf("Error writing to %s: %s", wDesc, wErr), reader, writer, r, w)
 				return
@@ -399,9 +455,14 @@ func pipe(
 		if err == io.EOF {
 			// expected case, log no error
 			handleErr("", reader, writer, r, w)
+			// sync notification here (and in error case below) in case the
+			// caller depends on synchronous notification of final state before
+			// exit
+			notifyFunc(totalBytes, time.Now().UnixNano()-startTime)
 			return
 		} else if err != nil {
 			handleErr(fmt.Sprintf("Error reading from %s: %s", rDesc, err), reader, writer, r, w)
+			notifyFunc(totalBytes, time.Now().UnixNano()-startTime)
 			return
 		}
 	}

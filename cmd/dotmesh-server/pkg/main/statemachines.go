@@ -1340,24 +1340,24 @@ func receivingState(f *fsMachine) stateFn {
 		log.Printf("No known address for current master of %s", f.filesystemId)
 		return backoffState
 	}
-	// XXX hack, IPv4 happens to come before IPv6 and happens to be routeable
-	// on my network (whereas IPv6 isn't), but this depends on the enumeration
-	// order of network cards in servers :/
-	// TODO we should really attempt each address in turn until we find one
-	// that works.
-	peerAddress := addresses[0]
-
 	_, _, apiKey, err := getPasswords("admin")
 	if err != nil {
 		log.Printf("Attempting to pull %s got %s", f.filesystemId, err)
 		return backoffState
 	}
+
+	url, err := deduceUrl(context.Background(), addresses, "internal", "admin", apiKey)
+	if err != nil {
+		log.Printf("%s", err)
+		return backoffState
+	}
+
 	req, err := http.NewRequest(
 		"GET",
 		fmt.Sprintf(
 			// receiving only happens within clusters. push/pull between
 			// clusters is all pushPeerState etc.
-			"%s/filesystems/%s/%s/%s", deduceUrl(peerAddress, "internal"),
+			"%s/filesystems/%s/%s/%s", url,
 			f.filesystemId, fromSnap, snapRange.toSnap.Id,
 		),
 		nil,
@@ -1375,7 +1375,8 @@ func receivingState(f *fsMachine) stateFn {
 	}
 	log.Printf(
 		"Debug: curl -u admin:[pw] %s/filesystems/%s/%s/%s",
-		deduceUrl(peerAddress, "internal"), f.filesystemId, fromSnap, snapRange.toSnap.Id,
+		url,
+		f.filesystemId, fromSnap, snapRange.toSnap.Id,
 	)
 
 	f.transitionedTo("receiving", "starting")
@@ -1844,12 +1845,25 @@ func (f *fsMachine) pull(
 
 	// 2. Perform GET, as receivingState does. Update as we go, similar to how
 	// push does it.
-
-	url := fmt.Sprintf(
-		"%s/filesystems/%s/%s/%s",
+	url, err := deduceUrl(
+		context.Background(),
+		[]string{transferRequest.Peer},
 		// pulls are between clusters, so use external address where
 		// appropriate
-		deduceUrl(transferRequest.Peer, "external"),
+		"external",
+		transferRequest.User,
+		transferRequest.ApiKey,
+	)
+	if err != nil {
+		return &Event{
+			Name: "push-initiator-cant-deduce-url",
+			Args: &EventArgs{"err": err},
+		}, backoffState
+	}
+
+	url = fmt.Sprintf(
+		"%s/filesystems/%s/%s/%s",
+		url,
 		toFilesystemId,
 		fromSnapshotId,
 		toSnapshotId,
@@ -2103,11 +2117,25 @@ func (f *fsMachine) push(
 	defer postWriter.Close()
 	defer postReader.Close()
 
-	url := fmt.Sprintf(
+	url, err := deduceUrl(
+		context.Background(),
+		[]string{transferRequest.Peer},
 		// pushes are between clusters, so use external address where
 		// appropriate
+		"external",
+		transferRequest.User,
+		transferRequest.ApiKey,
+	)
+	if err != nil {
+		return &Event{
+			Name: "push-initiator-cant-deduce-url",
+			Args: &EventArgs{"err": err},
+		}, backoffState
+	}
+
+	url = fmt.Sprintf(
 		"%s/filesystems/%s/%s/%s",
-		deduceUrl(transferRequest.Peer, "external"),
+		url,
 		filesystemId,
 		fromSnapshotId,
 		snapRange.toSnap.Id,

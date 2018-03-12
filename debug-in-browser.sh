@@ -62,8 +62,8 @@ echo "Kibana:                                    http://admin:$ADMIN_PW@localhos
 
 # node uis
 for node in $nodes; do
-    echo "$node GUI:  http://admin:${passwords[$node]}@${ips[$node]}:6969/ux"
-    echo "$node GUI:  http://admin:${passwords[$node]}@${ips[$node]}:6969/ui"
+    echo "$node GUI:  http://admin:${passwords[$node]}@${ips[$node]}:32607/ux"
+    echo "$node GUI:  http://admin:${passwords[$node]}@${ips[$node]}:32607/ui"
 done
 
 for job in `jobs -p`; do

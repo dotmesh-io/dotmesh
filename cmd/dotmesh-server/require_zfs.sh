@@ -135,7 +135,7 @@ if [ "$LOG_ADDR" != "" ]; then
 #    rm_opt="--rm"
 fi
 
-# To have its port exposed on Docker for Mac, `docker run` needs -p 6969.  But
+# To have its port exposed on Docker for Mac, `docker run` needs -p 32607.  But
 # dotmesh-server also wants to discover its routeable IPv4 addresses (on Linux
 # anyway; multi-node clusters work only on Linux because we can't discover the
 # Mac's IP from a container).  So to work with both we do that in the host
@@ -147,7 +147,7 @@ if [ "$PKI_PATH" != "" ]; then
     pki_volume_mount="-v $PKI_PATH:/pki"
 fi
 
-net="-p 6969:6969"
+net="-p 32607:32607"
 link=""
 
 # this setting means we have set DOTMESH_ETCD_ENDPOINT to a known working

@@ -63,6 +63,13 @@ Add the `gitlab-runner` user's SSH public key to `authorized_hosts` on releases@
 
 Edit  /etc/gitlab-runner/config.toml to set the concurrency to 4 (it's obvious how)
 
+Put the following (sorry) in root's crontab (by e.g. running sudo crontab -e):
+```
+@hourly bash -c 'for X in `sudo zpool list|grep testpool|cut -f 1 -d " "`; do sudo zpool destroy -f $X; done'
+@hourly bash -c 'while [ ! -z "`for C in $(docker ps --format "{{.Names}}" | grep cluster- || true); do docker exec -ti $C bash -c "if test -f /CLEAN_ME_UP; then echo CLEAN; else echo DIRTY; fi"; done|grep DIRTY`" ]; do echo "waiting for tests to complete..."; sleep 1; done; systemctl restart docker'
+@reboot rm /dotmesh-test-cleanup.lock
+```
+
 ## setup - nixos
 
 Use a config like this:

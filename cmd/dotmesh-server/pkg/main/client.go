@@ -30,20 +30,33 @@ func NewJsonRpcClient(user, hostname, apiKey string) *JsonRpcClient {
 }
 
 // TODO remove duplication wrt dm/pkg/api/remotes.go
-// call a method with string args, and attempt to decode it into result
+// call a method with args, and attempt to decode it into result
 func (j *JsonRpcClient) CallRemote(
 	ctx context.Context, method string, args interface{}, result interface{},
+) error {
+	// RPCs are always between clusters, so "external"
+	url, err := deduceUrl(ctx, []string{j.Hostname}, "external", j.User, j.ApiKey)
+	if err != nil {
+		return err
+	}
+	url = fmt.Sprintf("%s/rpc", url)
+	return j.reallyCallRemote(ctx, method, args, result, url)
+}
+
+func (j *JsonRpcClient) reallyCallRemote(
+	ctx context.Context, method string, args interface{}, result interface{},
+	urlToUse string,
 ) error {
 	// create new span using span found in context as parent (if none is found,
 	// our span becomes the trace root).
 	span, ctx := opentracing.StartSpanFromContext(ctx, method)
+
 	span.SetTag("type", "dotmesh-server rpc")
 	span.SetTag("rpcMethod", method)
 	span.SetTag("rpcArgs", fmt.Sprintf("%v", args))
 	defer span.Finish()
 
-	// RPCs are always between clusters, so "external"
-	url := fmt.Sprintf("%s/rpc", deduceUrl(j.Hostname, "external"))
+	url := urlToUse
 	message, err := json2.EncodeClientRequest(method, args)
 	if err != nil {
 		return err
@@ -80,8 +93,8 @@ func (j *JsonRpcClient) CallRemote(
 	}
 	err = json2.DecodeClientResponse(bytes.NewBuffer(b), &result)
 	if err != nil {
-		span.SetTag("error", fmt.Sprintf("Couldn't decode response '%s': %s", string(b), err))
-		return fmt.Errorf("Couldn't decode response '%s': %s", string(b), err)
+		span.SetTag("error", fmt.Sprintf("Response '%s' yields error %s", string(b), err))
+		return fmt.Errorf("Response '%s' yields error %s", string(b), err)
 	}
 	return nil
 }
