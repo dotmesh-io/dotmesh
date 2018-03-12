@@ -1134,7 +1134,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			}
 
 			// Check that the docker volume plugin socket works
-			_, err := RunOnNodeErr(
+			_, err = RunOnNodeErr(
 				nodeName,
 				"echo 'GET / HTTP/1.0' | socat /run/docker/plugins/dm.sock -",
 			)
