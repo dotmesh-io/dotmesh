@@ -13,7 +13,7 @@ variables:
 
 stages:
     - build
-    #- test
+    - test
     - deploy
     - manual_deploy
 
@@ -104,6 +104,170 @@ build_server:
 #          ./smoke.sh $(pwd)/binaries/Linux/dm dotmesh-server
 #          docker system prune -fa
 #          "
+
+macos_docker_stable:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_macos
+    tags:
+        - macos
+        - docker-stable
+    script:
+        - cd cmd/dotmesh-server
+        # Possible to build just the "prod" image because binaries got passed
+        # as artifact in cmd/dotmesh-server/target
+        # TODO: pull the built image from $CI_DOCKER_REGISTRY, rather than
+        # rebuilding it here.
+        - docker build -t dotmesh-server . || (sleep 30; docker build -t dotmesh-server .)
+        - cd ../..
+        - ./smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
+        - docker version
+        - which docker
+        - docker container prune -f
+
+macos_docker_edge:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_macos
+    tags:
+        - macos
+        - docker-edge
+    script:
+        - cd cmd/dotmesh-server
+        # Possible to build just the "prod" image because binaries got passed
+        # as artifact in cmd/dotmesh-server/target
+        # TODO: pull the built image from $CI_DOCKER_REGISTRY, rather than
+        # rebuilding it here.
+        - docker build -t dotmesh-server . || (sleep 30; docker build -t dotmesh-server .)
+        - cd ../..
+        - ./smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
+        - docker version
+        - which docker
+        - docker container prune -f
+
+versioner_unit_tests:
+    stage: test
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - cd cmd/versioner && go test
+
+# run full dind tests on linux
+linux_default_dot:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - ./test.sh -run TestDefaultDot
+
+linux_single_node:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - ./test.sh -run TestSingleNode
+
+linux_two_nodes_same_cluster:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - ./test.sh -run TestTwoNodesSameCluster
+
+linux_kubernetes:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - pwd
+        - ./test.sh -run TestKubernetes
+
+linux_deletion_simple:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - ./test.sh -run TestDeletionSimple
+
+linux_deletion_complex:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - ./test.sh -run TestDeletionComplex
+    allow_failure: true
+
+linux_two_single_node_clusters:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - ./test.sh -run TestTwoSingleNodeClusters
+
+linux_three_single_node_clusters:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - ./test.sh -run TestThreeSingleNodeClusters
+
+linux_two_double_node_clusters:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - ./test.sh -run TestTwoDoubleNodeClusters
+
+linux_stress:
+   stage: test
+   dependencies:
+       - build_server
+       - build_client_linux
+   tags:
+       - ubuntu
+       - fast
+   script:
+       - ./test.sh -timeout 30m -run TestStress
+   when: manual
 
 trigger_e2e_test:
     stage: deploy
