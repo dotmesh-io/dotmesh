@@ -415,10 +415,15 @@ func TeardownFinishedTestRuns() {
 						return
 					}
 				}
-
 				err = System("docker", "rm", "-f", "-v", node)
 				if err != nil {
 					fmt.Printf("erk during teardown %s\n", err)
+				}
+
+				volumeName := "kubeadm-dind-cluster-" + node
+				err = System("docker", "volume", "rm", "-f", volumeName)
+				if err != nil {
+					fmt.Printf("erk during volume cleanup of %s: %s\n", volumeName, err)
 				}
 
 				// workaround https://github.com/docker/docker/issues/20398
