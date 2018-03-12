@@ -105,7 +105,7 @@ build_server:
 #          docker system prune -fa
 #          "
 
-.macos_docker_stable:
+macos_docker_stable:
     stage: test
     dependencies:
         - build_server
@@ -126,7 +126,7 @@ build_server:
         - which docker
         - docker container prune -f
 
-.macos_docker_edge:
+macos_docker_edge:
     stage: test
     dependencies:
         - build_server
@@ -147,7 +147,7 @@ build_server:
         - which docker
         - docker container prune -f
 
-.versioner_unit_tests:
+versioner_unit_tests:
     stage: test
     tags:
         - ubuntu
@@ -156,7 +156,7 @@ build_server:
         - cd cmd/versioner && go test
 
 # run full dind tests on linux
-.linux_default_dot:
+linux_default_dot:
     stage: test
     dependencies:
         - build_server
@@ -167,7 +167,7 @@ build_server:
     script:
         - ./test.sh -run TestDefaultDot
 
-.linux_single_node:
+linux_single_node:
     stage: test
     dependencies:
         - build_server
@@ -178,7 +178,7 @@ build_server:
     script:
         - ./test.sh -run TestSingleNode
 
-.linux_two_nodes_same_cluster:
+linux_two_nodes_same_cluster:
     stage: test
     dependencies:
         - build_server
@@ -189,7 +189,7 @@ build_server:
     script:
         - ./test.sh -run TestTwoNodesSameCluster
 
-.linux_kubernetes:
+linux_kubernetes:
     stage: test
     dependencies:
         - build_server
@@ -201,7 +201,7 @@ build_server:
         - pwd
         - ./test.sh -run TestKubernetes
 
-.linux_deletion_simple:
+linux_deletion_simple:
     stage: test
     dependencies:
         - build_server
@@ -212,7 +212,7 @@ build_server:
     script:
         - ./test.sh -run TestDeletionSimple
 
-.linux_deletion_complex:
+linux_deletion_complex:
     stage: test
     dependencies:
         - build_server
@@ -224,7 +224,7 @@ build_server:
         - ./test.sh -run TestDeletionComplex
     allow_failure: true
 
-.linux_two_single_node_clusters:
+linux_two_single_node_clusters:
     stage: test
     dependencies:
         - build_server
@@ -235,7 +235,7 @@ build_server:
     script:
         - ./test.sh -run TestTwoSingleNodeClusters
 
-.linux_three_single_node_clusters:
+linux_three_single_node_clusters:
     stage: test
     dependencies:
         - build_server
@@ -246,7 +246,7 @@ build_server:
     script:
         - ./test.sh -run TestThreeSingleNodeClusters
 
-.linux_two_double_node_clusters:
+linux_two_double_node_clusters:
     stage: test
     dependencies:
         - build_server
@@ -257,7 +257,7 @@ build_server:
     script:
         - ./test.sh -run TestTwoDoubleNodeClusters
 
-.linux_stress:
+linux_stress:
    stage: test
    dependencies:
        - build_server
