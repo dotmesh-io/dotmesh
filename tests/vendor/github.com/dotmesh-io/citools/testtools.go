@@ -113,11 +113,22 @@ func TryUntilSucceeds(f func() error, desc string) error {
 	}
 }
 
-func TestMarkForCleanup(f Federation) {
+// debugParams variadic args to enable optional feature to specify more debugging
+func TestMarkForCleanup(f Federation, debugParams ...bool) {
 	log.Printf("Entering TestMarkForCleanup")
 	for _, c := range f {
 		for _, n := range c.GetNodes() {
 			node := n.Container
+			if len(debugParams) != 0 && debugParams[0] {
+				err := TryUntilSucceeds(func() error {
+					return System("bash", "-c", fmt.Sprintf(
+						`docker logs %s`, node,
+					))
+				}, fmt.Sprintf("marking %s for cleanup", node))
+				if err != nil {
+					log.Printf("Error %s getting logs from node %s. giving up.\n", node, err)
+				}
+			}
 			err := TryUntilSucceeds(func() error {
 				return System("bash", "-c", fmt.Sprintf(
 					`docker exec -t %s bash -c 'touch /CLEAN_ME_UP'`, node,
