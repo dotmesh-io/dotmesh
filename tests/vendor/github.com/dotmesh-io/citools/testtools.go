@@ -119,16 +119,7 @@ func TestMarkForCleanup(f Federation, debugParams ...bool) {
 	for _, c := range f {
 		for _, n := range c.GetNodes() {
 			node := n.Container
-			if len(debugParams) != 0 && debugParams[0] {
-				err := TryUntilSucceeds(func() error {
-					return System("bash", "-c", fmt.Sprintf(
-						`docker logs %s`, node,
-					))
-				}, fmt.Sprintf("marking %s for cleanup", node))
-				if err != nil {
-					log.Printf("Error %s getting logs from node %s. giving up.\n", node, err)
-				}
-			}
+
 			err := TryUntilSucceeds(func() error {
 				return System("bash", "-c", fmt.Sprintf(
 					`docker exec -t %s bash -c 'touch /CLEAN_ME_UP'`, node,
@@ -139,6 +130,18 @@ func TestMarkForCleanup(f Federation, debugParams ...bool) {
 			} else {
 				log.Printf("Marked %s for cleanup.", node)
 			}
+
+			if len(debugParams) != 0 && debugParams[0] {
+				err := TryUntilSucceeds(func() error {
+					return System("bash", "-c", fmt.Sprintf(
+						`docker logs %s`, node,
+					))
+				}, fmt.Sprintf("getting docker logs from %s", node))
+				if err != nil {
+					log.Printf("Error %s getting logs from node %s. giving up.\n", node, err)
+				}
+			}
+
 		}
 	}
 }
