@@ -214,7 +214,7 @@ ssh-keygen
 cat ~/.ssh/id_rsa.pub
 ```
 
-Now paste this key into your github account AND your gitlab account.
+Now paste this key into your github account.
 
 Now we login and run the `ubuntu` prepare script:
 
