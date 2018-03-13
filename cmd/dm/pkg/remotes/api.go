@@ -604,7 +604,10 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 			)
 			quotient := fmt.Sprintf(" (%d/%d)", result.Index, result.Total)
 			bar.Postfix(speed + quotient)
+		} else {
+			out.Write([]byte(fmt.Sprintf("Awaiting transfer... \n")))
 		}
+
 		if result.Index == result.Total && result.Status == "finished" {
 			if started {
 				bar.FinishPrint("Done!")
