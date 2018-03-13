@@ -42,7 +42,7 @@ if [ ! -d "$HOME/$INSTRUMENTATION_REPO" ]; then
 fi
 
 cd $HOME/$INSTRUMENTATION_REPO
-./up.sh secret # where secret is some local password
+./up.sh
 
 if [ ! -d "$HOME/$DISCOVERY_REPO" ]; then
   cd $HOME/

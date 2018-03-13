@@ -12,8 +12,8 @@ cluster in your federation (as configured by the integration test(s) you choose
 to run).
 
 The test suite intentionally leaves the last docker-in-docker environments
-running so that you can do ad-hoc poking or log/trace viewing after running a
-test (using `debug-in-browser.sh`).
+running so that you can do ad-hoc poking or log viewing after running a
+test.
 
 This acceptance test suite uses docker-in-docker, kubeadm style. It creates
 docker containers which simulate entire computers, each running systemd, and
@@ -284,13 +284,11 @@ We're going to create `~/dotmesh-instrumentation` and
 cd ~/
 git clone git@github.com:dotmesh-io/dotmesh-instrumentation
 cd dotmesh-instrumentation
-./up.sh secret # where secret is some local password
+./up.sh
 ```
 
-The `dotmesh-instrumentation` pack includes ELK for logging, Zipkin for
-tracing, a local registry which is required for the integration tests, and an
-etcd-browser which is useful for inspecting the state in your test clusters'
-etcd instances.
+The `dotmesh-instrumentation` pack includes a local registry which is required 
+for the integration tests.
 
 ```
 cd ~/
@@ -335,45 +333,3 @@ To run just an individual set of tests, run:
 
 To run an individual test, specify `TestTwoSingleNodeClusters/TestName` for
 example.
-
-To open a bunch of debug tools (Kibana for logs, Zipkin for traces, and etcd
-browsers for each cluster's etcd), run (where 'secret' is the pasword you
-specified when you ran `up.sh` in `dotmesh-instrumentation`):
-
-```
-ADMIN_PW=secret ./debug-in-browser.sh
-```
-
-Note that `debug-in-browser.sh` also dumps goroutine stacks (`*.goroutines`
-files) from all running dotmesh instances into the current working directory.
-This can be extremely useful for debugging deadlocks: look for suspicious
-stacks which indicate that things that are waiting on eachother.
-
-The old UI, if you want to use that, depends on having the Jekyll site running
-on `localhost:4000`. The following is a portable way to do that:
-
-```
-git clone git@github.com:dotmesh-io/dotmesh-website
-cd dotmesh-website
-docker run -ti --net=host -v $PWD:/srv/jekyll pwbgl/docker-jekyll-pygments jekyll serve /site
-```
-
-#### interacting with etcd
-
-You can use the `etcdctl` dev command to view the contents of the database.
-
-```bash
-bash dev.sh etcdctl ls /dotmesh.io
-```
-
-**list users**
-
-```bash
-bash dev.sh etcdctl ls /dotmesh.io/users
-```
-
-**show user**
-
-```bash
-bash dev.sh etcdctl get /dotmesh.io/users/00000000-0000-0000-0000-000000000000
-```
