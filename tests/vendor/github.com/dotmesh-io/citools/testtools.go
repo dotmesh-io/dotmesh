@@ -100,7 +100,7 @@ func TryUntilSucceeds(f func() error, desc string) error {
 	for {
 		err := f()
 		if err != nil {
-			if attempt > 10 {
+			if attempt > 20 {
 				return err
 			} else {
 				fmt.Printf("Error %s: %v, pausing and trying again...\n", desc, err)
