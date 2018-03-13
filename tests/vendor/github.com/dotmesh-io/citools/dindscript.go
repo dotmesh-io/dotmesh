@@ -577,6 +577,7 @@ function dind::run {
   fi
 
   volume_name="kubeadm-dind-${container_name}"
+  mkdir -p ${volume_name}
   dind::ensure-network
   dind::ensure-volume ${reuse_volume} "${volume_name}"
   dind::ensure-nat
