@@ -24,7 +24,7 @@ before_script:
     - mkdir -p src/github.com/dotmesh-io
     - ln -s `realpath ..` ./src/github.com/dotmesh-io/dotmesh
     - cd src/github.com/dotmesh-io/dotmesh
-    - if [ -f /dotmesh-test-cleanup.lock ]; do echo "waiting for test cleanup..."; sleep 1; fi
+    - if [ -f /dotmesh-test-cleanup.lock ]; then echo "waiting for test cleanup..."; sleep 1; fi
     - docker login -u $QUAY_USER -p $QUAY_PASSWORD quay.io
 
 build_client_linux:
