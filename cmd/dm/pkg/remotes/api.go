@@ -563,17 +563,29 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 		time.Sleep(time.Second)
 		result := &TransferPollResult{}
 
+		rpcError := make(chan error, 1)
+
 		ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
 		defer cancel()
 
-		err := dm.client.CallRemote(
-			ctx, "DotmeshRPC.GetTransfer", transferId, result,
-		)
-		if err != nil {
-			if !strings.Contains(fmt.Sprintf("%s", err), "No such intercluster transfer") {
-				out.Write([]byte(fmt.Sprintf("Got error, trying again: %s\n", err)))
+		go func() {
+			err := dm.client.CallRemote(
+				ctx, "DotmeshRPC.GetTransfer", transferId, result,
+			)
+			rpcError <- err
+		}()
+
+		select {
+		case <-ctx.Done():
+			out.Write([]byte(fmt.Sprintf("Got error from API, trying again: %s\n", ctx.Err())))
+		case err := <-rpcError:
+			if err != nil {
+				if !strings.Contains(fmt.Sprintf("%s", err), "No such intercluster transfer") {
+					out.Write([]byte(fmt.Sprintf("Got error, trying again: %s\n", err)))
+				}
 			}
 		}
+
 		if result.Size > 0 {
 			if !started {
 				bar = pb.New64(result.Size)
