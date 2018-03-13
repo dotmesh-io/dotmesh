@@ -67,7 +67,7 @@ Edit  /etc/gitlab-runner/config.toml to set the concurrency to 4 (it's obvious h
 
 Put the following (sorry) in root's crontab (by e.g. running sudo crontab -e):
 ```
-@hourly bash -c '(set -x; echo "starting cleanup!"; while [ ! -z "`for C in $(docker ps --format "{{.Names}}" | grep cluster- || true); do docker exec -i $C bash -c "if test -f /CLEAN_ME_UP; then echo CLEAN; else echo DIRTY; fi"; done|grep DIRTY`" ]; do echo "waiting for tests to complete..."; sleep 1; done; while ! (set -o noclobber;>/dotmesh-test-cleanup.lock); do echo "waiting to acquire test-cleanup lock to stop other containers starting..."; sleep 1; done; for X in $(mount|cut -d " " -f 3 |grep kubeadm-dind-cluster); do umount $X; done; systemctl restart docker; rm /dotmesh-test-cleanup.lock; for X in `sudo zpool list|grep testpool|cut -f 1 -d " "`; do sudo zpool destroy -f $X; done; echo "finished cleanup!") >>/var/log/cron-cleanup.log 2>>/var/log/cron-cleanup.log'
+@hourly bash -c '(set -x; echo "starting cleanup!"; while [ ! -z "`for C in $(docker ps --format "{{.Names}}" | grep cluster- || true); do docker exec -i $C bash -c "if test -f /CLEAN_ME_UP; then echo CLEAN; else echo DIRTY; fi"; done|grep DIRTY`" ]; do echo "waiting for tests to complete..."; sleep 1; done; while ! (set -o noclobber;>/dotmesh-test-cleanup.lock); do echo "waiting to acquire test-cleanup lock to stop other containers starting..."; sleep 1; done; for X in $(mount|cut -d " " -f 3 |grep kubeadm-dind-cluster); do umount $X; done; systemctl restart docker; for X in `sudo zpool list|grep testpool|cut -f 1 -d " "`; do sudo zpool destroy -f $X; done; rm /dotmesh-test-cleanup.lock; echo "finished cleanup!") >>/var/log/cron-cleanup.log 2>>/var/log/cron-cleanup.log'
 @reboot rm /dotmesh-test-cleanup.lock
 ```
 
