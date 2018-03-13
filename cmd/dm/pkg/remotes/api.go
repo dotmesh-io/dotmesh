@@ -2,18 +2,18 @@ package remotes
 
 import (
 	"fmt"
+	"golang.org/x/net/context"
 	"io"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"gopkg.in/cheggaaa/pb.v1"
 )
 
 const DEFAULT_BRANCH string = "master"
+const RPC_TIMEOUT time.Duration = 2 * time.Minute
 
 type VersionInfo struct {
 	InstalledVersion    string `json:"installed_version"`
@@ -562,8 +562,12 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 	for {
 		time.Sleep(time.Second)
 		result := &TransferPollResult{}
+
+		ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
+		defer cancel()
+
 		err := dm.client.CallRemote(
-			context.Background(), "DotmeshRPC.GetTransfer", transferId, result,
+			ctx, "DotmeshRPC.GetTransfer", transferId, result,
 		)
 		if err != nil {
 			if !strings.Contains(fmt.Sprintf("%s", err), "No such intercluster transfer") {
