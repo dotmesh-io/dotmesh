@@ -454,6 +454,16 @@ func TeardownFinishedTestRuns() {
 					fmt.Printf("erk during teardown %s\n", err)
 				}
 
+				// cleanup stray mounts, e.g. shm mounts
+				err = System("bash", "-c", fmt.Sprintf(`
+					for X in $(mount|cut -d ' ' -f 3 |grep %s); do
+						umount $X >/dev/null 2>&1 || true
+					done`, node),
+				)
+				if err != nil {
+					fmt.Printf("erk during cleanup mounts: %s\n", err)
+				}
+
 				fmt.Printf("=== Cleaned up node %s\n", node)
 			}
 
