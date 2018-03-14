@@ -1479,7 +1479,7 @@ func TestThreeSingleNodeClusters(t *testing.T) {
 
 		// Let's try and put things in a nonexistant namespace
 		// Likewise, This SHOULD fail, so we reverse the sense of the return code.
-		citools.RunOnNode(t, aliceNode.Container, "if dm push common_grapes --remote-name nonexistant/grapes; then exit 1; else exit 0; fi")
+		citools.RunOnNode(t, aliceNode.Container, "bash -c 'if dm push common_grapes --remote-name nonexistant/grapes; then exit 1; else exit 0; fi'")
 
 		// Check it doesn't get there
 		resp := citools.OutputFromRunOnNode(t, commonNode.Container, "dm list -H | cut -f 1 | sort")
@@ -1496,7 +1496,7 @@ func TestThreeSingleNodeClusters(t *testing.T) {
 
 		// Let's try and put things in bob's namespace.
 		// This SHOULD fail, so we reverse the sense of the return code.
-		citools.RunOnNode(t, aliceNode.Container, "if dm push common_passionfruit --remote-name bob/passionfruit; then exit 1; else exit 0; fi")
+		citools.RunOnNode(t, aliceNode.Container, "bash -c 'if dm push common_passionfruit --remote-name bob/passionfruit; then exit 1; else exit 0; fi'")
 
 		// Check it doesn't get there
 		resp := citools.OutputFromRunOnNode(t, commonNode.Container, "dm list -H | cut -f 1 | sort")
