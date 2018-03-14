@@ -529,7 +529,7 @@ func docker(node string, cmd string, env map[string]string) (string, error) {
 		}
 	}
 
-	c := exec.Command("docker", "exec", "-i", node, "sh", "-c", envString+cmd)
+	c := exec.Command("docker", "exec", "-i", node, "bash", "-c", envString+cmd)
 
 	var b bytes.Buffer
 
