@@ -3,13 +3,14 @@ package remotes
 import (
 	"fmt"
 	"golang.org/x/net/context"
+	"gopkg.in/cheggaaa/pb.v1"
 	"io"
+	"log"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
-
-	"gopkg.in/cheggaaa/pb.v1"
 )
 
 const DEFAULT_BRANCH string = "master"
@@ -586,6 +587,10 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 			}
 		}
 
+		debugMode := os.Getenv("DEBUG_MODE")
+		if debugMode != "" {
+			log.Printf("\nGot DotmeshRPC.GetTransfer response:  %+v", result)
+		}
 		if result.Size > 0 {
 			if !started {
 				bar = pb.New64(result.Size)
