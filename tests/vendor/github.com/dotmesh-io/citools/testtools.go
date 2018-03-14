@@ -414,6 +414,7 @@ func TeardownFinishedTestRuns() {
 				}
 
 				node := nodeName(stamp, cn, nn)
+
 				existsErr := SilentSystem("docker", "inspect", node)
 				notExists := false
 				if existsErr != nil {
@@ -451,20 +452,9 @@ func TeardownFinishedTestRuns() {
 					rm -rf /tmpfs/%s`, node, node),
 				)
 				if err != nil {
-					fmt.Printf("erk during teardown %s\n", err)
+					fmt.Printf("err during teardown %s\n", err)
 				}
 
-				// cleanup stray mounts, e.g. shm mounts
-				err = System("bash", "-c", fmt.Sprintf(`
-					for X in $(mount|cut -d ' ' -f 3 |grep %s); do
-						umount $X >/dev/null 2>&1 || true
-					done`, node),
-				)
-				if err != nil {
-					fmt.Printf("erk during cleanup mounts: %s\n", err)
-				}
-
-				fmt.Printf("=== Cleaned up node %s\n", node)
 			}
 
 			// clean up any leftover zpools
@@ -497,6 +487,25 @@ func TeardownFinishedTestRuns() {
 						}
 						fmt.Printf("=== Cleaned up zpool %s\n", shr[0])
 					}
+				}
+			}
+
+			// we can only clean up zpool data dirs after we release the zpools.
+			for _, n := range ns {
+				nodeSuffix := fmt.Sprintf("%d-%s-node-%s", stamp, n.ClusterNum, n.NodeNum)
+				// cleanup stray mounts, e.g. shm mounts
+				err = System("bash", "-c", fmt.Sprintf(`
+					for X in $(mount|cut -d ' ' -f 3 |grep %s); do
+						umount $X || true
+					done`, nodeSuffix),
+				)
+				if err != nil {
+					fmt.Printf("err during cleanup mounts: %s\n", err)
+				}
+				// cleanup zpool data directories
+				err = System("bash", "-c", fmt.Sprintf(`rm -rf /dotmesh-test-pools/testpool-%s*`, nodeSuffix))
+				if err != nil {
+					fmt.Printf("err cleaning up test pools dirs: %s\n", err)
 				}
 			}
 		}()
