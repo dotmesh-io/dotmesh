@@ -553,7 +553,8 @@ func dockerSystem(node string, cmd string) error {
 
 func RunOnNode(t *testing.T, node string, cmd string) {
 	fmt.Printf("RUNNING on %s: %s\n", node, cmd)
-	s, err := docker(node, cmd, nil)
+	debugEnv := map[string]string{"DEBUG_MODE": "1"}
+	s, err := docker(node, cmd, debugEnv)
 	if err != nil {
 		t.Error(fmt.Errorf("%s while running %s on %s: %s", err, cmd, node, s))
 	}
