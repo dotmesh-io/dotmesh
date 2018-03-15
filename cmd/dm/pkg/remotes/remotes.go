@@ -263,6 +263,11 @@ func (c *Configuration) SetCurrentBranchForVolume(volume, branch string) error {
 	return c.save()
 }
 
+func (c *Configuration) RemoteExists(remote string) bool {
+	_, ok := c.Remotes[remote]
+	return ok
+}
+
 func (c *Configuration) AddRemote(remote, user, hostname, apiKey string) error {
 	_, ok := c.Remotes[remote]
 	if ok {

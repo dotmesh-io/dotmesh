@@ -461,7 +461,7 @@ func getToken() (string, error) {
 	return s.ApiKey, nil
 }
 
-func setTokenIfNotExists(adminPassword, adminKey string) error {
+func setAuthTokens(adminPassword, adminKey string) error {
 	salt := make([]byte, SALT_BYTES)
 	_, err := rand.Read(salt)
 
@@ -491,15 +491,8 @@ func setTokenIfNotExists(adminPassword, adminKey string) error {
 		context.Background(),
 		fmt.Sprintf("/dotmesh.io/users/%s", ADMIN_USER_UUID),
 		string(encoded),
-		&client.SetOptions{PrevExist: client.PrevNoExist},
+		&client.SetOptions{},
 	)
-	if err != nil {
-		e, ok := err.(client.Error)
-		if ok && e.Code == client.ErrorCodeNodeExist {
-			// if it already exists, proceed without error
-			return nil
-		}
-	}
 	return err
 }
 
@@ -622,7 +615,7 @@ func exists(path string) (bool, error) {
 	return true, err
 }
 
-func clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath, clusterSecret string) error {
+func clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath string) error {
 	// - Start etcd with discovery token on non-standard ports (to avoid
 	//   conflicting with an existing etcd).
 	fmt.Printf("Guessing docker host's IPv4 address (should be routable from other cluster nodes)... ")
@@ -723,7 +716,7 @@ func clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath, clusterSec
 		var err error
 		for i := 1; i <= 10; i++ {
 			time.Sleep(time.Duration(delay) * 5 * time.Second)
-			err = setTokenIfNotExists(adminPassword, adminKey)
+			err = setAuthTokens(adminPassword, adminKey)
 			if err == nil {
 				path, _ := filepath.Split(configPath)
 				passwordPath := filepath.Join(path, "admin-password.txt")
@@ -791,6 +784,13 @@ func clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath, clusterSec
 	config, err := remotes.NewConfiguration(configPath)
 	if err != nil {
 		return err
+	}
+	if config.RemoteExists("local") {
+		fmt.Printf("Removing old 'local' remote... ")
+		err = config.RemoveRemote("local")
+		if err != nil {
+			return err
+		}
 	}
 	err = config.AddRemote("local", "admin", getHostFromEnv(), adminKey)
 	if err != nil {
@@ -1067,54 +1067,69 @@ func clusterInit(cmd *cobra.Command, args []string, out io.Writer) error {
 	fmt.Printf("got URL:\n%s\n", string(body))
 
 	// - Generate PKI material, and upload it to etcd at hidden clusterSecret
-	fmt.Printf("Generating PKI assets... ")
-	clusterSecret, err := RandToken(32)
-	if err != nil {
-		return err
-	}
+
 	pkiPath := getPkiPath()
 	_, err = os.Stat(pkiPath)
-	if err == nil {
-		return fmt.Errorf(
-			"PKI directory already exists at %s, refusing to proceed", pkiPath,
+	switch {
+	case err == nil:
+		fmt.Printf(
+			"PKI directory already exists at %s, using existing credentials.\n", pkiPath,
 		)
-	}
-	if !os.IsNotExist(err) {
-		return err
-	}
+	case os.IsNotExist(err):
+		fmt.Printf("Generating PKI assets... ")
+		err = os.Mkdir(pkiPath, 0700)
+		if err != nil {
+			return err
+		}
+		err = generatePKI(false)
+		fmt.Printf("done.\n")
 
-	err = os.Mkdir(pkiPath, 0700)
-	if err != nil {
-		return err
-	}
-	err = generatePKI(false)
-	fmt.Printf("done.\n")
+		// - Upload all PKI assets to discovery.dotmesh.io under "secure" path
+		pkiJsonEncoded, err := generatePkiJsonEncoded(pkiPath)
+		if err != nil {
+			return err
+		}
+		clusterSecret, err := RandToken(32)
+		if err != nil {
+			return err
+		}
+		putPath := fmt.Sprintf("%s/_secrets/_%s", string(body), clusterSecret)
 
-	// - Upload all PKI assets to discovery.dotmesh.io under "secure" path
-	pkiJsonEncoded, err := generatePkiJsonEncoded(pkiPath)
-	if err != nil {
-		return err
-	}
-	putPath := fmt.Sprintf("%s/_secrets/_%s", string(body), clusterSecret)
+		req, err := http.NewRequest("PUT", putPath, bytes.NewBufferString(pkiJsonEncoded))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	req, err := http.NewRequest("PUT", putPath, bytes.NewBufferString(pkiJsonEncoded))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		client := &http.Client{}
+		res, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		defer res.Body.Close()
 
-	client := &http.Client{}
-	res, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
+		_, err = ioutil.ReadAll(res.Body)
+		if err != nil {
+			return err
+		}
+		//fmt.Printf("Response: %s\n", r)
 
-	_, err = ioutil.ReadAll(res.Body)
-	if err != nil {
+		fmt.Printf(
+			"If you want more than one node in your cluster, run this on other nodes:\n\n"+
+				"    dm cluster join %s:%s\n\n"+
+				"This is the last time this secret will be printed, so keep it safe!\n\n",
+			string(body), clusterSecret,
+		)
+		if serverCount > 1 {
+			fmt.Printf("=====================================================================\n" +
+				"You specified --count > 1, you'll need to run this on the other nodes\n" +
+				"immediately, before the following setup will complete.\n" +
+				"=====================================================================\n",
+			)
+		}
+	default:
 		return err
 	}
-	//fmt.Printf("Response: %s\n", r)
 
 	// - Generate admin creds, and insert them into etcd
 	adminPassword, err := RandToken(32)
@@ -1127,24 +1142,9 @@ func clusterInit(cmd *cobra.Command, args []string, out io.Writer) error {
 		return err
 	}
 
-	// If you specified --count > 1, you'll need to do this immediately.
-	fmt.Printf(
-		"If you want more than one node in your cluster, run this on other nodes:\n\n"+
-			"    dm cluster join %s:%s\n\n"+
-			"This is the last time this secret will be printed, so keep it safe!\n\n",
-		string(body), clusterSecret,
-	)
-	if serverCount > 1 {
-		fmt.Printf("=====================================================================\n" +
-			"You specified --count > 1, you'll need to run this on the other nodes\n" +
-			"immediately, before the following setup will complete.\n" +
-			"=====================================================================\n",
-		)
-	}
-
 	// - Run clusterCommonSetup.
 	err = clusterCommonSetup(
-		strings.TrimSpace(string(body)), adminPassword, adminKey, pkiPath, clusterSecret,
+		strings.TrimSpace(string(body)), adminPassword, adminKey, pkiPath,
 	)
 	if err != nil {
 		return err
@@ -1238,7 +1238,7 @@ func clusterJoin(cmd *cobra.Command, args []string, out io.Writer) error {
 	}
 	fmt.Printf("done!\n")
 	// - Run clusterCommonSetup.
-	err = clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath, clusterSecret)
+	err = clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath)
 	if err != nil {
 		return err
 	}
