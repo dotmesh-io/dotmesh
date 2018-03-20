@@ -340,21 +340,49 @@ func clusterCommonPreflight() error {
 	}
 
 	logTiming("check docker version")
+
+	containers := []string{"dotmesh-etcd", "dotmesh-server", "dotmesh-server-inner"}
+
 	fmt.Printf("Checking dotmesh isn't running... ")
-	// - Is there a dotmesh-etcd or dotmesh-server container running?
-	//   a) If yes, exit.
-	for _, c := range []string{"dotmesh-etcd", "dotmesh-server"} {
+	// - Are all the containers running?
+	//   If yes, exit: We're good already.
+	anyContainersMissing := false
+	anyContainersRunning := false
+	for _, c := range containers {
 		ret, err := returnCode("docker", "inspect", "--type=container", c)
 		if err != nil {
 			return err
 		}
 		if ret == 0 {
-			return fmt.Errorf("%s container already exists!", c)
+			fmt.Printf("%s✓ ", c)
+			anyContainersRunning = true
+		} else {
+			fmt.Printf("%s❌ ", c)
+			anyContainersMissing = true
 		}
 	}
 	fmt.Printf("done.\n")
 
+	if !anyContainersMissing {
+		return fmt.Errorf("Dotmesh is already running!")
+	}
+
 	logTiming("check dotmesh isn't running")
+
+	if anyContainersRunning {
+		fmt.Printf("Terminating old containers... ")
+
+		for _, c := range containers {
+			_, err := returnCode("docker", "rm", "-f", c)
+			if err != nil {
+				return err
+			}
+			// Ignore `docker rm -f` errors, as not ALL the containers might have been running.
+		}
+		fmt.Printf("done.\n")
+		logTiming("stop existing containers")
+	}
+
 	if !offline {
 		fmt.Printf("Pulling dotmesh-server docker image... ")
 		resp, err := exec.Command(
