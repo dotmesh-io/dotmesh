@@ -144,6 +144,17 @@ mybox$ scp releases@get.dotmesh.io:*.tar.gz .
 Try the latest binary on https://dotmesh.com/try-dotmesh/ with a dm
 version to check that it's all deployed correctly.
 
+## Pushing live version of docs
+
+There might be docs issues that talk about as yet unreleased features.  These
+issues should be in the `blocked` column of the kanban board.
+
+Once the release is complete - open the pipeline for the docs repo and click
+the `deploy to production` job.
+
+Do this once the release is complete - now the docs and the released software
+should be lining up!
+
 ### Re-releasing
 In the event of a failure during the release process, for example, CI failures, or an embarassing bug fix on the same tag, it is possible to re-release by triggering the pipeline on http://gitlab.dotmesh.io:9999/dotmesh/dotmesh-sync/pipelines on the commit on the release branch. If the commit is on a pre-exisiting release tag, it will preserve the version of the tag.
 
