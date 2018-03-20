@@ -1103,6 +1103,13 @@ func clusterInit(cmd *cobra.Command, args []string, out io.Writer) error {
 		fmt.Printf(
 			"PKI directory already exists at %s, using existing credentials.\n", pkiPath,
 		)
+		fmt.Printf(
+			"If you want to completely recreate your cluster with fresh ones, run\n",
+		)
+		fmt.Printf(
+			"`dm cluster reset` then re-run this command.\n",
+		)
+
 	case os.IsNotExist(err):
 		fmt.Printf("Generating PKI assets... ")
 		err = os.Mkdir(pkiPath, 0700)
