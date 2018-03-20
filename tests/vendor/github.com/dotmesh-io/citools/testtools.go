@@ -100,7 +100,7 @@ func TryUntilSucceeds(f func() error, desc string) error {
 	for {
 		err := f()
 		if err != nil {
-			if attempt > 10 {
+			if attempt > 20 {
 				return err
 			} else {
 				fmt.Printf("Error %s: %v, pausing and trying again...\n", desc, err)
@@ -414,6 +414,7 @@ func TeardownFinishedTestRuns() {
 				}
 
 				node := nodeName(stamp, cn, nn)
+
 				existsErr := SilentSystem("docker", "inspect", node)
 				notExists := false
 				if existsErr != nil {
@@ -451,20 +452,9 @@ func TeardownFinishedTestRuns() {
 					rm -rf /tmpfs/%s`, node, node),
 				)
 				if err != nil {
-					fmt.Printf("erk during teardown %s\n", err)
+					fmt.Printf("err during teardown %s\n", err)
 				}
 
-				// cleanup stray mounts, e.g. shm mounts
-				err = System("bash", "-c", fmt.Sprintf(`
-					for X in $(mount|cut -d ' ' -f 3 |grep %s); do
-						umount $X >/dev/null 2>&1 || true
-					done`, node),
-				)
-				if err != nil {
-					fmt.Printf("erk during cleanup mounts: %s\n", err)
-				}
-
-				fmt.Printf("=== Cleaned up node %s\n", node)
 			}
 
 			// clean up any leftover zpools
@@ -499,6 +489,25 @@ func TeardownFinishedTestRuns() {
 					}
 				}
 			}
+
+			// we can only clean up zpool data dirs after we release the zpools.
+			for _, n := range ns {
+				nodeSuffix := fmt.Sprintf("%d-%s-node-%s", stamp, n.ClusterNum, n.NodeNum)
+				// cleanup stray mounts, e.g. shm mounts
+				err = System("bash", "-c", fmt.Sprintf(`
+					for X in $(mount|cut -d ' ' -f 3 |grep %s); do
+						umount $X || true
+					done`, nodeSuffix),
+				)
+				if err != nil {
+					fmt.Printf("err during cleanup mounts: %s\n", err)
+				}
+				// cleanup zpool data directories
+				err = System("bash", "-c", fmt.Sprintf(`rm -rf /dotmesh-test-pools/testpool-%s*`, nodeSuffix))
+				if err != nil {
+					fmt.Printf("err cleaning up test pools dirs: %s\n", err)
+				}
+			}
 		}()
 		out, err := exec.Command("docker", "volume", "prune", "-f").Output()
 		if err != nil {
@@ -520,7 +529,7 @@ func docker(node string, cmd string, env map[string]string) (string, error) {
 		}
 	}
 
-	c := exec.Command("docker", "exec", "-i", node, "sh", "-c", envString+cmd)
+	c := exec.Command("docker", "exec", "-i", node, "bash", "-c", envString+cmd)
 
 	var b bytes.Buffer
 
@@ -544,7 +553,8 @@ func dockerSystem(node string, cmd string) error {
 
 func RunOnNode(t *testing.T, node string, cmd string) {
 	fmt.Printf("RUNNING on %s: %s\n", node, cmd)
-	s, err := docker(node, cmd, nil)
+	debugEnv := map[string]string{"DEBUG_MODE": "1"}
+	s, err := docker(node, cmd, debugEnv)
 	if err != nil {
 		t.Error(fmt.Errorf("%s while running %s on %s: %s", err, cmd, node, s))
 	}
