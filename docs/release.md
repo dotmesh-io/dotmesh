@@ -108,13 +108,6 @@ triggered, it moves the symlinks from the root of `get.dotmesh.io/...`
 to point to `get.dotmesh.io/VERSION/...`, thereby making the published
 URLs now point to this version.
 
-### `deploy_to_kubernetes`
-
-This is available for any build, so we can push bleeding-edge
-experimental builds to the production Hub deployment in Kubernetes. It
-works by pushing the Docker images to the Gcloud registry from which
-production runs, and running a redeployment script.
-
 ### Updating the releases on Github
 
 We direct people here to see the release history:
