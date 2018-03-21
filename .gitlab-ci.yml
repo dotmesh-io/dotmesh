@@ -307,7 +307,7 @@ deploy_release_build:
         - ubuntu
         - fast
     script:
-        - VERSION=`cd cmd/versioner; go run versioner.go`
+        - VERSION=`cd cmd/versioner; go run versioner.go`; echo VERSION=$VERSION
         - "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no releases@get.dotmesh.io mkdir -p /pool/releases/$VERSION"
         - "rsync -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' -avz binaries/{Linux,Darwin} yaml releases@get.dotmesh.io:/pool/releases/$VERSION"
     only:
