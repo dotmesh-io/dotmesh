@@ -167,6 +167,9 @@ linux_default_dot:
         - fast
     script:
         - ./test.sh -run TestDefaultDot
+    artifacts:
+        paths:
+        - extracted_logs
 
 linux_single_node:
     stage: test
@@ -178,6 +181,9 @@ linux_single_node:
         - fast
     script:
         - ./test.sh -run TestSingleNode
+    artifacts:
+        paths:
+        - extracted_logs
 
 linux_two_nodes_same_cluster:
     stage: test
@@ -189,6 +195,9 @@ linux_two_nodes_same_cluster:
         - fast
     script:
         - ./test.sh -run TestTwoNodesSameCluster
+    artifacts:
+        paths:
+        - extracted_logs
 
 linux_kubernetes:
     stage: test
@@ -201,6 +210,9 @@ linux_kubernetes:
     script:
         - pwd
         - ./test.sh -run TestKubernetes
+    artifacts:
+        paths:
+        - extracted_logs
 
 linux_deletion_simple:
     stage: test
@@ -212,6 +224,9 @@ linux_deletion_simple:
         - fast
     script:
         - ./test.sh -run TestDeletionSimple
+    artifacts:
+        paths:
+        - extracted_logs
 
 linux_deletion_complex:
     stage: test
@@ -223,6 +238,9 @@ linux_deletion_complex:
         - fast
     script:
         - ./test.sh -run TestDeletionComplex
+    artifacts:
+        paths:
+        - extracted_logs
     allow_failure: true
 
 linux_two_single_node_clusters:
@@ -235,6 +253,9 @@ linux_two_single_node_clusters:
         - fast
     script:
         - ./test.sh -run TestTwoSingleNodeClusters
+    artifacts:
+        paths:
+        - extracted_logs
 
 linux_three_single_node_clusters:
     stage: test
@@ -246,6 +267,9 @@ linux_three_single_node_clusters:
         - fast
     script:
         - ./test.sh -run TestThreeSingleNodeClusters
+    artifacts:
+        paths:
+        - extracted_logs
 
 linux_two_double_node_clusters:
     stage: test
@@ -257,18 +281,24 @@ linux_two_double_node_clusters:
         - fast
     script:
         - ./test.sh -run TestTwoDoubleNodeClusters
+    artifacts:
+        paths:
+        - extracted_logs
 
 linux_stress:
-   stage: test
-   dependencies:
-       - build_server
-       - build_client_linux
-   tags:
-       - ubuntu
-       - fast
-   script:
-       - ./test.sh -timeout 30m -run TestStress
-   when: manual
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - ./test.sh -timeout 30m -run TestStress
+    artifacts:
+        paths:
+        - extracted_logs
+    when: manual
 
 trigger_e2e_test:
     stage: deploy
