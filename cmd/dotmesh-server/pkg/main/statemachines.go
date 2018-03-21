@@ -207,45 +207,36 @@ func (f *fsMachine) updateEtcdAboutSnapshots() error {
 		return err
 	}
 	// as soon as we're connected, eagerly: if we know about some
-	// snapshots, set them in etcd.
-	informed := false
-	f.snapshotsLock.Lock()
-	if f.filesystem.snapshots != nil {
-		informed = true
-	}
-	f.snapshotsLock.Unlock()
-
-	if informed {
+	// snapshots, **or the absence of them**, set this in etcd.
+	serialized, err := func() ([]byte, error) {
 		f.snapshotsLock.Lock()
-		serialized, err := json.Marshal(f.filesystem.snapshots)
-		if err != nil {
-			return err
-		}
-		f.snapshotsLock.Unlock()
-		// since we want atomic rewrites, we can just save the entire
-		// snapshot data in a single key, as a json list. this is easier to
-		// begin with! although we'll bump into the 1MB request limit in
-		// etcd eventually.
-		_, err = kapi.Set(
-			context.Background(),
-			fmt.Sprintf(
-				"%s/servers/snapshots/%s/%s", ETCD_PREFIX,
-				f.state.myNodeId, f.filesystemId,
-			),
-			string(serialized),
-			nil,
-		)
-		if err != nil {
-			return err
-		}
-		// ISSUE: We don't always hear the echo in time, see
-		// issue https://github.com/dotmesh-io/dotmesh/issues/54
-		log.Printf(
-			"[updateEtcdAboutSnapshots] successfully set new snaps for %s on %s,"+
-				" will we hear an echo?",
-			f.filesystemId, f.state.myNodeId,
-		)
+		defer f.snapshotsLock.Unlock()
+		return json.Marshal(f.filesystem.snapshots)
+	}()
+
+	// since we want atomic rewrites, we can just save the entire
+	// snapshot data in a single key, as a json list. this is easier to
+	// begin with! although we'll bump into the 1MB request limit in
+	// etcd eventually.
+	_, err = kapi.Set(
+		context.Background(),
+		fmt.Sprintf(
+			"%s/servers/snapshots/%s/%s", ETCD_PREFIX,
+			f.state.myNodeId, f.filesystemId,
+		),
+		string(serialized),
+		nil,
+	)
+	if err != nil {
+		return err
 	}
+	// ISSUE: We don't always hear the echo in time, see
+	// issue https://github.com/dotmesh-io/dotmesh/issues/54
+	log.Printf(
+		"[updateEtcdAboutSnapshots] successfully set new snaps for %s on %s,"+
+			" will we hear an echo?",
+		f.filesystemId, f.state.myNodeId,
+	)
 
 	// wait until the state machine notifies us that it's changed the
 	// snapshots

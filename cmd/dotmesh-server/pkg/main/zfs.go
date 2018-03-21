@@ -155,6 +155,10 @@ func discoverSystem(fs string) (*filesystem, error) {
 		return &filesystem{
 			id:     fs,
 			exists: false,
+			// Important not to leave snapshots nil in the default case, we
+			// need to inform other nodes that we have no snapshots of a
+			// filesystem if we don't have the filesystem.
+			snapshots: []*snapshot{},
 		}, nil
 	}
 	// is filesystem mounted?
