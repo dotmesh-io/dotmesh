@@ -108,13 +108,6 @@ triggered, it moves the symlinks from the root of `get.dotmesh.io/...`
 to point to `get.dotmesh.io/VERSION/...`, thereby making the published
 URLs now point to this version.
 
-### `deploy_to_kubernetes`
-
-This is available for any build, so we can push bleeding-edge
-experimental builds to the production Hub deployment in Kubernetes. It
-works by pushing the Docker images to the Gcloud registry from which
-production runs, and running a redeployment script.
-
 ### Updating the releases on Github
 
 We direct people here to see the release history:
@@ -144,7 +137,18 @@ mybox$ scp releases@get.dotmesh.io:*.tar.gz .
 Try the latest binary on https://dotmesh.com/try-dotmesh/ with a dm
 version to check that it's all deployed correctly.
 
+## Pushing live version of docs
+
+There might be docs issues that talk about as yet unreleased features.  These
+issues should be in the `blocked` column of the kanban board.
+
+Once the release is complete - open the pipeline for the docs repo and click
+the `deploy to production` job.
+
+Do this once the release is complete - now the docs and the released software
+should be lining up!
+
 ### Re-releasing
 In the event of a failure during the release process, for example, CI failures, or an embarassing bug fix on the same tag, it is possible to re-release by triggering the pipeline on http://gitlab.dotmesh.io:9999/dotmesh/dotmesh-sync/pipelines on the commit on the release branch. If the commit is on a pre-exisiting release tag, it will preserve the version of the tag.
 
-In rare cases where there is a requirement to re-do a release with different code, this can be done by resetting the branch and preserving the relese-x.y.z tag on the commit and force-pushing.
+In rare cases where there is a requirement to re-do a release with different code, this can be done by resetting the branch and preserving the relese-x.y.z tag on the commit and force-pushing. GitLab doesn't handle syncing force pushes, so you will need to temporarily disable branch protection for your user and force push to dotmesh-sync after doing this.

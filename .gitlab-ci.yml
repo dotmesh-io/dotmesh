@@ -24,6 +24,9 @@ before_script:
     - mkdir -p src/github.com/dotmesh-io
     - ln -s `realpath ..` ./src/github.com/dotmesh-io/dotmesh
     - cd src/github.com/dotmesh-io/dotmesh
+    # ensure master and the given branch are up-to-date so that versioner works reliably
+    - git checkout master && git pull --ff-only origin master
+    - git checkout $CI_COMMIT_REF_NAME && git reset --hard $CI_COMMIT_SHA
     - while [ -f /dotmesh-test-cleanup.lock ]; do echo "waiting for test cleanup..."; sleep 1; done
     - docker login -u $QUAY_USER -p $QUAY_PASSWORD quay.io
 
@@ -33,7 +36,6 @@ build_client_linux:
         - ubuntu
         - fast
     script:
-        - git checkout $CI_COMMIT_REF_NAME && git reset --hard $CI_COMMIT_SHA
         - (cd cmd/dm && ./rebuild.sh Linux)
     artifacts:
         paths:
@@ -46,7 +48,6 @@ build_client_macos:
         - ubuntu
         - fast
     script:
-        - git checkout $CI_COMMIT_REF_NAME && git reset --hard $CI_COMMIT_SHA
         - (cd cmd/dm && ./rebuild.sh Darwin)
     artifacts:
         paths:
@@ -71,7 +72,6 @@ build_server:
         - ubuntu
         - fast
     script:
-        - git checkout $CI_COMMIT_REF_NAME && git reset --hard $CI_COMMIT_SHA
         - (cd cmd/dotmesh-server && ./rebuild.sh) # also pushes
         - echo "pushed $CI_DOCKER_SERVER_IMAGE"
         - echo "pushed $CI_DOCKER_PROVISIONER_IMAGE"
@@ -167,6 +167,9 @@ linux_default_dot:
         - fast
     script:
         - ./test.sh -run TestDefaultDot
+    artifacts:
+        paths:
+        - extracted_logs
 
 linux_single_node:
     stage: test
@@ -178,6 +181,9 @@ linux_single_node:
         - fast
     script:
         - ./test.sh -run TestSingleNode
+    artifacts:
+        paths:
+        - extracted_logs
 
 linux_two_nodes_same_cluster:
     stage: test
@@ -189,6 +195,9 @@ linux_two_nodes_same_cluster:
         - fast
     script:
         - ./test.sh -run TestTwoNodesSameCluster
+    artifacts:
+        paths:
+        - extracted_logs
 
 linux_kubernetes:
     stage: test
@@ -201,6 +210,9 @@ linux_kubernetes:
     script:
         - pwd
         - ./test.sh -run TestKubernetes
+    artifacts:
+        paths:
+        - extracted_logs
 
 linux_deletion_simple:
     stage: test
@@ -212,6 +224,9 @@ linux_deletion_simple:
         - fast
     script:
         - ./test.sh -run TestDeletionSimple
+    artifacts:
+        paths:
+        - extracted_logs
 
 linux_deletion_complex:
     stage: test
@@ -223,6 +238,9 @@ linux_deletion_complex:
         - fast
     script:
         - ./test.sh -run TestDeletionComplex
+    artifacts:
+        paths:
+        - extracted_logs
     allow_failure: true
 
 linux_two_single_node_clusters:
@@ -235,6 +253,9 @@ linux_two_single_node_clusters:
         - fast
     script:
         - ./test.sh -run TestTwoSingleNodeClusters
+    artifacts:
+        paths:
+        - extracted_logs
 
 linux_three_single_node_clusters:
     stage: test
@@ -246,6 +267,9 @@ linux_three_single_node_clusters:
         - fast
     script:
         - ./test.sh -run TestThreeSingleNodeClusters
+    artifacts:
+        paths:
+        - extracted_logs
 
 linux_two_double_node_clusters:
     stage: test
@@ -257,18 +281,24 @@ linux_two_double_node_clusters:
         - fast
     script:
         - ./test.sh -run TestTwoDoubleNodeClusters
+    artifacts:
+        paths:
+        - extracted_logs
 
 linux_stress:
-   stage: test
-   dependencies:
-       - build_server
-       - build_client_linux
-   tags:
-       - ubuntu
-       - fast
-   script:
-       - ./test.sh -timeout 30m -run TestStress
-   when: manual
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - ./test.sh -timeout 30m -run TestStress
+    artifacts:
+        paths:
+        - extracted_logs
+    when: manual
 
 trigger_e2e_test:
     stage: deploy
@@ -307,8 +337,7 @@ deploy_release_build:
         - ubuntu
         - fast
     script:
-        - git checkout $CI_COMMIT_REF_NAME && git reset --hard $CI_COMMIT_SHA
-        - VERSION=`cd cmd/versioner; go run versioner.go`
+        - VERSION=`cd cmd/versioner; go run versioner.go`; echo VERSION=$VERSION
         - "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no releases@get.dotmesh.io mkdir -p /pool/releases/$VERSION"
         - "rsync -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' -avz binaries/{Linux,Darwin} yaml releases@get.dotmesh.io:/pool/releases/$VERSION"
     only:
@@ -317,7 +346,6 @@ deploy_release_build:
 mark_release_as_stable:
   stage: manual_deploy
   script:
-    - git checkout $CI_COMMIT_REF_NAME && git reset --hard $CI_COMMIT_SHA
     - VERSION=`cd cmd/versioner; go run versioner.go`
     - "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no releases@get.dotmesh.io sh -c \"true && rm -f /pool/releases/Linux && ln -s $VERSION/Linux /pool/releases && rm -f /pool/releases/Darwin && ln -s $VERSION/Darwin /pool/releases && rm -f /pool/releases/yaml && ln -fs $VERSION/yaml /pool/releases\""
   only:
