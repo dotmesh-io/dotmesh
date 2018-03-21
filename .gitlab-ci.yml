@@ -24,6 +24,9 @@ before_script:
     - mkdir -p src/github.com/dotmesh-io
     - ln -s `realpath ..` ./src/github.com/dotmesh-io/dotmesh
     - cd src/github.com/dotmesh-io/dotmesh
+    # ensure master and the given branch are up-to-date so that versioner works reliably
+    - git checkout master && git pull --ff-only origin master
+    - git checkout $CI_COMMIT_REF_NAME && git reset --hard $CI_COMMIT_SHA
     - while [ -f /dotmesh-test-cleanup.lock ]; do echo "waiting for test cleanup..."; sleep 1; done
     - docker login -u $QUAY_USER -p $QUAY_PASSWORD quay.io
 
@@ -33,7 +36,6 @@ build_client_linux:
         - ubuntu
         - fast
     script:
-        - git checkout $CI_COMMIT_REF_NAME && git reset --hard $CI_COMMIT_SHA
         - (cd cmd/dm && ./rebuild.sh Linux)
     artifacts:
         paths:
@@ -46,7 +48,6 @@ build_client_macos:
         - ubuntu
         - fast
     script:
-        - git checkout $CI_COMMIT_REF_NAME && git reset --hard $CI_COMMIT_SHA
         - (cd cmd/dm && ./rebuild.sh Darwin)
     artifacts:
         paths:
@@ -71,7 +72,6 @@ build_server:
         - ubuntu
         - fast
     script:
-        - git checkout $CI_COMMIT_REF_NAME && git reset --hard $CI_COMMIT_SHA
         - (cd cmd/dotmesh-server && ./rebuild.sh) # also pushes
         - echo "pushed $CI_DOCKER_SERVER_IMAGE"
         - echo "pushed $CI_DOCKER_PROVISIONER_IMAGE"
@@ -307,7 +307,6 @@ deploy_release_build:
         - ubuntu
         - fast
     script:
-        - git checkout $CI_COMMIT_REF_NAME && git reset --hard $CI_COMMIT_SHA
         - VERSION=`cd cmd/versioner; go run versioner.go`
         - "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no releases@get.dotmesh.io mkdir -p /pool/releases/$VERSION"
         - "rsync -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' -avz binaries/{Linux,Darwin} yaml releases@get.dotmesh.io:/pool/releases/$VERSION"
@@ -317,7 +316,6 @@ deploy_release_build:
 mark_release_as_stable:
   stage: manual_deploy
   script:
-    - git checkout $CI_COMMIT_REF_NAME && git reset --hard $CI_COMMIT_SHA
     - VERSION=`cd cmd/versioner; go run versioner.go`
     - "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no releases@get.dotmesh.io sh -c \"true && rm -f /pool/releases/Linux && ln -s $VERSION/Linux /pool/releases && rm -f /pool/releases/Darwin && ln -s $VERSION/Darwin /pool/releases && rm -f /pool/releases/yaml && ln -fs $VERSION/yaml /pool/releases\""
   only:
