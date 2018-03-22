@@ -259,7 +259,7 @@ func clusterUpgrade(cmd *cobra.Command, args []string, out io.Writer) error {
 	fmt.Printf("Upgrading local Dotmesh server to version %s (docker image %s)\n", clientVersion, dotmeshDockerImage)
 
 	if !offline {
-		fmt.Printf("Pulling dotmesh-server docker image... ")
+		fmt.Printf("Pulling dotmesh-server docker image...\n")
 		resp, err := exec.Command(
 			"docker", "pull", dotmeshDockerImage,
 		).CombinedOutput()
@@ -384,7 +384,7 @@ func clusterCommonPreflight() error {
 	}
 
 	if !offline {
-		fmt.Printf("Pulling dotmesh-server docker image... ")
+		fmt.Printf("Pulling dotmesh-server docker image...\n")
 		resp, err := exec.Command(
 			"docker", "pull", dotmeshDockerImage,
 		).CombinedOutput()
