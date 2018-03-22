@@ -92,14 +92,21 @@ if [ ! -e /dev/zfs ]; then
     mknod -m 660 /dev/zfs c $(cat /sys/class/misc/zfs/dev |sed 's/:/ /g')
 fi
 if ! zpool status $POOL; then
+    if [ -n $FIND_OUTER_MOUNT ]
+    then
+        BLOCK_DEVICE=`mount | grep $DIR | cut -f 1`
+        OUTER_DIR=`nsenter -t 1 -m -u -n -i /bin/sh -c 'mount' | grep $BLOCK_DEVICE | cut -f 3 -d ' ' | head -n 1`
+    else
+        OUTER_DIR="$DIR"
+    fi
+
     if [ ! -f $FILE ]; then
         truncate -s $POOL_SIZE $FILE
-        echo zpool create -m $MOUNTPOINT $POOL $FILE
-        zpool create -m $MOUNTPOINT $POOL $FILE
+        zpool create -m $MOUNTPOINT $POOL "$OUTER_DIR/dotmesh_data"
         echo "This directory contains dotmesh data files, please leave them alone unless you know what you're doing. See github.com/dotmesh-io/dotmesh for more information." > $DIR/README
         zpool get -H guid $POOL |cut -f 3 > $DIR/dotmesh_identity
     else
-        zpool import -f -d $DIR $POOL
+        zpool import -f -d $OUTER_DIR $POOL
     fi
 fi
 

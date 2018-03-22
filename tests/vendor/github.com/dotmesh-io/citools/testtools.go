@@ -136,7 +136,7 @@ func TestMarkForCleanup(f Federation) {
 		for _, n := range c.GetNodes() {
 			node := n.Container
 
-			logDir := "extracted_logs"
+			logDir := "../extracted_logs"
 			logFile := fmt.Sprintf(
 				"%s/dotmesh-server-inner-%s.log",
 				logDir, node,
