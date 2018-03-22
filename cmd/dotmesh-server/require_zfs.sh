@@ -237,6 +237,11 @@ do
     INHERIT_ENVIRONMENT_ARGS="$INHERIT_ENVIRONMENT_ARGS -e $name=$(eval "echo \$$name")"
 done
 
+# we need the logs from the inner server to be sent to the outer container
+# such that k8s will pick them up from the pod - the inner container is not
+# a pod but a container run from /var/run/docker.sock
+(while true; do docker tail -f dotmesh-server-inner || true; sleep 1; done) &
+
 # In order of the -v options below:
 # 1. Mount the docker socket so that we can stop and start containers around
 #    e.g. dm reset.
