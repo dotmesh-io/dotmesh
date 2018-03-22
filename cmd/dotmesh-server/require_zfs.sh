@@ -36,7 +36,7 @@ function fetch_zfs {
 
 # Put the data file inside /var/lib so that we end up on the big
 # partition if we're in a LinuxKit env.
-POOL_SIZE={$POOL_SIZE:-10G}
+POOL_SIZE=${POOL_SIZE:-10G}
 DIR=${USE_POOL_DIR:-/var/lib/dotmesh}
 DIR=$(echo $DIR |sed s/\#HOSTNAME\#/$(hostname)/)
 FILE=${DIR}/dotmesh_data
