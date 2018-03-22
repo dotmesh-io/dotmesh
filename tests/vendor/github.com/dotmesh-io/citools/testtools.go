@@ -113,8 +113,7 @@ func TryUntilSucceeds(f func() error, desc string) error {
 	}
 }
 
-// debugParams variadic args to enable optional feature to specify more debugging
-func TestMarkForCleanup(f Federation, debugParams ...bool) {
+func TestMarkForCleanup(f Federation) {
 	log.Printf("Entering TestMarkForCleanup")
 	for _, c := range f {
 		for _, n := range c.GetNodes() {
@@ -130,18 +129,30 @@ func TestMarkForCleanup(f Federation, debugParams ...bool) {
 			} else {
 				log.Printf("Marked %s for cleanup.", node)
 			}
+		}
+	}
+	// Attempt log extraction only after we've safely touched all those CLEAN_ME_UP files, *phew*.
+	for _, c := range f {
+		for _, n := range c.GetNodes() {
+			node := n.Container
 
-			if len(debugParams) != 0 && debugParams[0] {
-				err := TryUntilSucceeds(func() error {
-					return System("bash", "-c", fmt.Sprintf(
-						`docker logs %s`, node,
-					))
-				}, fmt.Sprintf("getting docker logs from %s", node))
-				if err != nil {
-					log.Printf("Error %s getting logs from node %s. giving up.\n", node, err)
-				}
+			logDir := "extracted_logs"
+			logFile := fmt.Sprintf(
+				"%s/dotmesh-server-inner-%s.log",
+				logDir, node,
+			)
+			err := System(
+				"bash", "-c",
+				fmt.Sprintf(
+					"mkdir -p %s && touch %s && chmod -R a+rwX %s && "+
+						"docker exec -i %s "+
+						"docker logs dotmesh-server-inner > %s",
+					logDir, logFile, logDir, node, logFile,
+				),
+			)
+			if err != nil {
+				log.Printf("Unable to stream docker logs to artifacts directory for %s: %s", node, err)
 			}
-
 		}
 	}
 }
@@ -1220,30 +1231,6 @@ func (c *Cluster) GetDesiredNodeCount() int {
 	return c.DesiredNodeCount
 }
 
-func (c *Cluster) collectLogs(nodeName string) {
-	// for the given outer docker nodeName, collect the logs into gitlab-ci
-	// assets directory.
-	go func() {
-		logDir := "extracted_logs"
-		logFile := fmt.Sprintf(
-			"%s/dotmesh-server-inner-%s.log",
-			logDir, nodeName,
-		)
-		err := System(
-			"bash", "-c",
-			fmt.Sprintf(
-				"mkdir -p %s && touch %s && chmod -R a+rwX %s && "+
-					"docker exec -i %s "+
-					"docker logs -f dotmesh-server-inner > %s &",
-				logDir, logFile, logDir, nodeName, logFile,
-			),
-		)
-		if err != nil {
-			log.Printf("Unable to stream docker logs to artifacts directory: %s", err)
-		}
-	}()
-}
-
 func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 	// init the first node in the cluster, join the rest
 	if c.DesiredNodeCount == 0 {
@@ -1264,7 +1251,6 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 	if err != nil {
 		return err
 	}
-	c.collectLogs(nodeName(now, i, 0))
 
 	clusterName := fmt.Sprintf("cluster_%d", i)
 	c.Nodes[0] = NodeFromNodeName(t, now, i, 0, clusterName)
@@ -1299,7 +1285,6 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 			return err
 		}
 
-		c.collectLogs(nodeName(now, i, j))
 		c.Nodes[j] = NodeFromNodeName(t, now, i, j, clusterName)
 
 		LogTiming("join_" + poolId(now, i, j))
