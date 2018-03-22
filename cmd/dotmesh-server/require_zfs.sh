@@ -36,6 +36,7 @@ function fetch_zfs {
 
 # Put the data file inside /var/lib so that we end up on the big
 # partition if we're in a LinuxKit env.
+POOL_SIZE=${POOL_SIZE:-10G}
 DIR=${USE_POOL_DIR:-/var/lib/dotmesh}
 DIR=$(echo $DIR |sed s/\#HOSTNAME\#/$(hostname)/)
 FILE=${DIR}/dotmesh_data
@@ -92,9 +93,11 @@ if [ ! -e /dev/zfs ]; then
 fi
 if ! zpool status $POOL; then
     if [ ! -f $FILE ]; then
-        truncate -s 10G $FILE
+        truncate -s $POOL_SIZE $FILE
         echo zpool create -m $MOUNTPOINT $POOL $FILE
         zpool create -m $MOUNTPOINT $POOL $FILE
+        echo "This directory contains dotmesh data files, please leave them alone unless you know what you're doing. See github.com/dotmesh-io/dotmesh for more information." > $DIR/README
+        zpool get -H guid $POOL |cut -f 3 > $DIR/dotmesh_identity
     else
         zpool import -f -d $DIR $POOL
     fi
