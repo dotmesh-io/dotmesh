@@ -1232,9 +1232,10 @@ func (c *Cluster) collectLogs(nodeName string) {
 		err := System(
 			"bash", "-c",
 			fmt.Sprintf(
-				"mkdir -p %s && docker exec -i %s "+
+				"mkdir -p %s && touch %s && chmod -R a+rwX %s && "+
+					"docker exec -i %s "+
 					"docker logs -f dotmesh-server-inner > %s",
-				logDir, nodeName, logFile,
+				logDir, logFile, logDir, nodeName, logFile,
 			),
 		)
 		if err != nil {
