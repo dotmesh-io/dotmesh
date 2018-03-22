@@ -3,7 +3,9 @@ variables:
     SERVER_NAME: dotmesh-server
     PROVISIONER_NAME: dotmesh-dynamic-provisioner
 
-    CI_DOCKER_REGISTRY: quay.io/dotmesh
+    CI_DOCKER_REGISTRY: registry.containers.ovh.net/dotmesh
+    RELEASE_DOCKER_REGISTRY: quay.io/dotmesh
+
     CI_DOCKER_TAG: $CI_COMMIT_SHA
 
     CI_DOCKER_SERVER_IMAGE: $CI_DOCKER_REGISTRY/dotmesh-server:$CI_COMMIT_SHA
@@ -29,6 +31,7 @@ before_script:
     - git checkout $CI_COMMIT_REF_NAME && git reset --hard $CI_COMMIT_SHA
     - while [ -f /dotmesh-test-cleanup.lock ]; do echo "waiting for test cleanup..."; sleep 1; done
     - docker login -u $QUAY_USER -p $QUAY_PASSWORD quay.io
+    - docker login -u $OVH_REGISTRY_USERNAME -p $OVH_REGISTRY_PASSWORD registry.containers.ovh.net
 
 build_client_linux:
     stage: build
@@ -75,6 +78,7 @@ build_server:
         - (cd cmd/dotmesh-server && ./rebuild.sh) # also pushes
         - echo "pushed $CI_DOCKER_SERVER_IMAGE"
         - echo "pushed $CI_DOCKER_PROVISIONER_IMAGE"
+        - (cd cmd/dotmesh-server && export CI_DOCKER_SERVER_IMAGE=$RELEASE_DOCKER_REGISTRY/dotmesh-server:$CI_COMMIT_SHA; export CI_DOCKER_PROVISIONER_IMAGE=$RELEASE_DOCKER_REGISTRY/dotmesh-dynamic-provisioner:$CI_COMMIT_SHA; ./rebuild.sh; echo "pushed $CI_DOCKER_SERVER_IMAGE"; echo "pushed $CI_DOCKER_PROVISIONER_IMAGE")
     artifacts:
         paths:
             - cmd/dotmesh-server/target
