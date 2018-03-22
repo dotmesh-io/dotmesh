@@ -278,6 +278,22 @@ func testSetup(t *testing.T, f Federation, stamp int64) error {
 				return err
 			}
 
+			// Set up registry credentials if we need them to workaround OVH
+			// registry not supporting public images.
+			loginDockerCmd := fmt.Sprintf(
+				"docker exec -i %s "+
+					"docker login -u %s -p %s registry.containers.ovh.net",
+				node,
+				os.Getenv("OVH_REGISTRY_USERNAME"),
+				os.Getenv("OVH_REGISTRY_PASSWORD"),
+			)
+			log.Printf("Running %s", loginDockerCmd)
+
+			err = System("bash", "-c", loginDockerCmd)
+			if err != nil {
+				return err
+			}
+
 			fmt.Printf("=== Started up %s\n", node)
 		}
 	}
@@ -1224,6 +1240,7 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 	if err != nil {
 		return err
 	}
+
 	clusterName := fmt.Sprintf("cluster_%d", i)
 	c.Nodes[0] = NodeFromNodeName(t, now, i, 0, clusterName)
 	fmt.Printf("(just added) Here are my nodes: %+v\n", c.Nodes)
@@ -1256,6 +1273,7 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 		if err != nil {
 			return err
 		}
+
 		c.Nodes[j] = NodeFromNodeName(t, now, i, j, clusterName)
 
 		LogTiming("join_" + poolId(now, i, j))
