@@ -237,19 +237,21 @@ do
     INHERIT_ENVIRONMENT_ARGS="$INHERIT_ENVIRONMENT_ARGS -e $name=$(eval "echo \$$name")"
 done
 
+# In order of the -v options below:
+# 1. Mount the docker socket so that we can stop and start containers around
+#    e.g. dm reset.
+# 2. Be able to install the docker plugin.
+# 3. Be able to mount zfs filesystems in e.g. /var/lib/dotmesh/mnt from inside
+#    the container in such a way that they propogate up to the host.
+# 4. Be able to create some symlinks that we hand to the docker volume plugin.
+# 5. Be able to install a Kubernetes FlexVolume driver (we make symlinks
+#    where it tells us to).
+
 docker run -i $rm_opt --privileged --name=$DOTMESH_INNER_SERVER_NAME \
-    # Mount the docker socket so that we can stop and start containers around
-    # e.g. dm reset.
     -v /var/run/docker.sock:/var/run/docker.sock \
-    # Be able to install the docker plugin.
     -v /run/docker/plugins:/run/docker/plugins \
-    # Be able to mount zfs filesystems in e.g. /var/lib/dotmesh/mnt from inside
-    # the container in such a way that they propogate up to the host.
     -v $MOUNTPOINT:$MOUNTPOINT:rshared \
-    # Be able to create some symlinks that we hand to the docker volume plugin.
     -v /var/dotmesh:/var/dotmesh \
-    # Be able to install a Kubernetes FlexVolume driver (we make symlinks
-    # where it tells us to).
     -v $FLEXVOLUME_DRIVER_DIR:/system-flexvolume \
     $net \
     $link \
