@@ -1234,7 +1234,7 @@ func (c *Cluster) collectLogs(nodeName string) {
 			fmt.Sprintf(
 				"mkdir -p %s && touch %s && chmod -R a+rwX %s && "+
 					"docker exec -i %s "+
-					"docker logs -f dotmesh-server-inner > %s",
+					"docker logs -f dotmesh-server-inner > %s &",
 				logDir, logFile, logDir, nodeName, logFile,
 			),
 		)
