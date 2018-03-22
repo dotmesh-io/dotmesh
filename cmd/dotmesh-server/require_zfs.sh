@@ -42,7 +42,7 @@ DIR=$(echo $DIR |sed s/\#HOSTNAME\#/$(hostname)/)
 FILE=${DIR}/dotmesh_data
 POOL=${USE_POOL_NAME:-pool}
 POOL=$(echo $POOL |sed s/\#HOSTNAME\#/$(hostname)/)
-MOUNTPOINT=${MOUNTPOINT:-$DIR/mnt}
+MOUNTPOINT=${MOUNTPOINT:-/var/lib/dotmesh/mnt}
 DOTMESH_INNER_SERVER_NAME=${DOTMESH_INNER_SERVER_NAME:-dotmesh-server-inner}
 FLEXVOLUME_DRIVER_DIR=${FLEXVOLUME_DRIVER_DIR:-/usr/libexec/kubernetes/kubelet-plugins/volume/exec}
 INHERIT_ENVIRONMENT_NAMES=( "FILESYSTEM_METADATA_TIMEOUT" "DOTMESH_UPGRADES_URL" "DOTMESH_UPGRADES_INTERVAL_SECONDS")
@@ -109,6 +109,8 @@ if ! zpool status $POOL; then
         OUTER_DIR="$DIR"
     fi
 
+    # TODO: make case where truncate previously succeeded but zpool create
+    # failed or never run recoverable.
     if [ ! -f $FILE ]; then
         truncate -s $POOL_SIZE $FILE
         zpool create -m $MOUNTPOINT $POOL "$OUTER_DIR/dotmesh_data"
@@ -236,11 +238,18 @@ do
 done
 
 docker run -i $rm_opt --privileged --name=$DOTMESH_INNER_SERVER_NAME \
-    -v $DIR:/var/lib/dotmesh \
+    # Mount the docker socket so that we can stop and start containers around
+    # e.g. dm reset.
     -v /var/run/docker.sock:/var/run/docker.sock \
+    # Be able to install the docker plugin.
     -v /run/docker/plugins:/run/docker/plugins \
+    # Be able to mount zfs filesystems in e.g. /var/lib/dotmesh/mnt from inside
+    # the container in such a way that they propogate up to the host.
     -v $MOUNTPOINT:$MOUNTPOINT:rshared \
+    # Be able to create some symlinks that we hand to the docker volume plugin.
     -v /var/dotmesh:/var/dotmesh \
+    # Be able to install a Kubernetes FlexVolume driver (we make symlinks
+    # where it tells us to).
     -v $FLEXVOLUME_DRIVER_DIR:/system-flexvolume \
     $net \
     $link \
