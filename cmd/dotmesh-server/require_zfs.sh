@@ -103,7 +103,7 @@ if ! zpool status $POOL; then
     # Further reading: https://github.com/dotmesh-io/dotmesh/issues/333
 
     if [ -n $FIND_OUTER_MOUNT ]; then
-        BLOCK_DEVICE=`mount | grep $DIR | cut -f 1`
+        BLOCK_DEVICE=`mount | grep $DIR | cut -d ' ' -f 1`
         OUTER_DIR=`nsenter -t 1 -m -u -n -i /bin/sh -c 'mount' | grep $BLOCK_DEVICE | cut -f 3 -d ' ' | head -n 1`
     else
         OUTER_DIR="$DIR"
