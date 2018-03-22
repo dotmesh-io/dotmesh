@@ -343,7 +343,7 @@ func clusterCommonPreflight() error {
 
 	containers := []string{"dotmesh-etcd", "dotmesh-server", "dotmesh-server-inner"}
 
-	fmt.Printf("Checking dotmesh isn't running... ")
+	fmt.Printf("Checking dotmesh isn't running...\n")
 	// - Are all the containers running?
 	//   If yes, exit: We're good already.
 	anyContainersMissing := false
@@ -354,10 +354,10 @@ func clusterCommonPreflight() error {
 			return err
 		}
 		if ret == 0 {
-			fmt.Printf("%s✓ ", c)
+			fmt.Printf("  * %s: is running\n", c)
 			anyContainersRunning = true
 		} else {
-			fmt.Printf("%s❌ ", c)
+			fmt.Printf("  * %s: is not running\n", c)
 			anyContainersMissing = true
 		}
 	}
