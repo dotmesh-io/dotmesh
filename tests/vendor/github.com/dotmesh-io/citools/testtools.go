@@ -135,23 +135,25 @@ func TestMarkForCleanup(f Federation) {
 	for _, c := range f {
 		for _, n := range c.GetNodes() {
 			node := n.Container
-
-			logDir := "../extracted_logs"
-			logFile := fmt.Sprintf(
-				"%s/dotmesh-server-inner-%s.log",
-				logDir, node,
-			)
-			err := System(
-				"bash", "-c",
-				fmt.Sprintf(
-					"mkdir -p %s && touch %s && chmod -R a+rwX %s && "+
-						"docker exec -i %s "+
-						"docker logs dotmesh-server-inner > %s",
-					logDir, logFile, logDir, node, logFile,
-				),
-			)
-			if err != nil {
-				log.Printf("Unable to stream docker logs to artifacts directory for %s: %s", node, err)
+			containers := []string{"dotmesh-server", "dotmesh-server-inner"}
+			for _, container := range containers {
+				logDir := "../extracted_logs"
+				logFile := fmt.Sprintf(
+					"%s/%s-%s.log",
+					logDir, container, node,
+				)
+				err := System(
+					"bash", "-c",
+					fmt.Sprintf(
+						"mkdir -p %s && touch %s && chmod -R a+rwX %s && "+
+							"docker exec -i %s "+
+							"docker logs %s > %s",
+						logDir, logFile, logDir, node, container, logFile,
+					),
+				)
+				if err != nil {
+					log.Printf("Unable to stream docker logs to artifacts directory for %s: %s", node, err)
+				}
 			}
 		}
 	}
