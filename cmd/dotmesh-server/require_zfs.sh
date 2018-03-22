@@ -96,6 +96,8 @@ if ! zpool status $POOL; then
         truncate -s $POOL_SIZE $FILE
         echo zpool create -m $MOUNTPOINT $POOL $FILE
         zpool create -m $MOUNTPOINT $POOL $FILE
+        echo "This directory contains dotmesh data files, please leave them alone unless you know what you're doing. See github.com/dotmesh-io/dotmesh for more information." > $DIR/README
+        zpool get -H guid $POOL |cut -f 3 > $DIR/dotmesh_identity
     else
         zpool import -f -d $DIR $POOL
     fi
