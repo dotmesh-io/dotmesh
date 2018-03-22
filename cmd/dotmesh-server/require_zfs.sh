@@ -92,8 +92,17 @@ if [ ! -e /dev/zfs ]; then
     mknod -m 660 /dev/zfs c $(cat /sys/class/misc/zfs/dev |sed 's/:/ /g')
 fi
 if ! zpool status $POOL; then
-    if [ -n $FIND_OUTER_MOUNT ]
-    then
+
+    # If we're asked to find the outer mount, then we need to feed `zpool` the
+    # path to where it's mounted _on the host_. So, nsenter up to the host and
+    # find where the block device is mounted there.
+    #
+    # This assumes that $DIR _is_ the mountpoint of the block device, for
+    # example a kubernetes-provided PV.
+    #
+    # Further reading: https://github.com/dotmesh-io/dotmesh/issues/333
+
+    if [ -n $FIND_OUTER_MOUNT ]; then
         BLOCK_DEVICE=`mount | grep $DIR | cut -f 1`
         OUTER_DIR=`nsenter -t 1 -m -u -n -i /bin/sh -c 'mount' | grep $BLOCK_DEVICE | cut -f 3 -d ' ' | head -n 1`
     else
