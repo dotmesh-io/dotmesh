@@ -35,8 +35,8 @@ func deduceUrl(ctx context.Context, hostnames []string, mode, user, apiKey strin
 			}
 		} else {
 			urlsToTry = []string{
-				fmt.Sprintf("http://%s:%d", hostname, 32607),
-				fmt.Sprintf("http://%s:%d", hostname, 6969),
+				fmt.Sprintf("http://%s:%d", hostname, SERVER_PORT),
+				fmt.Sprintf("http://%s:%d", hostname, SERVER_PORT_OLD),
 			}
 		}
 
@@ -628,5 +628,13 @@ func (v VolumeName) StringWithoutAdmin() string {
 		return v.Name
 	} else {
 		return fmt.Sprintf("%s/%s", v.Namespace, v.Name)
+	}
+}
+
+// we are removing lots of logging but let's enable them to be switched back on
+// if the PRINT_QUIET_LOGS env is not empty
+func quietLogger(logMessage string) {
+	if os.Getenv("PRINT_QUIET_LOGS") != "" {
+		log.Printf(logMessage)
 	}
 }
