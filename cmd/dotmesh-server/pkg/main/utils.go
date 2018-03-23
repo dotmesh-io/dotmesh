@@ -35,8 +35,8 @@ func deduceUrl(ctx context.Context, hostnames []string, mode, user, apiKey strin
 			}
 		} else {
 			urlsToTry = []string{
-				fmt.Sprintf("http://%s:%d", hostname, SERVER_PORT),
-				fmt.Sprintf("http://%s:%d", hostname, SERVER_PORT_OLD),
+				fmt.Sprintf("http://%s:%s", hostname, SERVER_PORT),
+				fmt.Sprintf("http://%s:%s", hostname, SERVER_PORT_OLD),
 			}
 		}
 
