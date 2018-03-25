@@ -36,12 +36,13 @@ function fetch_zfs {
 
 # Put the data file inside /var/lib so that we end up on the big
 # partition if we're in a LinuxKit env.
+POOL_SIZE=${POOL_SIZE:-10G}
 DIR=${USE_POOL_DIR:-/var/lib/dotmesh}
 DIR=$(echo $DIR |sed s/\#HOSTNAME\#/$(hostname)/)
 FILE=${DIR}/dotmesh_data
 POOL=${USE_POOL_NAME:-pool}
 POOL=$(echo $POOL |sed s/\#HOSTNAME\#/$(hostname)/)
-MOUNTPOINT=${MOUNTPOINT:-$DIR/mnt}
+MOUNTPOINT=${MOUNTPOINT:-/var/lib/dotmesh/mnt}
 DOTMESH_INNER_SERVER_NAME=${DOTMESH_INNER_SERVER_NAME:-dotmesh-server-inner}
 FLEXVOLUME_DRIVER_DIR=${FLEXVOLUME_DRIVER_DIR:-/usr/libexec/kubernetes/kubelet-plugins/volume/exec}
 INHERIT_ENVIRONMENT_NAMES=( "FILESYSTEM_METADATA_TIMEOUT" "DOTMESH_UPGRADES_URL" "DOTMESH_UPGRADES_INTERVAL_SECONDS")
@@ -91,12 +92,32 @@ if [ ! -e /dev/zfs ]; then
     mknod -m 660 /dev/zfs c $(cat /sys/class/misc/zfs/dev |sed 's/:/ /g')
 fi
 if ! zpool status $POOL; then
-    if [ ! -f $FILE ]; then
-        truncate -s 10G $FILE
-        echo zpool create -m $MOUNTPOINT $POOL $FILE
-        zpool create -m $MOUNTPOINT $POOL $FILE
+
+    # If we're asked to find the outer mount, then we need to feed `zpool` the
+    # path to where it's mounted _on the host_. So, nsenter up to the host and
+    # find where the block device is mounted there.
+    #
+    # This assumes that $DIR _is_ the mountpoint of the block device, for
+    # example a kubernetes-provided PV.
+    #
+    # Further reading: https://github.com/dotmesh-io/dotmesh/issues/333
+
+    if [ -n "$FIND_OUTER_MOUNT" ]; then
+        BLOCK_DEVICE=`mount | grep $DIR | cut -d ' ' -f 1 | head -n 1`
+        OUTER_DIR=`nsenter -t 1 -m -u -n -i /bin/sh -c 'mount' | grep $BLOCK_DEVICE | cut -f 3 -d ' ' | head -n 1`
     else
-        zpool import -f -d $DIR $POOL
+        OUTER_DIR="$DIR"
+    fi
+
+    # TODO: make case where truncate previously succeeded but zpool create
+    # failed or never run recoverable.
+    if [ ! -f $FILE ]; then
+        truncate -s $POOL_SIZE $FILE
+        zpool create -m $MOUNTPOINT $POOL "$OUTER_DIR/dotmesh_data"
+        echo "This directory contains dotmesh data files, please leave them alone unless you know what you're doing. See github.com/dotmesh-io/dotmesh for more information." > $DIR/README
+        zpool get -H guid $POOL |cut -f 3 > $DIR/dotmesh_identity
+    else
+        zpool import -f -d $OUTER_DIR $POOL
     fi
 fi
 
@@ -216,8 +237,22 @@ do
     INHERIT_ENVIRONMENT_ARGS="$INHERIT_ENVIRONMENT_ARGS -e $name=$(eval "echo \$$name")"
 done
 
+# we need the logs from the inner server to be sent to the outer container
+# such that k8s will pick them up from the pod - the inner container is not
+# a pod but a container run from /var/run/docker.sock
+(while true; do docker logs -f dotmesh-server-inner || true; sleep 1; done) &
+
+# In order of the -v options below:
+# 1. Mount the docker socket so that we can stop and start containers around
+#    e.g. dm reset.
+# 2. Be able to install the docker plugin.
+# 3. Be able to mount zfs filesystems in e.g. /var/lib/dotmesh/mnt from inside
+#    the container in such a way that they propogate up to the host.
+# 4. Be able to create some symlinks that we hand to the docker volume plugin.
+# 5. Be able to install a Kubernetes FlexVolume driver (we make symlinks
+#    where it tells us to).
+
 docker run -i $rm_opt --privileged --name=$DOTMESH_INNER_SERVER_NAME \
-    -v $DIR:/var/lib/dotmesh \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v /run/docker/plugins:/run/docker/plugins \
     -v $MOUNTPOINT:$MOUNTPOINT:rshared \

@@ -8,10 +8,10 @@ mechanisms that enable this.
 
 Releases are made from branches matching the pattern `release-X.Y`, eg
 `release-0.1`. Every commit on such a branch is a release version, and
-the version string will be `release-X.Y` for the first commit on the
+the version string will be `release-X.Y.0` for the first commit on the
 branch (which is the commit it shares with the parent branch, which
 should be `master`), or `release-X.Y.Z`, where `Z` is the number of
-commits since the first commit.
+commits not in common with the master branch (e.g. merge commits).
 
 You can check the generated version string from any given git state by doing this:
 
@@ -97,9 +97,8 @@ release build.
 However, we do not publish the above `get.dotmesh.io` URLs, or run
 their builds in production. Additional steps are required to mark a
 build as the "latest stable build" that appears at the root of
-`get.dotmesh.io`, which is linked to from our documentation, or to
-deploy a new version to the Hub. These are manual jobs in the
-`manual_deploy` stage.
+`get.dotmesh.io`, which is linked to from our documentation, These are manual
+jobs in the `manual_deploy` stage.
 
 ### `mark_release_as_stable`
 
@@ -151,4 +150,4 @@ should be lining up!
 ### Re-releasing
 In the event of a failure during the release process, for example, CI failures, or an embarassing bug fix on the same tag, it is possible to re-release by triggering the pipeline on http://gitlab.dotmesh.io:9999/dotmesh/dotmesh-sync/pipelines on the commit on the release branch. If the commit is on a pre-exisiting release tag, it will preserve the version of the tag.
 
-In rare cases where there is a requirement to re-do a release with different code, this can be done by resetting the branch and preserving the relese-x.y.z tag on the commit and force-pushing.
+In rare cases where there is a requirement to re-do a release with different code, this can be done by resetting the branch and preserving the relese-x.y.z tag on the commit and force-pushing. GitLab doesn't handle syncing force pushes, so you will need to temporarily disable branch protection for your user and force push to dotmesh-sync after doing this.

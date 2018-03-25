@@ -25,6 +25,8 @@ const ZPOOL = "zpool"
 const META_KEY_PREFIX = "io.dotmesh:meta-"
 const ETCD_PREFIX = "/dotmesh.io"
 const CONTAINER_MOUNT_PREFIX = "/var/dotmesh"
+const SERVER_PORT = "32607"
+const SERVER_PORT_OLD = "6969"
 
 var LOG_TO_STDOUT bool
 var POOL string

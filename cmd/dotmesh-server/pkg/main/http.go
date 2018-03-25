@@ -46,12 +46,44 @@ func (state *InMemoryState) runServer() {
 		log.Printf("Error while registering services %s", err)
 	}
 
-	tracer := opentracing.GlobalTracer()
-
 	router := mux.NewRouter()
-	router.Handle("/rpc",
-		middleware.FromHTTPRequest(tracer, "rpc")(NewAuthHandler(r)),
-	)
+
+	// only use the zipkin middleware if we have a TRACE_ADDR
+	if os.Getenv("TRACE_ADDR") != "" {
+		tracer := opentracing.GlobalTracer()
+
+		router.Handle("/rpc",
+			middleware.FromHTTPRequest(tracer, "rpc")(NewAuthHandler(r)),
+		)
+
+		router.Handle(
+			"/filesystems/{filesystem}/{fromSnap}/{toSnap}",
+			middleware.FromHTTPRequest(tracer, "zfs-sender")(
+				NewAuthHandler(state.NewZFSSendingServer()),
+			),
+		).Methods("GET")
+
+		router.Handle(
+			"/filesystems/{filesystem}/{fromSnap}/{toSnap}",
+			middleware.FromHTTPRequest(tracer, "zfs-receiver")(
+				NewAuthHandler(state.NewZFSReceivingServer()),
+			),
+		).Methods("POST")
+
+	} else {
+		router.Handle("/rpc", NewAuthHandler(r))
+
+		router.Handle(
+			"/filesystems/{filesystem}/{fromSnap}/{toSnap}",
+			NewAuthHandler(state.NewZFSSendingServer()),
+		).Methods("GET")
+
+		router.Handle(
+			"/filesystems/{filesystem}/{fromSnap}/{toSnap}",
+			NewAuthHandler(state.NewZFSReceivingServer()),
+		).Methods("POST")
+
+	}
 
 	router.HandleFunc("/status",
 		func(w http.ResponseWriter, r *http.Request) {
@@ -59,25 +91,16 @@ func (state *InMemoryState) runServer() {
 		},
 	)
 
-	router.Handle(
-		"/filesystems/{filesystem}/{fromSnap}/{toSnap}",
-		middleware.FromHTTPRequest(tracer, "zfs-sender")(
-			NewAuthHandler(state.NewZFSSendingServer()),
-		),
-	).Methods("GET")
+	if os.Getenv("PRINT_HTTP_LOGS") != "" {
+		loggingRouter := handlers.LoggingHandler(getLogfile("requests"), router)
+		err = http.ListenAndServe(fmt.Sprintf(":%s", SERVER_PORT), loggingRouter)
+	} else {
+		err = http.ListenAndServe(fmt.Sprintf(":%s", SERVER_PORT), router)
+	}
 
-	router.Handle(
-		"/filesystems/{filesystem}/{fromSnap}/{toSnap}",
-		middleware.FromHTTPRequest(tracer, "zfs-receiver")(
-			NewAuthHandler(state.NewZFSReceivingServer()),
-		),
-	).Methods("POST")
-
-	loggedRouter := handlers.LoggingHandler(getLogfile("requests"), router)
-	err = http.ListenAndServe(":32607", loggedRouter)
 	if err != nil {
-		out(fmt.Sprintf("Unable to listen on port 32607: '%s'\n", err))
-		log.Fatalf("Unable to listen on port 32607: '%s'", err)
+		out(fmt.Sprintf("Unable to listen on port %s: '%s'\n", SERVER_PORT, err))
+		log.Fatalf("Unable to listen on port %s: '%s'", SERVER_PORT, err)
 	}
 }
 

@@ -3,7 +3,9 @@ variables:
     SERVER_NAME: dotmesh-server
     PROVISIONER_NAME: dotmesh-dynamic-provisioner
 
-    CI_DOCKER_REGISTRY: quay.io/dotmesh
+    CI_DOCKER_REGISTRY: registry.containers.ovh.net/dotmesh
+    RELEASE_DOCKER_REGISTRY: quay.io/dotmesh
+
     CI_DOCKER_TAG: $CI_COMMIT_SHA
 
     CI_DOCKER_SERVER_IMAGE: $CI_DOCKER_REGISTRY/dotmesh-server:$CI_COMMIT_SHA
@@ -29,6 +31,7 @@ before_script:
     - git checkout $CI_COMMIT_REF_NAME && git reset --hard $CI_COMMIT_SHA
     - while [ -f /dotmesh-test-cleanup.lock ]; do echo "waiting for test cleanup..."; sleep 1; done
     - docker login -u $QUAY_USER -p $QUAY_PASSWORD quay.io
+    - docker login -u $OVH_REGISTRY_USERNAME -p $OVH_REGISTRY_PASSWORD registry.containers.ovh.net
 
 build_client_linux:
     stage: build
@@ -75,6 +78,7 @@ build_server:
         - (cd cmd/dotmesh-server && ./rebuild.sh) # also pushes
         - echo "pushed $CI_DOCKER_SERVER_IMAGE"
         - echo "pushed $CI_DOCKER_PROVISIONER_IMAGE"
+        - (cd cmd/dotmesh-server && export CI_DOCKER_SERVER_IMAGE=$RELEASE_DOCKER_REGISTRY/dotmesh-server:$CI_COMMIT_SHA; export CI_DOCKER_PROVISIONER_IMAGE=$RELEASE_DOCKER_REGISTRY/dotmesh-dynamic-provisioner:$CI_COMMIT_SHA; ./rebuild.sh; echo "pushed $CI_DOCKER_SERVER_IMAGE"; echo "pushed $CI_DOCKER_PROVISIONER_IMAGE")
     artifacts:
         paths:
             - cmd/dotmesh-server/target
@@ -167,6 +171,10 @@ linux_default_dot:
         - fast
     script:
         - ./test.sh -run TestDefaultDot
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
 
 linux_single_node:
     stage: test
@@ -178,6 +186,10 @@ linux_single_node:
         - fast
     script:
         - ./test.sh -run TestSingleNode
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
 
 linux_two_nodes_same_cluster:
     stage: test
@@ -189,6 +201,10 @@ linux_two_nodes_same_cluster:
         - fast
     script:
         - ./test.sh -run TestTwoNodesSameCluster
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
 
 linux_kubernetes:
     stage: test
@@ -201,6 +217,10 @@ linux_kubernetes:
     script:
         - pwd
         - ./test.sh -run TestKubernetes
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
 
 linux_deletion_simple:
     stage: test
@@ -212,6 +232,10 @@ linux_deletion_simple:
         - fast
     script:
         - ./test.sh -run TestDeletionSimple
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
 
 linux_deletion_complex:
     stage: test
@@ -223,6 +247,10 @@ linux_deletion_complex:
         - fast
     script:
         - ./test.sh -run TestDeletionComplex
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
     allow_failure: true
 
 linux_two_single_node_clusters:
@@ -235,6 +263,10 @@ linux_two_single_node_clusters:
         - fast
     script:
         - ./test.sh -run TestTwoSingleNodeClusters
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
 
 linux_three_single_node_clusters:
     stage: test
@@ -246,6 +278,10 @@ linux_three_single_node_clusters:
         - fast
     script:
         - ./test.sh -run TestThreeSingleNodeClusters
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
 
 linux_two_double_node_clusters:
     stage: test
@@ -257,18 +293,26 @@ linux_two_double_node_clusters:
         - fast
     script:
         - ./test.sh -run TestTwoDoubleNodeClusters
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
 
 linux_stress:
-   stage: test
-   dependencies:
-       - build_server
-       - build_client_linux
-   tags:
-       - ubuntu
-       - fast
-   script:
-       - ./test.sh -timeout 30m -run TestStress
-   when: manual
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - ./test.sh -timeout 30m -run TestStress
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
+    when: manual
 
 trigger_e2e_test:
     stage: deploy
@@ -307,7 +351,7 @@ deploy_release_build:
         - ubuntu
         - fast
     script:
-        - VERSION=`cd cmd/versioner; go run versioner.go`
+        - VERSION=`cd cmd/versioner; go run versioner.go`; echo VERSION=$VERSION
         - "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no releases@get.dotmesh.io mkdir -p /pool/releases/$VERSION"
         - "rsync -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' -avz binaries/{Linux,Darwin} yaml releases@get.dotmesh.io:/pool/releases/$VERSION"
     only:

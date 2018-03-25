@@ -1272,7 +1272,7 @@ func (d *DotmeshRPC) AllDotsAndBranches(
 	args *struct{},
 	result *VolumesAndBranches,
 ) error {
-	log.Printf("[AllDotsAndBranches] starting...")
+	quietLogger("[AllDotsAndBranches] starting...")
 
 	vac := VolumesAndBranches{}
 
@@ -1340,7 +1340,7 @@ func (d *DotmeshRPC) AllDotsAndBranches(
 		vac.Dots = append(vac.Dots, tlf)
 	}
 	*result = vac
-	log.Printf("[AllDotsAndBranches] finished!")
+	quietLogger("[AllDotsAndBranches] finished!")
 	return nil
 }
 

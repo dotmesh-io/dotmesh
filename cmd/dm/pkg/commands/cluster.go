@@ -259,7 +259,7 @@ func clusterUpgrade(cmd *cobra.Command, args []string, out io.Writer) error {
 	fmt.Printf("Upgrading local Dotmesh server to version %s (docker image %s)\n", clientVersion, dotmeshDockerImage)
 
 	if !offline {
-		fmt.Printf("Pulling dotmesh-server docker image... ")
+		fmt.Printf("Pulling dotmesh-server docker image...\n")
 		resp, err := exec.Command(
 			"docker", "pull", dotmeshDockerImage,
 		).CombinedOutput()
@@ -343,7 +343,7 @@ func clusterCommonPreflight() error {
 
 	containers := []string{"dotmesh-etcd", "dotmesh-server", "dotmesh-server-inner"}
 
-	fmt.Printf("Checking dotmesh isn't running... ")
+	fmt.Printf("Checking dotmesh isn't running...\n")
 	// - Are all the containers running?
 	//   If yes, exit: We're good already.
 	anyContainersMissing := false
@@ -354,10 +354,10 @@ func clusterCommonPreflight() error {
 			return err
 		}
 		if ret == 0 {
-			fmt.Printf("%s✓ ", c)
+			fmt.Printf("  * %s: is running\n", c)
 			anyContainersRunning = true
 		} else {
-			fmt.Printf("%s❌ ", c)
+			fmt.Printf("  * %s: is not running\n", c)
 			anyContainersMissing = true
 		}
 	}
@@ -384,7 +384,7 @@ func clusterCommonPreflight() error {
 	}
 
 	if !offline {
-		fmt.Printf("Pulling dotmesh-server docker image... ")
+		fmt.Printf("Pulling dotmesh-server docker image...\n")
 		resp, err := exec.Command(
 			"docker", "pull", dotmeshDockerImage,
 		).CombinedOutput()

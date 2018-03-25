@@ -183,7 +183,7 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 		return DotmeshVolume{}, err
 	}
 
-	log.Printf("[getOne] starting for %v", fs)
+	quietLogger(fmt.Sprintf("[getOne] starting for %v", fs))
 
 	if tlf, clone, err := s.registry.LookupFilesystemById(fs); err == nil {
 		authorized, err := tlf.Authorize(ctx)
@@ -191,32 +191,32 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 			return DotmeshVolume{}, err
 		}
 		if !authorized {
-			log.Printf(
+			quietLogger(fmt.Sprintf(
 				"[getOne] notauth for %v", fs,
-			)
+			))
 			return DotmeshVolume{}, PermissionDenied{}
 		}
 		// if not exists, 0 is fine
 		s.globalDirtyCacheLock.Lock()
-		log.Printf(
+		quietLogger(fmt.Sprintf(
 			"[getOne] looking up %s with master %s in %s",
 			fs, master, *s.globalDirtyCache,
-		)
+		))
 		dirty, ok := (*s.globalDirtyCache)[fs]
 		var dirtyBytes int64
 		var sizeBytes int64
 		if ok {
 			dirtyBytes = dirty.DirtyBytes
 			sizeBytes = dirty.SizeBytes
-			log.Printf(
+			quietLogger(fmt.Sprintf(
 				"[getOne] got dirtyInfo %d,%d for %s with master %s in %s",
 				sizeBytes, dirtyBytes, fs, master, *s.globalDirtyCache,
-			)
+			))
 		} else {
-			log.Printf(
+			quietLogger(fmt.Sprintf(
 				"[getOne] %s was not in %s",
 				fs, *s.globalDirtyCache,
-			)
+			))
 		}
 		s.globalDirtyCacheLock.Unlock()
 		// if not exists, 0 is fine
@@ -269,9 +269,9 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 			d.ServerStatuses[server.Id] = status
 			s.globalStateCacheLock.Unlock()
 		}
-		log.Printf(
+		quietLogger(fmt.Sprintf(
 			"[getOne] here is your volume: %s", d,
-		)
+		))
 		return d, nil
 	} else {
 		return DotmeshVolume{}, fmt.Errorf("Unable to find filesystem name for id %s", fs)

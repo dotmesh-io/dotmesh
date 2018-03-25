@@ -926,7 +926,7 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		citools.NewCluster(1), // cluster_1_node_0
 	}
 	defer citools.TestMarkForCleanup(f)
-	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f, true) })
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 
 	citools.StartTiming()
 	err := f.Start(t)
