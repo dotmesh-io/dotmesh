@@ -8,10 +8,10 @@ mechanisms that enable this.
 
 Releases are made from branches matching the pattern `release-X.Y`, eg
 `release-0.1`. Every commit on such a branch is a release version, and
-the version string will be `release-X.Y` for the first commit on the
+the version string will be `release-X.Y.0` for the first commit on the
 branch (which is the commit it shares with the parent branch, which
 should be `master`), or `release-X.Y.Z`, where `Z` is the number of
-commits since the first commit.
+commits not in common with the master branch (e.g. merge commits).
 
 You can check the generated version string from any given git state by doing this:
 
@@ -97,9 +97,8 @@ release build.
 However, we do not publish the above `get.dotmesh.io` URLs, or run
 their builds in production. Additional steps are required to mark a
 build as the "latest stable build" that appears at the root of
-`get.dotmesh.io`, which is linked to from our documentation, or to
-deploy a new version to the Hub. These are manual jobs in the
-`manual_deploy` stage.
+`get.dotmesh.io`, which is linked to from our documentation, These are manual
+jobs in the `manual_deploy` stage.
 
 ### `mark_release_as_stable`
 
