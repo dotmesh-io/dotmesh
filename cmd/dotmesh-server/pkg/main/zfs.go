@@ -197,7 +197,7 @@ func deleteFilesystemInZFS(fs string) error {
 //                   \ -> D(foo-oops)
 // # zfs promote foo
 
-func retrifyBranch(existingFs string, newFs string, rollbackTo string) error {
+func stashBranch(existingFs string, newFs string, rollbackTo string) error {
 	err := doSimpleZFSCommand(exec.Command(ZFS, "rename", fq(existingFs), fq(newFs)),
 		fmt.Sprintf("rename filesystem %s (%s) to %s (%s) for retroBranch",
 			existingFs, fq(existingFs),

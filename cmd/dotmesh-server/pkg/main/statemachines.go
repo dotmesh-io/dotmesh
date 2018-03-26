@@ -1273,7 +1273,7 @@ func (f *fsMachine) recoverFromDivergence(rollbackTo snapshot) error {
 	newFilesystemId := id.String()
 
 	// Roll back the filesystem to rollbackTo, but leaving the new filesystem pointing to its original state
-	err = retrifyBranch(f.filesystemId, newFilesystemId, rollbackTo.Id)
+	err = stashBranch(f.filesystemId, newFilesystemId, rollbackTo.Id)
 	if err != nil {
 		return err
 	}
