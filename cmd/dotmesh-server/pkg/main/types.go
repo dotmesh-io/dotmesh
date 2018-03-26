@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 )
@@ -14,6 +15,20 @@ type User struct {
 	Password []byte
 	ApiKey   string
 	Metadata map[string]string
+}
+
+func (user User) String() string {
+	v := reflect.ValueOf(user)
+	toString := ""
+	for i := 0; i < v.NumField(); i++ {
+		fieldName := v.Type().Field(i).Name
+		if fieldName == "ApiKey" {
+			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, "****")
+		} else {
+			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, v.Field(i).Interface())
+		}
+	}
+	return toString
 }
 
 type SafeUser struct {
@@ -233,7 +248,7 @@ type fsMachine struct {
 type TransferRequest struct {
 	Peer             string // hostname
 	User             string
-	ApiKey           string
+	ApiKey           string //protected value in toString
 	Direction        string // "push" or "pull"
 	LocalNamespace   string
 	LocalName        string
@@ -243,6 +258,20 @@ type TransferRequest struct {
 	RemoteBranchName string
 	// TODO could also include SourceSnapshot here
 	TargetCommit string // optional, "" means "latest"
+}
+
+func (transferRequest TransferRequest) String() string {
+	v := reflect.ValueOf(transferRequest)
+	toString := ""
+	for i := 0; i < v.NumField(); i++ {
+		fieldName := v.Type().Field(i).Name
+		if fieldName == "ApiKey" {
+			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, "****")
+		} else {
+			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, v.Field(i).Interface())
+		}
+	}
+	return toString
 }
 
 type EventArgs map[string]interface{}

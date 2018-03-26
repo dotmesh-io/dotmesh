@@ -1053,7 +1053,7 @@ func (d *DotmeshRPC) Transfer(
 	localExists := localFilesystemId != ""
 
 	if !remoteExists && !localExists {
-		return fmt.Errorf("Both local and remote filesystems don't exist. %+v", args)
+		return fmt.Errorf("Both local and remote filesystems don't exist.")
 	}
 	if args.Direction == "push" && !localExists {
 		return fmt.Errorf("Can't push when local doesn't exist")
