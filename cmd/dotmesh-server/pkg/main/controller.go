@@ -515,34 +515,38 @@ func (s *InMemoryState) masterFor(filesystem string) string {
 func (s *InMemoryState) initFilesystemMachine(filesystemId string) *fsMachine {
 	log.Printf("[initFilesystemMachine] starting: %s", filesystemId)
 
-	s.filesystemsLock.Lock()
-	defer s.filesystemsLock.Unlock()
-	log.Printf("[initFilesystemMachine] acquired lock: %s", filesystemId)
-	// do nothing if the fsMachine is already running
-	fs, ok := (*s.filesystems)[filesystemId]
-	if ok {
-		log.Printf("[initFilesystemMachine] reusing fsMachine for %s", filesystemId)
-		return fs
-	} else {
-		// Don't create a new fsMachine if we've been deleted
-		deleted, err := isFilesystemDeletedInEtcd(filesystemId)
-		if err != nil {
-			log.Printf("%v while requesting deletion state from etcd", err)
-			return nil
-		}
-
-		if deleted {
-			err := s.deleteFilesystem(filesystemId)
-			if err != nil {
-				log.Printf("Error deleting filesystem: %v", err)
-			}
-			return nil
+	fs, deleted := func() (*fsMachine, bool) {
+		s.filesystemsLock.Lock()
+		defer s.filesystemsLock.Unlock()
+		fs := (*s.filesystems)[filesystemId]
+		log.Printf("[initFilesystemMachine] acquired lock: %s", filesystemId)
+		// do nothing if the fsMachine is already running
+		if ok {
+			log.Printf("[initFilesystemMachine] reusing fsMachine for %s", filesystemId)
+			return fs, false
 		} else {
+			// Don't create a new fsMachine if we've been deleted
+			deleted, err := isFilesystemDeletedInEtcd(filesystemId)
+			if err != nil {
+				log.Printf("%v while requesting deletion state from etcd", err)
+				return nil, false
+			}
+		}
+		if !deleted {
 			log.Printf("[initFilesystemMachine] initializing new fsMachine for %s", filesystemId)
 			(*s.filesystems)[filesystemId] = newFilesystemMachine(filesystemId, s)
 			go (*s.filesystems)[filesystemId].run() // concurrently run state machine
-			return (*s.filesystems)[filesystemId]
+			return (*s.filesystems)[filesystemId], deleted
+		} else {
+			return fs, deleted
 		}
+	}()
+	if deleted {
+		err := s.deleteFilesystem(filesystemId)
+		if err != nil {
+			log.Printf("Error deleting filesystem: %v", err)
+		}
+		return nil
 	}
 }
 
