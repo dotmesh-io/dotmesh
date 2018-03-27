@@ -220,6 +220,7 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	state, err := z.state.getCurrentState(z.filesystem)
 	if err != nil {
+		log.Printf("[ZFSReceiver:ServeHTTP] error calling getCurrentState(%s): %v", z.filesystem, err)
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte(fmt.Sprintf("Can't find state of filesystem %s.\n", z.filesystem)))
 		return

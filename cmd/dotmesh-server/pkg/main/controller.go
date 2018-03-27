@@ -292,6 +292,10 @@ func (s *InMemoryState) notifyNewSnapshotsAfterPush(filesystemId string) {
 }
 
 func (s *InMemoryState) getCurrentState(filesystemId string) (string, error) {
+	// init fsMachine in case it isn't.
+	// XXX this trusts (authenticated) POST data :/
+	s.initFilesystemMachine(filesystemId)
+
 	s.filesystemsLock.Lock()
 	defer s.filesystemsLock.Unlock()
 	f, ok := (*s.filesystems)[filesystemId]
