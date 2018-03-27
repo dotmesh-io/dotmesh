@@ -480,7 +480,10 @@ func (s *InMemoryState) handleOneFilesystemMaster(node *client.Node) error {
 		pieces := strings.Split(node.Key, "/")
 		fs := pieces[len(pieces)-1]
 
-		deleted, err := isFilesystemDeletedInEtcd(fs)
+		var err error
+		var deleted bool
+
+		deleted, err = isFilesystemDeletedInEtcd(fs)
 		if err != nil {
 			return err
 		}
@@ -491,7 +494,6 @@ func (s *InMemoryState) handleOneFilesystemMaster(node *client.Node) error {
 
 		s.initFilesystemMachine(fs)
 		var responseChan chan *Event
-		var err error
 		requestId := pieces[len(pieces)-1]
 		if node.Value == s.myNodeId {
 			log.Printf("MOUNTING: %s=%s", fs, node.Value)
