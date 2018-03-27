@@ -4,6 +4,7 @@ import (
 	"fmt"
 	cp "github.com/dotmesh-io/go-checkpoint"
 	"os/exec"
+	"strings"
 )
 
 func (state *InMemoryState) checkForUpdates() error {
