@@ -825,12 +825,6 @@ func (d *DotmeshRPC) registerFilesystemBecomeMaster(
 ) error {
 	log.Printf("[registerFilesystemBecomeMaster] called: filesystemNamespace=%s, filesystemName=%s, cloneName=%s, filesystemId=%s path=%+v",
 		filesystemNamespace, filesystemName, cloneName, filesystemId, path)
-	// ensure there's a filesystem machine for it (and its parents), otherwise
-	// it won't process any events. in the case where it already exists, this
-	// is a noop.
-	log.Printf("[registerFilesystemBecomeMaster] calling initFilesystemMachine for %s", filesystemId)
-	d.state.initFilesystemMachine(filesystemId)
-	log.Printf("[registerFilesystemBecomeMaster] done initFilesystemMachine for %s", filesystemId)
 
 	kapi, err := getEtcdKeysApi()
 	if err != nil {
@@ -841,7 +835,44 @@ func (d *DotmeshRPC) registerFilesystemBecomeMaster(
 		filesystemIds = append(filesystemIds, c.Clone.FilesystemId)
 	}
 	for _, f := range filesystemIds {
-		_, err := kapi.Get(
+		// If any filesystemId in the transfer is marked as deleted or
+		// cleanupPending, remove that mark. We want to allow it to live again,
+		// and we don't want it to be asynchronously deleted!
+		deleted, err := isFilesystemDeletedInEtcd(f)
+		if err != nil {
+			return err
+		}
+		if deleted {
+			_, err = kapi.Delete(
+				context.Background(),
+				fmt.Sprintf("%s/filesystems/deleted/%s", ETCD_PREFIX, f),
+				&client.DeleteOptions{},
+			)
+			// Key not found means someone deleted it between us checking and
+			// us deleting it. Proceed.
+			if err != nil && !client.IsKeyNotFound(err) {
+				return err
+			}
+			_, err = kapi.Delete(
+				context.Background(),
+				fmt.Sprintf("%s/filesystems/cleanupPending/%s", ETCD_PREFIX, f),
+				&client.DeleteOptions{},
+			)
+			if err != nil && !client.IsKeyNotFound(err) {
+				return err
+			}
+		}
+
+		// Only after we've made sure that the fsMachine won't immediately try
+		// to delete it (if it's being raised from the dead), ensure there's a
+		// filesystem machine for it (and its parents), otherwise it won't
+		// process any events. in the case where it already exists, this is a
+		// noop.
+		log.Printf("[registerFilesystemBecomeMaster] calling initFilesystemMachine for %s", f)
+		d.state.initFilesystemMachine(f)
+		log.Printf("[registerFilesystemBecomeMaster] done initFilesystemMachine for %s", f)
+
+		_, err = kapi.Get(
 			context.Background(),
 			fmt.Sprintf(
 				"%s/filesystems/masters/%s", ETCD_PREFIX, f,
