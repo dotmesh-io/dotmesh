@@ -518,9 +518,10 @@ func (s *InMemoryState) initFilesystemMachine(filesystemId string) *fsMachine {
 	fs, deleted := func() (*fsMachine, bool) {
 		s.filesystemsLock.Lock()
 		defer s.filesystemsLock.Unlock()
-		fs := (*s.filesystems)[filesystemId]
+		fs, ok := (*s.filesystems)[filesystemId]
 		log.Printf("[initFilesystemMachine] acquired lock: %s", filesystemId)
 		// do nothing if the fsMachine is already running
+		deleted := false
 		if ok {
 			log.Printf("[initFilesystemMachine] reusing fsMachine for %s", filesystemId)
 			return fs, false
@@ -541,6 +542,7 @@ func (s *InMemoryState) initFilesystemMachine(filesystemId string) *fsMachine {
 			return fs, deleted
 		}
 	}()
+	// NB: deleteFilesystem takes filesystemsLock
 	if deleted {
 		err := s.deleteFilesystem(filesystemId)
 		if err != nil {
@@ -548,6 +550,7 @@ func (s *InMemoryState) initFilesystemMachine(filesystemId string) *fsMachine {
 		}
 		return nil
 	}
+	return fs
 }
 
 func (s *InMemoryState) exists(filesystem string) bool {
