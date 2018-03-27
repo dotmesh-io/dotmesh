@@ -522,12 +522,13 @@ func (s *InMemoryState) initFilesystemMachine(filesystemId string) *fsMachine {
 		log.Printf("[initFilesystemMachine] acquired lock: %s", filesystemId)
 		// do nothing if the fsMachine is already running
 		deleted := false
+		var err error
 		if ok {
 			log.Printf("[initFilesystemMachine] reusing fsMachine for %s", filesystemId)
 			return fs, false
 		} else {
 			// Don't create a new fsMachine if we've been deleted
-			deleted, err := isFilesystemDeletedInEtcd(filesystemId)
+			deleted, err = isFilesystemDeletedInEtcd(filesystemId)
 			if err != nil {
 				log.Printf("%v while requesting deletion state from etcd", err)
 				return nil, false
