@@ -133,11 +133,11 @@ func doSimpleZFSCommand(cmd *exec.Cmd, description string) error {
 	cmd.Stderr = &errBuffer
 	err := cmd.Run()
 	if err != nil {
-		readErr, err := ioutil.ReadAll(&errBuffer)
+		readBytes, readErr := ioutil.ReadAll(&errBuffer)
 		if readErr != nil {
 			return fmt.Errorf("error reading error: %v", readErr)
 		}
-		return fmt.Errorf("error running ZFS command to %s: %v / %v", description, err, string(errBuffer.Bytes()))
+		return fmt.Errorf("error running ZFS command to %s: %v / %v", description, err, string(readBytes))
 	}
 
 	return nil
