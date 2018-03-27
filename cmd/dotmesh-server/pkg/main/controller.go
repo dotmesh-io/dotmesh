@@ -474,15 +474,11 @@ func (s *InMemoryState) snapshotsFor(server string, filesystemId string) ([]snap
 	defer s.globalSnapshotCacheLock.Unlock()
 	filesystems, ok := (*s.globalSnapshotCache)[server]
 	if !ok {
-		return []snapshot{}, fmt.Errorf(
-			"No state currently known about server '%s' (filesystemId '%s')", server, filesystemId,
-		)
+		return []snapshot{}, nil
 	}
 	snapshots, ok := filesystems[filesystemId]
 	if !ok {
-		return []snapshot{}, fmt.Errorf(
-			"Snapshots of '%s' not currently known on server '%s'", filesystemId, server,
-		)
+		return []snapshot{}, nil
 	}
 	return snapshots, nil
 }
