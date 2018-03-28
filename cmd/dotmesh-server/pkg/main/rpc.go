@@ -546,10 +546,20 @@ func (d *DotmeshRPC) Exists(
 	args *struct{ Namespace, Name, Branch string },
 	result *string,
 ) error {
-	*result = d.state.registry.Exists(VolumeName{args.Namespace, args.Name}, args.Branch)
+	fsId := d.state.registry.Exists(VolumeName{args.Namespace, args.Name}, args.Branch)
+	deleted, err := isFilesystemDeletedInEtcd(fsId)
+	if err != nil {
+		return err
+	}
+	if deleted {
+		*result = ""
+	} else {
+		*result = fsId
+	}
 	return nil
 }
 
+// TODO Dedupe this wrt Exists
 func (d *DotmeshRPC) Lookup(
 	r *http.Request,
 	args *struct{ Namespace, Name, Branch string },
@@ -561,7 +571,15 @@ func (d *DotmeshRPC) Lookup(
 	if err != nil {
 		return err
 	}
-	*result = filesystemId
+	deleted, err := isFilesystemDeletedInEtcd(filesystemId)
+	if err != nil {
+		return err
+	}
+	if deleted {
+		*result = ""
+	} else {
+		*result = filesystemId
+	}
 	return nil
 }
 
@@ -823,6 +841,10 @@ func (d *DotmeshRPC) registerFilesystemBecomeMaster(
 	filesystemNamespace, filesystemName, cloneName, filesystemId string,
 	path PathToTopLevelFilesystem,
 ) error {
+
+	// TODO handle the case where the registry entry exists but the filesystems
+	// (fsMachine map) entry doesn't.
+
 	log.Printf("[registerFilesystemBecomeMaster] called: filesystemNamespace=%s, filesystemName=%s, cloneName=%s, filesystemId=%s path=%+v",
 		filesystemNamespace, filesystemName, cloneName, filesystemId, path)
 
@@ -879,7 +901,7 @@ func (d *DotmeshRPC) registerFilesystemBecomeMaster(
 			),
 			nil,
 		)
-		if !client.IsKeyNotFound(err) && err != nil {
+		if err != nil && !client.IsKeyNotFound(err) {
 			return err
 		}
 		if err != nil {

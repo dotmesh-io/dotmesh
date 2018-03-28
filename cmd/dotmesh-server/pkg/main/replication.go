@@ -215,9 +215,6 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// z.state.lockFilesystem(z.filesystem)
 	// defer z.state.unlockFilesystem(z.filesystem)
 
-	// TODO implement a sort of proxy layer so that pushes can make it to the
-	// right master, even if they land on the wrong server.
-
 	state, err := z.state.getCurrentState(z.filesystem)
 	if err != nil {
 		log.Printf("[ZFSReceiver:ServeHTTP] error calling getCurrentState(%s): %v", z.filesystem, err)
@@ -236,6 +233,9 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		// else OK, we can proceed
 	} else {
+		// below: a sort of proxy layer so that pushes can make it to the right
+		// master, even if they land on the wrong server.
+
 		addresses := z.state.addressesFor(master)
 
 		_, _, apiKey, err := getPasswords("admin")
