@@ -397,11 +397,15 @@ func (d *DotmeshRPC) List(
 		// user) doesn't have permission to read it.
 		if err != nil {
 			switch err := err.(type) {
-			default:
-				log.Printf("[List] err: %v", err)
-				return err
 			case PermissionDenied:
 				log.Printf("[List] permission denied reading %v", fs)
+				continue
+			default:
+				log.Printf("[List] err: %v", err)
+				// If we got an error looking something up, it might just be
+				// because the fsMachine list or the registry is temporarily
+				// inconsistent wrt the mastersCache. Proceed, at the risk of
+				// lying slightly...
 				continue
 			}
 		}

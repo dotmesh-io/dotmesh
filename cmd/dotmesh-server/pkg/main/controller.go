@@ -79,11 +79,9 @@ func (s *InMemoryState) deleteFilesystem(filesystemId string) error {
 		delete(*s.filesystems, filesystemId)
 	}()
 
-	func() {
-		s.mastersCacheLock.Lock()
-		defer s.mastersCacheLock.Unlock()
-		delete(*s.mastersCache, filesystemId)
-	}()
+	// Don't delete from mastersCache, because we want to be consistent wrt
+	// etcd. We can wait for etcd to tell us when filesystems/masters gets
+	// changed.
 
 	func() {
 		s.globalContainerCacheLock.Lock()
