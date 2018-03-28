@@ -563,14 +563,12 @@ func (s *InMemoryState) exists(filesystem string) bool {
 
 // return a filesystem or error
 func (s *InMemoryState) maybeFilesystem(filesystemId string) (*fsMachine, error) {
-	s.filesystemsLock.Lock()
-	defer s.filesystemsLock.Unlock()
-	fs, ok := (*s.filesystems)[filesystemId]
-	if ok {
-		return fs, nil
-	} else {
-		return nil, fmt.Errorf("No such filesystemId %s", filesystemId)
+	fs := s.initFilesystemMachine(filesystemId)
+	if fs == nil {
+		// It was deleted.
+		return nil, fmt.Errorf("No such filesystemId %s (it was deleted)", filesystemId)
 	}
+	return fs, nil
 }
 
 func (state *InMemoryState) reallyProcureFilesystem(ctx context.Context, name VolumeName) (
