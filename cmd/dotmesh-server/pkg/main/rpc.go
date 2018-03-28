@@ -1724,3 +1724,33 @@ func (d *DotmeshRPC) DumpEtcd(
 
 	return nil
 }
+
+func (d *DotmeshRPC) GetReplicationLatencyForBranch(
+	r *http.Request,
+	args *struct {
+		Namespace, Name, Branch string
+	},
+	result *map[string][]string, // Map from server name to list of commits it's missing
+) error {
+	log.Printf("[GetReplicationLatencyForBranch] being called with: %+v", args)
+
+	err := ensureAdminUser(r)
+
+	if err != nil {
+		return err
+	}
+
+	fs, err := d.state.registry.MaybeCloneFilesystemId(VolumeName{Namespace: args.Namespace, Name: args.Name}, args.Branch)
+	if err != nil {
+		return err
+	}
+
+	err, res := d.state.GetReplicationLatency(fs)
+	if err != nil {
+		return err
+	}
+
+	*result = res
+
+	return nil
+}

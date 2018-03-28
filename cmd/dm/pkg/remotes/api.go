@@ -304,6 +304,28 @@ func (dm *DotmeshAPI) DeleteVolume(volumeName string) error {
 	return nil
 }
 
+func (dm *DotmeshAPI) GetReplicationLatencyForBranch(volumeName string, branch string) (map[string][]string, error) {
+	namespace, name, err := ParseNamespacedVolume(volumeName)
+	if err != nil {
+		return nil, err
+	}
+
+	var result map[string][]string
+	err = dm.client.CallRemote(
+		context.Background(), "DotmeshRPC.GetReplicationLatencyForBranch",
+		struct {
+			Namespace, Name, Branch string
+		}{
+			Namespace: namespace,
+			Name:      name,
+			Branch:    branch,
+		},
+		&result,
+	)
+
+	return result, err
+}
+
 func (dm *DotmeshAPI) SwitchVolume(volumeName string) error {
 	return dm.setCurrentVolume(volumeName)
 }

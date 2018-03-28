@@ -267,14 +267,6 @@ func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
 	}
 
 	for _, branch := range bs {
-		if !scriptingMode {
-			if branch == currentBranch {
-				branch = "* " + branch
-			} else {
-				branch = "  " + branch
-			}
-		}
-
 		containerNames := []string{}
 
 		if branch == currentBranch {
@@ -294,9 +286,34 @@ func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
 			}
 		} else {
 			if len(containerNames) == 0 {
-				fmt.Fprintf(out, "%s\n", branch)
+				if branch == currentBranch {
+					fmt.Fprintf(out, "* %s\n", branch)
+				} else {
+					fmt.Fprintf(out, "  %s\n", branch)
+				}
 			} else {
 				fmt.Fprintf(out, "%s (containers: %s)\n", branch, strings.Join(containerNames, ","))
+			}
+		}
+
+		if !scriptingMode {
+			fmt.Fprintf(out, "Replication latencies:\n")
+		}
+
+		branchInternalName := branch
+		if branchInternalName == "master" {
+			branchInternalName = ""
+		}
+
+		latency, err := dm.GetReplicationLatencyForBranch(localDot, branchInternalName)
+		if err != nil {
+			return err
+		}
+		for server, missingCommits := range latency {
+			if scriptingMode {
+				fmt.Fprintf(out, "latency\t%s\t%s\n", server, strings.Join(missingCommits, "\t"))
+			} else {
+				fmt.Fprintf(out, "server %s is missing %+v\n", server, missingCommits)
 			}
 		}
 	}

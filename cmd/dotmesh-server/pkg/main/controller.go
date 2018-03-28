@@ -818,3 +818,44 @@ func (s *InMemoryState) CreateFilesystem(
 
 	return fs, ch, nil
 }
+
+// Returns a map from server name to a list of commit IDs that server is MISSING
+func (s *InMemoryState) GetReplicationLatency(fs string) (error, map[string][]string) {
+	commitsOnServer := map[string]map[string]struct{}{}
+	allCommits := map[string]struct{}{}
+
+	func() {
+		s.globalSnapshotCacheLock.Lock()
+		defer s.globalSnapshotCacheLock.Unlock()
+		for server, filesystems := range *(s.globalSnapshotCache) {
+			snapshots, ok := filesystems[fs]
+			commitsOnServer[server] = map[string]struct{}{}
+			if ok {
+				commitsOnServer[server] = map[string]struct{}{}
+				for _, snapshot := range snapshots {
+					commitsOnServer[server][snapshot.Id] = struct{}{}
+					allCommits[snapshot.Id] = struct{}{}
+				}
+			}
+		}
+	}()
+
+	log.Printf("[GetReplicationLatency] got initial data: %+v", commitsOnServer)
+	log.Printf("[GetReplicationLatency] all commits: %+v", allCommits)
+
+	result := map[string][]string{}
+	// Compute which elements are missing for each server
+	for server, commits := range commitsOnServer {
+		missingForServer := []string{}
+		for commit, _ := range allCommits {
+			_, ok := commits[commit]
+			if !ok {
+				missingForServer = append(missingForServer, commit)
+			}
+		}
+		result[server] = missingForServer
+	}
+
+	log.Printf("[GetReplicationLatency] result: %+v", result)
+	return nil, result
+}
