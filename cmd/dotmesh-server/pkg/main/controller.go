@@ -80,12 +80,6 @@ func (s *InMemoryState) deleteFilesystem(filesystemId string) error {
 	}()
 
 	func() {
-		s.mastersCacheLock.Lock()
-		defer s.mastersCacheLock.Unlock()
-		delete(*s.mastersCache, filesystemId)
-	}()
-
-	func() {
 		s.globalContainerCacheLock.Lock()
 		defer s.globalContainerCacheLock.Unlock()
 		delete(*s.globalContainerCache, filesystemId)
