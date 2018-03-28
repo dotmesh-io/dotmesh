@@ -29,6 +29,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"reflect"
 	"sync"
 
 	"golang.org/x/net/context"
@@ -46,6 +47,20 @@ type Remote struct {
 	CurrentVolume        string
 	CurrentBranches      map[string]string
 	DefaultRemoteVolumes map[string]map[string]VolumeName
+}
+
+func (remote Remote) String() string {
+	v := reflect.ValueOf(remote)
+	toString := ""
+	for i := 0; i < v.NumField(); i++ {
+		fieldName := v.Type().Field(i).Name
+		if fieldName == "ApiKey" {
+			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, "****")
+		} else {
+			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, v.Field(i).Interface())
+		}
+	}
+	return toString
 }
 
 type Configuration struct {
@@ -315,6 +330,20 @@ type JsonRpcClient struct {
 	User     string
 	Hostname string
 	ApiKey   string
+}
+
+func (jsonRpcClient JsonRpcClient) String() string {
+	v := reflect.ValueOf(jsonRpcClient)
+	toString := ""
+	for i := 0; i < v.NumField(); i++ {
+		fieldName := v.Type().Field(i).Name
+		if fieldName == "ApiKey" {
+			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, "****")
+		} else {
+			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, v.Field(i).Interface())
+		}
+	}
+	return toString
 }
 
 type Address struct {

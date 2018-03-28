@@ -128,17 +128,101 @@ func findFilesystemIdsOnSystem() []string {
 	return newLines
 }
 
-func deleteFilesystemInZFS(fs string) error {
-	cmd := exec.Command(ZFS, "destroy", "-r", fq(fs))
+func doSimpleZFSCommand(cmd *exec.Cmd, description string) error {
 	errBuffer := bytes.Buffer{}
 	cmd.Stderr = &errBuffer
 	err := cmd.Run()
 	if err != nil {
-		readErr, err := ioutil.ReadAll(&errBuffer)
+		readBytes, readErr := ioutil.ReadAll(&errBuffer)
 		if readErr != nil {
 			return fmt.Errorf("error reading error: %v", readErr)
 		}
-		return fmt.Errorf("error running zfs destroy on filesystem %s: %v, %v", fs, err, string(errBuffer.Bytes()))
+		return fmt.Errorf("error running ZFS command to %s: %v / %v", description, err, string(readBytes))
+	}
+
+	return nil
+}
+
+func deleteFilesystemInZFS(fs string) error {
+	cmd := exec.Command(ZFS, "destroy", "-r", fq(fs))
+	err := doSimpleZFSCommand(cmd, fmt.Sprintf("delete filesystem %s (full name: %s)", fs, fq(fs)))
+	return err
+}
+
+// Make a new clone newFS of existingFS, and then roll existingFS back
+// to snapshot rollbackTo.  This is easier said than done, as ZFS hs
+// rules about rolling the parent back past a clone point, but we have
+// ways around that.
+
+// We have (branch is called foo, rollbackTo = C)
+
+// us:     A -> B -> C -> D(foo)
+
+// We must bring about this situation, with a new automatically made
+// "foo-oops" branch to preserve the rolled-back-past state:
+
+// us:     A -> B -> C (foo)
+//                   \ -> D(foo-oops)
+
+// HOW NOT TO DO IT
+
+// step 1: create foo-oops by cloning foo
+// us:     A -> B -> C -> D(foo)(foo-oops)
+
+// step 2: move foo back to C, the rollbackTo point
+// us:     A -> B -> C(foo)                - !!! ZFS DISALLOWS THIS !!!
+//                   \ -> D(foo-oops)
+
+// CAN WE DO IT WITH PROMOTION?
+
+// It seems that if we create foo-oops by cloning foo, and then
+// promote foo-oops, all the snapshots become snapshots of foo-oops
+// rather than foo, and so foo@C doesn't exist, and foo-oops can't be
+// rolled back to foo-oops@C because of foo being a child of
+// it.. Hmmm.
+
+// CAN WE DO IT WITH RENAMES? YES, WE CAN!
+
+// step 1: rename foo to foo-oops
+// us:     A -> B -> C -> D(foo-oops)
+// # zfs rename foo foo-oops
+
+// step 2: create foo from foo-oops@C:
+// us:     A -> B -> C -> D(foo-oops)
+//                   \(foo)
+// # zfs clone foo-oops@C foo
+
+// step 3: make foo-oops be the branch from foo
+// us:     A -> B -> C (foo)
+//                   \ -> D(foo-oops)
+// # zfs promote foo
+
+func stashBranch(existingFs string, newFs string, rollbackTo string) error {
+	err := doSimpleZFSCommand(exec.Command(ZFS, "rename", fq(existingFs), fq(newFs)),
+		fmt.Sprintf("rename filesystem %s (%s) to %s (%s) for retroBranch",
+			existingFs, fq(existingFs),
+			newFs, fq(newFs),
+		),
+	)
+	if err != nil {
+		return err
+	}
+	err = doSimpleZFSCommand(exec.Command(ZFS, "clone", fq(newFs)+"@"+rollbackTo, fq(existingFs)),
+		fmt.Sprintf("clone snapshot %s of filesystem %s (%s) to %s (%s) for retroBranch",
+			rollbackTo, newFs, fq(newFs)+"@"+rollbackTo,
+			existingFs, fq(existingFs),
+		),
+	)
+	if err != nil {
+		return err
+	}
+	err = doSimpleZFSCommand(exec.Command(ZFS, "promote", fq(existingFs)),
+		fmt.Sprintf("promots filesystem %s (%s) for retroBranch",
+			existingFs, fq(existingFs),
+		),
+	)
+	if err != nil {
+		return err
 	}
 
 	return nil

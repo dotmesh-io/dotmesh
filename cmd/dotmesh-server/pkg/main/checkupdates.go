@@ -4,6 +4,7 @@ import (
 	"fmt"
 	cp "github.com/dotmesh-io/go-checkpoint"
 	"os/exec"
+	"strings"
 )
 
 func (state *InMemoryState) checkForUpdates() error {
@@ -43,7 +44,7 @@ func (state *InMemoryState) checkForUpdates() error {
 	if err != nil {
 		operatingSystem = fmt.Sprintf("ERROR: %+v", err)
 	} else {
-		operatingSystem = string(os)
+		operatingSystem = strings.TrimSpace(string(os))
 	}
 
 	archCommand := exec.Command("uname", "-a")
@@ -52,7 +53,7 @@ func (state *InMemoryState) checkForUpdates() error {
 	if err != nil {
 		architecture = fmt.Sprintf("ERROR: %+v", err)
 	} else {
-		architecture = string(arch)
+		architecture = strings.TrimSpace(string(arch))
 	}
 
 	checkParams := cp.CheckParams{

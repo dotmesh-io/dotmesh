@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -519,7 +520,7 @@ type TransferPollResult struct {
 	TransferRequestId string
 	Peer              string // hostname
 	User              string
-	ApiKey            string
+	ApiKey            string //protected value in toString()
 	Direction         string // "push" or "pull"
 
 	// Hold onto this information, it might become useful for e.g. recursive
@@ -551,6 +552,21 @@ type TransferPollResult struct {
 	Size               int64 // size of current segment in bytes
 	Sent               int64 // number of bytes of current segment sent so far
 	Message            string
+}
+
+func (transferPollResult TransferPollResult) String() string {
+	v := reflect.ValueOf(transferPollResult)
+	protectedValue := "****"
+	toString := "TransferPollResult : "
+	for i := 0; i < v.NumField(); i++ {
+		fieldName := v.Type().Field(i).Name
+		if fieldName == "ApiKey" {
+			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, protectedValue)
+		} else {
+			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, v.Field(i).Interface())
+		}
+	}
+	return toString
 }
 
 func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {

@@ -397,11 +397,15 @@ func (d *DotmeshRPC) List(
 		// user) doesn't have permission to read it.
 		if err != nil {
 			switch err := err.(type) {
-			default:
-				log.Printf("[List] err: %v", err)
-				return err
 			case PermissionDenied:
 				log.Printf("[List] permission denied reading %v", fs)
+				continue
+			default:
+				log.Printf("[List] err: %v", err)
+				// If we got an error looking something up, it might just be
+				// because the fsMachine list or the registry is temporarily
+				// inconsistent wrt the mastersCache. Proceed, at the risk of
+				// lying slightly...
 				continue
 			}
 		}
@@ -546,10 +550,20 @@ func (d *DotmeshRPC) Exists(
 	args *struct{ Namespace, Name, Branch string },
 	result *string,
 ) error {
-	*result = d.state.registry.Exists(VolumeName{args.Namespace, args.Name}, args.Branch)
+	fsId := d.state.registry.Exists(VolumeName{args.Namespace, args.Name}, args.Branch)
+	deleted, err := isFilesystemDeletedInEtcd(fsId)
+	if err != nil {
+		return err
+	}
+	if deleted {
+		*result = ""
+	} else {
+		*result = fsId
+	}
 	return nil
 }
 
+// TODO Dedupe this wrt Exists
 func (d *DotmeshRPC) Lookup(
 	r *http.Request,
 	args *struct{ Namespace, Name, Branch string },
@@ -561,7 +575,15 @@ func (d *DotmeshRPC) Lookup(
 	if err != nil {
 		return err
 	}
-	*result = filesystemId
+	deleted, err := isFilesystemDeletedInEtcd(filesystemId)
+	if err != nil {
+		return err
+	}
+	if deleted {
+		*result = ""
+	} else {
+		*result = filesystemId
+	}
 	return nil
 }
 
@@ -823,14 +845,12 @@ func (d *DotmeshRPC) registerFilesystemBecomeMaster(
 	filesystemNamespace, filesystemName, cloneName, filesystemId string,
 	path PathToTopLevelFilesystem,
 ) error {
+
+	// TODO handle the case where the registry entry exists but the filesystems
+	// (fsMachine map) entry doesn't.
+
 	log.Printf("[registerFilesystemBecomeMaster] called: filesystemNamespace=%s, filesystemName=%s, cloneName=%s, filesystemId=%s path=%+v",
 		filesystemNamespace, filesystemName, cloneName, filesystemId, path)
-	// ensure there's a filesystem machine for it (and its parents), otherwise
-	// it won't process any events. in the case where it already exists, this
-	// is a noop.
-	log.Printf("[registerFilesystemBecomeMaster] calling initFilesystemMachine for %s", filesystemId)
-	d.state.initFilesystemMachine(filesystemId)
-	log.Printf("[registerFilesystemBecomeMaster] done initFilesystemMachine for %s", filesystemId)
 
 	kapi, err := getEtcdKeysApi()
 	if err != nil {
@@ -841,14 +861,51 @@ func (d *DotmeshRPC) registerFilesystemBecomeMaster(
 		filesystemIds = append(filesystemIds, c.Clone.FilesystemId)
 	}
 	for _, f := range filesystemIds {
-		_, err := kapi.Get(
+		// If any filesystemId in the transfer is marked as deleted or
+		// cleanupPending, remove that mark. We want to allow it to live again,
+		// and we don't want it to be asynchronously deleted!
+		deleted, err := isFilesystemDeletedInEtcd(f)
+		if err != nil {
+			return err
+		}
+		if deleted {
+			_, err = kapi.Delete(
+				context.Background(),
+				fmt.Sprintf("%s/filesystems/deleted/%s", ETCD_PREFIX, f),
+				&client.DeleteOptions{},
+			)
+			// Key not found means someone deleted it between us checking and
+			// us deleting it. Proceed.
+			if err != nil && !client.IsKeyNotFound(err) {
+				return err
+			}
+			_, err = kapi.Delete(
+				context.Background(),
+				fmt.Sprintf("%s/filesystems/cleanupPending/%s", ETCD_PREFIX, f),
+				&client.DeleteOptions{},
+			)
+			if err != nil && !client.IsKeyNotFound(err) {
+				return err
+			}
+		}
+
+		// Only after we've made sure that the fsMachine won't immediately try
+		// to delete it (if it's being raised from the dead), ensure there's a
+		// filesystem machine for it (and its parents), otherwise it won't
+		// process any events. in the case where it already exists, this is a
+		// noop.
+		log.Printf("[registerFilesystemBecomeMaster] calling initFilesystemMachine for %s", f)
+		d.state.initFilesystemMachine(f)
+		log.Printf("[registerFilesystemBecomeMaster] done initFilesystemMachine for %s", f)
+
+		_, err = kapi.Get(
 			context.Background(),
 			fmt.Sprintf(
 				"%s/filesystems/masters/%s", ETCD_PREFIX, f,
 			),
 			nil,
 		)
-		if !client.IsKeyNotFound(err) && err != nil {
+		if err != nil && !client.IsKeyNotFound(err) {
 			return err
 		}
 		if err != nil {
@@ -1053,7 +1110,7 @@ func (d *DotmeshRPC) Transfer(
 	localExists := localFilesystemId != ""
 
 	if !remoteExists && !localExists {
-		return fmt.Errorf("Both local and remote filesystems don't exist. %+v", args)
+		return fmt.Errorf("Both local and remote filesystems don't exist.")
 	}
 	if args.Direction == "push" && !localExists {
 		return fmt.Errorf("Can't push when local doesn't exist")

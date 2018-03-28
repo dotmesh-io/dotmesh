@@ -54,6 +54,44 @@ func newFilesystemMachine(filesystemId string, s *InMemoryState) *fsMachine {
 	}
 }
 
+func activateClone(state *InMemoryState, topLevelFilesystemId, originFilesystemId, originSnapshotId, newCloneFilesystemId, newBranchName string) (string, error) {
+	// RegisterClone(name string, topLevelFilesystemId string, clone Clone)
+	err := state.registry.RegisterClone(
+		newBranchName, topLevelFilesystemId,
+		Clone{
+			newCloneFilesystemId,
+			Origin{
+				originFilesystemId, originSnapshotId,
+			},
+		},
+	)
+	if err != nil {
+		return "failed-clone-registration", err
+	}
+
+	// spin off a state machine
+	state.initFilesystemMachine(newCloneFilesystemId)
+	kapi, err := getEtcdKeysApi()
+	if err != nil {
+		return "failed-get-etcd", err
+	}
+	// claim the clone as mine, so that it can be mounted here
+	_, err = kapi.Set(
+		context.Background(),
+		fmt.Sprintf(
+			"%s/filesystems/masters/%s", ETCD_PREFIX, newCloneFilesystemId,
+		),
+		state.myNodeId,
+		// only modify current master if this is a new filesystem id
+		&client.SetOptions{PrevExist: client.PrevNoExist},
+	)
+	if err != nil {
+		return "failed-make-cloner-master", err
+	}
+
+	return "", nil
+}
+
 func (f *fsMachine) run() {
 	// TODO cancel this when we eventually support deletion
 	log.Printf("[run:%s] INIT", f.filesystemId)
@@ -760,23 +798,6 @@ func activeState(f *fsMachine) stateFn {
 			}
 			newCloneFilesystemId := uuid.String()
 
-			// RegisterClone(name string, topLevelFilesystemId string, clone Clone)
-			err = f.state.registry.RegisterClone(
-				newBranchName, topLevelFilesystemId,
-				Clone{
-					newCloneFilesystemId,
-					Origin{
-						originFilesystemId, originSnapshotId,
-					},
-				},
-			)
-			if err != nil {
-				f.innerResponses <- &Event{
-					Name: "failed-clone-registration", Args: &EventArgs{"err": err},
-				}
-				return backoffState
-			}
-
 			out, err := exec.Command(
 				ZFS, "clone",
 				fq(f.filesystemId)+"@"+originSnapshotId,
@@ -790,33 +811,17 @@ func activeState(f *fsMachine) stateFn {
 				}
 				return backoffState
 			}
-			// spin off a state machine
-			f.state.initFilesystemMachine(newCloneFilesystemId)
-			kapi, err := getEtcdKeysApi()
+
+			errorName, err := activateClone(f.state,
+				topLevelFilesystemId, originFilesystemId, originSnapshotId,
+				newCloneFilesystemId, newBranchName)
 			if err != nil {
 				f.innerResponses <- &Event{
-					Name: "failed-get-etcd",
-					Args: &EventArgs{"err": err},
+					Name: errorName, Args: &EventArgs{"err": err},
 				}
 				return backoffState
 			}
-			// claim the clone as mine, so that it can be mounted here
-			_, err = kapi.Set(
-				context.Background(),
-				fmt.Sprintf(
-					"%s/filesystems/masters/%s", ETCD_PREFIX, newCloneFilesystemId,
-				),
-				f.state.myNodeId,
-				// only modify current master if this is a new filesystem id
-				&client.SetOptions{PrevExist: client.PrevNoExist},
-			)
-			if err != nil {
-				f.innerResponses <- &Event{
-					Name: "failed-make-cloner-master",
-					Args: &EventArgs{"err": err},
-				}
-				return backoffState
-			}
+
 			f.innerResponses <- &Event{
 				Name: "cloned",
 				Args: &EventArgs{},
@@ -1250,6 +1255,47 @@ func discoveringState(f *fsMachine) stateFn {
 	}
 }
 
+// Attempt to recover from a divergence by creating a new branch from the current position, and rolling the
+// existing branch back to rollbackTo.
+// TODO: create a new local clone (branch), then roll back to
+// rollbackTo (except, you can't roll back a snapshot
+// that a clone depends on without promoting the clone... hmmm)
+
+// step 4: Make dotmesh aware of the new branch
+// ...something something fsmachine something etcd...
+
+func (f *fsMachine) recoverFromDivergence(rollbackTo snapshot) error {
+	// Mint an ID for the new branch
+	id, err := uuid.NewV4()
+	if err != nil {
+		return err
+	}
+	newFilesystemId := id.String()
+
+	// Roll back the filesystem to rollbackTo, but leaving the new filesystem pointing to its original state
+	err = stashBranch(f.filesystemId, newFilesystemId, rollbackTo.Id)
+	if err != nil {
+		return err
+	}
+
+	tlf, parentBranchName, err := f.state.registry.LookupFilesystemById(f.filesystemId)
+	if err != nil {
+		return err
+	}
+
+	topLevelFilesystemId := tlf.MasterBranch.Id
+	t := time.Now().UTC()
+	newBranchName := fmt.Sprintf("%s-DIVERGED-%s", parentBranchName, t.Format(time.RFC3339))
+
+	errorName, err := activateClone(f.state, topLevelFilesystemId, f.filesystemId, rollbackTo.Id, newFilesystemId, newBranchName)
+
+	if err != nil {
+		return fmt.Errorf("Error recovering from divergence: %+v in %s", err, errorName)
+	}
+
+	return nil
+}
+
 // attempt to pull some snapshots from the master, based on some hint that it
 // might be possible now
 func receivingState(f *fsMachine) stateFn {
@@ -1275,16 +1321,19 @@ func receivingState(f *fsMachine) stateFn {
 		case *ToSnapsAhead:
 			log.Printf("receivingState: ToSnapsAhead %s got %s", f.filesystemId, err)
 			// erk, slave is ahead of master
-			// TODO: create a new local clone (branch), then roll back to
-			// err.latestCommonSnapshot (except, you can't roll back a snapshot
-			// that a clone depends on without promoting the clone... hmmm)
+			errx := f.recoverFromDivergence(err.latestCommonSnapshot)
+			if errx != nil {
+				log.Printf("receivingState(%s): Unable to recover from divergence: %+v", f.filesystemId, errx)
+			}
+			// Go to discovering state, to update the world with our recent ZFS actions.
 			return discoveringState
 		case *ToSnapsDiverged:
 			log.Printf("receivingState: ToSnapsDiverged %s got %s", f.filesystemId, err)
-			// erk, slave has diverged from master
-			// TODO: create a new local clone (branch), then roll back to
-			// err.latestCommonSnapshot (except, you can't roll back a snapshot
-			// that a clone depends on without promoting the clone... hmmm)
+			errx := f.recoverFromDivergence(err.latestCommonSnapshot)
+			if errx != nil {
+				log.Printf("receivingState(%s): Unable to recover from divergence: %+v", f.filesystemId, errx)
+			}
+			// Go to discovering state, to update the world with our recent ZFS actions.
 			return discoveringState
 		case *NoCommonSnapshots:
 			log.Printf("receivingState: NoCommonSnapshots %s got %s", f.filesystemId, err)
