@@ -336,7 +336,11 @@ func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
 					masterState = ""
 				}
 
-				fmt.Fprintf(out, "server %s%s (status: %s) is missing %+v\n", server, masterState, serverStatus, missingCommits)
+				if len(missingCommits) > 0 {
+					fmt.Fprintf(out, "server %s%s (status: %s) is missing %+v\n", server, masterState, serverStatus, missingCommits)
+				} else {
+					fmt.Fprintf(out, "server %s%s (status: %s) is up to date\n", server, masterState, serverStatus)
+				}
 			}
 		}
 	}
