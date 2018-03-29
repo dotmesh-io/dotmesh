@@ -327,7 +327,7 @@ func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
 				} else {
 					masterState = "replica"
 				}
-				fmt.Fprintf(out, "latency\t%s\t%s\t%s\n", server, masterState, serverStatus, strings.Join(missingCommits, "\t"))
+				fmt.Fprintf(out, "latency\t%s\t%s\t%s\t%s\n", server, masterState, serverStatus, strings.Join(missingCommits, "\t"))
 			} else {
 				var masterState string
 				if dotmeshDot.Master == server {
