@@ -34,13 +34,14 @@ type DotmeshAPI struct {
 }
 
 type DotmeshVolume struct {
-	Id          string
-	Name        VolumeName
-	Clone       string
-	Master      string
-	SizeBytes   int64
-	DirtyBytes  int64
-	CommitCount int64
+	Id             string
+	Name           VolumeName
+	Clone          string
+	Master         string
+	SizeBytes      int64
+	DirtyBytes     int64
+	CommitCount    int64
+	ServerStatuses map[string]string // serverId => status
 }
 
 func CheckName(name string) bool {

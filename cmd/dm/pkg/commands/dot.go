@@ -230,10 +230,16 @@ func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
 
 	if namespace == activeNamespace && dot == activeDot {
 		if scriptingMode {
-			fmt.Fprintf(out, "current\n")
+			fmt.Fprintf(out, "selected\n")
 		} else {
-			fmt.Fprintf(out, "Dot is current.\n")
+			fmt.Fprintf(out, "Dot is currently selected.\n")
 		}
+	}
+
+	if scriptingMode {
+		fmt.Fprintf(out, "commitCount\t%d\n", dotmeshDot.CommitCount)
+	} else {
+		fmt.Fprintf(out, "Commits: %d\n", dotmeshDot.CommitCount)
 	}
 
 	if scriptingMode {
@@ -297,7 +303,7 @@ func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
 		}
 
 		if !scriptingMode {
-			fmt.Fprintf(out, "Replication latencies:\n")
+			fmt.Fprintf(out, "Replication Status:\n")
 		}
 
 		branchInternalName := branch
@@ -310,10 +316,27 @@ func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
 			return err
 		}
 		for server, missingCommits := range latency {
+			serverStatus, ok := dotmeshDot.ServerStatuses[server]
+			if !ok {
+				serverStatus = "unknown"
+			}
 			if scriptingMode {
-				fmt.Fprintf(out, "latency\t%s\t%s\n", server, strings.Join(missingCommits, "\t"))
+				var masterState string
+				if dotmeshDot.Master == server {
+					masterState = "master"
+				} else {
+					masterState = "replica"
+				}
+				fmt.Fprintf(out, "latency\t%s\t%s\t%s\n", server, masterState, serverStatus, strings.Join(missingCommits, "\t"))
 			} else {
-				fmt.Fprintf(out, "server %s is missing %+v\n", server, missingCommits)
+				var masterState string
+				if dotmeshDot.Master == server {
+					masterState = " [MASTER]"
+				} else {
+					masterState = ""
+				}
+
+				fmt.Fprintf(out, "server %s%s (status: %s) is missing %+v\n", server, masterState, serverStatus, missingCommits)
 			}
 		}
 	}
