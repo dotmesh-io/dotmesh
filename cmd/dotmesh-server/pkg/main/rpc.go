@@ -1754,3 +1754,45 @@ func (d *DotmeshRPC) GetReplicationLatencyForBranch(
 
 	return nil
 }
+
+func (d *DotmeshRPC) ForceBranchMasterById(
+	r *http.Request,
+	args *struct {
+		FilesystemId string
+		Master       string
+	},
+	result *bool,
+) error {
+	log.Printf("[ForceBranchMasterById] being called with: %+v", args)
+
+	kapi, err := getEtcdKeysApi()
+	if err != nil {
+		return err
+	}
+
+	newMaster := args.Master
+	if newMaster == "" {
+		// Default is THIS node
+		newMaster = d.state.myNodeId
+	}
+
+	key := fmt.Sprintf(
+		"%s/filesystems/masters/%s", ETCD_PREFIX, args.FilesystemId,
+	)
+
+	log.Printf("[ForceBranchMasterById] settings %s to %s", key, newMaster)
+
+	_, err = kapi.Set(
+		context.Background(),
+		key,
+		newMaster,
+		&client.SetOptions{},
+	)
+
+	if err != nil {
+		return err
+	}
+
+	*result = true
+	return nil
+}

@@ -826,6 +826,54 @@ func TestTwoNodesSameCluster(t *testing.T) {
 			t.Error(fmt.Sprintf("Unable to find world in transported data capsule, got '%s'", st))
 		}
 	})
+
+	t.Run("SmashBranchMaster", func(t *testing.T) {
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO'")
+
+		// Get list of server IDs and master/replica status
+		originalMaster := ""
+		originalReplica := ""
+		st1 := citools.OutputFromRunOnNode(t, node1, "dm dot show -H "+fsname+" | grep latency | cut -f 2,3")
+		for _, line := range strings.Split(st1, "\n") {
+			parts := strings.Split(line, "\t")
+			if len(parts) == 2 {
+				serverId := parts[0]
+				role := parts[1]
+				if role == "master" {
+					originalMaster = serverId
+				} else {
+					originalReplica = serverId
+				}
+			}
+		}
+
+		// Hulk Smash!
+		citools.RunOnNode(t, node1, "dm dot smash-branch-master "+fsname+" master "+originalReplica)
+
+		// It's asynch, so wait
+		time.Sleep(1 * time.Second)
+
+		// Check result
+		st2 := citools.OutputFromRunOnNode(t, node1, "dm dot show -H "+fsname+" | grep latency | cut -f 2,3")
+		for _, line := range strings.Split(st2, "\n") {
+			parts := strings.Split(line, "\t")
+			if len(parts) == 2 {
+				serverId := parts[0]
+				role := parts[1]
+				if role == "master" {
+					if serverId != originalReplica {
+						t.Errorf("Failed to unseat the current master: %s -> %s", st1, st2)
+					}
+				} else {
+					if serverId != originalMaster {
+						t.Errorf("Failed to promote current replica: %s -> %s", st1, st2)
+					}
+				}
+			}
+		}
+	})
+
 }
 
 func TestTwoDoubleNodeClusters(t *testing.T) {

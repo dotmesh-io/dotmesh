@@ -12,6 +12,23 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func NewCmdDotForceBranchMaster(out io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "smash-branch-master",
+		Short: "Abandon the current master node for a branch, possibly losing any data held on that node.",
+		Long:  "Online help: https://docs.dotmesh.com/references/cli/#FIXME",
+
+		Run: func(cmd *cobra.Command, args []string) {
+			err := branchSetMaster(cmd, args, out)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err.Error())
+				os.Exit(1)
+			}
+		},
+	}
+	return cmd
+}
+
 func NewCmdDotSetUpstream(out io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "set-upstream",
@@ -90,6 +107,7 @@ is used.`,
 	cmd.AddCommand(NewCmdDotSetUpstream(os.Stdout))
 	cmd.AddCommand(NewCmdDotShow(os.Stdout))
 	cmd.AddCommand(NewCmdDotDelete(os.Stdout))
+	cmd.AddCommand(NewCmdDotForceBranchMaster(os.Stdout))
 
 	return cmd
 }
@@ -136,6 +154,50 @@ func dotSetUpstream(cmd *cobra.Command, args []string, out io.Writer) error {
 
 	dm.Configuration.SetDefaultRemoteVolumeFor(peer, localNamespace, localDot, remoteNamespace, remoteDot)
 	return nil
+}
+
+func branchSetMaster(cmd *cobra.Command, args []string, out io.Writer) error {
+	dm, err := remotes.NewDotmeshAPI(configPath)
+	if err != nil {
+		return err
+	}
+
+	var dot, branch string
+
+	newMaster := ""
+
+	switch len(args) {
+	case 1:
+		dot, err = dm.CurrentVolume()
+		if err != nil {
+			return err
+		}
+
+		branch = args[0]
+	case 2:
+		dot = args[0]
+		branch = args[1]
+	case 3:
+		dot = args[0]
+		branch = args[1]
+		newMaster = args[2]
+	default:
+		return fmt.Errorf("Please specify [<dot>] <branch> [<server ID>] as arguments.")
+	}
+
+	if branch == "master" {
+		// "master" is spelt "" in the API
+		branch = ""
+	}
+
+	namespace, name, err := remotes.ParseNamespacedVolume(dot)
+	if err != nil {
+		return err
+	}
+
+	err = dm.ForceBranchMaster(namespace, name, branch, newMaster)
+
+	return err
 }
 
 func dotDelete(cmd *cobra.Command, args []string, out io.Writer) error {
