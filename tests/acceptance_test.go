@@ -882,6 +882,39 @@ func TestTwoNodesSameCluster(t *testing.T) {
 		}
 	})
 
+	t.Run("Divergence", func(t *testing.T) {
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO'")
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+		citools.RunOnNode(t, node1, "dm commit -m 'First commit'")
+		time.Sleep(1 * time.Second)
+
+		// Kill node1
+		citools.RunOnNode(t, node1, "docker stop dotmesh-server dotmesh-server-inner")
+		time.Sleep(1 * time.Second)
+
+		// Commit on node2
+		citools.RunOnNode(t, node2, "dm dot smash-branch-master "+fsname+" master")
+		citools.RunOnNode(t, node2, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO2'")
+		citools.RunOnNode(t, node2, "dm switch "+fsname)
+		citools.RunOnNode(t, node2, "dm commit -m 'node2 commit'")
+
+		// Kill node2
+		citools.RunOnNode(t, node2, "docker stop dotmesh-server dotmesh-server-inner")
+		time.Sleep(1 * time.Second)
+
+		// Start node1
+		citools.RunOnNode(t, node1, "docker start dotmesh-server dotmesh-server-inner")
+		time.Sleep(4 * time.Second)
+
+		// Commit on node1
+		citools.RunOnNode(t, node1, "dm dot smash-branch-master "+fsname+" master")
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO3'")
+		citools.RunOnNode(t, node1, "dm commit -m 'node1 commit'")
+
+		// Start node2 and enjoy the diverged state
+		citools.RunOnNode(t, node1, "docker start dotmesh-server dotmesh-server-inner")
+	})
 }
 
 func TestTwoDoubleNodeClusters(t *testing.T) {
