@@ -197,20 +197,9 @@ func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
 		fmt.Fprintf(out, "Dot %s/%s:\n", namespace, dot)
 	}
 
-	var dotmeshDot *remotes.DotmeshVolume
-	vs, err := dm.AllVolumes()
+	dotmeshDot, err := dm.BranchInfo(namespace, dot, "")
 	if err != nil {
 		return err
-	}
-
-	for _, v := range vs {
-		if v.Name.Namespace == namespace && v.Name.Name == dot {
-			dotmeshDot = &v
-			break
-		}
-	}
-	if dotmeshDot == nil {
-		return fmt.Errorf("Unable to find dot '%s'", localDot)
 	}
 
 	if scriptingMode {
@@ -291,19 +280,20 @@ func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
 				fmt.Fprintf(out, "container\t%s\t%s\n", branch, c)
 			}
 		} else {
-			if len(containerNames) == 0 {
-				if branch == currentBranch {
-					fmt.Fprintf(out, "* %s\n", branch)
-				} else {
-					fmt.Fprintf(out, "  %s\n", branch)
-				}
+			if branch == currentBranch {
+				fmt.Fprintf(out, "* %s", branch)
 			} else {
-				fmt.Fprintf(out, "%s (containers: %s)\n", branch, strings.Join(containerNames, ","))
+				fmt.Fprintf(out, "  %s", branch)
+			}
+			if len(containerNames) == 0 {
+				fmt.Fprintf(out, "\n")
+			} else {
+				fmt.Fprintf(out, " (containers: %s)\n", branch, strings.Join(containerNames, ","))
 			}
 		}
 
 		if !scriptingMode {
-			fmt.Fprintf(out, "Replication Status:\n")
+			fmt.Fprintf(out, "   Replication Status:\n")
 		}
 
 		branchInternalName := branch
@@ -337,9 +327,9 @@ func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
 				}
 
 				if len(missingCommits) > 0 {
-					fmt.Fprintf(out, "server %s%s (status: %s) is missing %+v\n", server, masterState, serverStatus, missingCommits)
+					fmt.Fprintf(out, "    server %s%s (status: %s) is missing %+v\n", server, masterState, serverStatus, missingCommits)
 				} else {
-					fmt.Fprintf(out, "server %s%s (status: %s) is up to date\n", server, masterState, serverStatus)
+					fmt.Fprintf(out, "    server %s%s (status: %s) is up to date\n", server, masterState, serverStatus)
 				}
 			}
 		}

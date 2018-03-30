@@ -352,6 +352,26 @@ func (dm *DotmeshAPI) AllBranches(volumeName string) ([]string, error) {
 	return branches, err
 }
 
+func (dm *DotmeshAPI) BranchInfo(namespace, name, branch string) (DotmeshVolume, error) {
+	var fsId string
+	err := dm.client.CallRemote(
+		context.Background(), "DotmeshRPC.Lookup", struct{ Namespace, Name, Branch string }{
+			Namespace: namespace,
+			Name:      name,
+			Branch:    branch},
+		&fsId,
+	)
+	if err != nil {
+		return DotmeshVolume{}, err
+	}
+
+	var result DotmeshVolume
+	err = dm.client.CallRemote(
+		context.Background(), "DotmeshRPC.Get", fsId, &result,
+	)
+	return result, err
+}
+
 func (dm *DotmeshAPI) AllVolumes() ([]DotmeshVolume, error) {
 	filesystems := map[string]map[string]DotmeshVolume{}
 	result := []DotmeshVolume{}
