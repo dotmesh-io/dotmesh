@@ -39,8 +39,10 @@ const (
 const maxUnavailable = 1
 
 func main() {
-	// When running as a pod in-cluster, a kubeconfig is not needed. Instead this will make use of the service account injected into the pod.
-	// However, allow the use of a local kubeconfig as this can make local development & testing easier.
+	// When running as a pod in-cluster, a kubeconfig is not needed. Instead
+	// this will make use of the service account injected into the pod.
+	// However, allow the use of a local kubeconfig as this can make local
+	// development & testing easier.
 	kubeconfig := flag.String("kubeconfig", "", "Path to a kubeconfig file")
 
 	// We log to stderr because glog will default to logging to a file.
@@ -82,9 +84,11 @@ func newRebootController(client kubernetes.Interface) *rebootController {
 	indexer, informer := cache.NewIndexerInformer(
 		&cache.ListWatch{
 			ListFunc: func(lo meta_v1.ListOptions) (runtime.Object, error) {
-				// We do not add any selectors because we want to watch all nodes.
-				// This is so we can determine the total count of "unavailable" nodes.
-				// However, this could also be implemented using multiple informers (or better, shared-informers)
+				// We do not add any selectors because we want to watch all
+				// nodes.  This is so we can determine the total count of
+				// "unavailable" nodes.  However, this could also be
+				// implemented using multiple informers (or better,
+				// shared-informers)
 				return client.Core().Nodes().List(lo)
 			},
 			WatchFunc: func(lo meta_v1.ListOptions) (watch.Interface, error) {
@@ -93,10 +97,12 @@ func newRebootController(client kubernetes.Interface) *rebootController {
 		},
 		// The types of objects this informer will return
 		&v1.Node{},
-		// The resync period of this object. This will force a re-queue of all cached objects at this interval.
-		// Every object will trigger the `Updatefunc` even if there have been no actual updates triggered.
-		// In some cases you can set this to a very high interval - as you can assume you will see periodic updates in normal operation.
-		// The interval is set low here for demo purposes.
+		// The resync period of this object. This will force a re-queue of all
+		// cached objects at this interval.  Every object will trigger the
+		// `Updatefunc` even if there have been no actual updates triggered.
+		// In some cases you can set this to a very high interval - as you can
+		// assume you will see periodic updates in normal operation.  The
+		// interval is set low here for demo purposes.
 		10*time.Second,
 		// Callback Functions to trigger on add/update/delete
 		cache.ResourceEventHandlerFuncs{
@@ -120,7 +126,8 @@ func newRebootController(client kubernetes.Interface) *rebootController {
 	)
 
 	rc.informer = informer
-	// NodeLister avoids some boilerplate code (e.g. convert runtime.Object to *v1.node)
+	// NodeLister avoids some boilerplate code (e.g. convert runtime.Object to
+	// *v1.node)
 	rc.nodeLister = lister_v1.NewNodeLister(indexer)
 
 	return rc
@@ -132,13 +139,15 @@ func (c *rebootController) Run(stopCh chan struct{}) {
 
 	go c.informer.Run(stopCh)
 
-	// Wait for all caches to be synced, before processing items from the queue is started
+	// Wait for all caches to be synced, before processing items from the queue
+	// is started
 	if !cache.WaitForCacheSync(stopCh, c.informer.HasSynced) {
 		glog.Error(fmt.Errorf("Timed out waiting for caches to sync"))
 		return
 	}
 
-	// Launching additional goroutines would parallelize workers consuming from the queue (but we don't really need this)
+	// Launching additional goroutines would parallelize workers consuming from
+	// the queue (but we don't really need this)
 	go wait.Until(c.runWorker, time.Second, stopCh)
 
 	<-stopCh
@@ -156,13 +165,14 @@ func (c *rebootController) processNext() bool {
 	if quit {
 		return false
 	}
-	// Tell the queue that we are done with processing this key. This unblocks the key for other workers
-	// This allows safe parallel processing because two pods with the same key are never processed in
-	// parallel.
+	// Tell the queue that we are done with processing this key. This unblocks
+	// the key for other workers. This allows safe parallel processing because
+	// two pods with the same key are never processed in parallel.
 	defer c.queue.Done(key)
 	// Invoke the method containing the business logic
 	err := c.process(key.(string))
-	// Handle the error if something went wrong during the execution of the business logic
+	// Handle the error if something went wrong during the execution of the
+	// business logic
 	c.handleErr(err, key)
 	return true
 }
@@ -189,8 +199,12 @@ func (c *rebootController) process(key string) error {
 	}
 
 	if unavailable >= maxUnavailable {
-		// TODO(aaron): We might want this case to retry indefinitely. Could create a specific error an check in handleErr()
-		return fmt.Errorf("Too many nodes unvailable (%d/%d). Skipping reboot of %s", unavailable, maxUnavailable, node.Name)
+		// TODO(aaron): We might want this case to retry indefinitely. Could
+		// create a specific error an check in handleErr()
+		return fmt.Errorf(
+			"Too many nodes unvailable (%d/%d). Skipping reboot of %s",
+			unavailable, maxUnavailable, node.Name,
+		)
 	}
 
 	// We should not modify the cache object directly, so we make a copy first
@@ -206,19 +220,22 @@ func (c *rebootController) process(key string) error {
 
 func (c *rebootController) handleErr(err error, key interface{}) {
 	if err == nil {
-		// Forget about the #AddRateLimited history of the key on every successful synchronization.
-		// This ensures that future processing of updates for this key is not delayed because of
-		// an outdated error history.
+		// Forget about the #AddRateLimited history of the key on every
+		// successful synchronization.  This ensures that future processing of
+		// updates for this key is not delayed because of an outdated error
+		// history.
 		c.queue.Forget(key)
 		return
 	}
 
-	// This controller retries 5 times if something goes wrong. After that, it stops trying.
+	// This controller retries 5 times if something goes wrong. After that, it
+	// stops trying.
 	if c.queue.NumRequeues(key) < 5 {
 		glog.Infof("Error processing node %v: %v", key, err)
 
 		// Re-enqueue the key rate limited. Based on the rate limiter on the
-		// queue and the re-enqueue history, the key will be processed later again.
+		// queue and the re-enqueue history, the key will be processed later
+		// again.
 		c.queue.AddRateLimited(key)
 		return
 	}
