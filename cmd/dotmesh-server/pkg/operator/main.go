@@ -202,7 +202,7 @@ func (c *dotmeshController) process(key string) error {
 			unused_pvs.push(make_new_pv(config.new_pv_size))
 				storage = unused_pvs.pop()
 			else:
-				Storage = local()
+				storage = local()
 			create_dotmesh_with_existing_pv(storage, node)
 
 		for each dotmesh in unnoded_dotmeshes:
