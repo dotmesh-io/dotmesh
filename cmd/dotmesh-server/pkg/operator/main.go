@@ -8,17 +8,16 @@ import (
 	"github.com/golang/glog"
 	"k8s.io/api/core/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
+	//"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	lister_v1 "k8s.io/client-go/listers/core/v1"
-	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/util/workqueue"
-
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/workqueue"
 )
 
 func GetClientConfig(kubeconfig string) (*rest.Config, error) {
@@ -68,18 +67,21 @@ func main() {
 	newRebootController(client).Run(stopCh)
 }
 
-type rebootController struct {
+type dotmeshController struct {
 	client     kubernetes.Interface
 	nodeLister lister_v1.NodeLister
 	informer   cache.Controller
 	queue      workqueue.RateLimitingInterface
 }
 
-func newRebootController(client kubernetes.Interface) *rebootController {
-	rc := &rebootController{
+func newRebootController(client kubernetes.Interface) *dotmeshController {
+	rc := &dotmeshController{
 		client: client,
 		queue:  workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
 	}
+
+	// TODO: listen for node_list_changed, dotmesh_pod_list_changed,
+	// config_changed or pv_list_changed
 
 	indexer, informer := cache.NewIndexerInformer(
 		&cache.ListWatch{
@@ -133,7 +135,7 @@ func newRebootController(client kubernetes.Interface) *rebootController {
 	return rc
 }
 
-func (c *rebootController) Run(stopCh chan struct{}) {
+func (c *dotmeshController) Run(stopCh chan struct{}) {
 	defer c.queue.ShutDown()
 	glog.Info("Starting RebootController")
 
@@ -154,12 +156,12 @@ func (c *rebootController) Run(stopCh chan struct{}) {
 	glog.Info("Stopping Reboot Controller")
 }
 
-func (c *rebootController) runWorker() {
+func (c *dotmeshController) runWorker() {
 	for c.processNext() {
 	}
 }
 
-func (c *rebootController) processNext() bool {
+func (c *dotmeshController) processNext() bool {
 	// Wait until there is a new item in the working queue
 	key, quit := c.queue.Get()
 	if quit {
@@ -177,7 +179,36 @@ func (c *rebootController) processNext() bool {
 	return true
 }
 
-func (c *rebootController) process(key string) error {
+func (c *dotmeshController) process(key string) error {
+	/*
+		TODO: implement the following algorithm in pseudocode.
+
+		nodes = list_of_eligible_nodes_in_az(config.node_eligibility_filter)
+
+		for node in nodes:
+			if not labelled(node):
+				label(node)
+
+		pvs = list_of_dotmesh_pvs_in_az()
+		dotmeshes = list_of_dotmesh_instances_in_az()
+		orphan_dotmeshes = filter(node_of_dotmesh not in nodes, dotmeshes)
+		unused_pvs = pvs - map(pv_of_dotmesh, dotmesh_nodes)
+		unnoded_dotmeshes = filter(node_of_dotmesh == null, dotmeshes)
+
+		undotted_nodes = nodes - map(node_of_dotmesh, dotmeshes)
+		for each node in undotted_nodes:
+			 if config.use_pv_storage:
+		if len(unused_pvs) == 0:
+			unused_pvs.push(make_new_pv(config.new_pv_size))
+				storage = unused_pvs.pop()
+			else:
+				Storage = local()
+			create_dotmesh_with_existing_pv(storage, node)
+
+		for each dotmesh in unnoded_dotmeshes:
+			delete_dotmesh(dotmesh)
+
+	*/
 	node, err := c.nodeLister.Get(key)
 	if err != nil {
 		return fmt.Errorf("failed to retrieve node by key %q: %v", key, err)
@@ -193,7 +224,7 @@ func (c *rebootController) process(key string) error {
 	}
 
 	// Determine if we should reboot based on maximum number of unavailable nodes
-	unavailable, err := c.unavailableNodeCount()
+	unavailable := 0
 	if err != nil {
 		return fmt.Errorf("Failed to determine number of unavailable nodes: %v", err)
 	}
@@ -218,7 +249,7 @@ func (c *rebootController) process(key string) error {
 	return nil
 }
 
-func (c *rebootController) handleErr(err error, key interface{}) {
+func (c *dotmeshController) handleErr(err error, key interface{}) {
 	if err == nil {
 		// Forget about the #AddRateLimited history of the key on every
 		// successful synchronization.  This ensures that future processing of
@@ -242,37 +273,4 @@ func (c *rebootController) handleErr(err error, key interface{}) {
 
 	c.queue.Forget(key)
 	glog.Errorf("Dropping node %q out of the queue: %v", key, err)
-}
-
-func (c *rebootController) unavailableNodeCount() (int, error) {
-	nodes, err := c.nodeLister.List(labels.Everything())
-	if err != nil {
-		return 0, err
-	}
-	var unavailable int
-	for _, n := range nodes {
-		if nodeIsRebooting(n) {
-			unavailable++
-			continue
-		}
-		for _, c := range n.Status.Conditions {
-			if c.Type == v1.NodeReady && c.Status == v1.ConditionFalse {
-				unavailable++
-			}
-		}
-	}
-	return unavailable, nil
-}
-
-func nodeIsRebooting(n *v1.Node) bool {
-	// Check if node is marked for reeboot-in-progress
-	if n.Annotations == nil {
-		return false // No annotations - not marked as needing reboot
-	}
-	if _, ok := n.Annotations[RebootInProgressAnnotation]; ok {
-		return true
-	}
-	// Check if node is already marked for immediate reboot
-	_, ok := n.Annotations[RebootAnnotation]
-	return ok
 }
