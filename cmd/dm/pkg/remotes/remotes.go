@@ -363,6 +363,7 @@ func (j *JsonRpcClient) tryAddresses(ctx context.Context, as []Address) (Address
 			errs = append(errs, err)
 		}
 	}
+	// TODO distinguish between network errors and API errors here: #356
 	return Address{}, fmt.Errorf("Unable to connect to any of the addresses attempted: %+v, errs: %s", as, errs)
 }
 
