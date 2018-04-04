@@ -1809,13 +1809,28 @@ func (d *DotmeshRPC) RestoreEtcd(
 	twoLevelNodesToClobber := []*client.Node{
 		find(response.Node, []string{"registry", "filesystems"}),
 		find(response.Node, []string{"registry", "clones"}),
+		find(response.Node, []string{"filesystems", "masters"}),
 	}
 
 	setEtcdKey := func(n client.Node) error {
 		if n.Key == fmt.Sprintf("%s/users/%s", ETCD_PREFIX, ADMIN_USER_UUID) {
+			// don't restore the admin user
 			return nil
 		}
-		_, err = kapi.Set(context.Background(), n.Key, n.Value, &client.SetOptions{})
+		_, err = kapi.Set(
+			context.Background(),
+			n.Key,
+			n.Value,
+			// Only set values that don't already exist. This is so that
+			// restoring from a backup of the same cluster will restore masters
+			// records while it won't clobber masters records for other
+			// clusters (which e.g. are being pushed to as a backup).  Note
+			// that because we delete the entire registry, registry entries
+			// _will_ get updated (e.g. adding collaborators to a dot).
+			&client.SetOptions{
+				PrevExist: "PrevNoExist",
+			},
+		)
 		return err
 	}
 
