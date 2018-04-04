@@ -1809,12 +1809,12 @@ func (d *DotmeshRPC) RestoreEtcd(
 
 	oneLevelNodesToClobber := []*client.Node{
 		find(response.Node, []string{"users"}),
+		find(response.Node, []string{"filesystems", "masters"}),
 	}
 
 	twoLevelNodesToClobber := []*client.Node{
 		find(response.Node, []string{"registry", "filesystems"}),
 		find(response.Node, []string{"registry", "clones"}),
-		find(response.Node, []string{"filesystems", "masters"}),
 	}
 
 	setEtcdKey := func(n client.Node) error {
