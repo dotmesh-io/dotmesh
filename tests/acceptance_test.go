@@ -1352,6 +1352,9 @@ func TestBackupAndRestoreTwoSingleNodeClusters(t *testing.T) {
 			t.Error(err)
 		}
 
+		// Wait a moment for etcd to reload itself.
+		time.Sleep(1 * time.Second)
+
 		listResp := map[string]map[string]DotmeshVolume{}
 		// on the target cluster, can bob see his filesystem? can he auth? can
 		// he see that it's his?

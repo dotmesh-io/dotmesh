@@ -1245,6 +1245,19 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		if err != nil {
 			return err
 		}
+
+		// From time to time, the entire registry will be deleted (see rpc.go
+		// RestoreEtcd). Detect this case and wipe out the registry records as
+		// commonly dots will be re-owned in this scenario.
+
+		if node.Node.Key == fmt.Sprintf("%s/registry", ETCD_PREFIX) {
+			s.resetRegistry()
+			return fmt.Errorf(
+				"intentionally reloading from etcd because " +
+					"we noticed the registry disappear.",
+			)
+		}
+
 		variant := getVariant(node.Node)
 		if variant == "filesystems/masters" {
 			updateMine(node.Node)

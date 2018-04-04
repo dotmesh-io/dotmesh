@@ -67,6 +67,10 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 	return s
 }
 
+func (s *InMemoryState) resetRegistry() {
+	s.registry = NewRegistry(s)
+}
+
 func (s *InMemoryState) deleteFilesystem(filesystemId string) error {
 	var errors []error
 

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/coreos/etcd/client"
 	"golang.org/x/net/context"
@@ -1768,6 +1769,35 @@ func (d *DotmeshRPC) RestoreEtcd(
 	}
 	response := client.Response{}
 	err = json.Unmarshal([]byte(args.Dump), &response)
+	if err != nil {
+		return err
+	}
+
+	// Before destroying the registry, back it up
+	node, err := kapi.Get(context.Background(),
+		fmt.Sprintf("%s/registry", ETCD_PREFIX),
+		&client.GetOptions{Recursive: true, Sort: false, Quorum: false},
+	)
+	if err != nil {
+		return err
+	}
+
+	resultBytes, err := json.Marshal(node)
+	if err != nil {
+		return err
+	}
+
+	// XXX: might run into size limits on keys one day.
+	_, err = kapi.Set(context.Background(),
+		fmt.Sprintf("%s/registry-backup-%d", ETCD_PREFIX, time.Now().Unix()),
+		string(resultBytes),
+		&client.SetOptions{},
+	)
+
+	_, err = kapi.Delete(context.Background(),
+		fmt.Sprintf("%s/registry", ETCD_PREFIX),
+		&client.DeleteOptions{Recursive: true, Dir: true},
+	)
 	if err != nil {
 		return err
 	}
