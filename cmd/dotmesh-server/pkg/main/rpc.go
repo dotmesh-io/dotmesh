@@ -1778,21 +1778,24 @@ func (d *DotmeshRPC) RestoreEtcd(
 		fmt.Sprintf("%s/registry", ETCD_PREFIX),
 		&client.GetOptions{Recursive: true, Sort: false, Quorum: false},
 	)
-	if err != nil {
+	if err != nil && !client.IsKeyNotFound(err) {
 		return err
 	}
 
-	resultBytes, err := json.Marshal(node)
-	if err != nil {
-		return err
-	}
+	// Don't try to back up a key that doesn't exist.
+	if err == nil {
+		resultBytes, err := json.Marshal(node)
+		if err != nil {
+			return err
+		}
 
-	// XXX: might run into size limits on keys one day.
-	_, err = kapi.Set(context.Background(),
-		fmt.Sprintf("%s/registry-backup-%d", ETCD_PREFIX, time.Now().Unix()),
-		string(resultBytes),
-		&client.SetOptions{},
-	)
+		// XXX: might run into size limits on keys one day.
+		_, err = kapi.Set(context.Background(),
+			fmt.Sprintf("%s/registry-backup-%d", ETCD_PREFIX, time.Now().Unix()),
+			string(resultBytes),
+			&client.SetOptions{},
+		)
+	}
 
 	_, err = kapi.Delete(context.Background(),
 		fmt.Sprintf("%s/registry", ETCD_PREFIX),
