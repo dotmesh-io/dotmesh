@@ -1799,7 +1799,7 @@ func (d *DotmeshRPC) RestoreEtcd(
 		&client.DeleteOptions{Recursive: true, Dir: true},
 	)
 
-	if err != nil && !client.IsNotExist(err) {
+	if err != nil && !client.IsKeyNotFound(err) {
 		// It's OK if it didn't exist.
 		return err
 	}
