@@ -1836,7 +1836,11 @@ func (d *DotmeshRPC) RestoreEtcd(
 				PrevExist: client.PrevNoExist,
 			},
 		)
-		return err
+		// Avoid clobbering existing keys, but don't fail.
+		if !strings.Contains(fmt.Sprintf("%s", err), "Key already exists") {
+			return err
+		}
+		return nil
 	}
 
 	for _, node := range oneLevelNodesToClobber {
