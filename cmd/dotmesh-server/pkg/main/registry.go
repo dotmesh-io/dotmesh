@@ -481,6 +481,7 @@ func (r *Registry) LookupFilesystemById(filesystemId string) (TopLevelFilesystem
 	for _, tlf := range r.TopLevelFilesystems {
 		if tlf.MasterBranch.Id == filesystemId {
 			// empty-string cloneName ~= "master branch"
+			quietLogger(fmt.Sprintf("[LookupFilesystemById] result: %+v, clone: master", tlf))
 			return tlf, "", nil
 		}
 	}
@@ -490,6 +491,7 @@ func (r *Registry) LookupFilesystemById(filesystemId string) (TopLevelFilesystem
 				// find the tlf for this topLevelFilesystemId
 				for _, tlf := range r.TopLevelFilesystems {
 					if tlf.MasterBranch.Id == topLevelFilesystemId {
+						quietLogger(fmt.Sprintf("[LookupFilesystemById] result: %+v, clone: %v", tlf, cloneName))
 						return tlf, cloneName, nil
 					}
 				}
