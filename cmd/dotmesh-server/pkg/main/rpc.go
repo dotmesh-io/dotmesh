@@ -1828,7 +1828,7 @@ func (d *DotmeshRPC) RestoreEtcd(
 			// that because we delete the entire registry, registry entries
 			// _will_ get updated (e.g. adding collaborators to a dot).
 			&client.SetOptions{
-				PrevExist: "PrevNoExist",
+				PrevExist: client.PrevNoExist,
 			},
 		)
 		return err
