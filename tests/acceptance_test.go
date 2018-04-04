@@ -1277,6 +1277,102 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 	})
 }
 
+func TestBackupAndRestoreTwoSingleNodeClusters(t *testing.T) {
+	citools.TeardownFinishedTestRuns()
+
+	f := citools.Federation{
+		citools.NewCluster(1), // cluster_0_node_0
+		citools.NewCluster(1), // cluster_1_node_0
+	}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
+
+	citools.StartTiming()
+	err := f.Start(t)
+	if err != nil {
+		t.Error(err)
+	}
+	cluster_0 := f[0].GetNode(0).Container
+
+	t.Run("BackupAndRestore", func(t *testing.T) {
+
+		// FOR OUR OWN OPERATIONAL USE
+		//
+		// Test that pushing dots and restoring etcd metadata results in intact
+		// users & their dots (TODO: and their collaborators).
+
+		bobKey := "bob is great"
+
+		// Create user bob on the first node
+		err := citools.RegisterUser(f[0].GetNode(0), "bob", "bob@bob.com", bobKey)
+		if err != nil {
+			t.Error(err)
+		}
+
+		var createResp bool
+
+		err = citools.DoRPC(f[0].GetNode(0).IP, "bob", bobKey,
+			"DotmeshRPC.Create",
+			VolumeName{Namespace: "bob", Name: "restoreme"},
+			&createResp)
+		if err != nil {
+			t.Error(err)
+		}
+
+		fsname := "bob/restoreme"
+
+		citools.RunOnNode(t, cluster_0, "dm switch "+fsname)
+		citools.RunOnNode(t, cluster_0, "dm commit -m 'hello'")
+
+		citools.RunOnNode(t, cluster_0, "dm push cluster_1")
+
+		apiKeyNode1 := f[0].GetNode(0).ApiKey
+		apiKeyNode2 := f[1].GetNode(0).ApiKey
+
+		var resp string
+		err = citools.DoRPC(f[0].GetNode(0).IP, "admin", apiKeyNode1,
+			"DotmeshRPC.DumpEtcd",
+			struct {
+				Prefix string
+			}{Prefix: ""},
+			&resp)
+		if err != nil {
+			t.Error(err)
+		}
+
+		var restoreResp bool
+		err = citools.DoRPC(f[1].GetNode(0).IP, "admin", apiKeyNode2,
+			"DotmeshRPC.RestoreEtcd",
+			struct {
+				Prefix string
+				Dump   string
+			}{Prefix: "", Dump: resp},
+			&restoreResp)
+		if err != nil {
+			t.Error(err)
+		}
+
+		listResp := map[string]map[string]DotmeshVolume{}
+		// on the target cluster, can bob see his filesystem? can he auth? can
+		// he see that it's his?
+		err = citools.DoRPC(f[1].GetNode(0).IP, "bob", bobKey,
+			"DotmeshRPC.List",
+			struct {
+			}{},
+			&listResp)
+		if err != nil {
+			t.Error(err)
+		}
+
+		d, ok := listResp["bob"]["restoreme"]
+		if !ok {
+			t.Errorf("IT WAS NOT OK: %+v", listResp)
+		}
+		fmt.Printf("dot: %+v\n", d)
+
+	})
+}
+
 func TestThreeSingleNodeClusters(t *testing.T) {
 	citools.TeardownFinishedTestRuns()
 
@@ -1890,4 +1986,20 @@ func TestStress(t *testing.T) {
 			}
 		}
 	})
+}
+
+type DotmeshVolume struct {
+	Id             string
+	Name           VolumeName
+	Branch         string
+	Master         string
+	SizeBytes      int64
+	DirtyBytes     int64
+	CommitCount    int64
+	ServerStatuses map[string]string // serverId => status
+}
+
+type VolumeName struct {
+	Namespace string
+	Name      string
 }

@@ -1697,7 +1697,6 @@ func (d *DotmeshRPC) DumpEtcd(
 	result *string,
 ) error {
 	err := ensureAdminUser(r)
-
 	if err != nil {
 		return err
 	}
@@ -1722,6 +1721,111 @@ func (d *DotmeshRPC) DumpEtcd(
 
 	*result = string(resultBytes)
 
+	return nil
+}
+
+func find(node *client.Node, path []string) *client.Node {
+	for _, node := range node.Nodes {
+		shrapnel := strings.Split(node.Key, "/")
+		last := shrapnel[len(shrapnel)-1]
+		if last == path[0] {
+			if len(path) == 1 {
+				return node
+			} else {
+				return find(node, path[1:])
+			}
+		}
+	}
+	log.Printf("Couldn't find %s in %+v -> %+v", path[0], node, node.Nodes)
+	return nil
+}
+
+func (d *DotmeshRPC) RestoreEtcd(
+	r *http.Request,
+	args *struct {
+		Prefix string
+		Dump   string
+	},
+	result *bool,
+) error {
+	// We dangerously, blindly trust the contents of the dump.
+	err := ensureAdminUser(r)
+	if err != nil {
+		return err
+	}
+
+	if !(args.Prefix == "" || args.Prefix == "/") {
+		return fmt.Errorf("Don't know how to restore a dump from a non-root key.")
+	}
+
+	// What do we restore?
+	// * users (except admin user)
+	// * registry
+
+	kapi, err := getEtcdKeysApi()
+	if err != nil {
+		return err
+	}
+	response := client.Response{}
+	err = json.Unmarshal([]byte(args.Dump), &response)
+	if err != nil {
+		return err
+	}
+
+	oneLevelNodesToClobber := []*client.Node{
+		find(response.Node, []string{"users"}),
+	}
+
+	twoLevelNodesToClobber := []*client.Node{
+		find(response.Node, []string{"registry", "filesystems"}),
+		find(response.Node, []string{"registry", "clones"}),
+	}
+
+	setEtcdKey := func(n client.Node) error {
+		if n.Key == fmt.Sprintf("%s/users/%s", ETCD_PREFIX, ADMIN_USER_UUID) {
+			return nil
+		}
+		_, err = kapi.Set(context.Background(), n.Key, n.Value, &client.SetOptions{})
+		return err
+	}
+
+	for _, node := range oneLevelNodesToClobber {
+		if node == nil {
+			// no users!?
+			continue
+		}
+		for _, n := range node.Nodes {
+			err = setEtcdKey(*n)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	for _, node := range twoLevelNodesToClobber {
+		if node == nil {
+			// no filesystems or clones is valid case
+			continue
+		}
+		for _, n := range node.Nodes {
+			for _, nn := range n.Nodes {
+				err = setEtcdKey(*nn)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	// Don't restore:
+	// * masters
+	// * request/response data
+	// * admin user
+	// * anything else :)
+
+	// In-memory state will be correctly updated by receiving from the etcd
+	// watch.
+
+	*result = true
 	return nil
 }
 
