@@ -81,6 +81,36 @@ func (dm *DotmeshAPI) Ping() (bool, error) {
 	return response, nil
 }
 
+func (dm *DotmeshAPI) BackupEtcd() (string, error) {
+	var response string
+	err := dm.client.CallRemote(context.Background(), "DotmeshRPC.DumpEtcd",
+		struct{ Prefix string }{Prefix: ""},
+		&response,
+	)
+	if err != nil {
+		return "", err
+	}
+	return response, nil
+}
+
+func (dm *DotmeshAPI) RestoreEtcd(dump string) error {
+	var response bool
+	err := dm.client.CallRemote(context.Background(), "DotmeshRPC.RestoreEtcd",
+		struct {
+			Prefix string
+			Dump   string
+		}{
+			Prefix: "",
+			Dump:   dump,
+		},
+		&response,
+	)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (dm *DotmeshAPI) GetVersion() (VersionInfo, error) {
 	var response VersionInfo
 	err := dm.client.CallRemote(context.Background(), "DotmeshRPC.Version", struct{}{}, &response)

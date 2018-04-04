@@ -253,6 +253,21 @@ linux_deletion_complex:
         when: always
     allow_failure: true
 
+linux_backup_and_restore_two_single_node_clusters:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - ./test.sh -run TestBackupAndRestoreTwoSingleNodeClusters
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
+
 linux_two_single_node_clusters:
     stage: test
     dependencies:

@@ -1324,36 +1324,17 @@ func TestBackupAndRestoreTwoSingleNodeClusters(t *testing.T) {
 		citools.RunOnNode(t, cluster_0, "dm switch "+fsname)
 		citools.RunOnNode(t, cluster_0, "dm commit -m 'hello'")
 
+		// This is how you backup & restore dotmesh!
 		citools.RunOnNode(t, cluster_0, "dm push cluster_1")
-
-		apiKeyNode1 := f[0].GetNode(0).ApiKey
-		apiKeyNode2 := f[1].GetNode(0).ApiKey
-
-		var resp string
-		err = citools.DoRPC(f[0].GetNode(0).IP, "admin", apiKeyNode1,
-			"DotmeshRPC.DumpEtcd",
-			struct {
-				Prefix string
-			}{Prefix: ""},
-			&resp)
-		if err != nil {
-			t.Error(err)
-		}
-
-		var restoreResp bool
-		err = citools.DoRPC(f[1].GetNode(0).IP, "admin", apiKeyNode2,
-			"DotmeshRPC.RestoreEtcd",
-			struct {
-				Prefix string
-				Dump   string
-			}{Prefix: "", Dump: resp},
-			&restoreResp)
-		if err != nil {
-			t.Error(err)
-		}
+		citools.RunOnNode(t, cluster_0, "dm cluster backup-etcd > backup.json")
+		citools.RunOnNode(t, cluster_0,
+			"dm remote switch cluster_1 && "+
+				"dm cluster restore-etcd < backup.json && "+
+				"dm remote switch cluster_0",
+		)
 
 		// Wait a moment for etcd to reload itself.
-		time.Sleep(1 * time.Second)
+		time.Sleep(5 * time.Second)
 
 		listResp := map[string]map[string]DotmeshVolume{}
 		// on the target cluster, can bob see his filesystem? can he auth? can

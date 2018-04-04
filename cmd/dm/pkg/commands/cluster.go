@@ -123,6 +123,10 @@ another.`,
 	cmd.AddCommand(NewCmdClusterJoin(os.Stdout))
 	cmd.AddCommand(NewCmdClusterReset(os.Stdout))
 	cmd.AddCommand(NewCmdClusterUpgrade(os.Stdout))
+
+	cmd.AddCommand(NewCmdClusterBackupEtcd(os.Stdout))
+	cmd.AddCommand(NewCmdClusterRestoreEtcd(os.Stdout, os.Stdin))
+
 	cmd.PersistentFlags().StringVar(
 		&traceAddr, "trace", "",
 		"Hostname for Zipkin host to enable distributed tracing",
@@ -173,6 +177,59 @@ another.`,
 		"Do not attempt any operations that require internet access "+
 			"(assumes dotmesh-server docker image has already been pulled)",
 	)
+	return cmd
+}
+
+func NewCmdClusterBackupEtcd(out io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "backup-etcd",
+		Short: "Backup the contents of etcd for a cluster (the current remote)",
+		Long:  "Online help: FIXME",
+		Run: func(cmd *cobra.Command, args []string) {
+
+			dm, err := remotes.NewDotmeshAPI(configPath)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err.Error())
+				os.Exit(1)
+			}
+			dump, err := dm.BackupEtcd()
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err.Error())
+				os.Exit(1)
+			}
+			out.Write([]byte(dump))
+
+		},
+	}
+	return cmd
+}
+
+func NewCmdClusterRestoreEtcd(out io.Writer, in io.Reader) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "restore-etcd",
+		Short: "Restore users (except admin) and registry from an etcd backup on stdin",
+		Long:  "Online help: FIXME",
+		Run: func(cmd *cobra.Command, args []string) {
+
+			bs, err := ioutil.ReadAll(in)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err.Error())
+				os.Exit(1)
+			}
+
+			dm, err := remotes.NewDotmeshAPI(configPath)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err.Error())
+				os.Exit(1)
+			}
+			err = dm.RestoreEtcd(string(bs))
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err.Error())
+				os.Exit(1)
+			}
+
+		},
+	}
 	return cmd
 }
 
