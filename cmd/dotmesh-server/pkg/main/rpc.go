@@ -1798,7 +1798,9 @@ func (d *DotmeshRPC) RestoreEtcd(
 		fmt.Sprintf("%s/registry", ETCD_PREFIX),
 		&client.DeleteOptions{Recursive: true, Dir: true},
 	)
-	if err != nil {
+
+	if err != nil && !client.IsNotExist(err) {
+		// It's OK if it didn't exist.
 		return err
 	}
 
