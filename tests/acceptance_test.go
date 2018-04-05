@@ -1932,6 +1932,139 @@ spec:
 	citools.DumpTiming()
 }
 
+// Test the dind-flexvolume and dind-dynamic-provisioner. In dind land, it
+// should be able to do exactly the same tricks as dotmesh, but just by
+// mkdir'ing a directory that happens to be bind-mount shared between nodes.
+//
+// Later, we can build tests on top which make the dotmesh operator _consume_
+// dind PVs.
+
+func TestKubernetesTestTooling(t *testing.T) {
+	citools.TeardownFinishedTestRuns()
+
+	f := citools.Federation{citools.NewKubernetes(3)}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
+
+	citools.StartTiming()
+	err := f.Start(t)
+	if err != nil {
+		t.Fatal(err) // there's no point carrying on
+	}
+	node1 := f[0].GetNode(0)
+	node2 := f[0].GetNode(1)
+	node3 := f[0].GetNode(2)
+
+	storageClass := `
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: dind-pv
+provisioner: dotmesh/dind-dynamic-provisioner
+`
+	citools.KubectlApply(t, node1.Container, storageClass)
+	citools.KubectlApply(t, node2.Container, storageClass)
+	citools.KubectlApply(t, node3.Container, storageClass)
+
+	citools.LogTiming("setup")
+	t.Run("DynamicProvisioning", func(t *testing.T) {
+		citools.KubectlApply(t, node1.Container, `
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: dind-pvc-test
+spec:
+  storageClassName: dind-pv
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+`)
+
+		citools.LogTiming("DynamicProvisioning: PV Claim")
+		err = citools.TryUntilSucceeds(func() error {
+			result := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pv")
+			// We really want a line like:
+			// "pvc-85b6beb0-bb1f-11e7-8633-0242ff9ba756   1Gi        RWO           Delete          Bound     default/admin-grapes-pvc   dotmesh                 15s"
+			if !strings.Contains(result, "default/dind-pv-test") {
+				return fmt.Errorf("dind PV didn't get created")
+			}
+			return nil
+		}, "finding the dind-pv-test PV")
+		if err != nil {
+			t.Error(err)
+		}
+
+		// TODO: figure out how to write something into the directory (probably
+		// by parsing out the pvc name)
+
+		citools.LogTiming("DynamicProvisioning: finding dind PV")
+
+		citools.KubectlApply(t, node1.Container, `
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: dind-deployment
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: dind-server
+    spec:
+      volumes:
+      - name: dind-storage
+        persistentVolumeClaim:
+         claimName: dind-pvc-test
+      containers:
+      - name: dind-server
+        image: nginx:1.12.1
+        volumeMounts:
+        - mountPath: "/usr/share/nginx/html"
+          name: dind-storage
+`)
+
+		citools.LogTiming("DynamicProvisioning: dind Deployment")
+		citools.KubectlApply(t, node1.Container, `
+apiVersion: v1
+kind: Service
+metadata:
+   name: dind-service
+spec:
+   type: NodePort
+   selector:
+       app: dind-server
+   ports:
+     - port: 80
+       nodePort: 30050
+`)
+
+		citools.LogTiming("DynamicProvisioning: dind Service")
+		err = citools.TryUntilSucceeds(func() error {
+			resp, err := http.Get(fmt.Sprintf("http://%s:30050/on-the-vine", node1.IP))
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+			body, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				return err
+			}
+			if !strings.Contains(string(body), "dinds") {
+				return fmt.Errorf("No dinds on the vine, got this instead: %v", string(body))
+			}
+			return nil
+		}, "finding dinds on the vine")
+		if err != nil {
+			t.Error(err)
+		}
+
+		citools.LogTiming("DynamicProvisioning: Dinds on the vine")
+	})
+	citools.DumpTiming()
+}
+
 func TestStress(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping stress tests in short mode.")
