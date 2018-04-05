@@ -12,7 +12,7 @@ fi
 
 VERSION=$(cd ../versioner && go run versioner.go)
 
-LOWERCASE_FIRST_ARGUMENT=${1,,}
+LOWERCASE_FIRST_ARGUMENT=$(echo "$1" | tr '[:upper:]' '[:lower:]')
 export GOOS=${GOOS:="$LOWERCASE_FIRST_ARGUMENT"}
 export PATH=/usr/local/go/bin:$PATH
 mkdir -p ../../binaries/$1
