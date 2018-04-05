@@ -41,6 +41,8 @@ var logger *log.Logger
 // flexVolumeDebug indicates whether flexvolume debugging should be enabled
 var flexVolumeDebug = false
 
+const DIND_SHARED_FOLDER = "/dotmesh-test-pools/dind-flexvolume"
+
 func init() {
 	// XXX: invent a better way to decide whether debugging should
 	// be used for flexvolume driver. For now we only enable it if
@@ -75,51 +77,38 @@ func (d *FlexVolumeDriver) mount(targetMountDir, jsonOptions string) (map[string
 
 	var mountPath string
 
-	namespace := opts["namespace"].(string)
+	pvId := opts["id"].(string)
+	sourceDir := fmt.Sprintf("%s/%s", DIND_SHARED_FOLDER, pvId)
 
-	name := opts["name"].(string)
-
-	var subvolume string
-	if _, ok := opts["subdot"]; ok {
-		subvolume = opts["subdot"].(string)
+	// make sure the shared folder exists on the host
+	// we keep our PV folders one level down (dind-flexvolume)
+	// so we can see the PV folders apart from the dot folders
+	_, err = os.Stat(DIND_SHARED_FOLDER)
+	if os.IsNotExist(err) {
+		err = os.Mkdir(DIND_SHARED_FOLDER, 0700)
+		if err != nil {
+			logger.Printf("MOUNT: mkdir err for %s: %v", DIND_SHARED_FOLDER, err)
+			return nil, err
+		}
 	}
 
-	// Match the semantics used by Docker, from parseNamespacedVolumeWithSubvolumes
-	switch subvolume {
-	case "":
-		subvolume = "__default__"
-	case "__root__":
-		subvolume = ""
+	// see if our target folder exists (because we are the target of a migration)
+	// if not - then make it!
+	_, err = os.Stat(sourceDir)
+	if os.IsNotExist(err) {
+		err = os.Mkdir(sourceDir, 0700)
+		if err != nil {
+			logger.Printf("MOUNT: mkdir err for %s: %v", sourceDir, err)
+			return nil, err
+		}
 	}
 
-	binaryDir := filepath.Dir(os.Args[0])
-	fvSocket := binaryDir + "/dm.sock"
-
-	err := doRPC(
-		fvSocket,
-		"DotmeshRPC.Procure",
-		struct {
-			Namespace string
-			Name      string
-			Subdot    string
-		}{
-			Namespace: namespace,
-			Name:      name,
-			Subdot:    subvolume,
-		},
-		&mountPath,
-	)
-	if err != nil {
-		logger.Printf("MOUNT: Procure of %s/%s.%s failed: %+v", namespace, name, subvolume, err)
-		return opts, err
-	}
-
-	logger.Printf("MOUNT: Procured %s/%s.%s at %s", namespace, name, subvolume, mountPath)
+	logger.Printf("MOUNT: Procured source folder %s", sourceDir)
 
 	// hackity hack, let's see how kube feels about being given a symlink
 	_, err = os.Stat(targetMountDir)
 	if os.IsNotExist(err) {
-		err = os.Symlink(mountPath, targetMountDir)
+		err = os.Symlink(sourceDir, targetMountDir)
 		if err != nil {
 			logger.Printf("MOUNT: symlink err: %v", err)
 			return nil, err
@@ -134,7 +123,7 @@ func (d *FlexVolumeDriver) mount(targetMountDir, jsonOptions string) (map[string
 			logger.Printf("MOUNT: remove err: %v", err)
 			return nil, err
 		}
-		err = os.Symlink(mountPath, targetMountDir)
+		err = os.Symlink(sourceDir, targetMountDir)
 		if err != nil {
 			logger.Printf("MOUNT: symlink err: %v", err)
 			return nil, err
@@ -239,53 +228,4 @@ func main() {
 	logger = log.New(f, fmt.Sprintf("%d: ", os.Getpid()), log.Ldate+log.Ltime+log.Lmicroseconds)
 	driver := NewFlexVolumeDriver()
 	os.Stdout.WriteString(driver.Run(os.Args[1:]))
-}
-
-// RPC client
-
-func doRPC(socketPath, method string, args interface{}, result interface{}) error {
-
-	url := fmt.Sprintf("http://unix-socket/rpc")
-	message, err := json2.EncodeClientRequest(method, args)
-	if err != nil {
-		return err
-	}
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(message))
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	client := http.Client{
-		Transport: &http.Transport{
-			DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
-				return net.Dial("unix", socketPath)
-			},
-		},
-	}
-
-	resp, err := client.Do(req)
-
-	if err != nil {
-		logger.Printf("RPC FAIL: %+v -> %s -> %+v", args, method, err)
-		return err
-	}
-
-	defer resp.Body.Close()
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		logger.Printf("RPC FAIL: %+v -> %s -> %+v", args, method, err)
-		return fmt.Errorf("Error reading body: %s", err)
-	}
-	err = json2.DecodeClientResponse(bytes.NewBuffer(b), &result)
-	if err != nil {
-		logger.Printf("RPC FAIL: %+v -> %s -> %+v", args, method, err)
-		return fmt.Errorf("Couldn't decode response '%s': %s", string(b), err)
-	}
-
-	if flexVolumeDebug {
-		logger.Printf("RPC: %+v -> %s -> %v", args, method, result)
-	}
-	return nil
 }

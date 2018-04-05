@@ -33,7 +33,7 @@ import (
 
 const (
 	resyncPeriod              = 15 * time.Second
-	provisionerName           = "dotmesh/dotmesh-dynamic-provisioner"
+	provisionerName           = "dotmesh/dind-dynamic-provisioner"
 	exponentialBackOffOnError = false
 	failedRetryThreshold      = 5
 	leasePeriod               = controller.DefaultLeaseDuration
@@ -42,18 +42,20 @@ const (
 	termLimit                 = controller.DefaultTermLimit
 )
 
-type dotmeshProvisioner struct {
+type dindProvisioner struct {
 }
 
 // NewDotmeshProvisioner creates a new dotmesh provisioner
-func NewDotmeshProvisioner() controller.Provisioner {
-	return &dotmeshProvisioner{}
+func NewDindProvisioner() controller.Provisioner {
+	return &dindProvisioner{}
 }
 
-var _ controller.Provisioner = &dotmeshProvisioner{}
+var _ controller.Provisioner = &dindProvisioner{}
 
 // Provision creates a storage asset and returns a PV object representing it.
-func (p *dotmeshProvisioner) Provision(options controller.VolumeOptions) (*v1.PersistentVolume, error) {
+// The options.PVName
+// PV such that the flexvolume can use the PVC id as the folder name
+func (p *dindProvisioner) Provision(options controller.VolumeOptions) (*v1.PersistentVolume, error) {
 	// PV name: options.PVName
 	// options is a https://godoc.org/github.com/kubernetes-incubator/external-storage/lib/controller#VolumeOptions
 	// options.PVC is a https://godoc.org/k8s.io/kubernetes/pkg/api#PersistentVolumeClaim
@@ -61,94 +63,14 @@ func (p *dotmeshProvisioner) Provision(options controller.VolumeOptions) (*v1.Pe
 
 	// options.PVC.ObjectMeta.Annotations = the PVC annotations
 
-	// Read storage class options
-	namespace, ok := options.Parameters["dotmeshNamespace"]
-	if !ok {
-		namespace = "admin"
-	}
+	// we will use the
 
-	// Read PVC annotations, which can override some options
-
-	annotations := options.PVC.ObjectMeta.Annotations
-
-	pvcNamespace, ok := annotations["dotmeshNamespace"]
-	if ok {
-		namespace = pvcNamespace
-	}
-
-	name, ok := annotations["dotmeshName"]
-	if !ok {
-		// No name specified? Default to PVC name.
-
-		// NOTE: This may be a useful indicator as to whether we're
-		// using k8s to attach to a "dotmesh-managed" volume, or we're
-		// using k8s to just ask DM to make me a volume - in the latter
-		// case, we should be hastier to delete things. So maybe set a
-		// boolean in this case and store it in the PV annotations and
-		// look for it in Delete?
-		name = options.PVC.ObjectMeta.Name
-	}
-
-	subdot, ok := annotations["dotmeshSubdot"]
-	if !ok {
-		subdot = ""
-	}
-	/*
-		// Cover two cases: Creating a new volume, or connecting to an existing volume
-
-		var alreadyExists bool
-
-		err := doRPC(
-			dotmeshNode,
-			user,
-			apiKey,
-			"DotmeshRPC.Exists",
-			map[string]string{
-				"TopLevelFilesystemName": name,
-				"Namespace":              namespace,
-				"CloneName":              "",
-			},
-			&alreadyExists,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		if !alreadyExists {
-			// There's a race condition if somebody else creates it in the
-			// meantime; it would be better to interpret the Create error to
-			// not complain if it's "already exists".
-			var createResult bool
-
-			err := doRPC(
-				dotmeshNode,
-				user,
-				apiKey,
-				"DotmeshRPC.Create",
-				map[string]string{
-					"Name":      name,
-					"Namespace": namespace,
-				},
-				&createResult,
-			)
-			if err != nil {
-				return nil, err
-			}
-		}
-	*/
-
-	glog.Info(fmt.Sprintf("Creating PV %s in response to PVC %s: %s/%s.%s", options.PVName, options.PVC.ObjectMeta.Name, namespace, name, subdot))
+	glog.Info(fmt.Sprintf("Creating PV %s in response to PVC %s", options.PVName, options.PVName))
 
 	pv := &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: options.PVName,
-			Annotations: map[string]string{
-				// Record some stuff we have, in case it's useful for debugging or anything
-				// But not the API key, obviously.
-				"dotmeshNamespace": namespace,
-				"dotmeshName":      name,
-				"dotmeshSubdot":    subdot,
-			},
+			Name:        options.PVName,
+			Annotations: map[string]string{},
 		},
 		Spec: v1.PersistentVolumeSpec{
 			PersistentVolumeReclaimPolicy: options.PersistentVolumeReclaimPolicy,
@@ -160,12 +82,10 @@ func (p *dotmeshProvisioner) Provision(options controller.VolumeOptions) (*v1.Pe
 			// https://godoc.org/k8s.io/kubernetes/pkg/api#PersistentVolumeSource
 			PersistentVolumeSource: v1.PersistentVolumeSource{
 				FlexVolume: &v1.FlexVolumeSource{
-					Driver: "dotmesh.io/dm",
-					FSType: "zfs",
+					Driver: "dotmesh.io/dind",
+					FSType: "ext4",
 					Options: map[string]string{
-						"name":      name,
-						"namespace": namespace,
-						"subdot":    subdot,
+						"id": options.PVName,
 					},
 				},
 			},
@@ -177,19 +97,9 @@ func (p *dotmeshProvisioner) Provision(options controller.VolumeOptions) (*v1.Pe
 
 // Delete removes the storage asset that was created by Provision represented
 // by the given PV.
-func (p *dotmeshProvisioner) Delete(volume *v1.PersistentVolume) error {
-	/*
-		      volume.Annotations["dotmeshProvisionerNamespace"]
-		      volume.Annotations["dotmeshProvisionerVolume"]
-				if !ok {
-					return errors.New("identity annotation not found on PV")
-				}
-
-		               Delete DM volume?
-					      Or do nothing as we just "detach"?
-					      Look up the actual use case here.
-	*/
-
+// We are only dealing with folders in test mode so let's not worry too much
+// about deleting
+func (p *dindProvisioner) Delete(volume *v1.PersistentVolume) error {
 	return nil
 }
 
@@ -221,10 +131,10 @@ func main() {
 
 	// Create the provisioner: it implements the Provisioner interface expected by
 	// the controller
-	dotmeshProvisioner := NewDotmeshProvisioner()
+	dindProvisioner := NewDindProvisioner()
 
 	// Start the provision controller which will dynamically provision dotmesh
 	// PVs
-	pc := controller.NewProvisionController(clientset, resyncPeriod, provisionerName, dotmeshProvisioner, serverVersion.GitVersion, exponentialBackOffOnError, failedRetryThreshold, leasePeriod, renewDeadline, retryPeriod, termLimit)
+	pc := controller.NewProvisionController(clientset, resyncPeriod, provisionerName, dindProvisioner, serverVersion.GitVersion, exponentialBackOffOnError, failedRetryThreshold, leasePeriod, renewDeadline, retryPeriod, termLimit)
 	pc.Run(wait.NeverStop)
 }
