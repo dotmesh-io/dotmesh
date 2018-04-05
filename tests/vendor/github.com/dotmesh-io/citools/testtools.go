@@ -1152,7 +1152,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		if err != nil {
 			return err
 		}
-		if strings.Contains(resp, "Ready") {
+		if strings.Contains(resp, "Available") {
 			fmt.Printf("etcd is up!\n")
 			break
 		}
