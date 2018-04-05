@@ -7,8 +7,8 @@ gcr.io/google_containers/kube-controller-manager-amd64:v1.7.6 google_containers/
 gcr.io/google_containers/kube-proxy-amd64:v1.7.6 google_containers/kube-proxy-amd64:v1.7.6
 gcr.io/google_containers/kube-scheduler-amd64:v1.7.6 google_containers/kube-scheduler-amd64:v1.7.6
 gcr.io/google_containers/pause-amd64:3.0 google_containers/pause-amd64:3.0
-quay.io/coreos/etcd-operator:v0.5.0 coreos/etcd-operator:v0.5.0
-quay.io/coreos/etcd:v3.1.8 coreos/etcd:v3.1.8
+quay.io/coreos/etcd-operator:v0.8.4 coreos/etcd-operator:v0.8.4
+quay.io/coreos/etcd:v3.1.8 coreos/etcd:v3.2.13
 weaveworks/weave-kube:2.0.4 weaveworks/weave-kube:2.0.4
 weaveworks/weave-npc:2.0.4 weaveworks/weave-npc:2.0.4
 nginx:1.12.1 nginx:1.12.1
