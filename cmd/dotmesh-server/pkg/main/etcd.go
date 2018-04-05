@@ -1225,13 +1225,14 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		go s.runServer()
 		go s.runUnixDomainServer()
 		go s.runPlugin()
-		go func() {
-			err := s.insertInitialAdminPassword()
-			if err != nil {
-				log.Printf("[insertInitialAdminPassword] err: %v", err)
-			}
-		}()
 	})
+
+	// Do this every time, even if it fails.  This is to handle the case where
+	// etcd gets wiped underneath us.
+	err = s.insertInitialAdminPassword()
+	if err != nil {
+		log.Printf("[insertInitialAdminPassword] err: %v", err)
+	}
 
 	// now watch for changes, and pipe them into the state machines
 	watcher := kapi.Watcher(
