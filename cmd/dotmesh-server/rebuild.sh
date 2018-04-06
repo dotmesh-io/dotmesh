@@ -10,6 +10,7 @@ VERSION="$(cd ../versioner && go run versioner.go)"
 
 CI_DOCKER_SERVER_IMAGE=${CI_DOCKER_SERVER_IMAGE:=$(hostname).local:80/dotmesh/dotmesh-server:latest}
 CI_DOCKER_PROVISIONER_IMAGE=${CI_DOCKER_PROVISIONER_IMAGE:=$(hostname).local:80/dotmesh/dotmesh-dynamic-provisioner:latest}
+CI_DOCKER_DIND_PROVISIONER_IMAGE=${CI_DOCKER_DIND_PROVISIONER_IMAGE:=$(hostname).local:80/dotmesh/dind-dynamic-provisioner:latest}
 
 if [ -z "$CI_DOCKER_TAG" ]; then
     # Non-CI build
@@ -64,6 +65,38 @@ if [ -z "${SKIP_K8S}" ]; then
 
     echo "building image: ${CI_DOCKER_PROVISIONER_IMAGE}"
     docker build -f pkg/dynamic-provisioning/Dockerfile -t "${CI_DOCKER_PROVISIONER_IMAGE}" .
+
+    # test tooling, built but not released:
+
+    # dind-flexvolume
+    echo "creating container: dotmesh-builder-dind-flexvolume-$ARTEFACT_CONTAINER"
+    docker rm -f dotmesh-builder-dind-flexvolume-$ARTEFACT_CONTAINER || true
+    docker run \
+        --name dotmesh-builder-dind-flexvolume-$ARTEFACT_CONTAINER \
+        -e GOPATH=/go \
+        -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dind-flexvolume \
+        dotmesh-builder:$ARTEFACT_CONTAINER \
+        go build -o /target/dind-flexvolume
+    echo "copy binary: /target/dind-flexvolume"
+    docker cp dotmesh-builder-dind-flexvolume-$ARTEFACT_CONTAINER:/target/dind-flexvolume target/
+    docker rm -f dotmesh-builder-dind-flexvolume-$ARTEFACT_CONTAINER
+
+    # dind-provisioner
+    echo "creating container: dotmesh-builder-dind-provisioner-$ARTEFACT_CONTAINER"
+    docker rm -f dotmesh-builder-dind-provisioner-$ARTEFACT_CONTAINER || true
+    docker run \
+        --name dotmesh-builder-dind-provisioner-$ARTEFACT_CONTAINER \
+        -e GOPATH=/go \
+        -e CGO_ENABLED=0 \
+        -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dind-dynamic-provisioning \
+        dotmesh-builder:$ARTEFACT_CONTAINER \
+        go build -a -ldflags '-extldflags "-static"' -o /target/dind-provisioner .
+    echo "copy binary: /target/dind-provisioner"
+    docker cp dotmesh-builder-dind-provisioner-$ARTEFACT_CONTAINER:/target/dind-provisioner target/
+    docker rm -f dotmesh-builder-dind-provisioner-$ARTEFACT_CONTAINER
+
+    echo "building image: ${CI_DOCKER_DIND_PROVISIONER_IMAGE}"
+    docker build -f pkg/dind-dynamic-provisioning/Dockerfile -t "${CI_DOCKER_DIND_PROVISIONER_IMAGE}" .
 fi
 
 # dotmesh-server

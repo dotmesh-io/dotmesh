@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -1952,8 +1953,6 @@ func TestKubernetesTestTooling(t *testing.T) {
 		t.Fatal(err) // there's no point carrying on
 	}
 	node1 := f[0].GetNode(0)
-	node2 := f[0].GetNode(1)
-	node3 := f[0].GetNode(2)
 
 	storageClass := `
 apiVersion: storage.k8s.io/v1
@@ -1963,8 +1962,6 @@ metadata:
 provisioner: dotmesh/dind-dynamic-provisioner
 `
 	citools.KubectlApply(t, node1.Container, storageClass)
-	citools.KubectlApply(t, node2.Container, storageClass)
-	citools.KubectlApply(t, node3.Container, storageClass)
 
 	citools.LogTiming("setup")
 	t.Run("DynamicProvisioning", func(t *testing.T) {
@@ -1983,21 +1980,30 @@ spec:
 `)
 
 		citools.LogTiming("DynamicProvisioning: PV Claim")
-		err = citools.TryUntilSucceeds(func() error {
-			result := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pv")
+
+		var dindPvc string
+		err := citools.TryUntilSucceeds(func() error {
+			result := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pv |grep default/dind-pv-test")
 			// We really want a line like:
 			// "pvc-85b6beb0-bb1f-11e7-8633-0242ff9ba756   1Gi        RWO           Delete          Bound     default/admin-grapes-pvc   dotmesh                 15s"
 			if !strings.Contains(result, "default/dind-pv-test") {
 				return fmt.Errorf("dind PV didn't get created")
 			}
+			dindPvc = strings.Split(result, " ")[0]
 			return nil
 		}, "finding the dind-pv-test PV")
 		if err != nil {
 			t.Error(err)
 		}
 
-		// TODO: figure out how to write something into the directory (probably
-		// by parsing out the pvc name)
+		// write something into the directory (by parsing out the pvc name)
+		// e.g. /dotmesh-test-pools/dind-flexvolume/pvc-<id>
+		target, err := os.Create(fmt.Sprintf("/dotmesh-test-pools/dind-flexvolume/%s", dindPvc))
+		if err != nil {
+			t.Error(err)
+		}
+		target.Write([]byte("dinds"))
+		target.Close()
 
 		citools.LogTiming("DynamicProvisioning: finding dind PV")
 

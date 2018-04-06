@@ -1,3 +1,3 @@
 FROM scratch
-COPY target/dm-provisioner /
-CMD ["/dm-provisioner"]
+COPY target/dind-provisioner /
+CMD ["/dind-provisioner"]

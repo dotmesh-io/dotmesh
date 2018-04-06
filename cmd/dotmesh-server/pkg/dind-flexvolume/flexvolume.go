@@ -20,20 +20,12 @@ limitations under the License.
 package main
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"log"
-	"net"
-	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
-
-	"github.com/gorilla/rpc/v2/json2"
 )
 
 var logger *log.Logger
@@ -75,15 +67,13 @@ func (d *FlexVolumeDriver) mount(targetMountDir, jsonOptions string) (map[string
 	}
 	logger.Printf("MOUNT: targetMountDir: %v, jsonOptions: %+v", targetMountDir, jsonOptions)
 
-	var mountPath string
-
 	pvId := opts["id"].(string)
 	sourceDir := fmt.Sprintf("%s/%s", DIND_SHARED_FOLDER, pvId)
 
 	// make sure the shared folder exists on the host
 	// we keep our PV folders one level down (dind-flexvolume)
 	// so we can see the PV folders apart from the dot folders
-	_, err = os.Stat(DIND_SHARED_FOLDER)
+	_, err := os.Stat(DIND_SHARED_FOLDER)
 	if os.IsNotExist(err) {
 		err = os.Mkdir(DIND_SHARED_FOLDER, 0700)
 		if err != nil {
