@@ -1168,6 +1168,25 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		}
 	}
 
+	// Install the dind-flexvolume driver on all nodes (test tooling to
+	// simulate cloud PVs).
+	for j := 0; j < c.DesiredNodeCount; j++ {
+		nodeName := nodeName(now, i, j)
+		getFlexCommand := fmt.Sprintf(`
+			export NODE=%s
+			docker exec -i $NODE mkdir -p \
+				/usr/libexec/kubernetes/kubelet-plugins/volume/exec/dotmesh.io~dind
+			docker cp ../cmd/dotmesh-server/target/dind-flexvolume \
+				$NODE:/usr/libexec/kubernetes/kubelet-plugins/volume/exec/dotmesh.io~dind/dind
+			`,
+			nodeName,
+		)
+		err = System("bash", "-c", getFlexCommand)
+		if err != nil {
+			return err
+		}
+	}
+
 	// For each node, wait until we can talk to dm from that node before
 	// proceeding.
 	for j := 0; j < c.DesiredNodeCount; j++ {
