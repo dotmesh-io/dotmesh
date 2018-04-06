@@ -75,7 +75,7 @@ func (d *FlexVolumeDriver) mount(targetMountDir, jsonOptions string) (map[string
 	// so we can see the PV folders apart from the dot folders
 	_, err := os.Stat(DIND_SHARED_FOLDER)
 	if os.IsNotExist(err) {
-		err = os.Mkdir(DIND_SHARED_FOLDER, 0700)
+		err = os.Mkdir(DIND_SHARED_FOLDER, 0777)
 		if err != nil {
 			logger.Printf("MOUNT: mkdir err for %s: %v", DIND_SHARED_FOLDER, err)
 			return nil, err
@@ -86,7 +86,7 @@ func (d *FlexVolumeDriver) mount(targetMountDir, jsonOptions string) (map[string
 	// if not - then make it!
 	_, err = os.Stat(sourceDir)
 	if os.IsNotExist(err) {
-		err = os.Mkdir(sourceDir, 0700)
+		err = os.Mkdir(sourceDir, 0777)
 		if err != nil {
 			logger.Printf("MOUNT: mkdir err for %s: %v", sourceDir, err)
 			return nil, err

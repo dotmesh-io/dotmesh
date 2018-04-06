@@ -1954,6 +1954,31 @@ func TestKubernetesTestTooling(t *testing.T) {
 	}
 	node1 := f[0].GetNode(0)
 
+	dindProvisioner := fmt.Sprintf(`
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dind-dynamic-provisioner
+  namespace: dotmesh
+  labels:
+    app: dind-dynamic-provisioner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dind-dynamic-provisioner
+  template:
+    metadata:
+      labels:
+        app: dind-dynamic-provisioner
+    spec:
+      containers:
+      - name: dind-dynamic-provisioner
+        image: %s
+        imagePullPolicy: "IfNotPresent"
+`, citools.LocalImage("dind-dynamic-provisioner"))
+	citools.KubectlApply(t, node1.Container, dindProvisioner)
+
 	storageClass := `
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
@@ -1983,10 +2008,10 @@ spec:
 
 		var dindPvc string
 		err := citools.TryUntilSucceeds(func() error {
-			result := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pv |grep default/dind-pv-test")
+			result := citools.OutputFromRunOnNode(t, node1.Container, "(kubectl get pv |grep default/dind-pvc-test) || true")
 			// We really want a line like:
 			// "pvc-85b6beb0-bb1f-11e7-8633-0242ff9ba756   1Gi        RWO           Delete          Bound     default/admin-grapes-pvc   dotmesh                 15s"
-			if !strings.Contains(result, "default/dind-pv-test") {
+			if !strings.Contains(result, "default/dind-pvc-test") {
 				return fmt.Errorf("dind PV didn't get created")
 			}
 			dindPvc = strings.Split(result, " ")[0]
@@ -1996,14 +2021,24 @@ spec:
 			t.Error(err)
 		}
 
-		// write something into the directory (by parsing out the pvc name)
-		// e.g. /dotmesh-test-pools/dind-flexvolume/pvc-<id>
-		target, err := os.Create(fmt.Sprintf("/dotmesh-test-pools/dind-flexvolume/%s", dindPvc))
-		if err != nil {
-			t.Error(err)
-		}
-		target.Write([]byte("dinds"))
-		target.Close()
+		go func() {
+			err := citools.TryUntilSucceeds(func() error {
+				// write something into the directory (by parsing out the pvc name)
+				// e.g. /dotmesh-test-pools/dind-flexvolume/pvc-<id>
+				// keep trying because it'll only exist when the flexvolume driver kicks in
+				target, err := os.Create(fmt.Sprintf("/dotmesh-test-pools/dind-flexvolume/%s/on-the-vine", dindPvc))
+				if err != nil {
+					fmt.Printf(">>> ERROR CREATING DINDS, retrying...: %+v\n", err)
+				} else {
+					target.Write([]byte("dinds"))
+					target.Close()
+				}
+				return err
+			}, "trying to write to dind-flexvolume directory manually")
+			if err != nil {
+				fmt.Printf("gave up trying to write to dind flexvolume directory: %s\n", err)
+			}
+		}()
 
 		citools.LogTiming("DynamicProvisioning: finding dind PV")
 

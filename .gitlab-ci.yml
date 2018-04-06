@@ -10,6 +10,7 @@ variables:
 
     CI_DOCKER_SERVER_IMAGE: $CI_DOCKER_REGISTRY/dotmesh-server:$CI_COMMIT_SHA
     CI_DOCKER_PROVISIONER_IMAGE: $CI_DOCKER_REGISTRY/dotmesh-dynamic-provisioner:$CI_COMMIT_SHA
+    CI_DOCKER_DIND_PROVISIONER_IMAGE: $CI_DOCKER_REGISTRY/dind-dynamic-provisioner:$CI_COMMIT_SHA
 
     CI_SERVICE_BEING_TESTED: dotmesh
 
@@ -75,9 +76,14 @@ build_server:
         - ubuntu
         - fast
     script:
+        # push to the OVH registry.
         - (cd cmd/dotmesh-server && ./rebuild.sh) # also pushes
         - echo "pushed $CI_DOCKER_SERVER_IMAGE"
         - echo "pushed $CI_DOCKER_PROVISIONER_IMAGE"
+        - echo "pushed $CI_DOCKER_DIND_PROVISIONER_IMAGE"
+        # push to quay.io, by overriding various variables (although notably
+        # not CI_DOCKER_DIND_PROVISIONER_IMAGE because that's test-only
+        # tooling).
         - (cd cmd/dotmesh-server && export CI_DOCKER_SERVER_IMAGE=$RELEASE_DOCKER_REGISTRY/dotmesh-server:$CI_COMMIT_SHA; export CI_DOCKER_PROVISIONER_IMAGE=$RELEASE_DOCKER_REGISTRY/dotmesh-dynamic-provisioner:$CI_COMMIT_SHA; ./rebuild.sh; echo "pushed $CI_DOCKER_SERVER_IMAGE"; echo "pushed $CI_DOCKER_PROVISIONER_IMAGE")
     artifacts:
         paths:
@@ -217,6 +223,22 @@ linux_kubernetes:
     script:
         - pwd
         - ./test.sh -run TestKubernetes
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
+
+linux_kubernetes_test_tools:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - pwd
+        - ./test.sh -run TestKubernetesTestTooling
     artifacts:
         paths:
         - extracted_logs

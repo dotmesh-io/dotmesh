@@ -119,4 +119,5 @@ docker build -t "${CI_DOCKER_SERVER_IMAGE}" .
 if [ -z "${NO_PUSH}" ]; then
     docker push ${CI_DOCKER_SERVER_IMAGE}
     docker push ${CI_DOCKER_PROVISIONER_IMAGE}
+    docker push ${CI_DOCKER_DIND_PROVISIONER_IMAGE}
 fi
