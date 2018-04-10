@@ -2102,6 +2102,47 @@ spec:
 		}
 
 		citools.LogTiming("DynamicProvisioning: Dinds on the vine")
+
+		// cordon the nginx node
+		nodeToBeCordoned := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get po -o=jsonpath='{.items[0].spec.nodeName}'")
+		citools.RunOnNode(t, node1.Container, fmt.Sprintf("kubectl drain %s --delete-local-data --ignore-daemonsets", nodeToBeCordoned))
+
+		// wait until new node for nginx appears
+		err = citools.TryUntilSucceeds(func() error {
+			result := citools.OutputFromRunOnNode(t, node1.Container, "(kubectl get po -o wide |grep dind-deployment) || true")
+			if !strings.Contains(result, "Running") {
+				return fmt.Errorf("dind-deployment didn't get re-scheduled")
+			}
+			if strings.Contains(result, nodeToBeCordoned) {
+				return fmt.Errorf("dind-deployment still on original node")
+			}
+			return nil
+		}, "finding the new dind-deployment")
+		if err != nil {
+			t.Error(err)
+		}
+
+		// retest the htttp connection
+		citools.LogTiming("DynamicProvisioning: dind Service")
+		err = citools.TryUntilSucceeds(func() error {
+			resp, err := http.Get(fmt.Sprintf("http://%s:30050/on-the-vine", node1.IP))
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+			body, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				return err
+			}
+			if !strings.Contains(string(body), "dinds") {
+				return fmt.Errorf("No dinds on the vine, got this instead: %v", string(body))
+			}
+			return nil
+		}, "finding dinds on the vine")
+		if err != nil {
+			t.Error(err)
+		}
+
 	})
 	citools.DumpTiming()
 }
