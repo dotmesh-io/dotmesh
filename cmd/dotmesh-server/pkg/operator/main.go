@@ -17,7 +17,6 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/client-go/util/workqueue"
 )
 
 func GetClientConfig(kubeconfig string) (*rest.Config, error) {
@@ -28,14 +27,6 @@ func GetClientConfig(kubeconfig string) (*rest.Config, error) {
 }
 
 var Version string = "none" // Set at compile time
-const (
-	RebootAnnotation           = "reboot-agent.v1.demo.local/reboot"
-	RebootNeededAnnotation     = "reboot-agent.v1.demo.local/reboot-needed"
-	RebootInProgressAnnotation = "reboot-agent.v1.demo.local/reboot-in-progress"
-)
-
-// TODO(aaron): make configurable and add MinAvailable
-const maxUnavailable = 1
 
 func main() {
 	// When running as a pod in-cluster, a kubeconfig is not needed. Instead
@@ -64,20 +55,18 @@ func main() {
 	stopCh := make(chan struct{})
 	defer close(stopCh)
 
-	newRebootController(client).Run(stopCh)
+	newDotmeshController(client).Run(stopCh)
 }
 
 type dotmeshController struct {
 	client     kubernetes.Interface
 	nodeLister lister_v1.NodeLister
 	informer   cache.Controller
-	queue      workqueue.RateLimitingInterface
 }
 
-func newRebootController(client kubernetes.Interface) *dotmeshController {
+func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 	rc := &dotmeshController{
 		client: client,
-		queue:  workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
 	}
 
 	// TODO: listen for node_list_changed, dotmesh_pod_list_changed,
@@ -99,7 +88,7 @@ func newRebootController(client kubernetes.Interface) *dotmeshController {
 		},
 		// The types of objects this informer will return
 		&v1.Node{},
-		// The resync period of this object. This will force a re-queue of all
+		// The resync period of this object. This will force a re-update of all
 		// cached objects at this interval.  Every object will trigger the
 		// `Updatefunc` even if there have been no actual updates triggered.
 		// In some cases you can set this to a very high interval - as you can
@@ -109,19 +98,16 @@ func newRebootController(client kubernetes.Interface) *dotmeshController {
 		// Callback Functions to trigger on add/update/delete
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				if key, err := cache.MetaNamespaceKeyFunc(obj); err == nil {
-					rc.queue.Add(key)
-				}
+				glog.Info("NODE ADD %+v", obj)
+				rc.scheduleUpdate()
 			},
 			UpdateFunc: func(old, new interface{}) {
-				if key, err := cache.MetaNamespaceKeyFunc(new); err == nil {
-					rc.queue.Add(key)
-				}
+				glog.Info("NODE UPDATE %+v -> %+v", old, new)
+				rc.scheduleUpdate()
 			},
 			DeleteFunc: func(obj interface{}) {
-				if key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj); err == nil {
-					rc.queue.Add(key)
-				}
+				glog.Info("NODE DELETE %+v", obj)
+				rc.scheduleUpdate()
 			},
 		},
 		cache.Indexers{},
@@ -135,21 +121,22 @@ func newRebootController(client kubernetes.Interface) *dotmeshController {
 	return rc
 }
 
+func (c *dotmeshController) scheduleUpdate() {
+	// FIXME: Set a flag so that a goroutine somewhere will notice we need to do The Algorithm
+	// because something may have changed.
+}
+
 func (c *dotmeshController) Run(stopCh chan struct{}) {
-	defer c.queue.ShutDown()
 	glog.Info("Starting RebootController")
 
 	go c.informer.Run(stopCh)
 
-	// Wait for all caches to be synced, before processing items from the queue
-	// is started
+	// Wait for all caches to be synced, before processing is started
 	if !cache.WaitForCacheSync(stopCh, c.informer.HasSynced) {
 		glog.Error(fmt.Errorf("Timed out waiting for caches to sync"))
 		return
 	}
 
-	// Launching additional goroutines would parallelize workers consuming from
-	// the queue (but we don't really need this)
 	go wait.Until(c.runWorker, time.Second, stopCh)
 
 	<-stopCh
@@ -157,29 +144,14 @@ func (c *dotmeshController) Run(stopCh chan struct{}) {
 }
 
 func (c *dotmeshController) runWorker() {
-	for c.processNext() {
-	}
+	// FIXME: Block until the flag set by scheduleUpdate is set and then run The Algorithm
+	// because something may have changed.
+	// while not time to quit {
+	// block on flag
+	// run process()
 }
 
-func (c *dotmeshController) processNext() bool {
-	// Wait until there is a new item in the working queue
-	key, quit := c.queue.Get()
-	if quit {
-		return false
-	}
-	// Tell the queue that we are done with processing this key. This unblocks
-	// the key for other workers. This allows safe parallel processing because
-	// two pods with the same key are never processed in parallel.
-	defer c.queue.Done(key)
-	// Invoke the method containing the business logic
-	err := c.process(key.(string))
-	// Handle the error if something went wrong during the execution of the
-	// business logic
-	c.handleErr(err, key)
-	return true
-}
-
-func (c *dotmeshController) process(key string) error {
+func (c *dotmeshController) process() error {
 	/*
 		TODO: implement the following algorithm in pseudocode.
 
@@ -209,68 +181,42 @@ func (c *dotmeshController) process(key string) error {
 			delete_dotmesh(dotmesh)
 
 	*/
-	node, err := c.nodeLister.Get(key)
-	if err != nil {
-		return fmt.Errorf("failed to retrieve node by key %q: %v", key, err)
-	}
+	//	node, err := c.nodeLister.Get(key)
+	//	if err != nil {
+	//		return fmt.Errorf("failed to retrieve node by key %q: %v", key, err)
+	//	}
 
-	glog.V(4).Infof("Received update of node: %s", node.GetName())
-	if node.Annotations == nil {
-		return nil // If node has no annotations, then it doesn't need a reboot
-	}
+	// glog.V(4).Infof("Received update of node: %s", node.GetName())
+	// if node.Annotations == nil {
+	// 	return nil // If node has no annotations, then it doesn't need a reboot
+	// }
 
-	if _, ok := node.Annotations[RebootNeededAnnotation]; !ok {
-		return nil // Node does not need reboot
-	}
+	// if _, ok := node.Annotations[RebootNeededAnnotation]; !ok {
+	// 	return nil // Node does not need reboot
+	// }
 
-	// Determine if we should reboot based on maximum number of unavailable nodes
-	unavailable := 0
-	if err != nil {
-		return fmt.Errorf("Failed to determine number of unavailable nodes: %v", err)
-	}
+	// // Determine if we should reboot based on maximum number of unavailable nodes
+	// unavailable := 0
+	// if err != nil {
+	// 	return fmt.Errorf("Failed to determine number of unavailable nodes: %v", err)
+	// }
 
-	if unavailable >= maxUnavailable {
-		// TODO(aaron): We might want this case to retry indefinitely. Could
-		// create a specific error an check in handleErr()
-		return fmt.Errorf(
-			"Too many nodes unvailable (%d/%d). Skipping reboot of %s",
-			unavailable, maxUnavailable, node.Name,
-		)
-	}
+	// if unavailable >= maxUnavailable {
+	// 	// TODO(aaron): We might want this case to retry indefinitely. Could
+	// 	// create a specific error an check in handleErr()
+	// 	return fmt.Errorf(
+	// 		"Too many nodes unvailable (%d/%d). Skipping reboot of %s",
+	// 		unavailable, maxUnavailable, node.Name,
+	// 	)
+	// }
 
-	// We should not modify the cache object directly, so we make a copy first
-	nodeCopy := node.DeepCopy()
+	// // We should not modify the cache object directly, so we make a copy first
+	// nodeCopy := node.DeepCopy()
 
-	glog.Infof("Marking node %s for reboot", node.Name)
-	nodeCopy.Annotations[RebootAnnotation] = ""
-	if _, err := c.client.Core().Nodes().Update(nodeCopy); err != nil {
-		return fmt.Errorf("Failed to set %s annotation: %v", RebootAnnotation, err)
-	}
+	// glog.Infof("Marking node %s for reboot", node.Name)
+	// nodeCopy.Annotations[RebootAnnotation] = ""
+	// if _, err := c.client.Core().Nodes().Update(nodeCopy); err != nil {
+	// 	return fmt.Errorf("Failed to set %s annotation: %v", RebootAnnotation, err)
+	// }
 	return nil
-}
-
-func (c *dotmeshController) handleErr(err error, key interface{}) {
-	if err == nil {
-		// Forget about the #AddRateLimited history of the key on every
-		// successful synchronization.  This ensures that future processing of
-		// updates for this key is not delayed because of an outdated error
-		// history.
-		c.queue.Forget(key)
-		return
-	}
-
-	// This controller retries 5 times if something goes wrong. After that, it
-	// stops trying.
-	if c.queue.NumRequeues(key) < 5 {
-		glog.Infof("Error processing node %v: %v", key, err)
-
-		// Re-enqueue the key rate limited. Based on the rate limiter on the
-		// queue and the re-enqueue history, the key will be processed later
-		// again.
-		c.queue.AddRateLimited(key)
-		return
-	}
-
-	c.queue.Forget(key)
-	glog.Errorf("Dropping node %q out of the queue: %v", key, err)
 }
