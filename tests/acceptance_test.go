@@ -2085,26 +2085,26 @@ spec:
 
 		citools.LogTiming("DynamicProvisioning: Dinds on the vine")
 
-		//	// cordon the nginx node
-		//	nodeToBeCordoned := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get po -o=jsonpath='{.items[0].spec.nodeName}'")
-		//	citools.RunOnNode(t, node1.Container, fmt.Sprintf("kubectl drain %s --delete-local-data --ignore-daemonsets", nodeToBeCordoned))
-		//
-		//	// wait until new node for nginx appears
-		//	err = citools.TryUntilSucceeds(func() error {
-		//		result := citools.OutputFromRunOnNode(t, node1.Container, "(kubectl get po -o wide |grep dind-deployment) || true")
-		//		if !strings.Contains(result, "Running") {
-		//			return fmt.Errorf("dind-deployment didn't get re-scheduled")
-		//		}
-		//		if strings.Contains(result, nodeToBeCordoned) {
-		//			return fmt.Errorf("dind-deployment still on original node")
-		//		}
-		//		return nil
-		//	}, "finding the new dind-deployment")
-		//	if err != nil {
-		//		t.Error(err)
-		//	}
-		//
-		//	testServiceAvailability(t, node1.IP)
+		// cordon the nginx node
+		nodeToBeCordoned := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get po -o=jsonpath='{.items[0].spec.nodeName}'")
+		citools.RunOnNode(t, node1.Container, fmt.Sprintf("kubectl drain %s --delete-local-data --ignore-daemonsets", nodeToBeCordoned))
+
+		// wait until new node for nginx appears
+		err = citools.TryUntilSucceeds(func() error {
+			result := citools.OutputFromRunOnNode(t, node1.Container, "(kubectl get po -o wide |grep dind-deployment) || true")
+			if !strings.Contains(result, "Running") {
+				return fmt.Errorf("dind-deployment didn't get re-scheduled")
+			}
+			if strings.Contains(result, nodeToBeCordoned) {
+				return fmt.Errorf("dind-deployment still on original node")
+			}
+			return nil
+		}, "finding the new dind-deployment")
+		if err != nil {
+			t.Error(err)
+		}
+
+		testServiceAvailability(t, node1.IP)
 	})
 	citools.DumpTiming()
 }
