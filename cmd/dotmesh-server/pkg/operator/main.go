@@ -276,9 +276,10 @@ func (c *dotmeshController) process() error {
 
 		newDotmesh := v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: FIXME,
+				Name:      "dotmesh",
+				NameSpace: "dotmesh",
 				Labels: map[string]string{
-					"app": "dotmesh",
+					"name": "dotmesh",
 				},
 				Annotations: map[string]string{},
 			},
@@ -287,12 +288,12 @@ func (c *dotmeshController) process() error {
 				InitContainers: []v1.Container{},
 				Containers: []v1.Container{
 					v1.Container{
-						Name: "dotmesh-outer",
+						Name:  "dotmesh-outer",
+						Image: "quay.io/dotmesh/dotmesh-server:latest",
 						Command: []string{
 							"/require_zfs.sh",
 							"dotmesh-server",
 						},
-						Image: FIXME,
 						SecurityContext: v1.SecurityContext{
 							Priviliged: true,
 						},
@@ -312,11 +313,42 @@ func (c *dotmeshController) process() error {
 							{Name: "dotmesh-secret", MountPath: "/secret"},
 							{Name: "test-pools-dir", MountPath: "/dotmesh-test-pools"},
 						},
+						Env: []v1.EnvVar{
+							{Name: "HOSTNAME", ValueFrom: EnvVarSource{FieldRef: {&ObjectFieldSelector: {APIVersion: "v1", FieldPath: "spec.nodeName"}}}},
+							{Name: "DOTMESH_ETCD_ENDPOINT", Value: "http://dotmesh-etcd-cluster-client.dotmesh.svc.cluster.local:2379"},
+							{Name: "DOTMESH_DOCKER_IMAGE", Value: "quay.io/dotmesh/dotmesh-server:latest"},
+							{Name: "PATH", Value: "/bundled-lib/sbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
+							{Name: "LD_LIBRARY_PATH", Value: "/bundled-lib/lib:/bundled-lib/usr/lib/"},
+							{Name: "ALLOW_PUBLIC_REGISTRATION", Value: "1"},
+							{Name: "INITIAL_ADMIN_PASSWORD_FILE", Value: "/secret/dotmesh-admin-password.txt"},
+							{Name: "INITIAL_ADMIN_API_KEY_FILE", Value: "/secret/dotmesh-api-key.txt"},
+							{Name: "USE_POOL_NAME", Value: "pool"},
+							{Name: "USE_POOL_DIR", Value: "/var/lib/dotmesh"},
+							{Name: "LOG_ADDR"},
+							{Name: "DOTMESH_UPGRADES_URL", Value: "https://checkpoint.dotmesh.com/"},
+							{Name: "DOTMESH_UPGRADES_INTERVAL_SECONDS", Value: 14400},
+							{NAme: "FLEXVOLUME_DRIVER_DIR", Value: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec nil"},
+						},
+						ImagePullPolicy: PullAlways,
+						LivenessProbe: &Probe{
+							Handler: Handler{
+								HTTPGet: &HTTPGetAction{
+									Path: "/status",
+									Port: "32607",
+								},
+								InitialDelaySeconds: 30,
+							},
+						},
 					},
 				},
 				RestartPolicy: v1.RestartPolicyNever,
 				Volumes: []v1.Volume{
-					FIXME,
+					{Name: "test-pools-dir", VolumeSource: {&HostPathVolumeSource{Path: "/dotmesh-test-pools"}}},
+					{Name: "run-docker", VolumeSource: {&HostPathVolumeSource{Path: "/var/run/docker"}}},
+					{Name: "var-lib", VolumeSource: {&HostPathVolumeSource{Path: "/var/lib"}}},
+					{Name: "system-lib", VolumeSource: {&HostPathVolumeSource{Path: "/lib"}}},
+					{Name: "dotmesh-kernel-modules", &EmptyDirVolumeSource: {}},
+					{Name: "dotmesh-secret", &SecretVolumeSource{SecretName: dotmesh}},
 				},
 			},
 		}
