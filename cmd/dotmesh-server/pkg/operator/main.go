@@ -132,12 +132,16 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 	podIndexer, podInformer := cache.NewIndexerInformer(
 		&cache.ListWatch{
 			ListFunc: func(lo meta_v1.ListOptions) (runtime.Object, error) {
-				// FIXME: Add selectors to only list Dotmesh pods
-				return client.Core().Pods(DOTMESH_NAMESPACE).List(lo)
+				// Add selectors to only list Dotmesh pods
+				dmLo := lo.DeepCopy()
+				dmLo.LabelSelector = "app=dotmesh"
+				return client.Core().Pods(DOTMESH_NAMESPACE).List(*dmLo)
 			},
 			WatchFunc: func(lo meta_v1.ListOptions) (watch.Interface, error) {
-				// FIXME: Add selectors to only list Dotmesh pods
-				return client.Core().Pods(DOTMESH_NAMESPACE).Watch(lo)
+				// Add selectors to only list Dotmesh pods
+				dmLo := lo.DeepCopy()
+				dmLo.LabelSelector = "app=dotmesh"
+				return client.Core().Pods(DOTMESH_NAMESPACE).Watch(*dmLo)
 			},
 		},
 		// The types of objects this informer will return
