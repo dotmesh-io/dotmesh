@@ -12,6 +12,7 @@ import (
 	//"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
@@ -273,11 +274,11 @@ func (c *dotmeshController) process() error {
 		*/
 
 		// FIXME: Create a dotmesh pod (with local storage for now) assigned to "node"
-
+		privileged := true
 		newDotmesh := v1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
+			ObjectMeta: meta_v1.ObjectMeta{
 				Name:      "dotmesh",
-				NameSpace: "dotmesh",
+				Namespace: "dotmesh",
 				Labels: map[string]string{
 					"name": "dotmesh",
 				},
@@ -289,19 +290,19 @@ func (c *dotmeshController) process() error {
 				Containers: []v1.Container{
 					v1.Container{
 						Name:  "dotmesh-outer",
-						Image: "quay.io/dotmesh/dotmesh-server:latest",
+						Image: "quay.io/dotmesh/dotmesh-server:latest", // FIXME: Include actual hash (compiled in via version)
 						Command: []string{
 							"/require_zfs.sh",
 							"dotmesh-server",
 						},
-						SecurityContext: v1.SecurityContext{
-							Priviliged: true,
+						SecurityContext: &v1.SecurityContext{
+							Privileged: &privileged,
 						},
 						Ports: []v1.ContainerPort{
 							{
 								Name:          "dotmesh-api",
 								ContainerPort: int32(32607),
-								Protocl:       v1.ProtocolTCP,
+								Protocol:      v1.ProtocolTCP,
 							},
 						},
 						VolumeMounts: []v1.VolumeMount{
@@ -314,7 +315,7 @@ func (c *dotmeshController) process() error {
 							{Name: "test-pools-dir", MountPath: "/dotmesh-test-pools"},
 						},
 						Env: []v1.EnvVar{
-							{Name: "HOSTNAME", ValueFrom: EnvVarSource{FieldRef: {&ObjectFieldSelector: {APIVersion: "v1", FieldPath: "spec.nodeName"}}}},
+							{Name: "HOSTNAME", ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{APIVersion: "v1", FieldPath: "spec.nodeName"}}},
 							{Name: "DOTMESH_ETCD_ENDPOINT", Value: "http://dotmesh-etcd-cluster-client.dotmesh.svc.cluster.local:2379"},
 							{Name: "DOTMESH_DOCKER_IMAGE", Value: "quay.io/dotmesh/dotmesh-server:latest"},
 							{Name: "PATH", Value: "/bundled-lib/sbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
@@ -326,33 +327,33 @@ func (c *dotmeshController) process() error {
 							{Name: "USE_POOL_DIR", Value: "/var/lib/dotmesh"},
 							{Name: "LOG_ADDR"},
 							{Name: "DOTMESH_UPGRADES_URL", Value: "https://checkpoint.dotmesh.com/"},
-							{Name: "DOTMESH_UPGRADES_INTERVAL_SECONDS", Value: 14400},
-							{NAme: "FLEXVOLUME_DRIVER_DIR", Value: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec nil"},
+							{Name: "DOTMESH_UPGRADES_INTERVAL_SECONDS", Value: "14400"},
+							{Name: "FLEXVOLUME_DRIVER_DIR", Value: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec nil"},
 						},
-						ImagePullPolicy: PullAlways,
-						LivenessProbe: &Probe{
-							Handler: Handler{
-								HTTPGet: &HTTPGetAction{
+						ImagePullPolicy: v1.PullAlways,
+						LivenessProbe: &v1.Probe{
+							Handler: v1.Handler{
+								HTTPGet: &v1.HTTPGetAction{
 									Path: "/status",
-									Port: "32607",
+									Port: intstr.FromInt(32607),
 								},
-								InitialDelaySeconds: 30,
+								// FIXME								InitialDelaySeconds: 30,
 							},
 						},
 					},
 				},
 				RestartPolicy: v1.RestartPolicyNever,
 				Volumes: []v1.Volume{
-					{Name: "test-pools-dir", VolumeSource: {&HostPathVolumeSource{Path: "/dotmesh-test-pools"}}},
-					{Name: "run-docker", VolumeSource: {&HostPathVolumeSource{Path: "/var/run/docker"}}},
-					{Name: "var-lib", VolumeSource: {&HostPathVolumeSource{Path: "/var/lib"}}},
-					{Name: "system-lib", VolumeSource: {&HostPathVolumeSource{Path: "/lib"}}},
-					{Name: "dotmesh-kernel-modules", &EmptyDirVolumeSource: {}},
-					{Name: "dotmesh-secret", &SecretVolumeSource{SecretName: dotmesh}},
+					{Name: "test-pools-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/dotmesh-test-pools"}}},
+					{Name: "run-docker", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/docker"}}},
+					{Name: "var-lib", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/lib"}}},
+					{Name: "system-lib", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/lib"}}},
+					{Name: "dotmesh-kernel-modules", VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{}}},
+					{Name: "dotmesh-secret", VolumeSource: v1.VolumeSource{Secret: &v1.SecretVolumeSource{SecretName: "dotmesh"}}},
 				},
 			},
 		}
-		_, err = c.client.Core().Pods(DOTMESH_NAMESPACE).Create(newDotmesh)
+		_, err = c.client.Core().Pods(DOTMESH_NAMESPACE).Create(&newDotmesh)
 		if err != nil {
 			return err
 		}
