@@ -10,6 +10,7 @@ import (
 	"k8s.io/api/core/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	//"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -24,6 +25,8 @@ import (
 
 const DOTMESH_NAMESPACE = "dotmesh"
 const DOTMESH_NODE_LABEL = "dotmesh.io/node"
+const DOTMESH_POD_ROLE_LABEL = "dotmesh.io/role"
+const DOTMESH_ROLE_SERVER = "dotmesh-server"
 
 func GetClientConfig(kubeconfig string) (*rest.Config, error) {
 	if kubeconfig != "" {
@@ -136,13 +139,13 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 			ListFunc: func(lo meta_v1.ListOptions) (runtime.Object, error) {
 				// Add selectors to only list Dotmesh pods
 				dmLo := lo.DeepCopy()
-				dmLo.LabelSelector = "app=dotmesh"
+				dmLo.LabelSelector = fmt.Sprintf("%s=%s", DOTMESH_POD_ROLE_LABEL, DOTMESH_ROLE_SERVER)
 				return client.Core().Pods(DOTMESH_NAMESPACE).List(*dmLo)
 			},
 			WatchFunc: func(lo meta_v1.ListOptions) (watch.Interface, error) {
 				// Add selectors to only list Dotmesh pods
 				dmLo := lo.DeepCopy()
-				dmLo.LabelSelector = "app=dotmesh"
+				dmLo.LabelSelector = fmt.Sprintf("%s=%s", DOTMESH_POD_ROLE_LABEL, DOTMESH_ROLE_SERVER)
 				return client.Core().Pods(DOTMESH_NAMESPACE).Watch(*dmLo)
 			},
 		},
@@ -216,7 +219,9 @@ func (c *dotmeshController) runWorker() {
 		func() bool {
 			c.updatesNeededLock.Lock()
 			defer c.updatesNeededLock.Unlock()
-			return c.updatesNeeded
+			needed := c.updatesNeeded
+			c.updatesNeeded = false
+			return needed
 		}()
 
 	if needed {
@@ -267,16 +272,18 @@ func (c *dotmeshController) process() error {
 	undotted_nodes := map[string]struct{}{}
 
 	for _, node := range nodes {
-		glog.Info(fmt.Sprintf("NODE DETAILS: %s ", node.ObjectMeta.Name))
+		//		glog.Info(fmt.Sprintf("NODE DETAILS: %s ", node.ObjectMeta.Name))
 		undotted_nodes[node.ObjectMeta.Name] = struct{}{}
 	}
 	for _, dotmesh := range dotmeshes {
+		// Find the node this pod is bound to, as if it's starting up it
+		// won't actually be scheduled onto that node yet
 		boundNode, ok := dotmesh.Spec.NodeSelector[DOTMESH_NODE_LABEL]
 		if ok {
-			glog.Info(fmt.Sprintf("POD DETAILS: %s on %s", dotmesh.ObjectMeta.Name, boundNode))
+			//			glog.Info(fmt.Sprintf("POD DETAILS: %s on %s", dotmesh.ObjectMeta.Name, boundNode))
 			delete(undotted_nodes, boundNode)
 		} else {
-			glog.Info(fmt.Sprintf("POD DETAILS: %s - UNBOUND", dotmesh.ObjectMeta.Name))
+			//			glog.Info(fmt.Sprintf("POD DETAILS: %s - UNBOUND", dotmesh.ObjectMeta.Name))
 		}
 	}
 
@@ -303,7 +310,7 @@ func (c *dotmeshController) process() error {
 				Name:      fmt.Sprintf("dotmesh-%s", node),
 				Namespace: "dotmesh",
 				Labels: map[string]string{
-					"app": "dotmesh",
+					DOTMESH_POD_ROLE_LABEL: DOTMESH_ROLE_SERVER,
 				},
 				Annotations: map[string]string{},
 			},
@@ -312,6 +319,11 @@ func (c *dotmeshController) process() error {
 				NodeSelector: map[string]string{
 					DOTMESH_NODE_LABEL: node,
 				},
+				Tolerations: []v1.Toleration{
+					v1.Toleration{
+						Effect:   v1.TaintEffectNoSchedule,
+						Operator: v1.TolerationOpExists,
+					}},
 				InitContainers: []v1.Container{},
 				Containers: []v1.Container{
 					v1.Container{
@@ -363,12 +375,18 @@ func (c *dotmeshController) process() error {
 									Path: "/status",
 									Port: intstr.FromInt(32607),
 								},
-								// FIXME								InitialDelaySeconds: 30,
+							},
+							InitialDelaySeconds: int32(30),
+						},
+						Resources: v1.ResourceRequirements{
+							Requests: v1.ResourceList{
+								v1.ResourceCPU: resource.MustParse("10m"),
 							},
 						},
 					},
 				},
-				RestartPolicy: v1.RestartPolicyNever,
+				RestartPolicy:      v1.RestartPolicyNever,
+				ServiceAccountName: "dotmesh",
 				Volumes: []v1.Volume{
 					{Name: "test-pools-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/dotmesh-test-pools"}}},
 					{Name: "run-docker", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/docker"}}},
