@@ -23,6 +23,7 @@ import (
 )
 
 const DOTMESH_NAMESPACE = "dotmesh"
+const DOTMESH_NODE_LABEL = "dotmesh.io/node"
 
 func GetClientConfig(kubeconfig string) (*rest.Config, error) {
 	if kubeconfig != "" {
@@ -219,7 +220,10 @@ func (c *dotmeshController) runWorker() {
 		}()
 
 	if needed {
-		c.process()
+		err := c.process()
+		if err != nil {
+			glog.Error(err)
+		}
 	} else {
 		time.Sleep(time.Second)
 	}
@@ -233,6 +237,20 @@ func (c *dotmeshController) process() error {
 		return err
 	}
 
+	// Ensure nodes are labelled, so we can bind Dotmesh instances to them
+	for _, node := range nodes {
+		nodeName := node.ObjectMeta.Name
+		_, ok := node.ObjectMeta.Labels[DOTMESH_NODE_LABEL]
+		if !ok {
+			n2 := node.DeepCopy()
+			n2.ObjectMeta.Labels[DOTMESH_NODE_LABEL] = nodeName
+			glog.Info(fmt.Sprintf("Labelling unfamiliar node %s so we can bind a Dotmesh to it", n2.ObjectMeta.Name))
+			_, err := c.client.Core().Nodes().Update(n2)
+			if err != nil {
+				return err
+			}
+		}
+	}
 	/* TODO
 	for node in nodes:
 		if not labelled(node):
@@ -253,8 +271,13 @@ func (c *dotmeshController) process() error {
 		undotted_nodes[node.ObjectMeta.Name] = struct{}{}
 	}
 	for _, dotmesh := range dotmeshes {
-		glog.Info(fmt.Sprintf("POD DETAILS: %s on %s", dotmesh.ObjectMeta.Name, dotmesh.Spec.NodeName))
-		delete(undotted_nodes, dotmesh.Spec.NodeName)
+		boundNode, ok := dotmesh.Spec.NodeSelector[DOTMESH_NODE_LABEL]
+		if ok {
+			glog.Info(fmt.Sprintf("POD DETAILS: %s on %s", dotmesh.ObjectMeta.Name, boundNode))
+			delete(undotted_nodes, boundNode)
+		} else {
+			glog.Info(fmt.Sprintf("POD DETAILS: %s - UNBOUND", dotmesh.ObjectMeta.Name))
+		}
 	}
 
 	/* TODO
@@ -277,15 +300,18 @@ func (c *dotmeshController) process() error {
 		privileged := true
 		newDotmesh := v1.Pod{
 			ObjectMeta: meta_v1.ObjectMeta{
-				Name:      "dotmesh",
+				Name:      fmt.Sprintf("dotmesh-%s", node),
 				Namespace: "dotmesh",
 				Labels: map[string]string{
-					"name": "dotmesh",
+					"app": "dotmesh",
 				},
 				Annotations: map[string]string{},
 			},
 			Spec: v1.PodSpec{
-				HostPID:        true,
+				HostPID: true,
+				NodeSelector: map[string]string{
+					DOTMESH_NODE_LABEL: node,
+				},
 				InitContainers: []v1.Container{},
 				Containers: []v1.Container{
 					v1.Container{
@@ -346,6 +372,7 @@ func (c *dotmeshController) process() error {
 				Volumes: []v1.Volume{
 					{Name: "test-pools-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/dotmesh-test-pools"}}},
 					{Name: "run-docker", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/docker"}}},
+					{Name: "docker-sock", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/docker.sock"}}},
 					{Name: "var-lib", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/lib"}}},
 					{Name: "system-lib", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/lib"}}},
 					{Name: "dotmesh-kernel-modules", VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{}}},
@@ -353,6 +380,7 @@ func (c *dotmeshController) process() error {
 				},
 			},
 		}
+		glog.Info(fmt.Sprintf("Creating pod %s on node %s", newDotmesh.ObjectMeta.Name, node))
 		_, err = c.client.Core().Pods(DOTMESH_NAMESPACE).Create(&newDotmesh)
 		if err != nil {
 			return err
