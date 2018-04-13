@@ -16,5 +16,7 @@ CGO_ENABLED=0 go build -a -ldflags '-extldflags "-static"' -o /dotmesh-test-pool
 Run it:
 
 ```
-dex 0 0 /dotmesh-test-pools/operator/operator --kubeconfig=/root/.kube/config
+dex 0 0 /dotmesh-test-pools/operator/operator --kubeconfig=/root/.kube/config -v 2
 ```
+
+`-v 3` gives messier logging. No `-v` at all makes it only log when it actually does something.

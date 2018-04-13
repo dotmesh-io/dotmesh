@@ -23,10 +23,17 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+// Log verbosities:
+
+// -v3 = log every raw watch event
+// -v2 = log relevant status of pods and nodes
+// -v1 = log
+
 const DOTMESH_NAMESPACE = "dotmesh"
 const DOTMESH_NODE_LABEL = "dotmesh.io/node"
 const DOTMESH_POD_ROLE_LABEL = "dotmesh.io/role"
 const DOTMESH_ROLE_SERVER = "dotmesh-server"
+const DOTMESH_IMAGE = "quay.io/dotmesh/dotmesh-server:latest" // FIXME: Include actual hash (compiled in via version)
 
 func GetClientConfig(kubeconfig string) (*rest.Config, error) {
 	if kubeconfig != "" {
@@ -112,15 +119,15 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 		// Callback Functions to trigger on add/update/delete
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				//				glog.Info("NODE ADD %+v", obj)
+				glog.V(3).Info("NODE ADD %+v", obj)
 				rc.scheduleUpdate()
 			},
 			UpdateFunc: func(old, new interface{}) {
-				//				glog.Info("NODE UPDATE %+v -> %+v", old, new)
+				glog.V(3).Info("NODE UPDATE %+v -> %+v", old, new)
 				rc.scheduleUpdate()
 			},
 			DeleteFunc: func(obj interface{}) {
-				//				glog.Info("NODE DELETE %+v", obj)
+				glog.V(3).Info("NODE DELETE %+v", obj)
 				rc.scheduleUpdate()
 			},
 		},
@@ -161,15 +168,15 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 		// Callback Functions to trigger on add/update/delete
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				//				glog.Info("POD ADD %+v", obj)
+				glog.V(3).Info("POD ADD %+v", obj)
 				rc.scheduleUpdate()
 			},
 			UpdateFunc: func(old, new interface{}) {
-				//				glog.Info("POD UPDATE %+v -> %+v", old, new)
+				glog.V(3).Info("POD UPDATE %+v -> %+v", old, new)
 				rc.scheduleUpdate()
 			},
 			DeleteFunc: func(obj interface{}) {
-				//				glog.Info("POD DELETE %+v", obj)
+				glog.V(3).Info("POD DELETE %+v", obj)
 				rc.scheduleUpdate()
 			},
 		},
@@ -235,6 +242,10 @@ func (c *dotmeshController) runWorker() {
 }
 
 func (c *dotmeshController) process() error {
+	glog.V(2).Info("Analysing cluster status...")
+
+	// EXAMINE NODES
+
 	// nodes is a []*v1.Node
 	// v1.Node is documented at https://godoc.org/k8s.io/api/core/v1#Node
 	nodes, err := c.nodeLister.List(labels.Everything())
@@ -242,11 +253,18 @@ func (c *dotmeshController) process() error {
 		return err
 	}
 
-	// Ensure nodes are labelled, so we can bind Dotmesh instances to them
+	// Ensure nodes are labelled correctly, so we can bind Dotmesh instances to them
 	for _, node := range nodes {
 		nodeName := node.ObjectMeta.Name
-		_, ok := node.ObjectMeta.Labels[DOTMESH_NODE_LABEL]
-		if !ok {
+		labelName, ok := node.ObjectMeta.Labels[DOTMESH_NODE_LABEL]
+
+		// We COULD use something other than the k8s node name as the
+		// label name; if so, here is the place to do that.  The code
+		// below all works in terms of the label name, so the change
+		// need only be made here.  However, the k8s node name seems the
+		// friendliest thing to use, as it saves making up another node
+		// id.
+		if !ok || labelName != nodeName {
 			n2 := node.DeepCopy()
 			n2.ObjectMeta.Labels[DOTMESH_NODE_LABEL] = nodeName
 			glog.Info(fmt.Sprintf("Labelling unfamiliar node %s so we can bind a Dotmesh to it", n2.ObjectMeta.Name))
@@ -256,11 +274,22 @@ func (c *dotmeshController) process() error {
 			}
 		}
 	}
-	/* TODO
-	for node in nodes:
-		if not labelled(node):
-			label(node)
-	*/
+
+	// Set of all node IDs
+	validNodes := map[string]struct{}{}
+
+	// Set of node IDs, starts as all nodes but we strike out ones we
+	// find a good dotmesh pod on
+	undottedNodes := map[string]struct{}{}
+
+	for _, node := range nodes {
+		nodeLabel := node.ObjectMeta.Labels[DOTMESH_NODE_LABEL]
+		glog.V(2).Info(fmt.Sprintf("Observing node %s (labelled %s)", node.ObjectMeta.Name, nodeLabel))
+		undottedNodes[nodeLabel] = struct{}{}
+		validNodes[nodeLabel] = struct{}{}
+	}
+
+	// EXAMINE DOTMESH PODS
 
 	// dotmeshes is a []*v1.Pod
 	// v1.Pod is documented at https://godoc.org/k8s.io/api/core/v1#Pod
@@ -269,32 +298,104 @@ func (c *dotmeshController) process() error {
 		return err
 	}
 
-	undotted_nodes := map[string]struct{}{}
+	dotmeshesToKill := map[string]struct{}{} // Set of pod IDs
 
-	for _, node := range nodes {
-		//		glog.Info(fmt.Sprintf("NODE DETAILS: %s ", node.ObjectMeta.Name))
-		undotted_nodes[node.ObjectMeta.Name] = struct{}{}
-	}
 	for _, dotmesh := range dotmeshes {
+		podName := dotmesh.ObjectMeta.Name
+
+		// Find the image this pod is running
+		if len(dotmesh.Spec.Containers) != 1 {
+			glog.Info(fmt.Sprintf("Observing pod %s - it has %d containers, should be 1", len(dotmesh.Spec.Containers)))
+			// Weird and strange, mark it for death
+			dotmeshesToKill[podName] = struct{}{}
+			continue
+		}
+
+		image := dotmesh.Spec.Containers[0].Image
+		if image != DOTMESH_IMAGE {
+			// Wrong image, mark it for death
+			glog.V(2).Info(fmt.Sprintf("Observing pod %s running wrong image %s (should be %s)", podName, image, DOTMESH_IMAGE))
+			dotmeshesToKill[podName] = struct{}{}
+			continue
+		}
+
 		// Find the node this pod is bound to, as if it's starting up it
 		// won't actually be scheduled onto that node yet
 		boundNode, ok := dotmesh.Spec.NodeSelector[DOTMESH_NODE_LABEL]
-		if ok {
-			//			glog.Info(fmt.Sprintf("POD DETAILS: %s on %s", dotmesh.ObjectMeta.Name, boundNode))
-			delete(undotted_nodes, boundNode)
-		} else {
-			//			glog.Info(fmt.Sprintf("POD DETAILS: %s - UNBOUND", dotmesh.ObjectMeta.Name))
+		if !ok {
+			glog.Info(fmt.Sprintf("Observing pod %s - cannot find %s label", podName, DOTMESH_NODE_LABEL))
+			// Weird and strange, mark it for death
+			dotmeshesToKill[podName] = struct{}{}
+			continue
+		}
+
+		runningNode := dotmesh.Spec.NodeName
+		// This is not set if the pod isn't running yet
+		if runningNode != "" {
+			if runningNode != boundNode {
+				glog.Info(fmt.Sprintf("Observing pod %s - running on node %s but bound to node %s", podName, runningNode, boundNode))
+				// Weird and strange, mark it for death
+				dotmeshesToKill[podName] = struct{}{}
+				continue
+			}
+		}
+
+		_, nodeOk := validNodes[boundNode]
+		if !nodeOk {
+			glog.Info(fmt.Sprintf("Observing pod %s - bound to invalid node %s", podName, boundNode))
+			// Weird and strange, mark it for death
+			dotmeshesToKill[podName] = struct{}{}
+			continue
+		}
+
+		status := dotmesh.Status.Phase
+		if status == v1.PodFailed {
+			// We're deleting the pod, so the user can't "kubectl describe" it, so let's log lots of stuff
+			glog.Info(fmt.Sprintf("Observing pod %s - FAILED (Message: %s) (Reason: %s)",
+				podName,
+				dotmesh.Status.Message,
+				dotmesh.Status.Reason,
+			))
+			for _, cond := range dotmesh.Status.Conditions {
+				glog.Info(fmt.Sprintf("Failed pod %s - condition %+v", podName, cond))
+			}
+			for _, cont := range dotmesh.Status.ContainerStatuses {
+				glog.Info(fmt.Sprintf("Failed pod %s - container %+v", podName, cont))
+			}
+
+			// Broken, mark it for death
+			dotmeshesToKill[podName] = struct{}{}
+			continue
+		}
+
+		// At this point, we believe this is a valid running Dotmesh pod.
+		// That node has a dotmesh, so isn't undotted.
+		glog.V(2).Info(fmt.Sprintf("Observing pod %s running %s on %s (status: %s)", podName, image, boundNode, dotmesh.Status.Phase))
+		delete(undottedNodes, boundNode)
+	}
+
+	// DELETE UNWANTED DOTMESH PODS
+
+	for dotmeshName, _ := range dotmeshesToKill {
+		glog.Info(fmt.Sprintf("Deleting pod %s", dotmeshName))
+		dp := meta_v1.DeletePropagationBackground
+		err = c.client.Core().Pods(DOTMESH_NAMESPACE).Delete(dotmeshName, &meta_v1.DeleteOptions{
+			PropagationPolicy: &dp,
+		})
+		if err != nil {
+			// Do not abort in error case, just keep pressing on
+			glog.Error(err)
 		}
 	}
 
-	/* TODO
+	/* TODO: Analyse available PVs
 	pvs = list_of_dotmesh_pvs_in_az()
 	unused_pvs = pvs - map(pv_of_dotmesh, dotmesh_nodes)
 	*/
 
-	for node, _ := range undotted_nodes {
-		glog.Info(fmt.Sprintf("Undotted node: %s", node))
+	// CREATE NEW DOTMESH PODS WHERE NEEDED
 
+	for node, _ := range undottedNodes {
 		/* TODO
 		if config.use_pv_storage:
 			if len(unused_pvs) == 0:
@@ -303,7 +404,7 @@ func (c *dotmeshController) process() error {
 		else:
 		*/
 
-		// FIXME: Create a dotmesh pod (with local storage for now) assigned to "node"
+		// Create a dotmesh pod (with local storage for now) assigned to this node
 		privileged := true
 		newDotmesh := v1.Pod{
 			ObjectMeta: meta_v1.ObjectMeta{
@@ -316,6 +417,7 @@ func (c *dotmeshController) process() error {
 			},
 			Spec: v1.PodSpec{
 				HostPID: true,
+				// This is what binds the pod to a specific node
 				NodeSelector: map[string]string{
 					DOTMESH_NODE_LABEL: node,
 				},
@@ -328,7 +430,7 @@ func (c *dotmeshController) process() error {
 				Containers: []v1.Container{
 					v1.Container{
 						Name:  "dotmesh-outer",
-						Image: "quay.io/dotmesh/dotmesh-server:latest", // FIXME: Include actual hash (compiled in via version)
+						Image: DOTMESH_IMAGE,
 						Command: []string{
 							"/require_zfs.sh",
 							"dotmesh-server",
@@ -398,63 +500,13 @@ func (c *dotmeshController) process() error {
 				},
 			},
 		}
-		glog.Info(fmt.Sprintf("Creating pod %s on node %s", newDotmesh.ObjectMeta.Name, node))
+		glog.Info(fmt.Sprintf("Creating pod %s running %s on node %s", newDotmesh.ObjectMeta.Name, DOTMESH_IMAGE, node))
 		_, err = c.client.Core().Pods(DOTMESH_NAMESPACE).Create(&newDotmesh)
 		if err != nil {
-			return err
+			// Do not abort in error case, just keep pressing on
+			glog.Error(err)
 		}
 	}
 
-	/*
-		TODO: delete pods without nodes, or with nodes that are not (no longer?) supposed to be running them.
-		FIXME: Think about nodes with >1 pod on. Legit thing to do if a cluster shrank? Make sure we do the right thing.
-
-			orphan_dotmeshes = filter(node_of_dotmesh not in nodes, dotmeshes)
-			unnoded_dotmeshes = filter(node_of_dotmesh == null, dotmeshes)
-
-			for each dotmesh in unnoded_dotmeshes + orphan_dotmeshes:
-				delete_dotmesh(dotmesh)
-
-	*/
-
-	// OLD CODE TO CRIB STUFF FROM:
-
-	//	node, err := c.nodeLister.Get(key)
-	//	if err != nil {
-	//		return fmt.Errorf("failed to retrieve node by key %q: %v", key, err)
-	//	}
-
-	// glog.V(4).Infof("Received update of node: %s", node.GetName())
-	// if node.Annotations == nil {
-	// 	return nil // If node has no annotations, then it doesn't need a reboot
-	// }
-
-	// if _, ok := node.Annotations[RebootNeededAnnotation]; !ok {
-	// 	return nil // Node does not need reboot
-	// }
-
-	// // Determine if we should reboot based on maximum number of unavailable nodes
-	// unavailable := 0
-	// if err != nil {
-	// 	return fmt.Errorf("Failed to determine number of unavailable nodes: %v", err)
-	// }
-
-	// if unavailable >= maxUnavailable {
-	// 	// TODO(aaron): We might want this case to retry indefinitely. Could
-	// 	// create a specific error an check in handleErr()
-	// 	return fmt.Errorf(
-	// 		"Too many nodes unvailable (%d/%d). Skipping reboot of %s",
-	// 		unavailable, maxUnavailable, node.Name,
-	// 	)
-	// }
-
-	// // We should not modify the cache object directly, so we make a copy first
-	// nodeCopy := node.DeepCopy()
-
-	// glog.Infof("Marking node %s for reboot", node.Name)
-	// nodeCopy.Annotations[RebootAnnotation] = ""
-	// if _, err := c.client.Core().Nodes().Update(nodeCopy); err != nil {
-	// 	return fmt.Errorf("Failed to set %s annotation: %v", RebootAnnotation, err)
-	// }
 	return nil
 }
