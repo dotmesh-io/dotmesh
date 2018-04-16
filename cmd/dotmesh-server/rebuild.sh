@@ -10,6 +10,7 @@ VERSION="$(cd ../versioner && go run versioner.go)"
 
 CI_DOCKER_SERVER_IMAGE=${CI_DOCKER_SERVER_IMAGE:=$(hostname).local:80/dotmesh/dotmesh-server:latest}
 CI_DOCKER_PROVISIONER_IMAGE=${CI_DOCKER_PROVISIONER_IMAGE:=$(hostname).local:80/dotmesh/dotmesh-dynamic-provisioner:latest}
+CI_DOCKER_OPERATOR_IMAGE=${CI_DOCKER_OPERATOR_IMAGE:=$(hostname).local:80/dotmesh/dotmesh-operator:latest}
 CI_DOCKER_DIND_PROVISIONER_IMAGE=${CI_DOCKER_DIND_PROVISIONER_IMAGE:=$(hostname).local:80/dotmesh/dind-dynamic-provisioner:latest}
 
 if [ -z "$CI_DOCKER_TAG" ]; then
@@ -65,6 +66,23 @@ if [ -z "${SKIP_K8S}" ]; then
 
     echo "building image: ${CI_DOCKER_PROVISIONER_IMAGE}"
     docker build -f pkg/dynamic-provisioning/Dockerfile -t "${CI_DOCKER_PROVISIONER_IMAGE}" .
+
+    # operator
+    echo "creating container: dotmesh-builder-operator-$ARTEFACT_CONTAINER"
+    docker rm -f dotmesh-builder-operator-$ARTEFACT_CONTAINER || true
+    docker run \
+        --name dotmesh-builder-operator-$ARTEFACT_CONTAINER \
+        -e GOPATH=/go \
+        -e CGO_ENABLED=0 \
+        -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/operator \
+        dotmesh-builder:$ARTEFACT_CONTAINER \
+        go build -a -ldflags '-extldflags "-static"' -o /target/operator .
+    echo "copy binary: /target/operator"
+    docker cp dotmesh-builder-operator-$ARTEFACT_CONTAINER:/target/operator target/
+    docker rm -f dotmesh-builder-operator-$ARTEFACT_CONTAINER
+
+    echo "building image: ${CI_DOCKER_OPERATOR_IMAGE}"
+    docker build -f pkg/operator/Dockerfile -t "${CI_DOCKER_OPERATOR_IMAGE}" .
 
     # test tooling, built but not released:
 
