@@ -27,13 +27,14 @@ import (
 
 // -v3 = log every raw watch event
 // -v2 = log relevant status of pods and nodes
-// -v1 = log
+// -v1 = log summary of cluster checks
 
 const DOTMESH_NAMESPACE = "dotmesh"
 const DOTMESH_NODE_LABEL = "dotmesh.io/node"
 const DOTMESH_POD_ROLE_LABEL = "dotmesh.io/role"
 const DOTMESH_ROLE_SERVER = "dotmesh-server"
 const DOTMESH_IMAGE = "quay.io/dotmesh/dotmesh-server:latest" // FIXME: Include actual hash (compiled in via version)
+const CLUSTER_MINIMUM_RATIO = 0.75                                                                                                    // When restarting pods, try to keep at least this many of the nodes running a pod.
 
 func GetClientConfig(kubeconfig string) (*rest.Config, error) {
 	if kubeconfig != "" {
@@ -112,10 +113,7 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 		// The resync period of this object. This will force a re-update of all
 		// cached objects at this interval.  Every object will trigger the
 		// `Updatefunc` even if there have been no actual updates triggered.
-		// In some cases you can set this to a very high interval - as you can
-		// assume you will see periodic updates in normal operation.  The
-		// interval is set low here for demo purposes.
-		10*time.Second,
+		60*time.Second,
 		// Callback Functions to trigger on add/update/delete
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
@@ -161,10 +159,7 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 		// The resync period of this object. This will force a re-update of all
 		// cached objects at this interval.  Every object will trigger the
 		// `Updatefunc` even if there have been no actual updates triggered.
-		// In some cases you can set this to a very high interval - as you can
-		// assume you will see periodic updates in normal operation.  The
-		// interval is set low here for demo purposes.
-		10*time.Second,
+		60*time.Second,
 		// Callback Functions to trigger on add/update/delete
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
@@ -199,7 +194,7 @@ func (c *dotmeshController) scheduleUpdate() {
 }
 
 func (c *dotmeshController) Run(stopCh chan struct{}) {
-	glog.Info("Starting RebootController")
+	glog.Info("Starting Dotmesh Operator")
 
 	go c.nodeInformer.Run(stopCh)
 	go c.podInformer.Run(stopCh)
@@ -218,7 +213,7 @@ func (c *dotmeshController) Run(stopCh chan struct{}) {
 	go wait.Until(c.runWorker, time.Second, stopCh)
 
 	<-stopCh
-	glog.Info("Stopping Reboot Controller")
+	glog.Info("Stopping Dotmesh Operator")
 }
 
 func (c *dotmeshController) runWorker() {
@@ -242,7 +237,7 @@ func (c *dotmeshController) runWorker() {
 }
 
 func (c *dotmeshController) process() error {
-	glog.V(2).Info("Analysing cluster status...")
+	glog.V(1).Info("Analysing cluster status...")
 
 	// EXAMINE NODES
 
@@ -282,6 +277,9 @@ func (c *dotmeshController) process() error {
 	// find a good dotmesh pod on
 	undottedNodes := map[string]struct{}{}
 
+	// Set of node IDs where starting new Dotmeshes is temporarily prohibited
+	suspendedNodes := map[string]struct{}{}
+
 	for _, node := range nodes {
 		nodeLabel := node.ObjectMeta.Labels[DOTMESH_NODE_LABEL]
 		glog.V(2).Info(fmt.Sprintf("Observing node %s (labelled %s)", node.ObjectMeta.Name, nodeLabel))
@@ -298,25 +296,18 @@ func (c *dotmeshController) process() error {
 		return err
 	}
 
-	dotmeshesToKill := map[string]struct{}{} // Set of pod IDs
+	dotmeshesToKill := map[string]struct{}{} // Set of pod IDs of dotmesh pods that need to die
+	dotmeshIsRunning := map[string]bool{}    // Set of pod IDs that are in the "Running" state
+
+	runningPodCount := 0
 
 	for _, dotmesh := range dotmeshes {
 		podName := dotmesh.ObjectMeta.Name
+		status := dotmesh.Status.Phase
 
-		// Find the image this pod is running
-		if len(dotmesh.Spec.Containers) != 1 {
-			glog.Info(fmt.Sprintf("Observing pod %s - it has %d containers, should be 1", len(dotmesh.Spec.Containers)))
-			// Weird and strange, mark it for death
-			dotmeshesToKill[podName] = struct{}{}
-			continue
-		}
-
-		image := dotmesh.Spec.Containers[0].Image
-		if image != DOTMESH_IMAGE {
-			// Wrong image, mark it for death
-			glog.V(2).Info(fmt.Sprintf("Observing pod %s running wrong image %s (should be %s)", podName, image, DOTMESH_IMAGE))
-			dotmeshesToKill[podName] = struct{}{}
-			continue
+		dotmeshIsRunning[podName] = status == v1.PodRunning
+		if status == v1.PodRunning {
+			runningPodCount++
 		}
 
 		// Find the node this pod is bound to, as if it's starting up it
@@ -329,6 +320,26 @@ func (c *dotmeshController) process() error {
 			continue
 		}
 
+		// Find the image this pod is running
+		if len(dotmesh.Spec.Containers) != 1 {
+			glog.Info(fmt.Sprintf("Observing pod %s - it has %d containers, should be 1", len(dotmesh.Spec.Containers)))
+			// Weird and strange, mark it for death
+			dotmeshesToKill[podName] = struct{}{}
+			// But don't try starting any new dotmesh on the node it's SUPPOSED to be on until it's gone
+			suspendedNodes[boundNode] = struct{}{}
+			continue
+		}
+
+		image := dotmesh.Spec.Containers[0].Image
+		if image != DOTMESH_IMAGE {
+			// Wrong image, mark it for death
+			glog.V(2).Info(fmt.Sprintf("Observing pod %s running wrong image %s (should be %s)", podName, image, DOTMESH_IMAGE))
+			dotmeshesToKill[podName] = struct{}{}
+			// But don't try starting any new dotmesh on the node it's SUPPOSED to be on until it's gone
+			suspendedNodes[boundNode] = struct{}{}
+			continue
+		}
+
 		runningNode := dotmesh.Spec.NodeName
 		// This is not set if the pod isn't running yet
 		if runningNode != "" {
@@ -336,6 +347,10 @@ func (c *dotmeshController) process() error {
 				glog.Info(fmt.Sprintf("Observing pod %s - running on node %s but bound to node %s", podName, runningNode, boundNode))
 				// Weird and strange, mark it for death
 				dotmeshesToKill[podName] = struct{}{}
+
+				// But don't try starting any new dotmesh on the node it's SUPPOSED to be on until it's gone
+				suspendedNodes[boundNode] = struct{}{}
+
 				continue
 			}
 		}
@@ -348,7 +363,6 @@ func (c *dotmeshController) process() error {
 			continue
 		}
 
-		status := dotmesh.Status.Phase
 		if status == v1.PodFailed {
 			// We're deleting the pod, so the user can't "kubectl describe" it, so let's log lots of stuff
 			glog.Info(fmt.Sprintf("Observing pod %s - FAILED (Message: %s) (Reason: %s)",
@@ -365,6 +379,9 @@ func (c *dotmeshController) process() error {
 
 			// Broken, mark it for death
 			dotmeshesToKill[podName] = struct{}{}
+
+			// But don't try starting a new dotmesh on there until it's gone
+			suspendedNodes[boundNode] = struct{}{}
 			continue
 		}
 
@@ -374,17 +391,57 @@ func (c *dotmeshController) process() error {
 		delete(undottedNodes, boundNode)
 	}
 
+	dottedNodeCount := len(validNodes) - len(undottedNodes)
+	glog.V(1).Info(fmt.Sprintf("%d healthy-looking dotmeshes exist to run on %d nodes; %d of them seem to be actually running; %d dotmeshes need deleting, and %d out of %d undotted nodes are temporarily suspended",
+		dottedNodeCount, len(validNodes),
+		runningPodCount,
+		len(dotmeshesToKill),
+		len(suspendedNodes), len(undottedNodes)))
+
 	// DELETE UNWANTED DOTMESH PODS
 
+	// Pods in dotmeshesToKill may be running an old version or on the
+	// wrong node or something, so may still be contributing to the
+	// cluster if dotmeshIsRunning[id] is true.
+
+	// We need to rate-limit the killing of running pods, to implement
+	// a nice rolling restart!
+
+	// We want to keep at least CLUSTER_MINIMUM_RATIO * len(validNodes)
+	// pods running. We have runningPodCount nodes running, as far as
+	// we can tell, so let's never delete so many in one go as to go
+	// below the minimum number of pods running.
+
+	// The one case to be careful of is if scheduled pods aren't
+	// starting, so we hold back on deleting existing pods to wait for
+	// them forever, when if we deleted those pods new ones could
+	// spring up in their wake...
+
+	clusterMinimumPopulation := int(CLUSTER_MINIMUM_RATIO * float32(len(validNodes)))
+	clusterPopulation := runningPodCount
+
+	glog.V(1).Info(fmt.Sprintf("%d/%d nodes might just be running or getting there, minimum target is %d",
+		clusterPopulation, len(validNodes),
+		clusterMinimumPopulation))
+
 	for dotmeshName, _ := range dotmeshesToKill {
-		glog.Info(fmt.Sprintf("Deleting pod %s", dotmeshName))
-		dp := meta_v1.DeletePropagationBackground
-		err = c.client.Core().Pods(DOTMESH_NAMESPACE).Delete(dotmeshName, &meta_v1.DeleteOptions{
-			PropagationPolicy: &dp,
-		})
-		if err != nil {
-			// Do not abort in error case, just keep pressing on
-			glog.Error(err)
+		if !dotmeshIsRunning[dotmeshName] || clusterPopulation > clusterMinimumPopulation {
+			glog.Info(fmt.Sprintf("Deleting pod %s", dotmeshName))
+			dp := meta_v1.DeletePropagationBackground
+			err = c.client.Core().Pods(DOTMESH_NAMESPACE).Delete(dotmeshName, &meta_v1.DeleteOptions{
+				PropagationPolicy: &dp,
+			})
+			if err != nil {
+				// Do not abort in error case, just keep pressing on
+				glog.Error(err)
+			}
+
+			if dotmeshIsRunning[dotmeshName] {
+				// We're killing a running pod
+				clusterPopulation--
+			}
+		} else {
+			glog.Info(fmt.Sprintf("Sparing pod %s to rate-limit the deletion of running pods", dotmeshName))
 		}
 	}
 
@@ -396,6 +453,12 @@ func (c *dotmeshController) process() error {
 	// CREATE NEW DOTMESH PODS WHERE NEEDED
 
 	for node, _ := range undottedNodes {
+		_, suspended := suspendedNodes[node]
+		if suspended {
+			glog.Info(fmt.Sprintf("Not creating a pod on undotted node %s, as the old pod is being cleared up", node))
+			continue
+		}
+
 		/* TODO
 		if config.use_pv_storage:
 			if len(unused_pvs) == 0:
@@ -457,7 +520,7 @@ func (c *dotmeshController) process() error {
 						Env: []v1.EnvVar{
 							{Name: "HOSTNAME", ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{APIVersion: "v1", FieldPath: "spec.nodeName"}}},
 							{Name: "DOTMESH_ETCD_ENDPOINT", Value: "http://dotmesh-etcd-cluster-client.dotmesh.svc.cluster.local:2379"},
-							{Name: "DOTMESH_DOCKER_IMAGE", Value: "quay.io/dotmesh/dotmesh-server:latest"},
+							{Name: "DOTMESH_DOCKER_IMAGE", Value: DOTMESH_IMAGE},
 							{Name: "PATH", Value: "/bundled-lib/sbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
 							{Name: "LD_LIBRARY_PATH", Value: "/bundled-lib/lib:/bundled-lib/usr/lib/"},
 							{Name: "ALLOW_PUBLIC_REGISTRATION", Value: "1"},
@@ -466,9 +529,13 @@ func (c *dotmeshController) process() error {
 							{Name: "USE_POOL_NAME", Value: "pool"},
 							{Name: "USE_POOL_DIR", Value: "/var/lib/dotmesh"},
 							{Name: "LOG_ADDR"},
+							// FIXME: Make this one configurable:
 							{Name: "DOTMESH_UPGRADES_URL", Value: "https://checkpoint.dotmesh.com/"},
 							{Name: "DOTMESH_UPGRADES_INTERVAL_SECONDS", Value: "14400"},
-							{Name: "FLEXVOLUME_DRIVER_DIR", Value: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec nil"},
+							// FIXME: The FV driver dir needs to be different
+							// for different cloud providers, so should come
+							// in from the configuration.
+							{Name: "FLEXVOLUME_DRIVER_DIR", Value: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec"},
 						},
 						ImagePullPolicy: v1.PullAlways,
 						LivenessProbe: &v1.Probe{

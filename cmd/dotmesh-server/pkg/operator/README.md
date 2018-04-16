@@ -19,4 +19,4 @@ Run it:
 dex 0 0 /dotmesh-test-pools/operator/operator --kubeconfig=/root/.kube/config -v 2
 ```
 
-`-v 3` gives messier logging. No `-v` at all makes it only log when it actually does something.
+`-v 3` gives messier logging. No `-v` at all makes it only log when it actually does something interesting.
