@@ -61,121 +61,28 @@ items:
         protocol: TCP
       selector:
         name: dotmesh
-  - apiVersion: extensions/v1beta1
-    kind: DaemonSet
+  - apiVersion: apps/v1beta1
+    kind: Deployment
     metadata:
-      name: dotmesh
-      #annotations:
-      #  dotmesh.io/key: value
-      labels:
-        name: dotmesh
+      name: dotmesh-operator
       namespace: dotmesh
+      labels:
+        app: dotmesh-operator
     spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: dotmesh-operator
       template:
         metadata:
           labels:
-            name: dotmesh
+            aoo: dotmesh-operator
         spec:
+          serviceAccount: dotmesh
           containers:
-            - name: dotmesh-outer
-              command:
-                - /require_zfs.sh
-                - dotmesh-server
-              ports:
-              - containerPort: 32607
-              env:
-                - name: HOSTNAME
-                  valueFrom:
-                    fieldRef:
-                      apiVersion: v1
-                      fieldPath: spec.nodeName
-                - name: DOTMESH_ETCD_ENDPOINT
-                  # etcd deployed by etcd operator.
-                  value: "http://dotmesh-etcd-cluster-client.dotmesh.svc.cluster.local:2379"
-                - name: DOTMESH_DOCKER_IMAGE
-                  value: "quay.io/dotmesh/dotmesh-server:DOCKER_TAG"
-                - name: PATH
-                  value: "/bundled-lib/sbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-                - name: LD_LIBRARY_PATH
-                  value: "/bundled-lib/lib:/bundled-lib/usr/lib/"
-                - name: ALLOW_PUBLIC_REGISTRATION
-                  value: "1"
-                # XXX some duplication here wrt dotmesh/cmd/dm/pkg/commands/cluster.go
-                - name: INITIAL_ADMIN_PASSWORD_FILE
-                  value: /secret/dotmesh-admin-password.txt
-                - name: INITIAL_ADMIN_API_KEY_FILE
-                  value: /secret/dotmesh-api-key.txt
-                - name: USE_POOL_NAME
-                  value: pool
-                - name: USE_POOL_DIR
-                  value: /var/lib/dotmesh
-                - name: LOG_ADDR
-                  value: "" # LOG_ADDR
-                - name: DOTMESH_UPGRADES_URL # Leave this out to disable checking for new versions
-                  value: "https://checkpoint.dotmesh.com/"
-                - name: DOTMESH_UPGRADES_INTERVAL_SECONDS
-                  value: "14400" # 4 hours
-                - name: FLEXVOLUME_DRIVER_DIR
-                  value: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec"
-              image: 'quay.io/dotmesh/dotmesh-server:DOCKER_TAG'
-              imagePullPolicy: Always
-              livenessProbe:
-                httpGet:
-                  path: /status
-                  port: 32607
-                initialDelaySeconds: 30
-              resources:
-                requests:
-                  cpu: 10m
-              securityContext:
-                privileged: true
-              volumeMounts:
-                - name: docker-sock
-                  mountPath: /var/run/docker.sock
-                - name: run-docker
-                  mountPath: /run/docker
-                - name: var-lib
-                  mountPath: /var/lib
-                - name: system-lib
-                  mountPath: /system-lib/lib
-                - name: dotmesh-kernel-modules
-                  mountPath: /bundled-lib
-                - name: dotmesh-secret
-                  mountPath: /secret
-                - name: test-pools-dir
-                  mountPath: /dotmesh-test-pools
-          #hostNetwork: true
-          hostPID: true
-          restartPolicy: Always
-          securityContext:
-            seLinuxOptions: {}
-          serviceAccountName: dotmesh
-          tolerations:
-            - effect: NoSchedule
-              operator: Exists
-          volumes:
-            - name: test-pools-dir
-              hostPath:
-                path: /dotmesh-test-pools
-            - name: docker-sock
-              hostPath:
-                path: /var/run/docker.sock
-            - name: run-docker
-              hostPath:
-                path: /run/docker
-            - name: var-lib
-              hostPath:
-                path: /var/lib
-            - name: system-lib
-              hostPath:
-                path: /lib
-            - name: dotmesh-kernel-modules
-              emptyDir: {}
-            - name: dotmesh-secret
-              secret:
-                secretName: dotmesh
-      updateStrategy:
-        type: RollingUpdate
+            - name: dotmesh-operator
+              image: 'quay.io/dotmesh/dotmesh-operator:DOCKER_TAG'
+              imagePullPolicy: "IfNotPresent"
   - apiVersion: v1
     kind: ServiceAccount
     metadata:
