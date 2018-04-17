@@ -13,6 +13,12 @@ Compile it:
 CGO_ENABLED=0 go build -a -ldflags '-extldflags "-static"' -o /dotmesh-test-pools/operator/operator .
 ```
 
+Configure it:
+
+```
+kubectl create configmap -n dotmesh configuration --from-literal=flexvolumeDriverDir=/usr/libexec/kubernetes/kubelet-plugins/volume/exec
+```
+
 Run it:
 
 ```

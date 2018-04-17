@@ -76,7 +76,7 @@ if [ -z "${SKIP_K8S}" ]; then
         -e CGO_ENABLED=0 \
         -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/operator \
         dotmesh-builder:$ARTEFACT_CONTAINER \
-        go build -a -ldflags '-extldflags "-static"' -o /target/operator .
+        go build -a -ldflags "-extldflags \"-static\" -X main.DOTMESH_VERSION=${VERSION} -X main.DOTMESH_IMAGE=${CI_DOCKER_SERVER_IMAGE} " -o /target/operator .
     echo "copy binary: /target/operator"
     docker cp dotmesh-builder-operator-$ARTEFACT_CONTAINER:/target/operator target/
     docker rm -f dotmesh-builder-operator-$ARTEFACT_CONTAINER
