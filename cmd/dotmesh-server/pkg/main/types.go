@@ -173,6 +173,9 @@ type InMemoryState struct {
 	globalStateCacheLock       *sync.Mutex
 	globalContainerCache       *map[string]containerInfo
 	globalContainerCacheLock   *sync.Mutex
+	etcdWaitTimestamp          int64
+	etcdWaitState              string
+	etcdWaitTimestampLock      *sync.Mutex
 	localReceiveProgress       *Observer
 	newSnapsOnMaster           *Observer
 	registry                   *Registry

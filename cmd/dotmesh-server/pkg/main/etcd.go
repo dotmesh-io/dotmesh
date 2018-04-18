@@ -1062,10 +1062,25 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		return ""
 	}
 
+	func() {
+		s.etcdWaitTimestampLock.Lock()
+		defer s.etcdWaitTimestampLock.Unlock()
+		s.etcdWaitTimestamp = time.Now().UnixNano()
+		s.etcdWaitState = "connect"
+	}()
+
 	kapi, err := getEtcdKeysApi()
 	if err != nil {
 		return err
 	}
+
+	func() {
+		s.etcdWaitTimestampLock.Lock()
+		defer s.etcdWaitTimestampLock.Unlock()
+		s.etcdWaitTimestamp = time.Now().UnixNano()
+		s.etcdWaitState = "initial get"
+	}()
+
 	// on first connect, fetch all of, well, everything
 	current, err := kapi.Get(context.Background(),
 		fmt.Sprintf(ETCD_PREFIX),
@@ -1074,6 +1089,13 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 	if err != nil {
 		return err
 	}
+
+	func() {
+		s.etcdWaitTimestampLock.Lock()
+		defer s.etcdWaitTimestampLock.Unlock()
+		s.etcdWaitTimestamp = time.Now().UnixNano()
+		s.etcdWaitState = "initial processing"
+	}()
 
 	// find the masters and requests nodes
 	var masters *client.Node
@@ -1242,7 +1264,19 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		},
 	)
 	for {
+		func() {
+			s.etcdWaitTimestampLock.Lock()
+			defer s.etcdWaitTimestampLock.Unlock()
+			s.etcdWaitTimestamp = time.Now().UnixNano()
+			s.etcdWaitState = "watch"
+		}()
 		node, err := watcher.Next(context.Background())
+		func() {
+			s.etcdWaitTimestampLock.Lock()
+			defer s.etcdWaitTimestampLock.Unlock()
+			s.etcdWaitTimestamp = time.Now().UnixNano()
+			s.etcdWaitState = fmt.Sprintf("processing %s", node.Node.Key)
+		}()
 		if err != nil {
 			return err
 		}
