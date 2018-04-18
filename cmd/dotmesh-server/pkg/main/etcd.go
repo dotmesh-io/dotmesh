@@ -1275,7 +1275,11 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 			s.etcdWaitTimestampLock.Lock()
 			defer s.etcdWaitTimestampLock.Unlock()
 			s.etcdWaitTimestamp = time.Now().UnixNano()
-			s.etcdWaitState = fmt.Sprintf("processing %s", node.Node.Key)
+			if node.Node == nil {
+				s.etcdWaitState = fmt.Sprintf("processing nil node.Node")
+			} else {
+				s.etcdWaitState = fmt.Sprintf("processing %s", node.Node.Key)
+			}
 		}()
 		if err != nil {
 			return err
