@@ -1697,6 +1697,11 @@ func (d *DotmeshRPC) DumpInternalState(
 	},
 	result *map[string]string,
 ) error {
+	err := ensureAdminUser(r)
+	if err != nil {
+		return err
+	}
+
 	// Set up a goroutine gathering data into *result via resultChan
 	*result = map[string]string{}
 
