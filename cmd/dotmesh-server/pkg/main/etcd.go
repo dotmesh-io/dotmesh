@@ -1271,19 +1271,29 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 			s.etcdWaitState = "watch"
 		}()
 		node, err := watcher.Next(context.Background())
+		if err != nil {
+			func() {
+				s.etcdWaitTimestampLock.Lock()
+				defer s.etcdWaitTimestampLock.Unlock()
+				s.etcdWaitTimestamp = time.Now().UnixNano()
+				s.etcdWaitState = fmt.Sprintf("watcher error %+v", err)
+			}()
+			return err
+		}
 		func() {
 			s.etcdWaitTimestampLock.Lock()
 			defer s.etcdWaitTimestampLock.Unlock()
 			s.etcdWaitTimestamp = time.Now().UnixNano()
-			if node.Node == nil {
-				s.etcdWaitState = fmt.Sprintf("processing nil node.Node")
+			if node == nil {
+				s.etcdWaitState = fmt.Sprintf("processing nil node")
 			} else {
-				s.etcdWaitState = fmt.Sprintf("processing %s", node.Node.Key)
+				if node.Node == nil {
+					s.etcdWaitState = fmt.Sprintf("processing nil node.Node")
+				} else {
+					s.etcdWaitState = fmt.Sprintf("processing %s", node.Node.Key)
+				}
 			}
 		}()
-		if err != nil {
-			return err
-		}
 
 		// From time to time, the entire registry will be deleted (see rpc.go
 		// RestoreEtcd). Detect this case and wipe out the registry records as
