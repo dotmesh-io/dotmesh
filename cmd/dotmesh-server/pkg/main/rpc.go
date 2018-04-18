@@ -1722,6 +1722,7 @@ func (d *DotmeshRPC) DumpInternalState(
 	s := d.state
 
 	go func() {
+		defer recover() // Don't kill the entire server if resultChan is closed because we took too long
 		resultChan <- []string{"filesystems.STARTED", "yes"}
 		s.filesystemsLock.Lock()
 		defer s.filesystemsLock.Unlock()
@@ -1763,6 +1764,7 @@ func (d *DotmeshRPC) DumpInternalState(
 	}()
 
 	go func() {
+		defer recover() // Don't kill the entire server if resultChan is closed because we took too long
 		resultChan <- []string{"mastersCache.STARTED", "yes"}
 		s.mastersCacheLock.Lock()
 		defer s.mastersCacheLock.Unlock()
@@ -1773,6 +1775,7 @@ func (d *DotmeshRPC) DumpInternalState(
 	}()
 
 	go func() {
+		defer recover() // Don't kill the entire server if resultChan is closed because we took too long
 		resultChan <- []string{"serverAddressesCache.STARTED", "yes"}
 		s.serverAddressesCacheLock.Lock()
 		defer s.serverAddressesCacheLock.Unlock()
@@ -1783,6 +1786,7 @@ func (d *DotmeshRPC) DumpInternalState(
 	}()
 
 	go func() {
+		defer recover() // Don't kill the entire server if resultChan is closed because we took too long
 		resultChan <- []string{"globalSnapshotCache.STARTED", "yes"}
 		s.globalSnapshotCacheLock.Lock()
 		defer s.globalSnapshotCacheLock.Unlock()
@@ -1800,6 +1804,7 @@ func (d *DotmeshRPC) DumpInternalState(
 	}()
 
 	go func() {
+		defer recover() // Don't kill the entire server if resultChan is closed because we took too long
 		resultChan <- []string{"globalStateCache.STARTED", "yes"}
 		s.globalStateCacheLock.Lock()
 		defer s.globalStateCacheLock.Unlock()
@@ -1814,6 +1819,7 @@ func (d *DotmeshRPC) DumpInternalState(
 	}()
 
 	go func() {
+		defer recover() // Don't kill the entire server if resultChan is closed because we took too long
 		resultChan <- []string{"globalContainerCache.STARTED", "yes"}
 		s.globalContainerCacheLock.Lock()
 		defer s.globalContainerCacheLock.Unlock()
@@ -1824,6 +1830,7 @@ func (d *DotmeshRPC) DumpInternalState(
 	}()
 
 	go func() {
+		defer recover() // Don't kill the entire server if resultChan is closed because we took too long
 		resultChan <- []string{"globalDirtyCache.STARTED", "yes"}
 		s.globalDirtyCacheLock.Lock()
 		defer s.globalDirtyCacheLock.Unlock()
@@ -1834,6 +1841,7 @@ func (d *DotmeshRPC) DumpInternalState(
 	}()
 
 	go func() {
+		defer recover() // Don't kill the entire server if resultChan is closed because we took too long
 		resultChan <- []string{"interclusterTransfers.STARTED", "yes"}
 		s.interclusterTransfersLock.Lock()
 		defer s.interclusterTransfersLock.Unlock()
@@ -1844,6 +1852,7 @@ func (d *DotmeshRPC) DumpInternalState(
 	}()
 
 	go func() {
+		defer recover() // Don't kill the entire server if resultChan is closed because we took too long
 		resultChan <- []string{"registry.TopLevelFilesystems.STARTED", "yes"}
 		s.registry.TopLevelFilesystemsLock.Lock()
 		defer s.registry.TopLevelFilesystemsLock.Unlock()
@@ -1864,6 +1873,7 @@ func (d *DotmeshRPC) DumpInternalState(
 	}()
 
 	go func() {
+		defer recover() // Don't kill the entire server if resultChan is closed because we took too long
 		resultChan <- []string{"registry.Clones.STARTED", "yes"}
 		s.registry.ClonesLock.Lock()
 		defer s.registry.ClonesLock.Unlock()
@@ -1876,6 +1886,7 @@ func (d *DotmeshRPC) DumpInternalState(
 	}()
 
 	go func() {
+		defer recover() // Don't kill the entire server if resultChan is closed because we took too long
 		resultChan <- []string{"etcdWait.STARTED", "yes"}
 		s.etcdWaitTimestampLock.Lock()
 		defer s.etcdWaitTimestampLock.Unlock()
