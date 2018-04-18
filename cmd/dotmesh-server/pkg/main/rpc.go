@@ -1722,10 +1722,15 @@ func (d *DotmeshRPC) DumpInternalState(
 	s := d.state
 
 	go func() {
+		resultChan <- []string{"filesystems.STARTED", "yes"}
 		s.filesystemsLock.Lock()
 		defer s.filesystemsLock.Unlock()
 
 		for id, fs := range *(s.filesystems) {
+			resultChan <- []string{fmt.Sprintf("filesystems.%s.STARTED", id), "yes"}
+			fs.snapshotsLock.Lock()
+			defer fs.snapshotsLock.Unlock()
+
 			resultChan <- []string{fmt.Sprintf("filesystems.%s.id", id), fs.filesystemId}
 			if fs.filesystem != nil {
 				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.id", id), fs.filesystem.id}
@@ -1752,26 +1757,33 @@ func (d *DotmeshRPC) DumpInternalState(
 			if fs.handoffRequest != nil {
 				resultChan <- []string{fmt.Sprintf("filesystems.%s.handoffRequest", id), toJsonString(*fs.handoffRequest)}
 			}
+			resultChan <- []string{fmt.Sprintf("filesystems.%s.DONE", id), "yes"}
 		}
+		resultChan <- []string{"filesystems.DONE", "yes"}
 	}()
 
 	go func() {
+		resultChan <- []string{"mastersCache.STARTED", "yes"}
 		s.mastersCacheLock.Lock()
 		defer s.mastersCacheLock.Unlock()
 		for fsId, server := range *(s.mastersCache) {
 			resultChan <- []string{fmt.Sprintf("mastersCache.%s", fsId), server}
 		}
+		resultChan <- []string{"mastersCache.DONE", "yes"}
 	}()
 
 	go func() {
+		resultChan <- []string{"serverAddressesCache.STARTED", "yes"}
 		s.serverAddressesCacheLock.Lock()
 		defer s.serverAddressesCacheLock.Unlock()
 		for serverId, addr := range *(s.serverAddressesCache) {
 			resultChan <- []string{fmt.Sprintf("serverAddressesCache.%s", serverId), addr}
 		}
+		resultChan <- []string{"serverAddressesCache.DONE", "yes"}
 	}()
 
 	go func() {
+		resultChan <- []string{"globalSnapshotCache.STARTED", "yes"}
 		s.globalSnapshotCacheLock.Lock()
 		defer s.globalSnapshotCacheLock.Unlock()
 		for serverId, d := range *(s.globalSnapshotCache) {
@@ -1784,9 +1796,11 @@ func (d *DotmeshRPC) DumpInternalState(
 				}
 			}
 		}
+		resultChan <- []string{"globalSnapshotCache.DONE", "yes"}
 	}()
 
 	go func() {
+		resultChan <- []string{"globalStateCache.STARTED", "yes"}
 		s.globalStateCacheLock.Lock()
 		defer s.globalStateCacheLock.Unlock()
 		for serverId, d := range *(s.globalStateCache) {
@@ -1796,33 +1810,41 @@ func (d *DotmeshRPC) DumpInternalState(
 				}
 			}
 		}
+		resultChan <- []string{"globalStateCache.DONE", "yes"}
 	}()
 
 	go func() {
+		resultChan <- []string{"globalContainerCache.STARTED", "yes"}
 		s.globalContainerCacheLock.Lock()
 		defer s.globalContainerCacheLock.Unlock()
 		for fsId, ci := range *(s.globalContainerCache) {
 			resultChan <- []string{fmt.Sprintf("globalContainerCache.%s", fsId), toJsonString(ci)}
 		}
+		resultChan <- []string{"globalContainerCache.DONE", "yes"}
 	}()
 
 	go func() {
+		resultChan <- []string{"globalDirtyCache.STARTED", "yes"}
 		s.globalDirtyCacheLock.Lock()
 		defer s.globalDirtyCacheLock.Unlock()
 		for fsId, di := range *(s.globalDirtyCache) {
 			resultChan <- []string{fmt.Sprintf("globalDirtyCache.%s", fsId), toJsonString(di)}
 		}
+		resultChan <- []string{"globalDirtyCache.DONE", "yes"}
 	}()
 
 	go func() {
+		resultChan <- []string{"interclusterTransfers.STARTED", "yes"}
 		s.interclusterTransfersLock.Lock()
 		defer s.interclusterTransfersLock.Unlock()
 		for txId, tpr := range *(s.interclusterTransfers) {
 			resultChan <- []string{fmt.Sprintf("interclusterTransfers.%s", txId), toJsonString(tpr)}
 		}
+		resultChan <- []string{"interclusterTransfers.DONE", "yes"}
 	}()
 
 	go func() {
+		resultChan <- []string{"registry.TopLevelFilesystems.STARTED", "yes"}
 		s.registry.TopLevelFilesystemsLock.Lock()
 		defer s.registry.TopLevelFilesystemsLock.Unlock()
 		for vn, tlf := range s.registry.TopLevelFilesystems {
@@ -1838,9 +1860,11 @@ func (d *DotmeshRPC) DumpInternalState(
 				resultChan <- []string{fmt.Sprintf("registry.TopLevelFilesystems.%s/%s.Collaborators[%d]", vn.Namespace, vn.Name, idx), toJsonString(c)}
 			}
 		}
+		resultChan <- []string{"registry.TopLevelFilesystems.DONE", "yes"}
 	}()
 
 	go func() {
+		resultChan <- []string{"registry.Clones.STARTED", "yes"}
 		s.registry.ClonesLock.Lock()
 		defer s.registry.ClonesLock.Unlock()
 		for fsId, c := range s.registry.Clones {
@@ -1848,13 +1872,16 @@ func (d *DotmeshRPC) DumpInternalState(
 				resultChan <- []string{fmt.Sprintf("registry.Clones.%s.%s.id", fsId, branchName), clone.FilesystemId}
 			}
 		}
+		resultChan <- []string{"registry.Clones.DONE", "yes"}
 	}()
 
 	go func() {
+		resultChan <- []string{"etcdWait.STARTED", "yes"}
 		s.etcdWaitTimestampLock.Lock()
 		defer s.etcdWaitTimestampLock.Unlock()
-		resultChan <- []string{"etcdWaitTimestamp", fmt.Sprintf("%d", s.etcdWaitTimestamp)}
-		resultChan <- []string{"etcdWaitState", s.etcdWaitState}
+		resultChan <- []string{"etcdWait.Timestamp", fmt.Sprintf("%d", s.etcdWaitTimestamp)}
+		resultChan <- []string{"etcdWait.State", s.etcdWaitState}
+		resultChan <- []string{"etcdWait.DONE", "yes"}
 	}()
 
 	resultChan <- []string{"myNodeId", s.myNodeId}
