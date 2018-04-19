@@ -889,6 +889,8 @@ func TestTwoNodesSameCluster(t *testing.T) {
 		citools.RunOnNode(t, node1, "dm commit -m 'First commit'")
 		time.Sleep(1 * time.Second)
 
+		fsId := strings.TrimSpace(citools.OutputFromRunOnNode(t, node1, "dm dot show -H | grep masterBranchId | cut -f 2"))
+
 		// Kill node1
 		citools.RunOnNode(t, node1, "docker stop dotmesh-server dotmesh-server-inner")
 		time.Sleep(1 * time.Second)
@@ -909,11 +911,22 @@ func TestTwoNodesSameCluster(t *testing.T) {
 
 		// Commit on node1
 		citools.RunOnNode(t, node1, "dm dot smash-branch-master "+fsname+" master")
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO3'")
-		citools.RunOnNode(t, node1, "dm commit -m 'node1 commit'")
+
+		zfsPath := strings.Replace(node1, "cluster", "testpool", -1) + "/dmfs/" + fsId + "@RandomUUID"
+
+		// Manual ZFS snapshot to circumvent etcd
+		citools.RunOnNode(t, node1, "docker exec -t dotmesh-server-inner zfs snapshot "+zfsPath)
+
+		// Restart node1 to enter into discovering state
+		citools.RunOnNode(t, node1, "docker stop dotmesh-server dotmesh-server-inner")
+		time.Sleep(1 * time.Second)
+		citools.RunOnNode(t, node1, "docker start dotmesh-server dotmesh-server-inner")
+		time.Sleep(4 * time.Second)
 
 		// Start node2 and enjoy the diverged state
-		citools.RunOnNode(t, node1, "docker start dotmesh-server dotmesh-server-inner")
+		citools.RunOnNode(t, node2, "docker start dotmesh-server dotmesh-server-inner")
+		time.Sleep(4 * time.Second)
+		citools.RunOnNode(t, node2, "dm dot show")
 	})
 }
 
