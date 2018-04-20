@@ -76,7 +76,7 @@ items:
       template:
         metadata:
           labels:
-            aoo: dotmesh-operator
+            app: dotmesh-operator
         spec:
           serviceAccount: dotmesh
           containers:

@@ -46,10 +46,19 @@ const DOTMESH_NODE_LABEL = "dotmesh.io/node"
 const DOTMESH_POD_ROLE_LABEL = "dotmesh.io/role"
 const DOTMESH_ROLE_SERVER = "dotmesh-server"
 
+// ConfigMap keys
+
 const CONFIG_NODE_SELECTOR = "nodeSelector"
 const CONFIG_UPGRADES_URL = "upgradesUrl"
 const CONFIG_UPGRADES_INTERVAL_SECONDS = "upgradesIntervalSeconds"
 const CONFIG_FLEXVOLUME_DRIVER_DIR = "flexvolumeDriverDir"
+const CONFIG_POOL_NAME = "poolName"
+const CONFIG_LOG_ADDRESS = "logAddress"
+const CONFIG_MODE = "storageMode"
+
+const CONFIG_MODE_LOCAL = "local" // Value for CONFIG_MODE
+const CONFIG_LOCAL_POOL_SIZE_PER_NODE = "local.poolSizePerNode"
+const CONFIG_LOCAL_POOL_LOCATION = "local.poolLocation"
 
 // These values are fed in via the build system at link time
 var DOTMESH_VERSION string
@@ -139,6 +148,11 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 	provideDefault(&rc.config.Data, CONFIG_UPGRADES_URL, "https://checkpoint.dotmesh.com/")
 	provideDefault(&rc.config.Data, CONFIG_UPGRADES_INTERVAL_SECONDS, "14400")
 	provideDefault(&rc.config.Data, CONFIG_FLEXVOLUME_DRIVER_DIR, "/usr/libexec/kubernetes/kubelet-plugins/volume/exec")
+	provideDefault(&rc.config.Data, CONFIG_POOL_NAME, "pool")
+	provideDefault(&rc.config.Data, CONFIG_LOG_ADDRESS, "")
+	provideDefault(&rc.config.Data, CONFIG_MODE, CONFIG_MODE_LOCAL)
+	provideDefault(&rc.config.Data, CONFIG_LOCAL_POOL_SIZE_PER_NODE, "10G")
+	provideDefault(&rc.config.Data, CONFIG_LOCAL_POOL_LOCATION, "/var/lib/dotmesh")
 
 	// TODO: listen for node_list_changed, dotmesh_pod_list_changed,
 	// config_changed or pv_list_changed
@@ -582,9 +596,10 @@ func (c *dotmeshController) process() error {
 							{Name: "ALLOW_PUBLIC_REGISTRATION", Value: "1"},
 							{Name: "INITIAL_ADMIN_PASSWORD_FILE", Value: "/secret/dotmesh-admin-password.txt"},
 							{Name: "INITIAL_ADMIN_API_KEY_FILE", Value: "/secret/dotmesh-api-key.txt"},
-							{Name: "USE_POOL_NAME", Value: "pool"},
-							{Name: "USE_POOL_DIR", Value: "/var/lib/dotmesh"},
-							{Name: "LOG_ADDR"},
+							{Name: "USE_POOL_NAME", Value: c.config.Data[CONFIG_POOL_NAME]},
+							{Name: "USE_POOL_DIR", Value: c.config.Data[CONFIG_LOCAL_POOL_LOCATION]},
+							{Name: "POOL_SIZE", Value: c.config.Data[CONFIG_LOCAL_POOL_SIZE_PER_NODE]},
+							{Name: "LOG_ADDR", Value: c.config.Data[CONFIG_LOG_ADDRESS]},
 							{Name: "DOTMESH_UPGRADES_URL", Value: c.config.Data[CONFIG_UPGRADES_URL]},
 							{Name: "DOTMESH_UPGRADES_INTERVAL_SECONDS", Value: c.config.Data[CONFIG_UPGRADES_INTERVAL_SECONDS]},
 							{Name: "FLEXVOLUME_DRIVER_DIR", Value: c.config.Data[CONFIG_FLEXVOLUME_DRIVER_DIR]},
