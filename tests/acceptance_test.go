@@ -912,7 +912,7 @@ func TestTwoNodesSameCluster(t *testing.T) {
 		// Commit on node1
 		citools.RunOnNode(t, node1, "dm dot smash-branch-master "+fsname+" master")
 
-		zfsPath := strings.Replace(node1, "cluster", "testpool", -1) + "/dmfs/" + fsId + "@RandomUUID"
+		zfsPath := strings.Replace(node1, "cluster", "testpool", -1) + "/dmfs/" + fsId + "@Node1CommitHash"
 
 		// Manual ZFS snapshot to circumvent etcd
 		citools.RunOnNode(t, node1, "docker exec -t dotmesh-server-inner zfs snapshot "+zfsPath)
@@ -921,12 +921,37 @@ func TestTwoNodesSameCluster(t *testing.T) {
 		citools.RunOnNode(t, node1, "docker stop dotmesh-server dotmesh-server-inner")
 		time.Sleep(1 * time.Second)
 		citools.RunOnNode(t, node1, "docker start dotmesh-server dotmesh-server-inner")
-		time.Sleep(4 * time.Second)
+		time.Sleep(1 * time.Second)
 
 		// Start node2 and enjoy the diverged state
 		citools.RunOnNode(t, node2, "docker start dotmesh-server dotmesh-server-inner")
 		time.Sleep(4 * time.Second)
-		citools.RunOnNode(t, node2, "dm dot show")
+
+		// TODO: Divergence resolution requires a restart of node 1 [master]
+		citools.RunOnNode(t, node1, "docker stop dotmesh-server dotmesh-server-inner")
+		time.Sleep(1 * time.Second)
+		citools.RunOnNode(t, node1, "docker start dotmesh-server dotmesh-server-inner")
+		time.Sleep(4 * time.Second)
+
+		// Check status of convergence
+		for _, node := range [...]string{node1, node2} {
+			dotStatus := citools.OutputFromRunOnNode(t, node, "dm dot show")
+			if !strings.Contains(dotStatus, "DIVERGED") || strings.Contains(dotStatus, "is missing") {
+				t.Errorf("Absence of Divergence branch or incomplete resolution on node: %s\n%s", node, dotStatus)
+			}
+			dmLog := citools.OutputFromRunOnNode(t, node, "dm log")
+			if !strings.Contains(dmLog, "First commit") || !strings.Contains(dmLog, "Node1CommitHash") {
+				t.Errorf("Absence of converged commits on  branch master on node :%s\n%s", node, dmLog)
+			}
+
+			dmBranch := citools.OutputFromRunOnNode(t, node, "dm branch | grep DIVERGED")
+			citools.RunOnNode(t, node, fmt.Sprintf("dm checkout %s", strings.TrimSpace(dmBranch)))
+
+			dmLog = citools.OutputFromRunOnNode(t, node, "dm log")
+			if !strings.Contains(dmLog, "node2 commit") {
+				t.Errorf("Absence of non-master diverged commits on  branch *DIVERGED on node :%s\n%s", node, dmLog)
+			}
+		}
 	})
 }
 
