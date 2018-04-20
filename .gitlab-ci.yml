@@ -228,22 +228,6 @@ linux_kubernetes:
         - extracted_logs
         when: always
 
-linux_kubernetes_test_tools:
-    stage: test
-    dependencies:
-        - build_server
-        - build_client_linux
-    tags:
-        - ubuntu
-        - fast
-    script:
-        - pwd
-        - ./test.sh -run TestKubernetesTestTooling
-    artifacts:
-        paths:
-        - extracted_logs
-        when: always
-
 linux_deletion_simple:
     stage: test
     dependencies:
