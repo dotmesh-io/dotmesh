@@ -127,6 +127,15 @@ func applyPrelude(prelude Prelude, fqfs string) error {
 	return nil
 }
 
+func toJsonString(value interface{}) string {
+	bytes, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Sprintf("Error encoding: %+v", err)
+	} else {
+		return string(bytes)
+	}
+}
+
 func encodePrelude(prelude Prelude) ([]byte, error) {
 	// encode a prelude as JSON wrapped up in base64. The reason for the base64
 	// is to avoid framing issues. This works because END_DOTMESH_PRELUDE has

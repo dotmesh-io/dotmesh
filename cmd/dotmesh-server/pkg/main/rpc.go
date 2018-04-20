@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"runtime/pprof"
 	"sort"
 	"strings"
 	"time"
@@ -1687,6 +1688,237 @@ func (d *DotmeshRPC) SetDebugFlag(
 	}
 
 	log.Printf("DEBUG FLAG: %s <- %s (was %s)", args.FlagName, args.FlagValue, *result)
+	return nil
+}
+
+func (d *DotmeshRPC) DumpInternalState(
+	r *http.Request,
+	args *struct {
+	},
+	result *map[string]string,
+) error {
+	err := ensureAdminUser(r)
+	if err != nil {
+		return err
+	}
+
+	// Set up a goroutine gathering data into *result via resultChan
+	*result = map[string]string{}
+
+	resultChan := make(chan ([]string))
+	doneChan := make(chan bool)
+
+	go func() {
+		for pair := range resultChan {
+			key := pair[0]
+			val := pair[1]
+
+			(*result)[key] = val
+		}
+		doneChan <- true
+	}()
+
+	// Gather data, using the channel, putting anything that might block in a goroutine
+	s := d.state
+
+	go func() {
+		defer recover() // Don't kill the entire server if resultChan is closed because we took too long
+		resultChan <- []string{"filesystems.STARTED", "yes"}
+		s.filesystemsLock.Lock()
+		defer s.filesystemsLock.Unlock()
+
+		for id, fs := range *(s.filesystems) {
+			resultChan <- []string{fmt.Sprintf("filesystems.%s.STARTED", id), "yes"}
+			fs.snapshotsLock.Lock()
+			defer fs.snapshotsLock.Unlock()
+
+			resultChan <- []string{fmt.Sprintf("filesystems.%s.id", id), fs.filesystemId}
+			if fs.filesystem != nil {
+				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.id", id), fs.filesystem.id}
+				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.exists", id), fmt.Sprintf("%t", fs.filesystem.exists)}
+				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.mounted", id), fmt.Sprintf("%t", fs.filesystem.mounted)}
+				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.origin", id), fmt.Sprintf("%s@%s", fs.filesystem.origin.FilesystemId, fs.filesystem.origin.SnapshotId)}
+				for idx, snapshot := range fs.filesystem.snapshots {
+					resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.snapshots[%d].id", id, idx), snapshot.Id}
+					for key, val := range *(snapshot.Metadata) {
+						resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.snapshots[%d].metadata.%s", id, idx, key), val}
+					}
+				}
+			}
+			resultChan <- []string{fmt.Sprintf("filesystems.%s.currentState", id), fs.currentState}
+			resultChan <- []string{fmt.Sprintf("filesystems.%s.status", id), fs.status}
+			resultChan <- []string{fmt.Sprintf("filesystems.%s.lastTransitionTimestamp", id), fmt.Sprintf("%d", fs.lastTransitionTimestamp)}
+			resultChan <- []string{fmt.Sprintf("filesystems.%s.lastTransferRequest", id), toJsonString(fs.lastTransferRequest)}
+			resultChan <- []string{fmt.Sprintf("filesystems.%s.lastTransferRequestId", id), fs.lastTransferRequestId}
+			resultChan <- []string{fmt.Sprintf("filesystems.%s.dirtyDelta", id), fmt.Sprintf("%d", fs.dirtyDelta)}
+			resultChan <- []string{fmt.Sprintf("filesystems.%s.sizeBytes", id), fmt.Sprintf("%d", fs.sizeBytes)}
+			if fs.lastPollResult != nil {
+				resultChan <- []string{fmt.Sprintf("filesystems.%s.lastPollResult", id), toJsonString(*fs.lastPollResult)}
+			}
+			if fs.handoffRequest != nil {
+				resultChan <- []string{fmt.Sprintf("filesystems.%s.handoffRequest", id), toJsonString(*fs.handoffRequest)}
+			}
+			resultChan <- []string{fmt.Sprintf("filesystems.%s.DONE", id), "yes"}
+		}
+		resultChan <- []string{"filesystems.DONE", "yes"}
+	}()
+
+	go func() {
+		defer recover() // Don't kill the entire server if resultChan is closed because we took too long
+		resultChan <- []string{"mastersCache.STARTED", "yes"}
+		s.mastersCacheLock.Lock()
+		defer s.mastersCacheLock.Unlock()
+		for fsId, server := range *(s.mastersCache) {
+			resultChan <- []string{fmt.Sprintf("mastersCache.%s", fsId), server}
+		}
+		resultChan <- []string{"mastersCache.DONE", "yes"}
+	}()
+
+	go func() {
+		defer recover() // Don't kill the entire server if resultChan is closed because we took too long
+		resultChan <- []string{"serverAddressesCache.STARTED", "yes"}
+		s.serverAddressesCacheLock.Lock()
+		defer s.serverAddressesCacheLock.Unlock()
+		for serverId, addr := range *(s.serverAddressesCache) {
+			resultChan <- []string{fmt.Sprintf("serverAddressesCache.%s", serverId), addr}
+		}
+		resultChan <- []string{"serverAddressesCache.DONE", "yes"}
+	}()
+
+	go func() {
+		defer recover() // Don't kill the entire server if resultChan is closed because we took too long
+		resultChan <- []string{"globalSnapshotCache.STARTED", "yes"}
+		s.globalSnapshotCacheLock.Lock()
+		defer s.globalSnapshotCacheLock.Unlock()
+		for serverId, d := range *(s.globalSnapshotCache) {
+			for fsId, snapshots := range d {
+				for idx, snapshot := range snapshots {
+					resultChan <- []string{fmt.Sprintf("globalSnapshotCache.%s.%s.snapshots[%d].id", serverId, fsId, idx), snapshot.Id}
+					for key, val := range *(snapshot.Metadata) {
+						resultChan <- []string{fmt.Sprintf("globalSnapshotCache.%s.%s.snapshots[%d].metadata.%s", serverId, fsId, idx, key), val}
+					}
+				}
+			}
+		}
+		resultChan <- []string{"globalSnapshotCache.DONE", "yes"}
+	}()
+
+	go func() {
+		defer recover() // Don't kill the entire server if resultChan is closed because we took too long
+		resultChan <- []string{"globalStateCache.STARTED", "yes"}
+		s.globalStateCacheLock.Lock()
+		defer s.globalStateCacheLock.Unlock()
+		for serverId, d := range *(s.globalStateCache) {
+			for fsId, states := range d {
+				for key, val := range states {
+					resultChan <- []string{fmt.Sprintf("globalStateCache.%s.%s.%s", serverId, fsId, key), val}
+				}
+			}
+		}
+		resultChan <- []string{"globalStateCache.DONE", "yes"}
+	}()
+
+	go func() {
+		defer recover() // Don't kill the entire server if resultChan is closed because we took too long
+		resultChan <- []string{"globalContainerCache.STARTED", "yes"}
+		s.globalContainerCacheLock.Lock()
+		defer s.globalContainerCacheLock.Unlock()
+		for fsId, ci := range *(s.globalContainerCache) {
+			resultChan <- []string{fmt.Sprintf("globalContainerCache.%s", fsId), toJsonString(ci)}
+		}
+		resultChan <- []string{"globalContainerCache.DONE", "yes"}
+	}()
+
+	go func() {
+		defer recover() // Don't kill the entire server if resultChan is closed because we took too long
+		resultChan <- []string{"globalDirtyCache.STARTED", "yes"}
+		s.globalDirtyCacheLock.Lock()
+		defer s.globalDirtyCacheLock.Unlock()
+		for fsId, di := range *(s.globalDirtyCache) {
+			resultChan <- []string{fmt.Sprintf("globalDirtyCache.%s", fsId), toJsonString(di)}
+		}
+		resultChan <- []string{"globalDirtyCache.DONE", "yes"}
+	}()
+
+	go func() {
+		defer recover() // Don't kill the entire server if resultChan is closed because we took too long
+		resultChan <- []string{"interclusterTransfers.STARTED", "yes"}
+		s.interclusterTransfersLock.Lock()
+		defer s.interclusterTransfersLock.Unlock()
+		for txId, tpr := range *(s.interclusterTransfers) {
+			resultChan <- []string{fmt.Sprintf("interclusterTransfers.%s", txId), toJsonString(tpr)}
+		}
+		resultChan <- []string{"interclusterTransfers.DONE", "yes"}
+	}()
+
+	go func() {
+		defer recover() // Don't kill the entire server if resultChan is closed because we took too long
+		resultChan <- []string{"registry.TopLevelFilesystems.STARTED", "yes"}
+		s.registry.TopLevelFilesystemsLock.Lock()
+		defer s.registry.TopLevelFilesystemsLock.Unlock()
+		for vn, tlf := range s.registry.TopLevelFilesystems {
+			resultChan <- []string{fmt.Sprintf("registry.TopLevelFilesystems.%s/%s.MasterBranch.id", vn.Namespace, vn.Name), tlf.MasterBranch.Id}
+			// FIXME: MasterBranch is a DotmeshVolume, with many other fields we could display.
+			for idx, ob := range tlf.OtherBranches {
+				resultChan <- []string{fmt.Sprintf("registry.TopLevelFilesystems.%s/%s.OtherBranches[%d].id", vn.Namespace, vn.Name, idx), ob.Id}
+				resultChan <- []string{fmt.Sprintf("registry.TopLevelFilesystems.%s/%s.OtherBranches[%d].name", vn.Namespace, vn.Name, idx), ob.Branch}
+				// FIXME: ob is a DotmeshVolume, with many other fields we could display.
+			}
+			resultChan <- []string{fmt.Sprintf("registry.TopLevelFilesystems.%s/%s.Owner", vn.Namespace, vn.Name), toJsonString(tlf.Owner)}
+			for idx, c := range tlf.Collaborators {
+				resultChan <- []string{fmt.Sprintf("registry.TopLevelFilesystems.%s/%s.Collaborators[%d]", vn.Namespace, vn.Name, idx), toJsonString(c)}
+			}
+		}
+		resultChan <- []string{"registry.TopLevelFilesystems.DONE", "yes"}
+	}()
+
+	go func() {
+		defer recover() // Don't kill the entire server if resultChan is closed because we took too long
+		resultChan <- []string{"registry.Clones.STARTED", "yes"}
+		s.registry.ClonesLock.Lock()
+		defer s.registry.ClonesLock.Unlock()
+		for fsId, c := range s.registry.Clones {
+			for branchName, clone := range c {
+				resultChan <- []string{fmt.Sprintf("registry.Clones.%s.%s.id", fsId, branchName), clone.FilesystemId}
+			}
+		}
+		resultChan <- []string{"registry.Clones.DONE", "yes"}
+	}()
+
+	go func() {
+		defer recover() // Don't kill the entire server if resultChan is closed because we took too long
+		resultChan <- []string{"etcdWait.STARTED", "yes"}
+		s.etcdWaitTimestampLock.Lock()
+		defer s.etcdWaitTimestampLock.Unlock()
+		resultChan <- []string{"etcdWait.Timestamp", fmt.Sprintf("%d", s.etcdWaitTimestamp)}
+		resultChan <- []string{"etcdWait.State", s.etcdWaitState}
+		resultChan <- []string{"etcdWait.DONE", "yes"}
+	}()
+
+	resultChan <- []string{"myNodeId", s.myNodeId}
+	resultChan <- []string{"versionInfo", toJsonString(s.versionInfo)}
+
+	for _, prof := range pprof.Profiles() {
+		var writer strings.Builder
+		err := prof.WriteTo(&writer, 2)
+		if err != nil {
+			resultChan <- []string{fmt.Sprintf("profile.%s.ERROR", prof.Name()), fmt.Sprintf("%+v", err)}
+		} else {
+			resultChan <- []string{fmt.Sprintf("profile.%s", prof.Name()), writer.String()}
+		}
+	}
+
+	// Give all goroutines a second at most to run
+	time.Sleep(1 * time.Second)
+
+	// Shut down the collector goroutine
+	close(resultChan)
+
+	// Await its confirmation so we can take ownership of result
+	<-doneChan
+
+	// Return the result
+	log.Printf("[DumpInternalState] %+v", *result)
 	return nil
 }
 

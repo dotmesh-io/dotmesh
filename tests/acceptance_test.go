@@ -875,6 +875,13 @@ func TestTwoNodesSameCluster(t *testing.T) {
 		}
 	})
 
+	t.Run("DumpInternalState", func(t *testing.T) {
+		st := citools.OutputFromRunOnNode(t, node1, "dm debug DotmeshRPC.DumpInternalState")
+		if len(st) < 10 {
+			t.Errorf("Suspiciously short result from DumpInternalState: %s", st)
+		}
+	})
+
 }
 
 func TestTwoDoubleNodeClusters(t *testing.T) {

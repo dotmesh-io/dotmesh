@@ -43,6 +43,10 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 		// global container state (what containers are running where), filesystemId -> containerInfo
 		globalContainerCache:     &map[string]containerInfo{},
 		globalContainerCacheLock: &sync.Mutex{},
+		// When did we start waiting for etcd?
+		etcdWaitTimestamp:     0,
+		etcdWaitState:         "",
+		etcdWaitTimestampLock: &sync.Mutex{},
 		// a sort of global event bus for filesystems getting new snapshots on
 		// their masters, keyed on filesystem name, which interested parties
 		// such as slaves for that filesystem may subscribe to
