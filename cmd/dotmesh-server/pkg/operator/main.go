@@ -318,6 +318,16 @@ func (c *dotmeshController) process() error {
 		return err
 	}
 
+	// Set of all node IDs
+	validNodes := map[string]struct{}{}
+
+	// Set of node IDs, starts as all nodes but we strike out ones we
+	// find a good dotmesh pod on
+	undottedNodes := map[string]struct{}{}
+
+	// Set of node IDs where starting new Dotmeshes is temporarily prohibited
+	suspendedNodes := map[string]struct{}{}
+
 	// Ensure nodes are labelled correctly, so we can bind Dotmesh instances to them
 	for _, node := range nodes {
 		nodeName := node.ObjectMeta.Name
@@ -337,24 +347,20 @@ func (c *dotmeshController) process() error {
 			if err != nil {
 				return err
 			}
+			// Don't try to work with this node yet; it needs its label
+			// in place, so wait until the change to the node of it
+			// getting a label re-triggers this algorithm before we
+			// process it.
+		} else {
+			// This node is correctly labelled, so add it to the list of
+			// all valid nodes and also to the list of "undotted" nodes;
+			// we will eliminate it from that list when we examine the
+			// list of dotmesh pods, if we find a dotmesh pod running on
+			// that node.
+			glog.V(2).Infof("Observing node %s (labelled %s)", node.ObjectMeta.Name, labelName)
+			undottedNodes[labelName] = struct{}{}
+			validNodes[labelName] = struct{}{}
 		}
-	}
-
-	// Set of all node IDs
-	validNodes := map[string]struct{}{}
-
-	// Set of node IDs, starts as all nodes but we strike out ones we
-	// find a good dotmesh pod on
-	undottedNodes := map[string]struct{}{}
-
-	// Set of node IDs where starting new Dotmeshes is temporarily prohibited
-	suspendedNodes := map[string]struct{}{}
-
-	for _, node := range nodes {
-		nodeLabel := node.ObjectMeta.Labels[DOTMESH_NODE_LABEL]
-		glog.V(2).Infof("Observing node %s (labelled %s)", node.ObjectMeta.Name, nodeLabel)
-		undottedNodes[nodeLabel] = struct{}{}
-		validNodes[nodeLabel] = struct{}{}
 	}
 
 	// EXAMINE DOTMESH PODS
@@ -541,7 +547,7 @@ func (c *dotmeshController) process() error {
 		privileged := true
 		newDotmesh := v1.Pod{
 			ObjectMeta: meta_v1.ObjectMeta{
-				Name:      fmt.Sprintf("dotmesh-%s", node),
+				Name:      fmt.Sprintf("server-%s", node),
 				Namespace: "dotmesh",
 				Labels: map[string]string{
 					DOTMESH_POD_ROLE_LABEL: DOTMESH_ROLE_SERVER,
