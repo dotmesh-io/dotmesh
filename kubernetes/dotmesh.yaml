@@ -85,7 +85,7 @@ items:
         nodePort: 32607
         protocol: TCP
       selector:
-        name: dotmesh
+        dotmesh.io/role: dotmesh-server
   - apiVersion: apps/v1beta1
     kind: Deployment
     metadata:

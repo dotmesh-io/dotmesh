@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
@@ -526,6 +527,20 @@ func (c *dotmeshController) process() error {
 	unused_pvs = pvs - map(pv_of_dotmesh, dotmesh_nodes)
 	*/
 
+	// FIXME: This hardcodes the name of the Deployment to be the
+	// ownerRef of created pods. It would be nicer to use an API to
+	// find the Pod containing the currently running process and then
+	// walking up to find the Deployment, so this code works under
+	// other names/namespaces.
+
+	// GET /apis/extensions/v1beta1/namespaces/{namespace}/deployments/dotmesh-operator
+
+	operatorDeployment, err := c.client.AppsV1().Deployments(DOTMESH_NAMESPACE).Get("dotmesh-operator", meta_v1.GetOptions{})
+
+	if err != nil {
+		glog.Fatal(err)
+	}
+
 	// CREATE NEW DOTMESH PODS WHERE NEEDED
 
 	for node, _ := range undottedNodes {
@@ -553,6 +568,9 @@ func (c *dotmeshController) process() error {
 					DOTMESH_POD_ROLE_LABEL: DOTMESH_ROLE_SERVER,
 				},
 				Annotations: map[string]string{},
+				OwnerReferences: []meta_v1.OwnerReference{
+					*meta_v1.NewControllerRef(operatorDeployment, schema.FromAPIVersionAndKind("apps/v1beta", "Deployment")),
+				},
 			},
 			Spec: v1.PodSpec{
 				HostPID: true,
