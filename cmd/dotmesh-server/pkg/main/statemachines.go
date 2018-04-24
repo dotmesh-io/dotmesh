@@ -362,6 +362,7 @@ func handoffState(f *fsMachine) stateFn {
 	event, _ := f.unmount()
 	if event.Name != "unmounted" {
 		log.Printf("unexpected response to unmount attempt: %s", event)
+		f.innerResponses <- event
 		return backoffState
 	}
 
@@ -491,6 +492,17 @@ waitingForSlaveSnapshot:
 		// only modify current master if I am indeed still the master
 		&client.SetOptions{PrevValue: f.state.myNodeId},
 	)
+	if err != nil {
+		f.innerResponses <- &Event{
+			Name: "failed-to-set-master-in-etcd",
+			Args: &EventArgs{
+				"err":    err,
+				"target": f.filesystemId,
+				"node":   f.state.myNodeId,
+			},
+		}
+		return backoffState
+	}
 	f.innerResponses <- &Event{Name: "moved"}
 	return inactiveState
 }
