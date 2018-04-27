@@ -66,6 +66,7 @@ func Initialise() {
 	MainCmd.AddCommand(NewCmdDebug(os.Stdout))
 	MainCmd.AddCommand(NewCmdDot(os.Stdout))
 	MainCmd.AddCommand(NewCmdVersion(os.Stdout))
+	MainCmd.AddCommand(NewCmdMount(os.Stdout))
 
 	MainCmd.PersistentFlags().StringVarP(
 		&configPath, "config", "c",
