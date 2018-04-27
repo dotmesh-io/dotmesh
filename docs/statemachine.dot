@@ -18,6 +18,7 @@ digraph {
 	 active:rollback -> active:in[label="GOT rollback";color=blue;];
 	 active:clone -> active:in[label="GOT clone";color=blue;];
 	 active:unmount -> inactive:in[label="GOT unmount";color=blue;];
+	 active:mount -> active:in[label="GOT mount";color=blue;];
 
 	 inactive[label="{<in>inactive|{<error>error|<mount>GOT mount|<ar>attemptReceive()}}";];
 	 inactive:error -> backoff[color=red;];
