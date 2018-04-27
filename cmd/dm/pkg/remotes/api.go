@@ -137,15 +137,22 @@ func (dm *DotmeshAPI) NewVolume(volumeName string) error {
 	return dm.setCurrentVolume(volumeName)
 }
 
+type ProcureVolumeName struct {
+	Namespace string
+	Name      string
+	Subdot    string
+}
+
 func (dm *DotmeshAPI) ProcureVolume(volumeName string) (string, error) {
 	var response string
 	namespace, name, err := ParseNamespacedVolume(volumeName)
 	if err != nil {
 		return "", err
 	}
-	sendVolumeName := VolumeName{
+	sendVolumeName := ProcureVolumeName{
 		Namespace: namespace,
 		Name:      name,
+		Subdot:    "__default__",
 	}
 	err = dm.client.CallRemote(context.Background(), "DotmeshRPC.Procure", sendVolumeName, &response)
 	if err != nil {

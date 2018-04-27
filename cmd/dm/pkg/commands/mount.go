@@ -30,7 +30,7 @@ NOTE: this currently only works for Linux.`,
 		},
 	}
 
-	cmd.PersistentFlags().BoolVarP(&createDot, "init", "i", false,
+	cmd.PersistentFlags().BoolVarP(&createDot, "create", "r", false,
 		"Create the dot if it does not exist.")
 
 	return cmd
@@ -60,15 +60,10 @@ func mountDot(cmd *cobra.Command, args []string, out io.Writer) error {
 		return err
 	}
 
-	if !exists {
-		if createDot {
-			err = dm.NewVolume(localDot)
-			if err != nil {
-				return fmt.Errorf("Error creating dot: %v", err)
-			}
-		} else {
-			return fmt.Errorf("Dot %s does not exist.", localDot)
-		}
+	if !exists && !createDot {
+		return fmt.Errorf(`Dot %s does not exist.
+
+If you want to create it - use the '--create' flag`, localDot)
 	}
 
 	localDotPath, err := dm.ProcureVolume(localDot)
