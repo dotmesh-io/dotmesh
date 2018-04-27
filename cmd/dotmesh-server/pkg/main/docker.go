@@ -77,21 +77,27 @@ type ResponseGet struct {
 
 // create a symlink from /dotmesh/:name[@:branch] into /dmfs/:filesystemId
 func newContainerMountSymlink(name VolumeName, filesystemId string, subvolume string) (string, error) {
+	log.Printf("[newContainerMountSymlink] name=%+v, fsId=%s.%s", name, filesystemId, subvolume)
 	if _, err := os.Stat(CONTAINER_MOUNT_PREFIX); err != nil {
 		if os.IsNotExist(err) {
 			if err := os.MkdirAll(CONTAINER_MOUNT_PREFIX, 0700); err != nil {
+				log.Printf("[newContainerMountSymlink] error creating prefix %s: %+v", CONTAINER_MOUNT_PREFIX, err)
 				return "", err
 			}
 		} else {
+			log.Printf("[newContainerMountSymlink] error statting prefix %s: %+v", CONTAINER_MOUNT_PREFIX, err)
 			return "", err
 		}
 	}
-	if _, err := os.Stat(containerMntParent(name)); err != nil {
+	parent := containerMntParent(name)
+	if _, err := os.Stat(parent); err != nil {
 		if os.IsNotExist(err) {
-			if err := os.MkdirAll(containerMntParent(name), 0700); err != nil {
+			if err := os.MkdirAll(parent, 0700); err != nil {
+				log.Printf("[newContainerMountSymlink] error creating parent %s: %+v", parent, err)
 				return "", err
 			}
 		} else {
+			log.Printf("[newContainerMountSymlink] error statting parent %s: %+v", parent, err)
 			return "", err
 		}
 	}
@@ -101,17 +107,20 @@ func newContainerMountSymlink(name VolumeName, filesystemId string, subvolume st
 
 	// Only create symlink if it doesn't already exist. Otherwise just hand it back
 	// (the target of it may have been updated elsewhere).
-	if _, err := os.Stat(mountpoint); err != nil {
+	if stat, err := os.Stat(mountpoint); err != nil {
 		if os.IsNotExist(err) {
 			err = os.Symlink(mnt(filesystemId), mountpoint)
 			if err != nil {
+				log.Printf("[newContainerMountSymlink] error symlinking mountpoint %s: %+v", mountpoint, err)
 				return "", err
 			}
 		} else {
+			log.Printf("[newContainerMountSymlink] error statting mountpoint %s: %+v", mountpoint, err)
 			return "", err
 		}
 	} else {
 		// FIXME: Check it really is a symlink. Various bugs lead to a raw directory being here, which then silently breaks things.
+		log.Printf("[newContainerMountSymlink] mountpoint %s found: %+v", mountpoint, stat)
 	}
 
 	// ...and we return either that raw mountpoint, or a subvolume within
@@ -121,13 +130,16 @@ func newContainerMountSymlink(name VolumeName, filesystemId string, subvolume st
 	if _, err := os.Stat(result); err != nil {
 		if os.IsNotExist(err) {
 			if err := os.MkdirAll(result, 0755); err != nil {
+				log.Printf("[newContainerMountSymlink] error creating subdot %s: %+v", result, err)
 				return "", err
 			}
 		} else {
+			log.Printf("[newContainerMountSymlink] error statting subdot %s: %+v", result, err)
 			return "", err
 		}
 	}
 
+	log.Printf("[newContainerMountSymlink] returning %s", result)
 	return result, nil
 }
 
