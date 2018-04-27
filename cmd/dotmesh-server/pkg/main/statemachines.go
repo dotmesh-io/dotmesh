@@ -839,6 +839,12 @@ func activeState(f *fsMachine) stateFn {
 				Args: &EventArgs{},
 			}
 			return activeState
+		} else if e.Name == "mount" {
+			f.innerResponses <- &Event{
+				Name: "mounted",
+				Args: &EventArgs{},
+			}
+			return activeState
 		} else if e.Name == "unmount" {
 			// fail if any containers running
 			containers, err := f.containersRunning()
