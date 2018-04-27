@@ -28,3 +28,12 @@ vagrant.prepare: ; bash dev.sh vagrant-prepare
 
 .PHONY: vagrant.test
 vagrant.test: ; bash dev.sh vagrant-test
+
+.PHONY: vagrant.changed
+vagrant.changed:
+	bash dev.sh vagrant-list-changed-files
+
+.PHONY: vagrant.copy
+vagrant.copy:
+	bash dev.sh vagrant-copy-changed-files
+

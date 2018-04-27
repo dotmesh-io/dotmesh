@@ -91,6 +91,19 @@ function vagrant-sync() {
   (cd $VAGRANT_GOPATH && git reset --hard $githash)
 }
 
+function vagrant-list-changed-files() {
+  files=$(git status | grep "modified:" | awk '{print $2}')
+  echo $files
+}
+
+function vagrant-copy-changed-files() {
+  for file in $CHANGED_FILES; do
+    copypcommand="cp -r /vagrant/$file /home/vagrant/gocode/src/github.com/dotmesh-io/dotmesh/$file"
+    echo $copypcommand
+    eval $copypcommand
+  done
+}
+
 function vagrant-prepare() {
   vagrant-sync
   (cd $VAGRANT_GOPATH && ./prep-tests.sh)
