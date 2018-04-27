@@ -55,9 +55,6 @@ func mountDot(cmd *cobra.Command, args []string, out io.Writer) error {
 		return err
 	}
 
-	fmt.Fprintf(out, "args %+v\n", args)
-	fmt.Fprintf(out, "mounting dot: %s/%s on %s\n", namespace, dot, mountpoint)
-
 	exists, err := dm.VolumeExists(localDot)
 	if err != nil {
 		return err
@@ -79,14 +76,14 @@ func mountDot(cmd *cobra.Command, args []string, out io.Writer) error {
 		return err
 	}
 
-	fmt.Fprintf(out, "procured dot: %s/%s into %s", namespace, dot, localDotPath)
+	fmt.Fprintf(out, "procured dot: %s/%s into %s\n", namespace, dot, localDotPath)
 
 	err = os.Symlink(localDotPath, mountpoint)
 	if err != nil {
 		return err
 	}
 
-	fmt.Fprintf(out, "symlinked dot: %s/%s from %s to %s", namespace, dot, localDotPath, mountpoint)
+	fmt.Fprintf(out, "symlinked dot: %s/%s from %s to %s\n", namespace, dot, localDotPath, mountpoint)
 
 	return nil
 }
