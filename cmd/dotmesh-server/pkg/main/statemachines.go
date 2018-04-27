@@ -362,6 +362,7 @@ func handoffState(f *fsMachine) stateFn {
 	event, _ := f.unmount()
 	if event.Name != "unmounted" {
 		log.Printf("unexpected response to unmount attempt: %s", event)
+		f.innerResponses <- event
 		return backoffState
 	}
 
@@ -491,6 +492,17 @@ waitingForSlaveSnapshot:
 		// only modify current master if I am indeed still the master
 		&client.SetOptions{PrevValue: f.state.myNodeId},
 	)
+	if err != nil {
+		f.innerResponses <- &Event{
+			Name: "failed-to-set-master-in-etcd",
+			Args: &EventArgs{
+				"err":    err,
+				"target": f.filesystemId,
+				"node":   f.state.myNodeId,
+			},
+		}
+		return backoffState
+	}
 	f.innerResponses <- &Event{Name: "moved"}
 	return inactiveState
 }
@@ -1291,7 +1303,12 @@ func (f *fsMachine) recoverFromDivergence(rollbackTo snapshot) error {
 
 	topLevelFilesystemId := tlf.MasterBranch.Id
 	t := time.Now().UTC()
-	newBranchName := fmt.Sprintf("%s-DIVERGED-%s", parentBranchName, t.Format(time.RFC3339))
+	newBranchName := ""
+	if parentBranchName == "" {
+		newBranchName = fmt.Sprintf("master-DIVERGED-%s", t.Format(time.RFC3339))
+	} else {
+		newBranchName = fmt.Sprintf("%s-DIVERGED-%s", parentBranchName, t.Format(time.RFC3339))
+	}
 
 	errorName, err := activateClone(f.state, topLevelFilesystemId, f.filesystemId, rollbackTo.Id, newFilesystemId, newBranchName)
 

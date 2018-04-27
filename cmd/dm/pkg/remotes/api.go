@@ -137,6 +137,23 @@ func (dm *DotmeshAPI) NewVolume(volumeName string) error {
 	return dm.setCurrentVolume(volumeName)
 }
 
+func (dm *DotmeshAPI) ProcureVolume(volumeName string) (string, error) {
+	var response string
+	namespace, name, err := ParseNamespacedVolume(volumeName)
+	if err != nil {
+		return "", err
+	}
+	sendVolumeName := VolumeName{
+		Namespace: namespace,
+		Name:      name,
+	}
+	err = dm.client.CallRemote(context.Background(), "DotmeshRPC.Procure", sendVolumeName, &response)
+	if err != nil {
+		return "", err
+	}
+	return response, nil
+}
+
 func (dm *DotmeshAPI) setCurrentVolume(volumeName string) error {
 	return dm.Configuration.SetCurrentVolume(volumeName)
 }

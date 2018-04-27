@@ -575,6 +575,17 @@ func TestSingleNode(t *testing.T) {
 		// GetNode(0).ApiKey from here.
 	})
 
+	t.Run("MountDot", func(t *testing.T) {
+		fsname := citools.UniqName()
+
+		// make a nice fresh dot with a commit
+		citools.RunOnNode(t, node1, "dm init "+fsname)
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+		citools.RunOnNode(t, node1, "dm commit -m 'initial empty commit'")
+
+		citools.RunOnNode(t, node1, "dm mount "+fsname+" /tmp/"+fsname)
+	})
+
 }
 
 func checkDeletionWorked(t *testing.T, fsname string, delay time.Duration, node1 string, node2 string) {
@@ -882,6 +893,77 @@ func TestTwoNodesSameCluster(t *testing.T) {
 		}
 	})
 
+	t.Run("Divergence", func(t *testing.T) {
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO'")
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+		citools.RunOnNode(t, node1, "dm commit -m 'First commit'")
+		time.Sleep(1 * time.Second)
+
+		fsId := strings.TrimSpace(citools.OutputFromRunOnNode(t, node1, "dm dot show -H | grep masterBranchId | cut -f 2"))
+
+		// Kill node1
+		citools.RunOnNode(t, node1, "docker stop dotmesh-server dotmesh-server-inner")
+		time.Sleep(1 * time.Second)
+
+		// Commit on node2
+		citools.RunOnNode(t, node2, "dm dot smash-branch-master "+fsname+" master")
+		citools.RunOnNode(t, node2, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO2'")
+		citools.RunOnNode(t, node2, "dm switch "+fsname)
+		citools.RunOnNode(t, node2, "dm commit -m 'node2 commit'")
+
+		// Kill node2
+		citools.RunOnNode(t, node2, "docker stop dotmesh-server dotmesh-server-inner")
+		time.Sleep(1 * time.Second)
+
+		// Start node1
+		citools.RunOnNode(t, node1, "docker start dotmesh-server dotmesh-server-inner")
+		time.Sleep(4 * time.Second)
+
+		// Commit on node1
+		citools.RunOnNode(t, node1, "dm dot smash-branch-master "+fsname+" master")
+
+		zfsPath := strings.Replace(node1, "cluster", "testpool", -1) + "/dmfs/" + fsId + "@Node1CommitHash"
+
+		// Manual ZFS snapshot to circumvent etcd
+		citools.RunOnNode(t, node1, "docker exec -t dotmesh-server-inner zfs snapshot "+zfsPath)
+
+		// Restart node1 to enter into discovering state
+		citools.RunOnNode(t, node1, "docker stop dotmesh-server dotmesh-server-inner")
+		time.Sleep(1 * time.Second)
+		citools.RunOnNode(t, node1, "docker start dotmesh-server dotmesh-server-inner")
+		time.Sleep(1 * time.Second)
+
+		// Start node2 and enjoy the diverged state
+		citools.RunOnNode(t, node2, "docker start dotmesh-server dotmesh-server-inner")
+		time.Sleep(4 * time.Second)
+
+		// TODO: Divergence resolution requires a restart of node 1 [master]
+		citools.RunOnNode(t, node1, "docker stop dotmesh-server dotmesh-server-inner")
+		time.Sleep(1 * time.Second)
+		citools.RunOnNode(t, node1, "docker start dotmesh-server dotmesh-server-inner")
+		time.Sleep(4 * time.Second)
+
+		// Check status of convergence
+		for _, node := range [...]string{node1, node2} {
+			dotStatus := citools.OutputFromRunOnNode(t, node, "dm dot show")
+			if !strings.Contains(dotStatus, "DIVERGED") || strings.Contains(dotStatus, "is missing") {
+				t.Errorf("Absence of Divergence branch or incomplete resolution on node: %s\n%s", node, dotStatus)
+			}
+			dmLog := citools.OutputFromRunOnNode(t, node, "dm log")
+			if !strings.Contains(dmLog, "First commit") || !strings.Contains(dmLog, "Node1CommitHash") {
+				t.Errorf("Absence of converged commits on  branch master on node :%s\n%s", node, dmLog)
+			}
+
+			dmBranch := citools.OutputFromRunOnNode(t, node, "dm branch | grep DIVERGED")
+			citools.RunOnNode(t, node, fmt.Sprintf("dm checkout %s", strings.TrimSpace(dmBranch)))
+
+			dmLog = citools.OutputFromRunOnNode(t, node, "dm log")
+			if !strings.Contains(dmLog, "node2 commit") {
+				t.Errorf("Absence of non-master diverged commits on  branch *DIVERGED on node :%s\n%s", node, dmLog)
+			}
+		}
+	})
 }
 
 func TestTwoDoubleNodeClusters(t *testing.T) {

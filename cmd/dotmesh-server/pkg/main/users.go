@@ -198,6 +198,11 @@ func AllUsers() ([]User, error) {
 		&client.GetOptions{Recursive: true},
 	)
 
+	// If there's no record of any users, there are no users.
+	if allUsers == nil {
+		return users, nil
+	}
+
 	for _, u := range allUsers.Node.Nodes {
 		this := User{}
 		err := json.Unmarshal([]byte(u.Value), &this)
