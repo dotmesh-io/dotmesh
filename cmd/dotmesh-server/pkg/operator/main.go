@@ -353,14 +353,22 @@ func (c *dotmeshController) process() error {
 			// getting a label re-triggers this algorithm before we
 			// process it.
 		} else {
-			// This node is correctly labelled, so add it to the list of
-			// all valid nodes and also to the list of "undotted" nodes;
-			// we will eliminate it from that list when we examine the
-			// list of dotmesh pods, if we find a dotmesh pod running on
-			// that node.
-			glog.V(2).Infof("Observing node %s (labelled %s)", node.ObjectMeta.Name, labelName)
-			undottedNodes[labelName] = struct{}{}
-			validNodes[labelName] = struct{}{}
+			if node.Spec.Unschedulable {
+				// Mark unschedulable nodes as valid (so existing dotmesh
+				// pods won't be killed) but not even consider them as
+				// undotted (so new dotmesh pods won't get created).
+				glog.V(2).Infof("Ignoring node %s as it's marked as unschedulable", node.ObjectMeta.Name)
+				validNodes[labelName] = struct{}{}
+			} else {
+				// This node is correctly labelled, so add it to the list of
+				// all valid nodes and also to the list of "undotted" nodes;
+				// we will eliminate it from that list when we examine the
+				// list of dotmesh pods, if we find a dotmesh pod running on
+				// that node.
+				glog.V(2).Infof("Observing node %s (labelled %s)", node.ObjectMeta.Name, labelName)
+				undottedNodes[labelName] = struct{}{}
+				validNodes[labelName] = struct{}{}
+			}
 		}
 	}
 
