@@ -970,17 +970,21 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		go func(j int) {
 			// Use the locally build dotmesh server image as the "latest" image in
 			// the test containers.
-			st, err := docker(
-				nodeName(now, i, j),
-				fmt.Sprintf(
-					"docker pull %s.local:80/dotmesh/dotmesh-server:latest && "+
-						"docker tag %s.local:80/dotmesh/dotmesh-server:latest "+
-						"quay.io/dotmesh/dotmesh-server:latest", // ABS FIXME: What is this for, and can we get rid of it safely?
-					hostname, hostname,
-				),
-				nil)
-			if err != nil {
-				panic(st)
+			for _, imageName := range []string{"dotmesh-server", "dotmesh-dynamic-provisioner", "dotmesh-operator", "dind-dynamic-provisioner"} {
+				st, err := docker(
+					nodeName(now, i, j),
+					fmt.Sprintf(
+						"docker pull %s.local:80/dotmesh/%s:latest && "+
+							"docker tag %s.local:80/dotmesh/%s:latest "+
+							"quay.io/dotmesh/%s:latest",
+						hostname, imageName,
+						hostname, imageName,
+						imageName,
+					),
+					nil)
+				if err != nil {
+					panic(st)
+				}
 			}
 			/*
 				for fqImage, localName := range cache {
@@ -1015,33 +1019,25 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 
 	// TODO regex the following yamels to refer to the newly pushed
 	// dotmesh container image, rather than the latest stable
+
 	err = System("bash", "-c",
 		fmt.Sprintf(
 			`MASTER=%s
 			docker exec $MASTER mkdir /dotmesh-kube-yaml
 			for X in ../kubernetes/*.yaml; do docker cp $X $MASTER:/dotmesh-kube-yaml/; done
-			docker exec $MASTER sed -i 's/quay.io\/dotmesh\/dotmesh-server:DOCKER_TAG/%s/' /dotmesh-kube-yaml/dotmesh.yaml
+			docker exec $MASTER sed -i 's/quay.io\/dotmesh\/dotmesh-operator:DOCKER_TAG/%s/' /dotmesh-kube-yaml/dotmesh.yaml
 			docker exec $MASTER sed -i 's/quay.io\/dotmesh\/dotmesh-dynamic-provisioner:DOCKER_TAG/%s/' /dotmesh-kube-yaml/dotmesh.yaml
-			docker exec $MASTER sed -i 's/DOTMESH_UPGRADES_URL/DISABLED_DOTMESH_UPGRADES_URL/' /dotmesh-kube-yaml/dotmesh.yaml
-			docker exec $MASTER sed -i 's/value: pool/value: %s-\#HOSTNAME\#/' /dotmesh-kube-yaml/dotmesh.yaml
-			docker exec $MASTER sed -i 's/value: \/var\/lib\/dotmesh/value: %s-\#HOSTNAME\#/' /dotmesh-kube-yaml/dotmesh.yaml
-			docker exec $MASTER sed -i 's/"" \# LOG_ADDR/"%s"/' /dotmesh-kube-yaml/dotmesh.yaml
 			docker exec $MASTER sed -i 's/size: 3/size: 1/' /dotmesh-kube-yaml/dotmesh-etcd-cluster.yaml
 			`,
 			nodeName(now, i, 0),
-			strings.Replace(LocalImage("dotmesh-server"), "/", "\\/", -1),
+			strings.Replace(LocalImage("dotmesh-operator"), "/", "\\/", -1),
 			strings.Replace(LocalImage("dotmesh-dynamic-provisioner"), "/", "\\/", -1),
-			// need to somehow number the instances, did this by modifying
-			// require_zfs.sh to include the hostname in the pool name to make
-			// them unique... TODO: make sure we clear these up
-			poolId(now, i, 0),
-			"\\/dotmesh-test-pools\\/"+poolId(now, i, 0),
-			logAddr,
 		),
 	)
 	if err != nil {
 		return err
 	}
+
 	st, err := docker(
 		nodeName(now, i, 0),
 		"touch /dind/flexvolume_driver && "+
@@ -1091,9 +1087,19 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		LogTiming("join_" + poolId(now, i, j))
 	}
 	// now install dotmesh yaml (setting initial admin pw)
+
+	configMapCmd := fmt.Sprintf(
+		"kubectl create configmap -n dotmesh configuration --from-literal=upgradesUrl= '--from-literal=poolName=%s-#HOSTNAME#' '--from-literal=local.poolLocation=/dotmesh-test-pools/%s-#HOSTNAME#' --from-literal=logAddress=%s",
+		poolId(now, i, 0),
+		poolId(now, i, 0),
+		logAddr,
+	)
+
 	st, err = docker(
 		nodeName(now, i, 0),
-		"kubectl apply -f /dotmesh-kube-yaml/weave-net.yaml && "+
+		"echo '#### STARTING WEAVE-NET' && "+
+			"kubectl apply -f /dotmesh-kube-yaml/weave-net.yaml && "+
+			"echo '#### CREATING DOTMESH CONFIGURATION' && "+
 			"kubectl create namespace dotmesh && "+
 			"echo -n 'secret123' > dotmesh-admin-password.txt && "+
 			"echo -n 'FAKEAPIKEY' > dotmesh-api-key.txt && "+
@@ -1101,13 +1107,18 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			"    --from-file=./dotmesh-admin-password.txt --from-file=./dotmesh-api-key.txt -n dotmesh && "+
 			"rm dotmesh-admin-password.txt && "+
 			"rm dotmesh-api-key.txt && "+
+			// create configmap
+			configMapCmd+" && "+
 			// install etcd operator on the cluster
+			"echo '#### STARTING ETCD OPERATOR' && "+
 			"kubectl apply -f /dotmesh-kube-yaml/etcd-operator-clusterrole.yaml && "+
 			"kubectl apply -f /dotmesh-kube-yaml/etcd-operator-dep.yaml && "+
 			// install dotmesh once on the master (retry because etcd operator
 			// needs to initialize)
 			"sleep 1 && "+
+			"echo '#### STARTING ETCD' && "+
 			"while ! kubectl apply -f /dotmesh-kube-yaml/dotmesh-etcd-cluster.yaml; do sleep 2; "+KUBE_DEBUG_CMD+"; done && "+
+			"echo '#### STARTING DOTMESH' && "+
 			"kubectl apply -f /dotmesh-kube-yaml/dotmesh.yaml",
 		nil,
 	)
@@ -1178,7 +1189,12 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 				/usr/libexec/kubernetes/kubelet-plugins/volume/exec/dotmesh.io~dind
 			docker cp ../cmd/dotmesh-server/target/dind-flexvolume \
 				$NODE:/usr/libexec/kubernetes/kubelet-plugins/volume/exec/dotmesh.io~dind/dind
+			docker exec -i $NODE systemctl restart kubelet
 			`,
+			// Restarting the kubelet (line above) shouldn't be
+			// necessary, but in this case for some reason it seems to be
+			// necessary to make the flexvolume plugin be seen on all
+			// nodes :-(
 			nodeName,
 		)
 		err = System("bash", "-c", getFlexCommand)
