@@ -224,7 +224,7 @@ linux_kubernetes:
         - fast
     script:
         - pwd
-        - ./test.sh -run TestKubernetes
+        - ./test.sh -run 'TestKubernetes$'
     artifacts:
         paths:
         - extracted_logs
