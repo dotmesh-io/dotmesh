@@ -493,6 +493,54 @@ func TestSingleNode(t *testing.T) {
 		}
 	})
 
+	t.Run("MountExistingDot", func(t *testing.T) {
+		fsname := citools.UniqName()
+
+		// make a nice fresh dot with a commit
+		citools.RunOnNode(t, node1, "dm init "+fsname)
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+
+		citools.RunOnNode(t, node1, "dm commit -m 'initial empty commit'")
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo hello > /foo/file.txt'")
+		citools.RunOnNode(t, node1, "dm commit -m 'commit with some data'")
+
+		// mount the dot on a local path
+		citools.RunOnNode(t, node1, "dm mount "+fsname+" /tmp/mounted-"+fsname)
+
+		// check we can see the dot data from the local path
+		st := citools.OutputFromRunOnNode(t, node1, "cat /tmp/mounted-"+fsname+"/file.txt")
+		if st != "hello\n" {
+			t.Errorf("Expected hello, got %+v", st)
+		}
+	})
+
+	t.Run("MountNewDot", func(t *testing.T) {
+		fsname := citools.UniqName()
+
+		// mount a created dot on a local path
+		citools.RunOnNode(t, node1, "dm mount --create "+fsname+" /tmp/mounted-"+fsname)
+
+		// write data to the local dot path
+		citools.RunOnNode(t, node1, "sh -c 'echo hello > /tmp/mounted-"+fsname+"/file.txt'")
+
+		// check we can read the data from a container dot
+		st := citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'cat /foo/file.txt'")
+		if st != "hello\n" {
+			t.Errorf("Expected hello, got %+v", st)
+		}
+	})
+
+	t.Run("MountNewDotFailure", func(t *testing.T) {
+		fsname := citools.UniqName()
+
+		// fail to make a dot because no --create flag
+		st := citools.OutputFromRunOnNode(t, node1, "if dm mount "+fsname+" /tmp/mounted-"+fsname+"; then false; else true; fi")
+
+		if !strings.Contains(st, fmt.Sprintf("Dot %s does not exist.", fsname)) {
+			t.Error(fmt.Sprintf("We didn't get an error when the --create flag was not used: %+v", st))
+		}
+	})
+
 	t.Run("ApiKeys", func(t *testing.T) {
 		apiKey := f[0].GetNode(0).ApiKey
 		password := f[0].GetNode(0).Password
@@ -573,17 +621,6 @@ func TestSingleNode(t *testing.T) {
 		// later tests don't fail! We can do a "citools.RunOnNode(t, node1, sed -i
 		// s/old/new/ /root/.dotmesh/config)" but we can't mutate
 		// GetNode(0).ApiKey from here.
-	})
-
-	t.Run("MountDot", func(t *testing.T) {
-		fsname := citools.UniqName()
-
-		// make a nice fresh dot with a commit
-		citools.RunOnNode(t, node1, "dm init "+fsname)
-		citools.RunOnNode(t, node1, "dm switch "+fsname)
-		citools.RunOnNode(t, node1, "dm commit -m 'initial empty commit'")
-
-		citools.RunOnNode(t, node1, "dm mount "+fsname+" /tmp/"+fsname)
 	})
 
 }
