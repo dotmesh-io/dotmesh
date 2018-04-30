@@ -33,7 +33,6 @@ Add the name of the environment variable you want passed into
  * `cmd/dm/pkg/cluster.go` -> edit `inheritedEnvironment`
  * `cmd/dotmesh-server/require_zfs.sh` -> edit `INHERIT_ENVIRONMENT_NAMES`
 
-
 ## debugging frontend test code
 
 Sometimes when making changes to the frontend tests - the test suite will not
@@ -48,3 +47,20 @@ $ node specs/*.js
 ```
 
 The problem is normally reported as a syntax error at this point.
+
+## Adding an extra Docker image
+
+The build produces various Docker images. For local testing, they need
+to be made available in the local registry so the DIND containers can
+pull them in; for CI testing, they need to be in the OVH registry; and
+for release, they need to make it to quay.io.
+
+Please follow the existing pattern in `rebuild.sh` scripts and
+`~/.gitlab-ci.yml` of using a `CI_DOCKER_XXX_IMAGE` environment
+variable to obtain the image names to tag and push, so the
+infrastructure can route the images to the appropriate places for the
+type of build in progress.
+
+Also, new image repositories need to be created on `quay.io`, marked
+public, and the `dotmesh+ci` CI robot user given write access to them;
+and in the OVH registry, they must be set to "Visibilité: Public".
