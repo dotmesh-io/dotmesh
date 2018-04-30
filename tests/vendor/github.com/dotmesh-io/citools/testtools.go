@@ -965,52 +965,35 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 
 	// pre-pull all the container images Kubernetes needs to use, tag them to
 	// trick it into not downloading anything.
-	finishing := make(chan bool)
-	for j := 0; j < c.DesiredNodeCount; j++ {
-		go func(j int) {
-			// Use the locally build dotmesh server image as the "latest" image in
-			// the test containers.
-			for _, imageName := range []string{"dotmesh-server", "dotmesh-dynamic-provisioner", "dotmesh-operator", "dind-dynamic-provisioner"} {
-				st, err := docker(
-					nodeName(now, i, j),
-					fmt.Sprintf(
-						"docker pull %s.local:80/dotmesh/%s:latest && "+
-							"docker tag %s.local:80/dotmesh/%s:latest "+
-							"quay.io/dotmesh/%s:latest",
-						hostname, imageName,
-						hostname, imageName,
-						imageName,
-					),
-					nil)
-				if err != nil {
-					panic(st)
-				}
-			}
-			/*
-				for fqImage, localName := range cache {
-					fmt.Printf("Pulling %s.local:80/%s\n", hostname, localName)
+	/*
+		finishing := make(chan bool)
+		for j := 0; j < c.DesiredNodeCount; j++ {
+			go func(j int) {
+				// Use the locally build dotmesh server image as the "latest" image in
+				// the test containers.
+				for _, imageName := range []string{"dotmesh-server", "dotmesh-dynamic-provisioner", "dotmesh-operator", "dind-dynamic-provisioner"} {
 					st, err := docker(
 						nodeName(now, i, j),
-						// docker pull $local_name
-						// docker tag $local_name $fq_image
 						fmt.Sprintf(
-							"docker pull %s.local:80/%s && "+
-								"docker tag %s.local:80/%s %s",
-							hostname, localName, hostname, localName, fqImage,
+							"docker pull %s.local:80/dotmesh/%s:latest && "+
+								"docker tag %s.local:80/dotmesh/%s:latest "+
+								"quay.io/dotmesh/%s:latest",
+							hostname, imageName,
+							hostname, imageName,
+							imageName,
 						),
-						nil,
-					)
+						nil)
 					if err != nil {
 						panic(st)
 					}
 				}
-			*/
-			finishing <- true
-		}(j)
-	}
-	for j := 0; j < c.DesiredNodeCount; j++ {
-		_ = <-finishing
-	}
+				finishing <- true
+			}(j)
+		}
+		for j := 0; j < c.DesiredNodeCount; j++ {
+			_ = <-finishing
+		}
+	*/
 
 	logAddr := ""
 	if os.Getenv("DISABLE_LOG_AGGREGATION") == "" {
