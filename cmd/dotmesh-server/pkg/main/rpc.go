@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"runtime/pprof"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -1898,15 +1898,46 @@ func (d *DotmeshRPC) DumpInternalState(
 	resultChan <- []string{"myNodeId", s.myNodeId}
 	resultChan <- []string{"versionInfo", toJsonString(s.versionInfo)}
 
-	for _, prof := range pprof.Profiles() {
-		var writer strings.Builder
-		err := prof.WriteTo(&writer, 2)
-		if err != nil {
-			resultChan <- []string{fmt.Sprintf("profile.%s.ERROR", prof.Name()), fmt.Sprintf("%+v", err)}
-		} else {
-			resultChan <- []string{fmt.Sprintf("profile.%s", prof.Name()), writer.String()}
+	go func() {
+		defer recover() // Don't kill the entire server if resultChan is closed because we took too long
+		resultChan <- []string{"goroutines.STARTED", "yes"}
+
+		numProfiles := 1
+		profiles := make([]runtime.StackRecord, numProfiles)
+
+		for {
+			numProfiles, ok := runtime.GoroutineProfile(profiles)
+			if ok {
+				break
+			} else {
+				// Grow the profiles array and try again
+				profiles = make([]runtime.StackRecord, numProfiles)
+				continue
+			}
 		}
-	}
+
+		for grIdx, sr := range profiles {
+			stack := sr.Stack()
+			frames := runtime.CallersFrames(stack)
+			idx := 0
+			for {
+				frame, more := frames.Next()
+				// To keep this example's output stable
+				// even if there are changes in the testing package,
+				// stop unwinding when we leave package runtime.
+				resultChan <- []string{
+					fmt.Sprintf("goroutines.%d.stack[%03d]", grIdx, idx),
+					fmt.Sprintf("%s (%s:%d)", frame.Function, frame.File, frame.Line),
+				}
+
+				idx = idx + 1
+				if !more {
+					break
+				}
+			}
+		}
+		resultChan <- []string{"goroutines.DONE", "yes"}
+	}()
 
 	// Give all goroutines a second at most to run
 	time.Sleep(1 * time.Second)
@@ -1918,7 +1949,7 @@ func (d *DotmeshRPC) DumpInternalState(
 	<-doneChan
 
 	// Return the result
-	log.Printf("[DumpInternalState] %+v", *result)
+	log.Printf("[DumpInternalState] finished")
 	return nil
 }
 
