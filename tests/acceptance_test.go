@@ -1823,7 +1823,7 @@ func TestThreeSingleNodeClusters(t *testing.T) {
 	*/
 }
 
-func TestKubernetes(t *testing.T) {
+func TestKubernetesVolumes(t *testing.T) {
 	citools.TeardownFinishedTestRuns()
 
 	f := citools.Federation{citools.NewKubernetes(3)}

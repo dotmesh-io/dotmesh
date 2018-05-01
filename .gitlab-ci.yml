@@ -214,7 +214,7 @@ linux_two_nodes_same_cluster:
         - extracted_logs
         when: always
 
-linux_kubernetes:
+linux_kubernetes_volumes:
     stage: test
     dependencies:
         - build_server
@@ -224,7 +224,7 @@ linux_kubernetes:
         - fast
     script:
         - pwd
-        - ./test.sh -run 'TestKubernetes$'
+        - ./test.sh -run TestKubernetesVolumes
     artifacts:
         paths:
         - extracted_logs
