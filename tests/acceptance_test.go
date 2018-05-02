@@ -936,6 +936,8 @@ func TestTwoNodesSameCluster(t *testing.T) {
 		citools.RunOnNode(t, node1, "dm switch "+fsname)
 		citools.RunOnNode(t, node1, "dm commit -m 'First commit'")
 		ensureCurrentDotIsFullyReplicated(t, node1)
+		citools.RunOnNode(t, node1, "dm dot show")
+		citools.RunOnNode(t, node2, "dm dot show")
 
 		fsId := strings.TrimSpace(citools.OutputFromRunOnNode(t, node1, "dm dot show -H | grep masterBranchId | cut -f 2"))
 
@@ -947,6 +949,7 @@ func TestTwoNodesSameCluster(t *testing.T) {
 		citools.RunOnNode(t, node2, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO2'")
 		citools.RunOnNode(t, node2, "dm switch "+fsname)
 		citools.RunOnNode(t, node2, "dm commit -m 'node2 commit'")
+		citools.RunOnNode(t, node2, "dm dot show")
 
 		// Kill node2
 		stopContainers(t, node2)
@@ -962,12 +965,14 @@ func TestTwoNodesSameCluster(t *testing.T) {
 		// Manual ZFS snapshot to circumvent etcd
 		citools.RunOnNode(t, node1, "docker exec -t dotmesh-server-inner zfs snapshot "+zfsPath)
 
-		// Restart node1 to enter into discovering state
 		stopContainers(t, node1)
 		startContainers(t, node1)
+		citools.RunOnNode(t, node1, "dm dot show")
 
 		// Start node2 and enjoy the diverged state
 		startContainers(t, node2)
+		citools.RunOnNode(t, node1, "dm dot show")
+		citools.RunOnNode(t, node2, "dm dot show")
 
 		// Check status of convergence
 		for _, node := range [...]string{node1, node2} {
