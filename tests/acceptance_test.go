@@ -935,13 +935,12 @@ func TestTwoNodesSameCluster(t *testing.T) {
 		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO'")
 		citools.RunOnNode(t, node1, "dm switch "+fsname)
 		citools.RunOnNode(t, node1, "dm commit -m 'First commit'")
-		time.Sleep(1 * time.Second)
+		ensureCurrentDotIsFullyReplicated(t, node1)
 
 		fsId := strings.TrimSpace(citools.OutputFromRunOnNode(t, node1, "dm dot show -H | grep masterBranchId | cut -f 2"))
 
 		// Kill node1
-		citools.RunOnNode(t, node1, "docker stop dotmesh-server dotmesh-server-inner")
-		time.Sleep(1 * time.Second)
+		stopContainers(t, node1)
 
 		// Commit on node2
 		citools.RunOnNode(t, node2, "dm dot smash-branch-master "+fsname+" master")
@@ -950,12 +949,10 @@ func TestTwoNodesSameCluster(t *testing.T) {
 		citools.RunOnNode(t, node2, "dm commit -m 'node2 commit'")
 
 		// Kill node2
-		citools.RunOnNode(t, node2, "docker stop dotmesh-server dotmesh-server-inner")
-		time.Sleep(1 * time.Second)
+		stopContainers(t, node2)
 
 		// Start node1
-		citools.RunOnNode(t, node1, "docker start dotmesh-server dotmesh-server-inner")
-		time.Sleep(4 * time.Second)
+		startContainers(t, node1)
 
 		// Commit on node1
 		citools.RunOnNode(t, node1, "dm dot smash-branch-master "+fsname+" master")
@@ -966,14 +963,11 @@ func TestTwoNodesSameCluster(t *testing.T) {
 		citools.RunOnNode(t, node1, "docker exec -t dotmesh-server-inner zfs snapshot "+zfsPath)
 
 		// Restart node1 to enter into discovering state
-		citools.RunOnNode(t, node1, "docker stop dotmesh-server dotmesh-server-inner")
-		time.Sleep(1 * time.Second)
-		citools.RunOnNode(t, node1, "docker start dotmesh-server dotmesh-server-inner")
-		time.Sleep(1 * time.Second)
+		stopContainers(t, node1)
+		startContainers(t, node1)
 
 		// Start node2 and enjoy the diverged state
-		citools.RunOnNode(t, node2, "docker start dotmesh-server dotmesh-server-inner")
-		time.Sleep(4 * time.Second)
+		startContainers(t, node2)
 
 		// Check status of convergence
 		for _, node := range [...]string{node1, node2} {
@@ -2231,6 +2225,49 @@ spec:
 		testServiceAvailability(t, node1.IP)
 	})
 	citools.DumpTiming()
+}
+
+func ensureCurrentDotIsFullyReplicated(t *testing.T, node string) {
+	for try := 1; try <= 5; try++ {
+		fmt.Printf("Dotmesh containers running on %s: ", node)
+		st := citools.OutputFromRunOnNode(t, node, "dm dot show | grep missing || true")
+		if st == "" {
+			return
+		} else {
+			time.Sleep(1 * time.Second)
+		}
+	}
+	t.Fatalf("Dot wouldn't stabilise")
+}
+
+func stopContainers(t *testing.T, node string) {
+	citools.RunOnNode(t, node, "docker stop dotmesh-server dotmesh-server-inner")
+
+	for try := 1; try <= 5; try++ {
+		fmt.Printf("Dotmesh containers running on %s: ", node)
+		st := citools.OutputFromRunOnNode(t, node, "docker ps | grep dotmesh-server | wc -l")
+		if st == "0\n" {
+			return
+		} else {
+			time.Sleep(1 * time.Second)
+		}
+	}
+	t.Fatalf("Containers wouldn't stop on %+v", node)
+}
+
+func startContainers(t *testing.T, node string) {
+	citools.RunOnNode(t, node, "docker start dotmesh-server dotmesh-server-inner")
+
+	for try := 1; try <= 5; try++ {
+		fmt.Print("Dotmesh containers running on %s: ", node)
+		st := citools.OutputFromRunOnNode(t, node, "dm version | grep 'Unable to connect' | wc -l")
+		if st == "0\n" {
+			return
+		} else {
+			time.Sleep(1 * time.Second)
+		}
+	}
+	t.Fatalf("Containers wouldn't start on %+v", node)
 }
 
 func testServiceAvailability(t *testing.T, IP string) {
