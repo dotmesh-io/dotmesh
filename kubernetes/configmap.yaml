@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configuration
+  namespace: dotmesh
+data:
+  nodeSelector: ''
+  upgradesUrl: https://checkpoint.dotmesh.com/
+  upgradesIntervalSeconds: '14400'
+  flexvolumeDriverDir: /usr/libexec/kubernetes/kubelet-plugins/volume/exec
+  poolName: pool
+  logAddress: ''
+  storageMode: local
+  local.poolSizePerNode: 10G
+  local.poolLocation: /var/lib/dotmesh
