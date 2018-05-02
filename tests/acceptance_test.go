@@ -975,12 +975,6 @@ func TestTwoNodesSameCluster(t *testing.T) {
 		citools.RunOnNode(t, node2, "docker start dotmesh-server dotmesh-server-inner")
 		time.Sleep(4 * time.Second)
 
-		// TODO: Divergence resolution requires a restart of node 1 [master]
-		citools.RunOnNode(t, node1, "docker stop dotmesh-server dotmesh-server-inner")
-		time.Sleep(1 * time.Second)
-		citools.RunOnNode(t, node1, "docker start dotmesh-server dotmesh-server-inner")
-		time.Sleep(4 * time.Second)
-
 		// Check status of convergence
 		for _, node := range [...]string{node1, node2} {
 			dotStatus := citools.OutputFromRunOnNode(t, node, "dm dot show")

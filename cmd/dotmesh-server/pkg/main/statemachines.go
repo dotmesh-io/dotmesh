@@ -1021,6 +1021,9 @@ func (f *fsMachine) attemptReceive() bool {
 		case *NoFromSnaps:
 			// no snaps; can't replicate yet
 			return false
+		case *ToSnapsDiverged:
+			// detected divergence, attempt to recieve and resolve
+			return true
 		default:
 			// some other error
 			log.Printf("Not attempting to receive %s because: %s", f.filesystemId, err)
@@ -1629,6 +1632,8 @@ func pushInitiatorState(f *fsMachine) stateFn {
 	// for "up to latest")
 
 	// TODO tidy up argument passing here.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
 	responseEvent, nextState := f.applyPath(path, func(f *fsMachine,
 		fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
 		transferRequestId string, pollResult *TransferPollResult,
@@ -1636,7 +1641,7 @@ func pushInitiatorState(f *fsMachine) stateFn {
 	) (*Event, stateFn) {
 		return f.retryPush(
 			fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
-			transferRequestId, pollResult, client, transferRequest,
+			transferRequestId, pollResult, client, transferRequest, ctx,
 		)
 	}, transferRequestId, &pollResult, client, &transferRequest)
 
@@ -1659,13 +1664,19 @@ func (f *fsMachine) incrementPollResultIndex(
 func (f *fsMachine) retryPush(
 	fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
 	transferRequestId string, pollResult *TransferPollResult,
-	client *JsonRpcClient, transferRequest *TransferRequest,
+	client *JsonRpcClient, transferRequest *TransferRequest, ctx context.Context,
 ) (*Event, stateFn) {
 	// Let's go!
 	var retry int
 	var responseEvent *Event
-	var nextState stateFn
+	nextState := backoffState
+
 	for retry < 5 {
+		select {
+		case <-ctx.Done():
+			break
+		default:
+		}
 		// TODO refactor this wrt retryPull
 		responseEvent, nextState = func() (*Event, stateFn) {
 			// Interpret empty toSnapshotId as "push to the latest snapshot"
@@ -1690,7 +1701,7 @@ func (f *fsMachine) retryPush(
 			)
 			var remoteSnaps []*snapshot
 			err := client.CallRemote(
-				context.Background(),
+				ctx,
 				"DotmeshRPC.CommitsById",
 				toFilesystemId,
 				&remoteSnaps,
@@ -1773,7 +1784,7 @@ func (f *fsMachine) retryPush(
 			var result bool
 			log.Printf("[retryPush] calling RegisterTransfer with args: %+v", pollResult)
 			err = client.CallRemote(
-				context.Background(), "DotmeshRPC.RegisterTransfer", pollResult, &result,
+				ctx, "DotmeshRPC.RegisterTransfer", pollResult, &result,
 			)
 			if err != nil {
 				return &Event{
@@ -1791,6 +1802,7 @@ func (f *fsMachine) retryPush(
 			return f.push(
 				fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
 				snapRange, transferRequest, &transferRequestId, pollResult, client,
+				ctx,
 			)
 		}()
 		if responseEvent.Name == "finished-push" || responseEvent.Name == "peer-up-to-date" {
@@ -2158,6 +2170,7 @@ func (f *fsMachine) push(
 	transferRequestId *string,
 	pollResult *TransferPollResult,
 	client *JsonRpcClient,
+	ctx context.Context,
 ) (responseEvent *Event, nextState stateFn) {
 
 	filesystemId := pollResult.FilesystemId
@@ -2181,7 +2194,7 @@ func (f *fsMachine) push(
 	defer postReader.Close()
 
 	url, err := deduceUrl(
-		context.Background(),
+		ctx,
 		[]string{transferRequest.Peer},
 		// pushes are between clusters, so use external address where
 		// appropriate
