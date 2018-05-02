@@ -2066,6 +2066,10 @@ spec:
 // Later, we can build tests on top which make the dotmesh operator _consume_
 // dind PVs.
 
+// THIS TEST IS DISABLED IN CI because the "drain" doesn't work when
+// the node has pods on it managed by operators, it gives an error
+// about unknown controller types :-(
+
 func TestKubernetesTestTooling(t *testing.T) {
 	citools.TeardownFinishedTestRuns()
 

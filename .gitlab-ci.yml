@@ -321,7 +321,8 @@ linux_two_double_node_clusters:
         - extracted_logs
         when: always
 
-linux_kubernetes_test_tooling:
+# Test disabled while we rethink how it works (see comments in acceptance_test.go)
+.linux_kubernetes_test_tooling:
     stage: test
     dependencies:
         - build_server
