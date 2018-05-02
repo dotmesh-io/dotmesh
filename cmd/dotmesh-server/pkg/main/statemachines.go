@@ -1021,6 +1021,9 @@ func (f *fsMachine) attemptReceive() bool {
 		case *NoFromSnaps:
 			// no snaps; can't replicate yet
 			return false
+		case *ToSnapsDiverged:
+			// detected divergence, attempt to recieve and resolve
+			return true
 		default:
 			// some other error
 			log.Printf("Not attempting to receive %s because: %s", f.filesystemId, err)
