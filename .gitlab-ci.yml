@@ -1,4 +1,4 @@
-variables:
+2ariables:
 
     SERVER_NAME: dotmesh-server
     PROVISIONER_NAME: dotmesh-dynamic-provisioner
