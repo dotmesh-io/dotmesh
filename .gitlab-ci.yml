@@ -114,7 +114,7 @@ build_server:
 #          cd cmd/dotmesh-server;
 #          docker build -t dotmesh-server . || (sleep 30; docker build -t dotmesh-server .)
 #          cd ../..
-#          ./smoke.sh $(pwd)/binaries/Linux/dm dotmesh-server
+#          ./scripts/smoke.sh $(pwd)/binaries/Linux/dm dotmesh-server
 #          docker system prune -fa
 #          "
 
@@ -134,7 +134,7 @@ macos_docker_stable:
         # rebuilding it here.
         - docker build -t dotmesh-server . || (sleep 30; docker build -t dotmesh-server .)
         - cd ../..
-        - ./smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
+        - ./scripts/smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
         - docker version
         - which docker
         - docker container prune -f
@@ -155,7 +155,7 @@ macos_docker_edge:
         # rebuilding it here.
         - docker build -t dotmesh-server . || (sleep 30; docker build -t dotmesh-server .)
         - cd ../..
-        - ./smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
+        - ./scripts/smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
         - docker version
         - which docker
         - docker container prune -f
