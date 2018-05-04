@@ -937,6 +937,7 @@ func TestTwoNodesSameCluster(t *testing.T) {
 		citools.RunOnNode(t, node1, "dm commit -m 'First commit'")
 		ensureCurrentDotIsFullyReplicated(t, node1, fsname)
 		ensureCurrentDotIsFullyReplicated(t, node2, fsname)
+		time.Sleep(3 * time.Second)
 
 		fsId := strings.TrimSpace(citools.OutputFromRunOnNode(t, node1, "dm dot show -H | grep masterBranchId | cut -f 2"))
 
