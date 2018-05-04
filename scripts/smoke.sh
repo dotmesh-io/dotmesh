@@ -46,7 +46,8 @@ if [ x$SMOKE_TEST_REMOTE != x ]
 then
     echo "### Testing push to remote..."
     REMOTE="smoke_test_`date +%s`"
-    echo "$SMOKE_TEST_APIKEY" | "$DM" remote add "$REMOTE" "$SMOKE_TEST_REMOTE"
+
+    (set +x; echo "$SMOKE_TEST_APIKEY"; set -x) | "$DM" remote add "$REMOTE" "$SMOKE_TEST_REMOTE"
 
     "$DM" push "$REMOTE" "$VOL"
 
