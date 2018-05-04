@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 set -xe
 
-# Smoke test to see whether basics still work on e.g. macOS
+# Smoke test to see whether basics still work on e.g. macOS; also tests the 
 
 DM="$1"
 VOL="volume_`date +%s`"
 IMAGE="${CI_DOCKER_REGISTRY:-`hostname`.local:80/dotmesh}/"$2":${CI_DOCKER_TAG:-latest}"
+
+# We use a bespoke config path to isolate us from other runs (although
+# we do hog the node's docker state, so it's far from perfect)
+
 CONFIG=/tmp/smoke_test_$$.dmconfig
 trap 'rm "$CONFIG" || true' EXIT
 
@@ -66,7 +70,7 @@ then
     echo "### Testing delete on remote..."
 
     REMOTE_NAME="`echo $SMOKE_TEST_REMOTE | sed s/@.*$//`"
-    "$DM" dot delete -f "$REMOTE_NAME"/"$VOL"
+    "$DM" -c "$CONFIG"dot delete -f "$REMOTE_NAME"/"$VOL"
 
     "$DM" -c "$CONFIG" remote switch local
     "$DM" -c "$CONFIG" remote rm "$REMOTE"
