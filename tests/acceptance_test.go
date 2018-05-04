@@ -935,10 +935,8 @@ func TestTwoNodesSameCluster(t *testing.T) {
 		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO'")
 		citools.RunOnNode(t, node1, "dm switch "+fsname)
 		citools.RunOnNode(t, node1, "dm commit -m 'First commit'")
-		ensureCurrentDotIsFullyReplicated(t, node1)
-		citools.RunOnNode(t, node1, "dm dot show")
-		citools.RunOnNode(t, node2, "dm switch "+fsname)
-		citools.RunOnNode(t, node2, "dm dot show")
+		ensureCurrentDotIsFullyReplicated(t, node1, fsname)
+		ensureCurrentDotIsFullyReplicated(t, node2, fsname)
 
 		fsId := strings.TrimSpace(citools.OutputFromRunOnNode(t, node1, "dm dot show -H | grep masterBranchId | cut -f 2"))
 
@@ -2233,10 +2231,9 @@ spec:
 	citools.DumpTiming()
 }
 
-func ensureCurrentDotIsFullyReplicated(t *testing.T, node string) {
+func ensureCurrentDotIsFullyReplicated(t *testing.T, node string, fsname string) {
 	for try := 1; try <= 5; try++ {
-		fmt.Printf("Dotmesh containers running on %s: ", node)
-		st := citools.OutputFromRunOnNode(t, node, "dm dot show | grep missing || true")
+		st := citools.OutputFromRunOnNode(t, node, fmt.Sprintf("dm dot show %s | grep missing || true", fsname))
 		if st == "" {
 			return
 		} else {
