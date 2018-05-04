@@ -70,7 +70,7 @@ then
     echo "### Testing delete on remote..."
 
     REMOTE_NAME="`echo $SMOKE_TEST_REMOTE | sed s/@.*$//`"
-    "$DM" -c "$CONFIG"dot delete -f "$REMOTE_NAME"/"$VOL"
+    "$DM" -c "$CONFIG" dot delete -f "$REMOTE_NAME"/"$VOL"
 
     "$DM" -c "$CONFIG" remote switch local
     "$DM" -c "$CONFIG" remote rm "$REMOTE"
