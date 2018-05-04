@@ -6,12 +6,14 @@ set -xe
 DM="$1"
 VOL="volume_`date +%s`"
 IMAGE="${CI_DOCKER_REGISTRY:-`hostname`.local:80/dotmesh}/"$2":${CI_DOCKER_TAG:-latest}"
+CONFIG=/tmp/smoke_test_$$.dmconfig
+trap 'rm "$CONFIG" || true' EXIT
 
-sudo "$DM" cluster reset || (sleep 30; sudo "$DM" cluster reset) || true
+sudo "$DM" -c "$CONFIG" cluster reset || (sleep 30; sudo "$DM" cluster reset) || true
 
 echo "### Installing image ${IMAGE}"
 
-"$DM" cluster init --offline --image "$IMAGE"
+"$DM" -c "$CONFIG" cluster init --offline --image "$IMAGE"
 
 echo "### Testing docker run..."
 
@@ -19,7 +21,7 @@ docker run --rm -i --name smoke -v "$VOL:/foo" --volume-driver dm ubuntu touch /
 
 echo "### Testing list..."
 
-OUT=`"$DM" list`
+OUT=`"$DM" -c "$CONFIG" list`
 
 if [[ $OUT == *"$VOL"* ]]; then
     echo "String '$VOL' found, yay!"
@@ -30,10 +32,10 @@ fi
 
 echo "### Testing commit..."
 
-"$DM" switch "$VOL"
-"$DM" commit -m 'Test commit'
+"$DM" -c "$CONFIG" switch "$VOL"
+"$DM" -c "$CONFIG" commit -m 'Test commit'
 
-OUT=`"$DM" log`
+OUT=`"$DM" -c "$CONFIG" log`
 
 if [[ $OUT == *"Test commit"* ]]; then
     echo "Commit found, yay!"
@@ -47,12 +49,12 @@ then
     echo "### Testing push to remote..."
     REMOTE="smoke_test_`date +%s`"
 
-    (set +x; echo "$SMOKE_TEST_APIKEY"; set -x) | "$DM" remote add "$REMOTE" "$SMOKE_TEST_REMOTE"
+    (set +x; echo "$SMOKE_TEST_APIKEY"; set -x) | "$DM" -c "$CONFIG" remote add "$REMOTE" "$SMOKE_TEST_REMOTE"
 
-    "$DM" push "$REMOTE" "$VOL"
+    "$DM" -c "$CONFIG" push "$REMOTE" "$VOL"
 
-    "$DM" remote switch "$REMOTE"
-    OUT=`"$DM" list`
+    "$DM" -c "$CONFIG" remote switch "$REMOTE"
+    OUT=`"$DM" -c "$CONFIG" list`
 
     if [[ $OUT == *"$VOL"* ]]; then
         echo "String '$VOL' found on the remote, yay!"
@@ -61,8 +63,13 @@ then
         exit 1
     fi
 
-    "$DM" remote switch local
-    "$DM" remote rm "$REMOTE"
+    echo "### Testing delete on remote..."
+
+    REMOTE_NAME="`echo $SMOKE_TEST_REMOTE | sed s/@.*$//`"
+    "$DM" dot delete -f "$REMOTE_NAME"/"$VOL"
+
+    "$DM" -c "$CONFIG" remote switch local
+    "$DM" -c "$CONFIG" remote rm "$REMOTE"
 fi
 
 exit 0

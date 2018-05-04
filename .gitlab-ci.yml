@@ -127,13 +127,7 @@ macos_docker_stable:
         - macos
         - docker-stable
     script:
-        - cd cmd/dotmesh-server
-        # Possible to build just the "prod" image because binaries got passed
-        # as artifact in cmd/dotmesh-server/target
-        # TODO: pull the built image from $CI_DOCKER_REGISTRY, rather than
-        # rebuilding it here.
-        - docker build -t dotmesh-server . || (sleep 30; docker build -t dotmesh-server .)
-        - cd ../..
+        - docker pull $CI_DOCKER_REGISTRY:dotmesh-server:$CI_DOCKER_TAG
         - ./scripts/smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
         - docker version
         - which docker
@@ -148,13 +142,7 @@ macos_docker_edge:
         - macos
         - docker-edge
     script:
-        - cd cmd/dotmesh-server
-        # Possible to build just the "prod" image because binaries got passed
-        # as artifact in cmd/dotmesh-server/target
-        # TODO: pull the built image from $CI_DOCKER_REGISTRY, rather than
-        # rebuilding it here.
-        - docker build -t dotmesh-server . || (sleep 30; docker build -t dotmesh-server .)
-        - cd ../..
+        - docker pull $CI_DOCKER_REGISTRY:dotmesh-server:$CI_DOCKER_TAG
         - ./scripts/smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
         - docker version
         - which docker
@@ -169,6 +157,7 @@ linux_smoke:
         - ubuntu
         - fast
     script:
+        - docker pull $CI_DOCKER_REGISTRY:dotmesh-server:$CI_DOCKER_TAG
         - ./scripts/smoke.sh $(pwd)/binaries/Linux/dm dotmesh-server
         - docker version
         - which docker
