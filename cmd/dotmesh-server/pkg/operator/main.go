@@ -472,6 +472,17 @@ func (c *dotmeshController) process() error {
 
 		// At this point, we believe this is a valid running Dotmesh pod.
 		// That node has a dotmesh, so isn't undotted.
+
+		// IDEA: We could try and health-check the pod if we find its IP
+		// and send it a Dotmesh RPC call, but we need to be careful NOT
+		// to consider pods still in the throes of startup broken and
+		// mark them for death. Perhaps we need to compare their age
+		// against a timeout value, and allow health-check failures for
+		// pods younger than a certain age. But how to set that age? On
+		// a busy cluster with a flakey Internet connection, could image
+		// fetching take an age? Perhaps we only eliminate "Running"
+		// pods that don't respond to a health-check over a certain age?
+		// Where do we draw the line?
 		glog.V(2).Infof("Observing pod %s running %s on %s (status: %s)", podName, image, boundNode, dotmesh.Status.Phase)
 		delete(undottedNodes, boundNode)
 	}
