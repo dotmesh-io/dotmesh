@@ -129,7 +129,7 @@ func newContainerMountSymlink(name VolumeName, filesystemId string, subvolume st
 	// Do we need to create the subvolume directory?
 	if _, err := os.Stat(result); err != nil {
 		if os.IsNotExist(err) {
-			if err := os.MkdirAll(result, 0755); err != nil {
+			if err := os.MkdirAll(result, 0777); err != nil {
 				log.Printf("[newContainerMountSymlink] error creating subdot %s: %+v", result, err)
 				return "", err
 			}
