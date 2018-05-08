@@ -935,8 +935,8 @@ func TestTwoNodesSameCluster(t *testing.T) {
 		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO'")
 		citools.RunOnNode(t, node1, "dm switch "+fsname)
 		citools.RunOnNode(t, node1, "dm commit -m 'First commit'")
-		ensureCurrentDotIsFullyReplicated(t, node1, fsname)
-		ensureCurrentDotIsFullyReplicated(t, node2, fsname)
+		ensureDotIsFullyReplicated(t, node1, fsname)
+		ensureDotIsFullyReplicated(t, node2, fsname)
 		time.Sleep(3 * time.Second)
 
 		fsId := strings.TrimSpace(citools.OutputFromRunOnNode(t, node1, "dm dot show -H | grep masterBranchId | cut -f 2"))
@@ -2232,12 +2232,14 @@ spec:
 	citools.DumpTiming()
 }
 
-func ensureCurrentDotIsFullyReplicated(t *testing.T, node string, fsname string) {
+func ensureDotIsFullyReplicated(t *testing.T, node string, fsname string) {
 	for try := 1; try <= 5; try++ {
-		st := citools.OutputFromRunOnNode(t, node, fmt.Sprintf("dm dot show %s | grep missing || true", fsname))
-		if st == "" {
+		st := citools.OutputFromRunOnNode(t, node, fmt.Sprintf("dm dot show %s", fsname))
+		if !strings.Contains(st, "missing") {
+			fmt.Print("Replicated")
 			return
 		} else {
+			fmt.Print("Failed to replicate, sleeping and retrying")
 			time.Sleep(1 * time.Second)
 		}
 	}
