@@ -942,6 +942,14 @@ func inactiveState(f *fsMachine) stateFn {
 			event, nextState := f.mount()
 			f.innerResponses <- event
 			return true, nextState
+
+		} else if e.Name == "unmount" {
+			f.innerResponses <- &Event{
+				Name: "unmounted",
+				Args: &EventArgs{},
+			}
+			return inactiveState
+
 		} else {
 			f.innerResponses <- &Event{
 				Name: "unhandled",

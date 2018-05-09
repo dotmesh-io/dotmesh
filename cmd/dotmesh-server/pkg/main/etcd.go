@@ -821,7 +821,9 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 	filesystemBelongsToMe := map[string]bool{}
 
 	// handy inline funcs to avoid duplication
-	updateMine := func(node *client.Node) {
+
+	// returns whether mastersCache was modified
+	updateMine := func(node *client.Node) bool {
 		// (0)/(1)dotmesh.io/(2)servers/(3)masters/(4):filesystem = master
 		pieces := strings.Split(node.Key, "/")
 		fs := pieces[4]
@@ -829,10 +831,19 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		s.mastersCacheLock.Lock()
 		defer s.mastersCacheLock.Unlock()
 
+		var modified bool
 		if node.Value == "" {
 			delete(*s.mastersCache, fs)
 			delete(filesystemBelongsToMe, fs)
 		} else {
+			old, ok := (*s.mastersCache)[fs]
+			if ok && old != node.Value {
+				modified = true
+			}
+			if !ok {
+				// new value
+				modified = true
+			}
 			(*s.mastersCache)[fs] = node.Value
 			if node.Value == s.myNodeId {
 				filesystemBelongsToMe[fs] = true
@@ -840,6 +851,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 				filesystemBelongsToMe[fs] = false
 			}
 		}
+		return modified
 	}
 	updateAddresses := func(node *client.Node) error {
 		// (0)/(1)dotmesh.io/(2)servers/(3)addresses/(4):server = addresses
@@ -1159,9 +1171,11 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 	}
 	if masters != nil {
 		for _, node := range masters.Nodes {
-			updateMine(node)
-			if err = s.handleOneFilesystemMaster(node); err != nil {
-				return err
+			modified := updateMine(node)
+			if modified {
+				if err = s.handleOneFilesystemMaster(node); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -1309,9 +1323,11 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 
 		variant := getVariant(node.Node)
 		if variant == "filesystems/masters" {
-			updateMine(node.Node)
-			if err = s.handleOneFilesystemMaster(node.Node); err != nil {
-				return err
+			modified := updateMine(node.Node)
+			if modified {
+				if err = s.handleOneFilesystemMaster(node.Node); err != nil {
+					return err
+				}
 			}
 		} else if variant == "filesystems/deleted" {
 			if err = s.handleOneFilesystemDeletion(node.Node); err != nil {
