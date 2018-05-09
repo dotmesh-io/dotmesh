@@ -923,6 +923,7 @@ func inactiveState(f *fsMachine) stateFn {
 	log.Printf("entering inactive state for %s", f.filesystemId)
 
 	handleEvent := func(e *Event) (bool, stateFn) {
+		f.transitionedTo("inactive", fmt.Sprintf("handling %s", e.Name))
 		if e.Name == "delete" {
 			err := f.state.deleteFilesystem(f.filesystemId)
 			if err != nil {
@@ -946,7 +947,7 @@ func inactiveState(f *fsMachine) stateFn {
 				Name: "unhandled",
 				Args: &EventArgs{"current-state": f.currentState, "event": e},
 			}
-			log.Printf("unhandled event %s while in inactiveState", e)
+			log.Printf("[inactiveState:%s] unhandled event %s", f.filesystemId, e)
 		}
 		return false, nil
 	}
@@ -957,6 +958,7 @@ func inactiveState(f *fsMachine) stateFn {
 	// checking going back into receive...
 	// TODO test this behaviour
 
+	f.transitionedTo("inactive", "waiting for requests")
 	select {
 	case e := <-f.innerRequests:
 		doTransition, nextState := handleEvent(e)
@@ -968,6 +970,7 @@ func inactiveState(f *fsMachine) stateFn {
 	}
 
 	if f.attemptReceive() {
+		f.transitionedTo("inactive", "found snapshots on master")
 		return receivingState
 	}
 
@@ -975,6 +978,7 @@ func inactiveState(f *fsMachine) stateFn {
 	f.state.newSnapsOnMaster.Subscribe(f.filesystemId, newSnapsOnMaster)
 	defer f.state.newSnapsOnMaster.Unsubscribe(f.filesystemId, newSnapsOnMaster)
 
+	f.transitionedTo("inactive", "waiting for requests or snapshots")
 	select {
 	case _ = <-newSnapsOnMaster:
 		return receivingState
@@ -984,6 +988,7 @@ func inactiveState(f *fsMachine) stateFn {
 			return nextState
 		}
 	}
+	f.transitionedTo("inactive", "backing off because we don't know what else to do")
 	return backoffState
 }
 
@@ -1016,20 +1021,24 @@ func (f *fsMachine) attemptReceive() bool {
 		switch err := err.(type) {
 		case *ToSnapsUpToDate:
 			// no action, we're up-to-date
+			log.Printf("[attemptReceive:%s] We're up to date", f.filesystemId)
 			return false
 		case *NoFromSnaps:
 			// no snaps; can't replicate yet
+			log.Printf("[attemptReceive:%s] There are no snapshots to receive", f.filesystemId)
 			return false
 		case *ToSnapsDiverged:
 			// detected divergence, attempt to recieve and resolve
+			log.Printf("[attemptReceive:%s] Detected divergence, attempting to receive", f.filesystemId)
 			return true
 		default:
 			// some other error
-			log.Printf("Not attempting to receive %s because: %s", f.filesystemId, err)
+			log.Printf("[attemptReceive:%s] Error %+v, not attempting to receive", f.filesystemId, err)
 			return false
 		}
 	} else {
 		// non-error canApply implies clean fastforward apply is possible
+		log.Printf("[attemptReceive:%s] Detected clean fastforward, attempting to receive", f.filesystemId)
 		return true
 	}
 }
@@ -1079,6 +1088,7 @@ func missingState(f *fsMachine) stateFn {
 	}
 
 	if f.attemptReceive() {
+		f.transitionedTo("missing", "going to receiving because we found snapshots")
 		return receivingState
 	}
 
@@ -1086,10 +1096,12 @@ func missingState(f *fsMachine) stateFn {
 	f.state.newSnapsOnMaster.Subscribe(f.filesystemId, newSnapsOnMaster)
 	defer f.state.newSnapsOnMaster.Unsubscribe(f.filesystemId, newSnapsOnMaster)
 
+	f.transitionedTo("missing", "waiting for snapshots or requests")
 	select {
 	case _ = <-newSnapsOnMaster:
 		return receivingState
 	case e := <-f.innerRequests:
+		f.transitionedTo("missing", fmt.Sprintf("handling %s", e.name))
 		if e.Name == "delete" {
 			// We're in the missing state, so the filesystem
 			// theoretically isn't here anyway. But it may be present in
@@ -1207,6 +1219,7 @@ func missingState(f *fsMachine) stateFn {
 	}
 	// something unknown happened, go and check the state of the system after a
 	// short timeout to avoid busylooping
+	f.transitionedTo("missing", "backing off as we don't know what else to do")
 	return backoffState
 }
 
