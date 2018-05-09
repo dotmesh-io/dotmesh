@@ -1101,7 +1101,7 @@ func missingState(f *fsMachine) stateFn {
 	case _ = <-newSnapsOnMaster:
 		return receivingState
 	case e := <-f.innerRequests:
-		f.transitionedTo("missing", fmt.Sprintf("handling %s", e.name))
+		f.transitionedTo("missing", fmt.Sprintf("handling %s", e.Name))
 		if e.Name == "delete" {
 			// We're in the missing state, so the filesystem
 			// theoretically isn't here anyway. But it may be present in
