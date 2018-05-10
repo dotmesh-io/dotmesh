@@ -1693,8 +1693,7 @@ func (d *DotmeshRPC) SetDebugFlag(
 
 func (d *DotmeshRPC) DumpInternalState(
 	r *http.Request,
-	args *struct {
-	},
+	filter *string,
 	result *map[string]string,
 ) error {
 	err := ensureAdminUser(r)
@@ -1713,7 +1712,10 @@ func (d *DotmeshRPC) DumpInternalState(
 			key := pair[0]
 			val := pair[1]
 
-			(*result)[key] = val
+			// empty string is prefix of everything
+			if filter == nil || strings.HasPrefix(key, *filter) {
+				(*result)[key] = val
+			}
 		}
 		doneChan <- true
 	}()
