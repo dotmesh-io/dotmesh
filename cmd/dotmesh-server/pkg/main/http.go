@@ -15,6 +15,19 @@ import (
 	rpcjson "github.com/gorilla/rpc/v2/json2"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/openzipkin/zipkin-go-opentracing/examples/middleware"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+)
+
+var (
+	rpcRequests = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "rpc_requests_total",
+			Help: "Number of rpc requests.",
+		},
+		[]string{"device"},
+	)
 )
 
 func pathExists(path string) (bool, error) {
@@ -90,6 +103,8 @@ func (state *InMemoryState) runServer() {
 			fmt.Fprintf(w, "OK")
 		},
 	)
+
+	router.Handle("/metrics", promhttp.Handler())
 
 	if os.Getenv("PRINT_HTTP_LOGS") != "" {
 		loggingRouter := handlers.LoggingHandler(getLogfile("requests"), router)
