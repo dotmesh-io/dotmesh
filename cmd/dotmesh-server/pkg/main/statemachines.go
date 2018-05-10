@@ -2347,19 +2347,6 @@ func (f *fsMachine) push(
 		"compress",
 	)
 
-	log.Printf(
-		"[actualPush] Writing prelude of %d bytes (encoded): %s",
-		len(preludeEncoded), preludeEncoded,
-	)
-	_, err = pipeWriter.Write(preludeEncoded)
-	if err != nil {
-		_ = <-finished
-		return &Event{
-			Name: "error-writing-prelude",
-			Args: &EventArgs{"err": err},
-		}, backoffState
-	}
-
 	req.SetBasicAuth(
 		transferRequest.User,
 		transferRequest.ApiKey,
@@ -2376,10 +2363,23 @@ func (f *fsMachine) push(
 
 	errch := make(chan error)
 	go func() {
+		// This goroutine does all the writing to the HTTP POST
+		log.Printf(
+			"[actualPush] Writing prelude of %d bytes (encoded): %s",
+			len(preludeEncoded), preludeEncoded,
+		)
+		_, err = pipeWriter.Write(preludeEncoded)
+		if err != nil {
+			log.Printf("[actualPush] Error writing prelude: %+v (sent to errch)", err)
+			errch <- err
+			log.Printf("[actualPush] errch accepted prelude error, woohoo")
+		}
+
 		log.Printf(
 			"[actualPush] About to Run() for %s %s => %s",
 			filesystemId, fromSnapshotId, toSnapshotId,
 		)
+
 		runErr := cmd.Run()
 
 		log.Printf(
@@ -2449,7 +2449,7 @@ func (f *fsMachine) push(
 			filesystemId, fromSnapshotId, toSnapshotId, err,
 		)
 		return &Event{
-			Name: "error-from-zfs-send",
+			Name: "error-from-writing-prelude-and-zfs-send",
 			Args: &EventArgs{"err": err},
 		}, backoffState
 	}
