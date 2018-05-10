@@ -76,6 +76,12 @@ func (z ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		postClient := new(http.Client)
 		log.Printf("[ZFSSender:ServeHTTP] Proxying pull from %s: %s", master, url)
 		resp, err := postClient.Do(req)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(fmt.Sprintf("Can't proxy pull from %s: %+v.\n", url, err)))
+			return
+		}
+
 		finished := make(chan bool)
 		log.Printf("[ZFSSender:ServeHTTP] Got HTTP response +v", resp.StatusCode)
 		w.WriteHeader(resp.StatusCode)
@@ -88,11 +94,6 @@ func (z ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"none",
 		)
 		defer resp.Body.Close()
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(fmt.Sprintf("Can't proxy pull from %s: %+v.\n", url, err)))
-			return
-		}
 		log.Printf("[ZFSSender:ServeHTTP] Waiting for finish signal...")
 		_ = <-finished
 		return
@@ -272,6 +273,12 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		postClient := new(http.Client)
 		log.Printf("[ZFSReceiver] Proxying push to %s: %s", master, url)
 		resp, err := postClient.Do(req)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(fmt.Sprintf("Can't proxy push to %s: %+v.\n", url, err)))
+			return
+		}
+
 		finished := make(chan bool)
 		log.Printf("[ZFSReceiver] Got HTTP response +v", resp.StatusCode)
 		w.WriteHeader(resp.StatusCode)
@@ -284,11 +291,6 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"compress",
 		)
 		defer resp.Body.Close()
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(fmt.Sprintf("Can't proxy push to %s: %+v.\n", url, err)))
-			return
-		}
 		log.Printf("[ZFSReceiver] Waiting for finish signal...")
 		_ = <-finished
 		return

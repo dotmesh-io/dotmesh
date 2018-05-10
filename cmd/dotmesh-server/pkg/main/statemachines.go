@@ -1501,6 +1501,7 @@ func receivingState(f *fsMachine) stateFn {
 	log.Printf("[pull] about to start consuming prelude on %v", pipeReader)
 	prelude, err := consumePrelude(pipeReader)
 	if err != nil {
+		_ = <-finished
 		return backoffState
 	}
 	log.Printf("[pull] Got prelude %v", prelude)
@@ -2041,6 +2042,7 @@ func (f *fsMachine) pull(
 	log.Printf("[pull] about to start consuming prelude on %v", pipeReader)
 	prelude, err := consumePrelude(pipeReader)
 	if err != nil {
+		_ = <-finished
 		return &Event{
 			Name: "consume-prelude-failed",
 			Args: &EventArgs{"err": err, "filesystemId": toFilesystemId},
@@ -2349,7 +2351,14 @@ func (f *fsMachine) push(
 		"[actualPush] Writing prelude of %d bytes (encoded): %s",
 		len(preludeEncoded), preludeEncoded,
 	)
-	pipeWriter.Write(preludeEncoded)
+	_, err = pipeWriter.Write(preludeEncoded)
+	if err != nil {
+		_ = <-finished
+		return &Event{
+			Name: "error-writing-prelude",
+			Args: &EventArgs{"err": err},
+		}, backoffState
+	}
 
 	req.SetBasicAuth(
 		transferRequest.User,
@@ -2388,6 +2397,7 @@ func (f *fsMachine) push(
 	resp, err := postClient.Do(req)
 	if err != nil {
 		log.Printf("[actualPush] error in postClient.Do: %s", err)
+		_ = <-finished
 		return &Event{
 			Name: "error-from-post-when-pushing",
 			Args: &EventArgs{"err": err},
@@ -2401,6 +2411,7 @@ func (f *fsMachine) push(
 			"[actualPush] Got error while reading response body %s: %s",
 			string(responseBody), err,
 		)
+		_ = <-finished
 		return &Event{
 			Name: "error-reading-push-response-body",
 			Args: &EventArgs{"err": err},
@@ -2408,6 +2419,7 @@ func (f *fsMachine) push(
 	}
 
 	if resp.StatusCode != 200 {
+		_ = <-finished
 		return &Event{
 			Name: "error-pushing-posting",
 			Args: &EventArgs{
