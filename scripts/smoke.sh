@@ -58,14 +58,16 @@ then
     "$DM" -c "$CONFIG" push "$REMOTE" "$VOL"
 
     "$DM" -c "$CONFIG" remote switch "$REMOTE"
-    OUT=`"$DM" -c "$CONFIG" list`
 
-    if [[ $OUT == *"$VOL"* ]]; then
-        echo "String '$VOL' found on the remote, yay!"
-    else
-        echo "String '$VOL' not found on the remote, boo :("
-        exit 1
-    fi
+    for TRY in `seq 10`; do
+        if "$DM" -c "$CONFIG" dot show $VOL; then
+            echo "Found $VOL"
+            break
+        else
+            echo "$VOL not found, retrying ($TRY)..."
+            sleep 1
+        fi
+    done
 
     echo "### Testing delete on remote..."
 
