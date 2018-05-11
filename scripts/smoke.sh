@@ -59,19 +59,20 @@ then
 
     "$DM" -c "$CONFIG" remote switch "$REMOTE"
 
+    REMOTE_NAME="`echo $SMOKE_TEST_REMOTE | sed s/@.*$//`"
+
     for TRY in `seq 10`; do
-        if "$DM" -c "$CONFIG" dot show $VOL; then
-            echo "Found $VOL"
+        if "$DM" -c "$CONFIG" dot show "$REMOTE_NAME"/"$VOL"; then
+            echo "Found $REMOTE_NAME/$VOL"
             break
         else
-            echo "$VOL not found, retrying ($TRY)..."
+            echo "$REMOTE_NAME/$VOL not found, retrying ($TRY)..."
             sleep 1
         fi
     done
 
     echo "### Testing delete on remote..."
 
-    REMOTE_NAME="`echo $SMOKE_TEST_REMOTE | sed s/@.*$//`"
     "$DM" -c "$CONFIG" dot delete -f "$REMOTE_NAME"/"$VOL"
 
     "$DM" -c "$CONFIG" remote switch local
