@@ -236,16 +236,16 @@ type fsMachine struct {
 	// filesystem-sliced view of new snapshot events
 	newSnapsOnServers *Observer
 	// current state, status field for reporting/debugging and transition observer
-	currentState             string
-	status                   string
-	lastTransitionTimestamp  int64
-	transitionObserver       *Observer
-	lastTransferRequest      TransferRequest
-	lastTransferRequestId    string
-	externalSnapshotsChanged chan bool
-	dirtyDelta               int64
-	sizeBytes                int64
-	lastPollResult           *TransferPollResult
+	currentState            string
+	status                  string
+	lastTransitionTimestamp int64
+	transitionObserver      *Observer
+	lastTransferRequest     TransferRequest
+	lastTransferRequestId   string
+	pushCompleted           chan bool
+	dirtyDelta              int64
+	sizeBytes               int64
+	lastPollResult          *TransferPollResult
 }
 
 type TransferRequest struct {

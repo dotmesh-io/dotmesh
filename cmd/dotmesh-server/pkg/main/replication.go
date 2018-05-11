@@ -304,6 +304,17 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Ok, so we're ready to receive the push. Our fsmachine must be in pushPeerState,
+	// and is therefore blocking on us to tell it we've finished, one way or another.
+
+	defer func() {
+		// XXX might this leak goroutines in any cases where fsMachine isn't in
+		// pushPeerState when a push completes for some reason?
+		log.Printf("[ZFSReceiver:%s] Notifying fsmachine", z.filesystem)
+
+		go z.state.notifyPushCompleted(z.filesystem)
+	}()
+
 	cmd := exec.Command("zfs", "recv", fq(z.filesystem))
 	pipeReader, pipeWriter := io.Pipe()
 	defer pipeReader.Close()
@@ -393,11 +404,6 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
-
-	// XXX might this leak goroutines in any cases where fsMachine isn't in
-	// pushPeerState when a push completes for some reason?
-	log.Printf("[ZFSReceiver:%s] Notifying fsmachine", z.filesystem)
-	go z.state.notifyNewSnapshotsAfterPush(z.filesystem)
 
 	log.Printf("[ZFSReceiver:%s] Closing pipe, and returning from ServeHTTP.", z.filesystem)
 }

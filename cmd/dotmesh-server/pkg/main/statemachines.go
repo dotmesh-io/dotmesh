@@ -48,9 +48,9 @@ func newFilesystemMachine(filesystemId string, s *InMemoryState) *fsMachine {
 		// reload the list of snapshots, update etcd and coordinate our own
 		// state changes, which we do via the POST handler sending on this
 		// channel.
-		externalSnapshotsChanged: make(chan bool),
-		dirtyDelta:               0,
-		sizeBytes:                0,
+		pushCompleted: make(chan bool),
+		dirtyDelta:    0,
+		sizeBytes:     0,
 	}
 }
 
@@ -2290,7 +2290,7 @@ func (f *fsMachine) push(
 		}, backoffState
 	}
 
-	log.Printf("[actualPush] size: %d", size)
+	log.Printf("[actualPush:%s] size: %d", filesystemId, size)
 	pollResult.Size = size
 	pollResult.Status = "pushing"
 	err = updatePollResult(*transferRequestId, *pollResult)
@@ -2353,7 +2353,7 @@ func (f *fsMachine) push(
 	)
 	postClient := new(http.Client)
 
-	log.Printf("About to postClient.Do with req %s", req)
+	log.Printf("[actualPush:%s] About to postClient.Do with req %s", filesystemId, req)
 
 	// postClient.Do will block trying to read the first byte of the request
 	// body. But, we won't be able to provide the first byte until we start
@@ -2365,38 +2365,45 @@ func (f *fsMachine) push(
 	go func() {
 		// This goroutine does all the writing to the HTTP POST
 		log.Printf(
-			"[actualPush] Writing prelude of %d bytes (encoded): %s",
+			"[actualPush:%s] Writing prelude of %d bytes (encoded): %s",
+			filesystemId,
 			len(preludeEncoded), preludeEncoded,
 		)
 		_, err = pipeWriter.Write(preludeEncoded)
 		if err != nil {
-			log.Printf("[actualPush] Error writing prelude: %+v (sent to errch)", err)
+			log.Printf("[actualPush:%s] Error writing prelude: %+v (sent to errch)", filesystemId, err)
 			errch <- err
-			log.Printf("[actualPush] errch accepted prelude error, woohoo")
+			log.Printf("[actualPush:%s] errch accepted prelude error, woohoo", filesystemId)
 		}
 
 		log.Printf(
-			"[actualPush] About to Run() for %s %s => %s",
+			"[actualPush:%s] About to Run() for %s => %s",
 			filesystemId, fromSnapshotId, toSnapshotId,
 		)
 
 		runErr := cmd.Run()
 
 		log.Printf(
-			"[actualPush] Run() got result %s, about to put it into errch after closing pipeWriter",
+			"[actualPush:%s] Run() got result %s, about to put it into errch after closing pipeWriter",
+			filesystemId,
 			runErr,
 		)
 		err := pipeWriter.Close()
 		if err != nil {
-			log.Printf("[actualPush] error closing pipeWriter: %s", err)
+			log.Printf("[actualPush:%s] error closing pipeWriter: %s", filesystemId, err)
 		}
+		log.Printf(
+			"[actualPush:%s] Writing to errch",
+			filesystemId,
+			runErr,
+		)
 		errch <- runErr
-		log.Printf("[actualPush] errch accepted it, woohoo")
+		log.Printf("[actualPush:%s] errch accepted it, woohoo", filesystemId)
 	}()
 
 	resp, err := postClient.Do(req)
 	if err != nil {
-		log.Printf("[actualPush] error in postClient.Do: %s", err)
+		log.Printf("[actualPush:%s] error in postClient.Do: %s", filesystemId, err)
 		_ = <-finished
 		return &Event{
 			Name: "error-from-post-when-pushing",
@@ -2404,11 +2411,13 @@ func (f *fsMachine) push(
 		}, backoffState
 	}
 	defer resp.Body.Close()
+	log.Printf("[actualPush:%s] started HTTP request", filesystemId)
 
 	responseBody, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf(
-			"[actualPush] Got error while reading response body %s: %s",
+			"[actualPush:%s] Got error while reading response body %s: %s",
+			filesystemId,
 			string(responseBody), err,
 		)
 		_ = <-finished
@@ -2418,7 +2427,10 @@ func (f *fsMachine) push(
 		}, backoffState
 	}
 
+	log.Printf("[actualPush:%s] Got response body while pushing: status %d, body %s", filesystemId, resp.StatusCode, string(responseBody))
+
 	if resp.StatusCode != 200 {
+		log.Printf("ABS TEST: Aborting!")
 		_ = <-finished
 		return &Event{
 			Name: "error-pushing-posting",
@@ -2431,21 +2443,19 @@ func (f *fsMachine) push(
 		}, backoffState
 	}
 
-	log.Printf("[actualPush] Got response body while pushing: %s", string(responseBody))
-
-	log.Printf("[actualPush] Waiting for finish signal...")
+	log.Printf("[actualPush:%s] Waiting for finish signal...", filesystemId)
 	_ = <-finished
-	log.Printf("[actualPush] Done!")
+	log.Printf("[actualPush:%s] Done!", filesystemId)
 
-	log.Printf("[actualPush] reading from errch")
+	log.Printf("[actualPush:%s] reading from errch", filesystemId)
 	err = <-errch
 	log.Printf(
-		"[actualPush] Finished Run() for %s %s => %s: %s",
+		"[actualPush:%s] Finished Run() for %s => %s: %s",
 		filesystemId, fromSnapshotId, toSnapshotId, err,
 	)
 	if err != nil {
 		log.Printf(
-			"[actualPush] Error from zfs send of %s from %s => %s: %s, check zfs-send-errors.log",
+			"[actualPush:%s] Error from zfs send from %s => %s: %s, check zfs-send-errors.log",
 			filesystemId, fromSnapshotId, toSnapshotId, err,
 		)
 		return &Event{
@@ -2457,7 +2467,7 @@ func (f *fsMachine) push(
 	// XXX Adding the log messages below seemed to stop a deadlock, not sure
 	// why. For now, let's just leave them in...
 	// XXX what about closing post{Writer,Reader}?
-	log.Printf("[actualPush] Closing pipes...")
+	log.Printf("[actualPush:%s] Closing pipes...", filesystemId)
 	pipeWriter.Close()
 	pipeReader.Close()
 
@@ -2584,41 +2594,42 @@ func pushPeerState(f *fsMachine) stateFn {
 		Args: &EventArgs{},
 	}
 
-	for {
-		log.Printf("[pushPeerState:%s] about to read from externalSnapshotsChanged", f.filesystemId)
+	log.Printf("[pushPeerState:%s] about to read from pushCompleted", f.filesystemId)
 
-		select {
-		case <-timeoutTimer.C:
-			log.Printf(
-				"[pushPeerState:%s] Timed out waiting for externalSnapshotsChanged",
-				f.filesystemId,
-			)
-			return backoffState
-		case <-f.externalSnapshotsChanged:
-			// onwards!
-		}
+	select {
+	case <-timeoutTimer.C:
 		log.Printf(
-			"[pushPeerState:%s] read from externalSnapshotsChanged! doing inline load",
+			"[pushPeerState:%s] Timed out waiting for pushCompleted",
 			f.filesystemId,
 		)
+		return backoffState
+	case <-f.pushCompleted:
+		// onwards!
+	}
+	log.Printf(
+		"[pushPeerState:%s] read from pushCompleted! doing inline load",
+		f.filesystemId,
+	)
 
-		// inline load, async because discover() blocks on publishing to
-		// newSnapsOnMaster chan, which we're subscribed to and so have to read
-		// from concurrently with discover() to avoid deadlock.
-		go func() {
-			err = f.discover()
-			log.Printf("[pushPeerState] done inline load")
-			if err != nil {
-				// XXX how to propogate the error to the initiator? should their
-				// retry include sending a new peer-transfer message every time?
-				log.Printf("[pushPeerState] error during inline load: %s", err)
-			}
-		}()
+	// inline load, async because discover() blocks on publishing to
+	// newSnapsOnMaster chan, which we're subscribed to and so have to read
+	// from concurrently with discover() to avoid deadlock.
+	go func() {
+		err = f.discover()
+		log.Printf("[pushPeerState] done inline load")
+		if err != nil {
+			// XXX how to propogate the error to the initiator? should their
+			// retry include sending a new peer-transfer message every time?
+			log.Printf("[pushPeerState] error during inline load: %s", err)
+		}
+	}()
 
-		// give ourselves another 60 seconds while loading
-		log.Printf("[pushPeerState] resetting timer because we're waiting for loading")
-		reset()
+	// give ourselves another 60 seconds while loading
+	log.Printf("[pushPeerState] resetting timer because we're waiting for loading")
+	reset()
 
+	for {
+		// Loops as notifications of the new snapshots arrive
 		log.Printf("[pushPeerState] about to read from newSnapsOnMaster")
 		select {
 		case <-timeoutTimer.C:

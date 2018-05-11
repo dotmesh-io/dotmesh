@@ -1067,6 +1067,8 @@ func (d *DotmeshRPC) RegisterTransfer(
 	} else {
 		return nil
 	}
+
+	return nil
 }
 
 // Need both push and pull because one cluster will often be behind NAT.
