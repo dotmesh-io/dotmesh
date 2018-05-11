@@ -226,6 +226,31 @@ func TestSingleNode(t *testing.T) {
 		}
 	})
 
+	t.Run("DotShow", func(t *testing.T) {
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/X")
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+		citools.RunOnNode(t, node1, "dm commit -m 'hello'")
+		citools.RunOnNode(t, node1, "dm checkout -b branch1")
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/Y")
+		citools.RunOnNode(t, node1, "dm commit -m 'there'")
+		resp := citools.OutputFromRunOnNode(t, node1, "dm dot show")
+		if !strings.Contains(resp, "master") {
+			t.Error("failed to show master status")
+		}
+		if !strings.Contains(resp, "branch1") {
+			t.Error("failed to show branch status")
+		}
+		re, _ := regexp.Compile(`server.*up to date`)
+		matches := re.FindAllStringSubmatch(resp, -1)
+		masterReplicationStatus := matches[0][0]
+		branchReplicationStatus := matches[1][0]
+		if masterReplicationStatus == branchReplicationStatus {
+			t.Error("master and branch replication statusse are suspiciously similar")
+		}
+
+	})
+
 	t.Run("Reset", func(t *testing.T) {
 		fsname := citools.UniqName()
 		// Run a container in the background so that we can observe it get
