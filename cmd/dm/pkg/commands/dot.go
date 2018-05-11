@@ -365,33 +365,34 @@ func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
 
 		latency, err := dm.GetReplicationLatencyForBranch(localDot, branchInternalName)
 		if err != nil {
-			return err
-		}
-		for server, missingCommits := range latency {
-			serverStatus, ok := dotmeshDot.ServerStatuses[server]
-			if !ok {
-				serverStatus = "unknown"
-			}
-			if scriptingMode {
-				var masterState string
-				if dotmeshDot.Master == server {
-					masterState = "master"
-				} else {
-					masterState = "replica"
+			fmt.Fprintf(out, "unable to fetch replication status (%s), proceeding...\n", err)
+		} else {
+			for server, missingCommits := range latency {
+				serverStatus, ok := dotmeshDot.ServerStatuses[server]
+				if !ok {
+					serverStatus = "unknown"
 				}
-				fmt.Fprintf(out, "latency\t%s\t%s\t%s\t%s\n", server, masterState, serverStatus, strings.Join(missingCommits, "\t"))
-			} else {
-				var masterState string
-				if dotmeshDot.Master == server {
-					masterState = " [MASTER]"
+				if scriptingMode {
+					var masterState string
+					if dotmeshDot.Master == server {
+						masterState = "master"
+					} else {
+						masterState = "replica"
+					}
+					fmt.Fprintf(out, "latency\t%s\t%s\t%s\t%s\n", server, masterState, serverStatus, strings.Join(missingCommits, "\t"))
 				} else {
-					masterState = ""
-				}
+					var masterState string
+					if dotmeshDot.Master == server {
+						masterState = " [MASTER]"
+					} else {
+						masterState = ""
+					}
 
-				if len(missingCommits) > 0 {
-					fmt.Fprintf(out, "    server %s%s (status: %s) is missing %+v\n", server, masterState, serverStatus, missingCommits)
-				} else {
-					fmt.Fprintf(out, "    server %s%s (status: %s) is up to date\n", server, masterState, serverStatus)
+					if len(missingCommits) > 0 {
+						fmt.Fprintf(out, "    server %s%s (status: %s) is missing %+v\n", server, masterState, serverStatus, missingCommits)
+					} else {
+						fmt.Fprintf(out, "    server %s%s (status: %s) is up to date\n", server, masterState, serverStatus)
+					}
 				}
 			}
 		}
