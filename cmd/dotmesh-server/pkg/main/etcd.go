@@ -690,7 +690,7 @@ func (s *InMemoryState) deserializeDispatchAndRespond(fs string, node *client.No
 	// etcd and anyone waiting for it will be waiting on the response key to
 	// show up, not on the return of this function.
 
-	log.Printf("About to dispatch %s to %s", fs, e)
+	log.Printf("About to dispatch %s to %s", e, fs)
 	c, err := s.dispatchEvent(fs, e, requestId)
 	if err != nil {
 		return err
