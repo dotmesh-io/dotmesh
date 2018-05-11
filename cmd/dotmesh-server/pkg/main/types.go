@@ -286,7 +286,7 @@ type Event struct {
 func (ea EventArgs) String() string {
 	aggr := []string{}
 	for k, v := range ea {
-		aggr = append(aggr, fmt.Sprintf("%s: %s", k, v))
+		aggr = append(aggr, fmt.Sprintf("%s: %+q", k, v))
 	}
 	return strings.Join(aggr, ", ")
 }
