@@ -305,15 +305,8 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Ok, so we're ready to receive the push. Our fsmachine must be in pushPeerState,
-	// and is therefore blocking on us to tell it we've finished, one way or another.
-
-	defer func() {
-		// XXX might this leak goroutines in any cases where fsMachine isn't in
-		// pushPeerState when a push completes for some reason?
-		log.Printf("[ZFSReceiver:%s] Notifying fsmachine", z.filesystem)
-
-		go z.state.notifyPushCompleted(z.filesystem)
-	}()
+	// and is therefore blocking on us to tell it we've finished, one way or another, via
+	// z.state.notifyPushCompleted(z.filesystem, true/false) so we'd better do that in every path.
 
 	cmd := exec.Command("zfs", "recv", fq(z.filesystem))
 	pipeReader, pipeWriter := io.Pipe()
@@ -354,6 +347,9 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(fmt.Sprintf("Unable to parse prelude for %s: %s\n", z.filesystem, err)))
 		log.Printf("[ZFSReceiver:%s] Unable to parse prelude: %s\n", z.filesystem, err)
+
+		go z.state.notifyPushCompleted(z.filesystem, false)
+
 		return
 	}
 	log.Printf("[ZFSReceiver:%s] Got prelude %v", z.filesystem, prelude)
@@ -376,6 +372,8 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"[ZFSReceiver:%s] Unable to read: %+v",
 				z.filesystem, err,
 			)
+
+			go z.state.notifyPushCompleted(z.filesystem, false)
 			return
 		}
 		w.WriteHeader(http.StatusBadRequest)
@@ -387,6 +385,8 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"[ZFSReceiver:%s] Unable to receive: %+v, stderr: %s",
 			z.filesystem, err, readErr,
 		)
+
+		go z.state.notifyPushCompleted(z.filesystem, false)
 		return
 	}
 
@@ -402,10 +402,14 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"[ZFSReceiver:%s] Unable to apply prelude: %+v",
 			z.filesystem, err,
 		)
+
+		go z.state.notifyPushCompleted(z.filesystem, false)
 		return
 	}
 
-	log.Printf("[ZFSReceiver:%s] Closing pipe, and returning from ServeHTTP.", z.filesystem)
+	log.Printf("[ZFSReceiver:%s] Notifying fsmachine of success", z.filesystem)
+
+	go z.state.notifyPushCompleted(z.filesystem, true)
 }
 
 type ZFSSender struct {

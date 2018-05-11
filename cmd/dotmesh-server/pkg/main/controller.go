@@ -284,7 +284,7 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 	}
 }
 
-func (s *InMemoryState) notifyPushCompleted(filesystemId string) {
+func (s *InMemoryState) notifyPushCompleted(filesystemId string, success bool) {
 	s.filesystemsLock.Lock()
 	f, ok := (*s.filesystems)[filesystemId]
 	s.filesystemsLock.Unlock()
@@ -292,8 +292,8 @@ func (s *InMemoryState) notifyPushCompleted(filesystemId string) {
 		log.Printf("[notifyPushCompleted] No such filesystem id %s", filesystemId)
 		return
 	}
-	log.Printf("[notifyPushCompleted:%s] about to notify chan", filesystemId)
-	f.pushCompleted <- true
+	log.Printf("[notifyPushCompleted:%s] about to notify chan with success=%t", filesystemId, success)
+	f.pushCompleted <- success
 	log.Printf("[notifyPushCompleted:%s] done notify chan", filesystemId)
 }
 

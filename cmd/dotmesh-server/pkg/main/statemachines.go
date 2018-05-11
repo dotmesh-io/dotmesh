@@ -2594,7 +2594,7 @@ func pushPeerState(f *fsMachine) stateFn {
 		Args: &EventArgs{},
 	}
 
-	log.Printf("[pushPeerState:%s] about to read from pushCompleted", f.filesystemId)
+	log.Printf("[pushPeerState:%s] blocking for ZFSReceiver to tell us to proceed via pushCompleted", f.filesystemId)
 
 	select {
 	case <-timeoutTimer.C:
@@ -2603,11 +2603,18 @@ func pushPeerState(f *fsMachine) stateFn {
 			f.filesystemId,
 		)
 		return backoffState
-	case <-f.pushCompleted:
+	case success := <-f.pushCompleted:
 		// onwards!
+		if !success {
+			log.Printf(
+				"[pushPeerState:%s] ZFS receive failed.",
+				f.filesystemId,
+			)
+			return backoffState
+		}
 	}
 	log.Printf(
-		"[pushPeerState:%s] read from pushCompleted! doing inline load",
+		"[pushPeerState:%s] ZFS receive succeeded.",
 		f.filesystemId,
 	)
 
