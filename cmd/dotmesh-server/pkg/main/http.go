@@ -26,7 +26,7 @@ var (
 			Name: "rpc_requests_total",
 			Help: "Number of rpc requests.",
 		},
-		[]string{"device"},
+		[]string{"status_code"},
 	)
 )
 
