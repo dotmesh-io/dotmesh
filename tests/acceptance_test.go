@@ -2298,7 +2298,61 @@ func testServiceAvailability(t *testing.T, IP string) {
 	}
 }
 
-func TestStress(t *testing.T) {
+func TestStressLotsOfCommits(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping lots of commits test in short mode.")
+	}
+
+	citools.TeardownFinishedTestRuns()
+
+	f := citools.Federation{
+		citools.NewCluster(1),
+		citools.NewCluster(1),
+	}
+
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
+
+	citools.StartTiming()
+	err := f.Start(t)
+	if err != nil {
+		t.Error(err)
+	}
+	cluster0 := f[0].GetNode(0)
+	cluster1 := f[1].GetNode(0)
+
+	NUMBER_OF_COMMITS := 1000
+
+	t.Run("PushLotsOfCommitsTest", func(t *testing.T) {
+		fsname := citools.UniqName()
+		for i := 0; i < NUMBER_OF_COMMITS; i++ {
+			citools.RunOnNode(t, cluster0.Container, citools.DockerRun(fsname)+
+				fmt.Sprintf(" sh -c 'echo STUFF-%d > /foo/whatever'", i))
+			if i == 0 {
+				citools.RunOnNode(t, cluster0.Container, fmt.Sprintf("dm switch %s", fsname))
+			}
+			citools.RunOnNode(t, cluster0.Container, fmt.Sprintf("dm commit -m'Commit %d - the rain in spain falls mainly on the plain; the fox jumped over the dog and all that'", i))
+		}
+
+		citools.RunOnNode(t, cluster0.Container, fmt.Sprintf("dm push cluster_1"))
+
+		// Now go to cluster1 and do dm list, dm log and look for all those commits
+
+		st := citools.OutputFromRunOnNode(t, cluster1.Container, "dm list")
+		if !strings.Contains(st, fsname) {
+			t.Error(fmt.Sprintf("We didn't see the fsname we expected (%s) in %s", fsname, st))
+		}
+
+		citools.RunOnNode(t, cluster1.Container, fmt.Sprintf("dm switch %s", fsname))
+		st = citools.OutputFromRunOnNode(t, cluster1.Container, "dm log | grep 'the rain in spain' | wc -l")
+		if st != fmt.Sprintf("%d\n", NUMBER_OF_COMMITS) {
+			t.Error(fmt.Sprintf("We didn't see the right number of commits: Got '%s', wanted %d", st, NUMBER_OF_COMMITS))
+		}
+		citools.RunOnNode(t, cluster1.Container, fmt.Sprintf("dm dot delete -f %s", fsname))
+	})
+}
+
+func TestStressHandover(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping stress tests in short mode.")
 	}

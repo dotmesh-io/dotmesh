@@ -364,7 +364,7 @@ linux_two_double_node_clusters:
     except:
         - schedules
 
-linux_stress:
+linux_stress_lots_of_commits:
     stage: test
     dependencies:
         - build_server
@@ -373,7 +373,25 @@ linux_stress:
         - ubuntu
         - fast
     script:
-        - ./test.sh -timeout 30m -run TestStress
+        - ./test.sh -timeout 30m -run TestStressLotsOfCommits
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
+    when: manual
+    except:
+        - schedules
+
+linux_stress_handover:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - ./test.sh -timeout 30m -run TestStressHandover
     artifacts:
         paths:
         - extracted_logs
