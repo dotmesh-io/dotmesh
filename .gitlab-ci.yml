@@ -132,9 +132,6 @@ macos_docker_stable:
         - docker version
         - which docker
         - docker container prune -f
-    except:
-      variables:
-        - $SCHEDULED == "nightly"
 
 macos_docker_edge:
     stage: test
@@ -150,9 +147,6 @@ macos_docker_edge:
         - docker version
         - which docker
         - docker container prune -f
-    except:
-      variables:
-        - $SCHEDULED == "nightly"
 
 linux_smoke:
     stage: test
@@ -168,9 +162,6 @@ linux_smoke:
         - docker version
         - which docker
         - docker container prune -f
-    except:
-      variables:
-        - $SCHEDULED == "nightly"
 
 versioner_unit_tests:
     stage: test
@@ -180,8 +171,7 @@ versioner_unit_tests:
     script:
         - cd cmd/versioner && go test
     except:
-      variables:
-        - $SCHEDULED
+        - schedules
 
 # run full dind tests on linux
 linux_default_dot:
@@ -199,8 +189,7 @@ linux_default_dot:
         - extracted_logs
         when: always
     except:
-      variables:
-        - $SCHEDULED
+        - schedules
 
 linux_single_node:
     stage: test
@@ -217,9 +206,7 @@ linux_single_node:
         - extracted_logs
         when: always
     except:
-      variables:
-        - $SCHEDULED
-
+        - schedules
 
 linux_two_nodes_same_cluster:
     stage: test
@@ -236,9 +223,7 @@ linux_two_nodes_same_cluster:
         - extracted_logs
         when: always
     except:
-      variables:
-        - $SCHEDULED
-
+        - schedules
 
 linux_kubernetes_volumes:
     stage: test
@@ -256,9 +241,7 @@ linux_kubernetes_volumes:
         - extracted_logs
         when: always
     except:
-      variables:
-        - $SCHEDULED
-
+        - schedules
 
 linux_deletion_simple:
     stage: test
@@ -275,9 +258,7 @@ linux_deletion_simple:
         - extracted_logs
         when: always
     except:
-      variables:
-        - $SCHEDULED
-
+        - schedules
 
 linux_deletion_complex:
     stage: test
@@ -295,9 +276,7 @@ linux_deletion_complex:
         when: always
     allow_failure: true
     except:
-      variables:
-        - $SCHEDULED
-
+        - schedules
 
 linux_backup_and_restore_two_single_node_clusters:
     stage: test
@@ -314,9 +293,7 @@ linux_backup_and_restore_two_single_node_clusters:
         - extracted_logs
         when: always
     except:
-      variables:
-        - $SCHEDULED
-
+        - schedules
 
 linux_two_single_node_clusters:
     stage: test
@@ -333,9 +310,7 @@ linux_two_single_node_clusters:
         - extracted_logs
         when: always
     except:
-      variables:
-        - $SCHEDULED
-
+        - schedules
 
 linux_three_single_node_clusters:
     stage: test
@@ -352,9 +327,7 @@ linux_three_single_node_clusters:
         - extracted_logs
         when: always
     except:
-      variables:
-        - $SCHEDULED
-
+        - schedules
 
 linux_two_double_node_clusters:
     stage: test
@@ -371,9 +344,7 @@ linux_two_double_node_clusters:
         - extracted_logs
         when: always
     except:
-      variables:
-        - $SCHEDULED
-
+        - schedules
 
 # Test disabled while we rethink how it works (see comments in acceptance_test.go)
 .linux_kubernetes_test_tooling:
@@ -391,9 +362,7 @@ linux_two_double_node_clusters:
         - extracted_logs
         when: always
     except:
-      variables:
-        - $SCHEDULED
-
+        - schedules
 
 linux_stress_lots_of_commits:
     stage: test
@@ -409,9 +378,9 @@ linux_stress_lots_of_commits:
         paths:
         - extracted_logs
         when: always
-    only:
-      variables:
-        - $SCHEDULED == "nightly"
+    when: manual
+    except:
+        - schedules
 
 linux_stress_handover:
     stage: test
@@ -427,9 +396,9 @@ linux_stress_handover:
         paths:
         - extracted_logs
         when: always
-    only:
-      variables:
-        - $SCHEDULED == "nightly"
+    when: manual
+    except:
+        - schedules
 
 trigger_e2e_test:
     stage: deploy
@@ -441,9 +410,7 @@ trigger_e2e_test:
         - curl -X POST -F "token=$E2E_TRIGGER_TOKEN" -F "ref=master" -F "variables[DOTMESH_CI_COMMIT_SHA]=$CI_COMMIT_SHA" -F "variables[DOTMESH_CI_BUILD_REF_NAME]=$CI_BUILD_REF_NAME" http://gitlab.dotmesh.io:9999/api/v4/projects/31/trigger/pipeline
     except:
         - /^release-.*$/
-      variables:
-        - $SCHEDULED
-
+        - schedules
 
 deploy_unstable_build:
     stage: deploy
@@ -460,9 +427,7 @@ deploy_unstable_build:
         - "echo \"Deployed to https://get.dotmesh.io/unstable/$CI_COMMIT_REF_NAME\""
     except:
         - /^release-.*$/
-      variables:
-        - $SCHEDULED
-
+        - schedules
 
 deploy_release_build:
     stage: deploy
@@ -480,9 +445,7 @@ deploy_release_build:
     only:
         - /^release-.*$/
     except:
-      variables:
-        - $SCHEDULED
-
+        - schedules
 
 mark_release_as_stable:
   stage: manual_deploy
@@ -493,5 +456,4 @@ mark_release_as_stable:
     - /^release-.*$/
   when: manual
   except:
-      variables:
-        - $SCHEDULED
+    - schedules
