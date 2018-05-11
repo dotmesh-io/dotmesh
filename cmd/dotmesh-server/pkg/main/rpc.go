@@ -1046,7 +1046,7 @@ func (d *DotmeshRPC) RegisterTransfer(
 	// tying a transfer to a filesystem id is probably wrong. except, the thing
 	// being updated is a specific branch (filesystem id), it's ok if it drags
 	// dependent snapshots along with it.
-	_, err = d.state.globalFsRequest(args.FilesystemId, &Event{
+	responseChan, err := d.state.globalFsRequest(args.FilesystemId, &Event{
 		Name: "peer-transfer",
 		Args: &EventArgs{
 			"Transfer": args,
@@ -1055,17 +1055,18 @@ func (d *DotmeshRPC) RegisterTransfer(
 	if err != nil {
 		return err
 	}
-	/*
-		// XXX should we be throwing away a result? not doing so probably leaks
-		// goroutines.
-		go func() {
-			// asynchronously throw away the response, transfers can be polled via
-			// their own entries in etcd
-			e := <-f.responses // XXX is this right???
-			log.Printf("finished peer-transfer of %s, %s", args, e)
-		}()
-	*/
-	return nil
+
+	// Block until the fsmachine is ready to transfer
+	log.Printf("[RegisterTransfer:%s] waiting for ack from the fsmachine...", args.FilesystemId)
+	e := <-responseChan
+	log.Printf("[RegisterTransfer:%s] received ack from the fsmachine: %+v", args.FilesystemId, e)
+
+	if e.Name != "awaiting-transfer" {
+		// Something went wrong!
+		return fmt.Errorf("Error requesting peer transfer: %+v", e)
+	} else {
+		return nil
+	}
 }
 
 // Need both push and pull because one cluster will often be behind NAT.

@@ -2576,6 +2576,14 @@ func pushPeerState(f *fsMachine) stateFn {
 		}()
 	}()
 
+	// Here we are about to block, so confirm we are ready at this
+	// point or the caller won't start to push and unblock us
+	log.Printf("[pushPeerState:%s] clearing peer to send", f.filesystemId)
+	f.innerResponses <- &Event{
+		Name: "awaiting-transfer",
+		Args: &EventArgs{},
+	}
+
 	for {
 		log.Printf("[pushPeerState:%s] about to read from externalSnapshotsChanged", f.filesystemId)
 
@@ -2585,10 +2593,6 @@ func pushPeerState(f *fsMachine) stateFn {
 				"[pushPeerState:%s] Timed out waiting for externalSnapshotsChanged",
 				f.filesystemId,
 			)
-			f.innerResponses <- &Event{
-				Name: "timed-out-external-snaps",
-				Args: &EventArgs{},
-			}
 			return backoffState
 		case <-f.externalSnapshotsChanged:
 			// onwards!
@@ -2619,10 +2623,6 @@ func pushPeerState(f *fsMachine) stateFn {
 		select {
 		case <-timeoutTimer.C:
 			log.Printf("[pushPeerState] Timed out waiting for newSnapsOnMaster")
-			f.innerResponses <- &Event{
-				Name: "timed-out-snaps-on-master",
-				Args: &EventArgs{},
-			}
 			return backoffState
 		// check that the snapshot is the one we're expecting
 		case s := <-newSnapsOnMaster:
@@ -2639,10 +2639,6 @@ func pushPeerState(f *fsMachine) stateFn {
 				mounted := f.filesystem.mounted
 				f.snapshotsLock.Unlock()
 				if mounted {
-					f.innerResponses <- &Event{
-						Name: "receiving-push-complete",
-						Args: &EventArgs{},
-					}
 					log.Printf(
 						"[pushPeerState:%s] mounted case, returning activeState on snap %s",
 						f.filesystemId, sn.Id,
@@ -2653,18 +2649,18 @@ func pushPeerState(f *fsMachine) stateFn {
 					// receiving further pushes?
 					responseEvent, nextState := f.mount()
 					if responseEvent.Name == "mounted" {
-						f.innerResponses <- &Event{
-							Name: "receiving-push-complete",
-							Args: &EventArgs{},
-						}
+						log.Printf(
+							"[pushPeerState:%s] unmounted case, returning nextState %s on snap %s",
+							f.filesystemId, nextState, sn.Id,
+						)
+						return nextState
 					} else {
-						f.innerResponses <- responseEvent
+						log.Printf(
+							"[pushPeerState:%s] unmounted case, returning nextState %s as mount failed: %+v",
+							f.filesystemId, nextState, responseEvent,
+						)
+						return nextState
 					}
-					log.Printf(
-						"[pushPeerState:%s] unmounted case, returning nextState %s on snap %s",
-						f.filesystemId, nextState, sn.Id,
-					)
-					return nextState
 				}
 			} else {
 				log.Printf(
@@ -2917,6 +2913,10 @@ func pullPeerState(f *fsMachine) stateFn {
 	// events while this is happening? (Although I think we want to do that for
 	// GETs in general?)
 	f.transitionedTo("pullPeerState", "immediate-return")
+	f.innerResponses <- &Event{
+		Name: "awaiting-transfer",
+		Args: &EventArgs{},
+	}
 	return discoveringState
 }
 

@@ -396,7 +396,9 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// XXX might this leak goroutines in any cases where fsMachine isn't in
 	// pushPeerState when a push completes for some reason?
+	log.Printf("[ZFSReceiver:%s] Notifying fsmachine", z.filesystem)
 	go z.state.notifyNewSnapshotsAfterPush(z.filesystem)
+
 	log.Printf("[ZFSReceiver:%s] Closing pipe, and returning from ServeHTTP.", z.filesystem)
 }
 
