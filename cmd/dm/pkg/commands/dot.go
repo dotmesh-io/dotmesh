@@ -259,15 +259,15 @@ func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
 		fmt.Fprintf(out, "Dot %s/%s:\n", namespace, dot)
 	}
 
-	dotmeshDot, err := dm.BranchInfo(namespace, dot, "")
+	masterDot, err := dm.BranchInfo(namespace, dot, "")
 	if err != nil {
 		return err
 	}
 
 	if scriptingMode {
-		fmt.Fprintf(out, "masterBranchId\t%s\n", dotmeshDot.Id)
+		fmt.Fprintf(out, "masterBranchId\t%s\n", masterDot.Id)
 	} else {
-		fmt.Fprintf(out, "Master branch ID: %s\n", dotmeshDot.Id)
+		fmt.Fprintf(out, "Master branch ID: %s\n", masterDot.Id)
 	}
 
 	activeQualified, err := dm.CurrentVolume()
@@ -288,22 +288,22 @@ func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
 	}
 
 	if scriptingMode {
-		fmt.Fprintf(out, "commitCount\t%d\n", dotmeshDot.CommitCount)
+		fmt.Fprintf(out, "commitCount\t%d\n", masterDot.CommitCount)
 	} else {
-		fmt.Fprintf(out, "Commits: %d\n", dotmeshDot.CommitCount)
+		fmt.Fprintf(out, "Commits: %d\n", masterDot.CommitCount)
 	}
 
 	if scriptingMode {
 		fmt.Fprintf(out, "size\t%d\ndirty\t%d\n",
-			dotmeshDot.SizeBytes,
-			dotmeshDot.DirtyBytes)
+			masterDot.SizeBytes,
+			masterDot.DirtyBytes)
 	} else {
-		if dotmeshDot.DirtyBytes == 0 {
-			fmt.Fprintf(out, "Dot size: %s (all clean)\n", prettyPrintSize(dotmeshDot.SizeBytes))
+		if masterDot.DirtyBytes == 0 {
+			fmt.Fprintf(out, "Dot size: %s (all clean)\n", prettyPrintSize(masterDot.SizeBytes))
 		} else {
 			fmt.Fprintf(out, "Dot size: %s (%s dirty)\n",
-				prettyPrintSize(dotmeshDot.SizeBytes),
-				prettyPrintSize(dotmeshDot.DirtyBytes))
+				prettyPrintSize(masterDot.SizeBytes),
+				prettyPrintSize(masterDot.DirtyBytes))
 		}
 	}
 
@@ -325,9 +325,17 @@ func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
 
 	for _, branch := range bs {
 		containerNames := []string{}
-
+		var branchDot remotes.DotmeshVolume
+		if branch == "master" {
+			branchDot = masterDot
+		} else {
+			branchDot, err = dm.BranchInfo(namespace, localDot, branch)
+			if err != nil {
+				return err
+			}
+		}
 		if branch == currentBranch {
-			containerInfo, err := dm.RelatedContainers(dotmeshDot.Name, branch)
+			containerInfo, err := dm.RelatedContainers(branchDot.Name, branch)
 			if err != nil {
 				return err
 			}
@@ -368,13 +376,13 @@ func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
 			fmt.Fprintf(out, "unable to fetch replication status (%s), proceeding...\n", err)
 		} else {
 			for server, missingCommits := range latency {
-				serverStatus, ok := dotmeshDot.ServerStatuses[server]
+				serverStatus, ok := branchDot.ServerStatuses[server]
 				if !ok {
 					serverStatus = "unknown"
 				}
 				if scriptingMode {
 					var masterState string
-					if dotmeshDot.Master == server {
+					if branchDot.Master == server {
 						masterState = "master"
 					} else {
 						masterState = "replica"
@@ -382,10 +390,10 @@ func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
 					fmt.Fprintf(out, "latency\t%s\t%s\t%s\t%s\n", server, masterState, serverStatus, strings.Join(missingCommits, "\t"))
 				} else {
 					var masterState string
-					if dotmeshDot.Master == server {
+					if branchDot.Master == server {
 						masterState = " [MASTER]"
 					} else {
-						masterState = ""
+						masterState = "         "
 					}
 
 					if len(missingCommits) > 0 {
