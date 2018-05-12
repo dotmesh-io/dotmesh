@@ -522,10 +522,38 @@ func (s *InMemoryState) handleOneFilesystemDeletion(node *client.Node) error {
 
 	pieces := strings.Split(node.Key, "/")
 	fs := pieces[len(pieces)-1]
+
+	func() {
+		s.filesystemsLock.Lock()
+		defer s.filesystemsLock.Unlock()
+		f, ok := (*s.filesystems)[fs]
+		if ok {
+			log.Printf("[handleOneFilesystemDeletion:%s] before initFs..  state: %s, status: %s", fs, f.currentState, f.status)
+		} else {
+			log.Printf("[handleOneFilesystemDeletion:%s] before initFs.. no fsMachine")
+		}
+	}()
+
 	s.initFilesystemMachine(fs)
+
+	func() {
+		s.filesystemsLock.Lock()
+		defer s.filesystemsLock.Unlock()
+		f, ok := (*s.filesystems)[fs]
+		if ok {
+			log.Printf("[handleOneFilesystemDeletion:%s] after initFs.. state: %s, status: %s", fs, f.currentState, f.status)
+		} else {
+			log.Printf("[handleOneFilesystemDeletion:%s] after initFs.. no fsMachine")
+		}
+	}()
+
 	var responseChan chan *Event
 	var err error
-	requestId := pieces[len(pieces)-1]
+	id, err := uuid.NewV4()
+	if err != nil {
+		return err
+	}
+	requestId := id.String()
 	responseChan, err = s.dispatchEvent(fs, &Event{Name: "delete"}, requestId)
 	if err != nil {
 		return err

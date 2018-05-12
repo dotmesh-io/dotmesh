@@ -1619,7 +1619,7 @@ func (d *DotmeshRPC) Delete(
 		// Block until the filesystem is gone locally (it may still be
 		// dying on other nodes in the cluster, but it's too costly to
 		// track that for the gains it gives us)
-		waitForFilesystemDeath(fsid)
+		d.state.waitForFilesystemDeath(fsid)
 
 		// As we only block for completion locally, there IS a chance
 		// that the deletions will happen in the wrong order on other
