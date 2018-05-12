@@ -892,13 +892,13 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 					// ok, we'll be setting it below...
 				} else {
 					// state already exists. check that we're updating with a
-					// revision that is strictly newer...
+					// revision that is the same or newer...
 					currentVersion := (*s.globalStateCache)[server][filesystem]["version"]
 					i, err := strconv.ParseUint(currentVersion, 10, 64)
 					if err != nil {
 						return err
 					}
-					if i >= node.ModifiedIndex {
+					if i > node.ModifiedIndex {
 						log.Printf(
 							"Out of order updates! %s is older than %s",
 							(*s.globalStateCache)[server][filesystem],
