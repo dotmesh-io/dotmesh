@@ -42,8 +42,8 @@ if [ -z "${SKIP_K8S}" ]; then
     docker rm -f dotmesh-builder-flexvolume-$ARTEFACT_CONTAINER || true
     docker run \
         --name dotmesh-builder-flexvolume-$ARTEFACT_CONTAINER \
-        -v dotmesh_build_cache:/go/pkg \
-        -e GOPATH=/go \
+        -v dotmesh_build_cache_flexvolume:/gocache \
+        -e GOPATH=/go -e GOCACHE=/gocache \
         -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/flexvolume \
         dotmesh-builder:$ARTEFACT_CONTAINER \
         go build -pkgdir /go/pkg -o /target/flexvolume
@@ -56,12 +56,12 @@ if [ -z "${SKIP_K8S}" ]; then
     docker rm -f dotmesh-builder-dm-provisioner-$ARTEFACT_CONTAINER || true
     docker run \
         --name dotmesh-builder-dm-provisioner-$ARTEFACT_CONTAINER \
-        -v dotmesh_build_cache:/go/pkg \
-        -e GOPATH=/go \
+        -v dotmesh_build_cache_dm_provisioner:/gocache \
+        -e GOPATH=/go -e GOCACHE=/gocache \
         -e CGO_ENABLED=0 \
         -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dynamic-provisioning \
         dotmesh-builder:$ARTEFACT_CONTAINER \
-        go build -pkgdir /go/pkg -a -ldflags '-extldflags "-static"' -o /target/dm-provisioner .
+        go build -pkgdir /go/pkg -ldflags '-extldflags "-static"' -o /target/dm-provisioner .
     echo "copy binary: /target/dm-provisioner"
     docker cp dotmesh-builder-dm-provisioner-$ARTEFACT_CONTAINER:/target/dm-provisioner target/
     docker rm -f dotmesh-builder-dm-provisioner-$ARTEFACT_CONTAINER
@@ -74,12 +74,12 @@ if [ -z "${SKIP_K8S}" ]; then
     docker rm -f dotmesh-builder-operator-$ARTEFACT_CONTAINER || true
     docker run \
         --name dotmesh-builder-operator-$ARTEFACT_CONTAINER \
-        -v dotmesh_build_cache:/go/pkg \
-        -e GOPATH=/go \
+        -v dotmesh_build_cache_operator:/gocache \
+        -e GOPATH=/go -e GOCACHE=/gocache \
         -e CGO_ENABLED=0 \
         -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/operator \
         dotmesh-builder:$ARTEFACT_CONTAINER \
-        go build -pkgdir /go/pkg -a -ldflags "-extldflags \"-static\" -X main.DOTMESH_VERSION=${VERSION} -X main.DOTMESH_IMAGE=${CI_DOCKER_SERVER_IMAGE} " -o /target/operator .
+        go build -pkgdir /go/pkg -ldflags "-extldflags \"-static\" -X main.DOTMESH_VERSION=${VERSION} -X main.DOTMESH_IMAGE=${CI_DOCKER_SERVER_IMAGE} " -o /target/operator .
     echo "copy binary: /target/operator"
     docker cp dotmesh-builder-operator-$ARTEFACT_CONTAINER:/target/operator target/
     docker rm -f dotmesh-builder-operator-$ARTEFACT_CONTAINER
@@ -94,8 +94,8 @@ if [ -z "${SKIP_K8S}" ]; then
     docker rm -f dotmesh-builder-dind-flexvolume-$ARTEFACT_CONTAINER || true
     docker run \
         --name dotmesh-builder-dind-flexvolume-$ARTEFACT_CONTAINER \
-        -v dotmesh_build_cache:/go/pkg \
-        -e GOPATH=/go \
+        -v dotmesh_build_cache_dind_flexvolume:/gocache \
+        -e GOPATH=/go -e GOCACHE=/gocache \
         -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dind-flexvolume \
         dotmesh-builder:$ARTEFACT_CONTAINER \
         go build -pkgdir /go/pkg -o /target/dind-flexvolume
@@ -108,12 +108,12 @@ if [ -z "${SKIP_K8S}" ]; then
     docker rm -f dotmesh-builder-dind-provisioner-$ARTEFACT_CONTAINER || true
     docker run \
         --name dotmesh-builder-dind-provisioner-$ARTEFACT_CONTAINER \
-        -v dotmesh_build_cache:/go/pkg \
-        -e GOPATH=/go \
+        -v dotmesh_build_cache_dind_provisioner:/gocache \
+        -e GOPATH=/go -e GOCACHE=/gocache \
         -e CGO_ENABLED=0 \
         -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dind-dynamic-provisioning \
         dotmesh-builder:$ARTEFACT_CONTAINER \
-        go build -pkgdir /go/pkg -a -ldflags '-extldflags "-static"' -o /target/dind-provisioner .
+        go build -pkgdir /go/pkg -ldflags '-extldflags "-static"' -o /target/dind-provisioner .
     echo "copy binary: /target/dind-provisioner"
     docker cp dotmesh-builder-dind-provisioner-$ARTEFACT_CONTAINER:/target/dind-provisioner target/
     docker rm -f dotmesh-builder-dind-provisioner-$ARTEFACT_CONTAINER
@@ -127,8 +127,8 @@ echo "creating container: dotmesh-builder-server-$ARTEFACT_CONTAINER"
 docker rm -f dotmesh-builder-server-$ARTEFACT_CONTAINER || true
 docker run \
     --name dotmesh-builder-server-$ARTEFACT_CONTAINER \
-    -v dotmesh_build_cache:/go/pkg \
-    -e GOPATH=/go \
+    -v dotmesh_build_cache_server:/gocache \
+    -e GOPATH=/go -e GOCACHE=/gocache \
     -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/main \
     dotmesh-builder:$ARTEFACT_CONTAINER \
     go build -pkgdir /go/pkg -ldflags "-X main.serverVersion=${VERSION}" -o /target/dotmesh-server
