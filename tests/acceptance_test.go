@@ -579,7 +579,7 @@ func TestSingleNode(t *testing.T) {
 			t.Error(err)
 		}
 		if resp.ApiKey == apiKey {
-			t.Errorf("Got API key %v, expected a new one!", resp.ApiKey, apiKey)
+			t.Errorf("Got API key %v, expected a new one (got %v)!", resp.ApiKey, apiKey)
 		}
 
 		var user struct {
@@ -776,6 +776,24 @@ func TestDeletionSimple(t *testing.T) {
 
 		checkDeletionWorked(t, fsname, 10*time.Second, node1, node2)
 	})
+
+	t.Run("DeleteQuicklyOnOtherNode", func(t *testing.T) {
+		// Does deletion succeed if you attempt to initate it from another node
+		// in the cluster?
+
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO'")
+		citools.RunOnNode(t, node2, "dm dot delete -f "+fsname)
+
+		// Ensure the initial delete has happened, but the metadata is
+		// still draining. This is less than half the metadata timeout
+		// configured above; the system should be in the process of
+		// cleaning up after the volume, but it should be fine to reuse
+		// the name by now.
+
+		checkDeletionWorked(t, fsname, 2*time.Second, node1, node2)
+	})
+
 }
 
 func setupBranchesForDeletion(t *testing.T, fsname string, node1 string, node2 string) {
@@ -872,7 +890,7 @@ func TestTwoNodesSameCluster(t *testing.T) {
 		st := citools.OutputFromRunOnNode(t, node2, citools.DockerRun(fsname)+" cat /foo/HELLO")
 
 		if !strings.Contains(st, "WORLD") {
-			t.Error(fmt.Sprintf("Unable to find world in transported data capsule, got '%s'", st))
+			t.Errorf("Unable to find world in transported data capsule, got '%s'", st)
 		}
 	})
 
@@ -1368,7 +1386,7 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		// 1) dm init
 		resp := citools.OutputFromRunOnNode(t, node1, "if dm init @; then false; else true; fi ")
 		if !strings.Contains(resp, "Invalid dot name") {
-			t.Error("Didn't get an error when attempting to dm init an invalid volume name: %s", resp)
+			t.Errorf("Didn't get an error when attempting to dm init an invalid volume name: %s", resp)
 		}
 
 		// 2) pull/clone it
@@ -1381,18 +1399,18 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		resp = citools.OutputFromRunOnNode(t, node1, "if dm clone cluster_0 "+fsname+" --local-name @; then false; else true; fi ")
 
 		if !strings.Contains(resp, "Invalid dot name") {
-			t.Error("Didn't get an error when attempting to dm clone to an invalid volume name: %s", resp)
+			t.Errorf("Didn't get an error when attempting to dm clone to an invalid volume name: %s", resp)
 		}
 
 		resp = citools.OutputFromRunOnNode(t, node1, "if dm pull cluster_0 @ --remote-name "+fsname+"; then false; else true; fi ")
 		if !strings.Contains(resp, "Invalid dot name") {
-			t.Error("Didn't get an error when attempting to dm pull to an invalid volume name: %s", resp)
+			t.Errorf("Didn't get an error when attempting to dm pull to an invalid volume name: %s", resp)
 		}
 
 		// 3) push it
 		resp = citools.OutputFromRunOnNode(t, node2, "if dm push cluster_0 "+fsname+" --remote-name @; then false; else true; fi ")
 		if !strings.Contains(resp, "Invalid dot name") {
-			t.Error("Didn't get an error when attempting to dm push to an invalid volume name: %s", resp)
+			t.Errorf("Didn't get an error when attempting to dm push to an invalid volume name: %s", resp)
 		}
 	})
 }
@@ -2265,7 +2283,7 @@ func startContainers(t *testing.T, node string) {
 	citools.RunOnNode(t, node, "docker start dotmesh-server dotmesh-server-inner")
 
 	for try := 1; try <= 5; try++ {
-		fmt.Print("Dotmesh containers running on %s: ", node)
+		fmt.Printf("Dotmesh containers running on %s: ", node)
 		st := citools.OutputFromRunOnNode(t, node, "dm version | grep 'Unable to connect' | wc -l")
 		if st == "0\n" {
 			return
@@ -2340,13 +2358,13 @@ func TestStressLotsOfCommits(t *testing.T) {
 
 		st := citools.OutputFromRunOnNode(t, cluster1.Container, "dm list")
 		if !strings.Contains(st, fsname) {
-			t.Error(fmt.Sprintf("We didn't see the fsname we expected (%s) in %s", fsname, st))
+			t.Errorf("We didn't see the fsname we expected (%s) in %s", fsname, st)
 		}
 
 		citools.RunOnNode(t, cluster1.Container, fmt.Sprintf("dm switch %s", fsname))
 		st = citools.OutputFromRunOnNode(t, cluster1.Container, "dm log | grep 'the rain in spain' | wc -l")
 		if st != fmt.Sprintf("%d\n", NUMBER_OF_COMMITS) {
-			t.Error(fmt.Sprintf("We didn't see the right number of commits: Got '%s', wanted %d", st, NUMBER_OF_COMMITS))
+			t.Errorf("We didn't see the right number of commits: Got '%s', wanted %d", st, NUMBER_OF_COMMITS)
 		}
 		citools.RunOnNode(t, cluster1.Container, fmt.Sprintf("dm dot delete -f %s", fsname))
 	})
