@@ -42,6 +42,7 @@ if [ -z "${SKIP_K8S}" ]; then
     docker rm -f dotmesh-builder-flexvolume-$ARTEFACT_CONTAINER || true
     docker run \
         --name dotmesh-builder-flexvolume-$ARTEFACT_CONTAINER \
+        -v dotmesh_build_cache:/go/pkg \
         -e GOPATH=/go \
         -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/flexvolume \
         dotmesh-builder:$ARTEFACT_CONTAINER \
@@ -55,6 +56,7 @@ if [ -z "${SKIP_K8S}" ]; then
     docker rm -f dotmesh-builder-dm-provisioner-$ARTEFACT_CONTAINER || true
     docker run \
         --name dotmesh-builder-dm-provisioner-$ARTEFACT_CONTAINER \
+        -v dotmesh_build_cache:/go/pkg \
         -e GOPATH=/go \
         -e CGO_ENABLED=0 \
         -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dynamic-provisioning \
@@ -72,6 +74,7 @@ if [ -z "${SKIP_K8S}" ]; then
     docker rm -f dotmesh-builder-operator-$ARTEFACT_CONTAINER || true
     docker run \
         --name dotmesh-builder-operator-$ARTEFACT_CONTAINER \
+        -v dotmesh_build_cache:/go/pkg \
         -e GOPATH=/go \
         -e CGO_ENABLED=0 \
         -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/operator \
@@ -91,6 +94,7 @@ if [ -z "${SKIP_K8S}" ]; then
     docker rm -f dotmesh-builder-dind-flexvolume-$ARTEFACT_CONTAINER || true
     docker run \
         --name dotmesh-builder-dind-flexvolume-$ARTEFACT_CONTAINER \
+        -v dotmesh_build_cache:/go/pkg \
         -e GOPATH=/go \
         -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dind-flexvolume \
         dotmesh-builder:$ARTEFACT_CONTAINER \
@@ -104,6 +108,7 @@ if [ -z "${SKIP_K8S}" ]; then
     docker rm -f dotmesh-builder-dind-provisioner-$ARTEFACT_CONTAINER || true
     docker run \
         --name dotmesh-builder-dind-provisioner-$ARTEFACT_CONTAINER \
+        -v dotmesh_build_cache:/go/pkg \
         -e GOPATH=/go \
         -e CGO_ENABLED=0 \
         -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dind-dynamic-provisioning \
@@ -122,6 +127,7 @@ echo "creating container: dotmesh-builder-server-$ARTEFACT_CONTAINER"
 docker rm -f dotmesh-builder-server-$ARTEFACT_CONTAINER || true
 docker run \
     --name dotmesh-builder-server-$ARTEFACT_CONTAINER \
+    -v dotmesh_build_cache:/go/pkg \
     -e GOPATH=/go \
     -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/main \
     dotmesh-builder:$ARTEFACT_CONTAINER \
