@@ -61,7 +61,7 @@ if [ -z "${SKIP_K8S}" ]; then
         -e CGO_ENABLED=0 \
         -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dynamic-provisioning \
         dotmesh-builder:$ARTEFACT_CONTAINER \
-        go build -pkgdir /go/pkg -a -ldflags '-extldflags "-static"' -o /target/dm-provisioner .
+        go build -pkgdir /go/pkg -o /target/dm-provisioner .
     echo "copy binary: /target/dm-provisioner"
     docker cp dotmesh-builder-dm-provisioner-$ARTEFACT_CONTAINER:/target/dm-provisioner target/
     docker rm -f dotmesh-builder-dm-provisioner-$ARTEFACT_CONTAINER
@@ -79,7 +79,7 @@ if [ -z "${SKIP_K8S}" ]; then
         -e CGO_ENABLED=0 \
         -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/operator \
         dotmesh-builder:$ARTEFACT_CONTAINER \
-        go build -pkgdir /go/pkg -a -ldflags "-extldflags \"-static\" -X main.DOTMESH_VERSION=${VERSION} -X main.DOTMESH_IMAGE=${CI_DOCKER_SERVER_IMAGE} " -o /target/operator .
+        go build -pkgdir /go/pkg -ldflags "-X main.DOTMESH_VERSION=${VERSION} -X main.DOTMESH_IMAGE=${CI_DOCKER_SERVER_IMAGE}" -o /target/operator .
     echo "copy binary: /target/operator"
     docker cp dotmesh-builder-operator-$ARTEFACT_CONTAINER:/target/operator target/
     docker rm -f dotmesh-builder-operator-$ARTEFACT_CONTAINER
@@ -113,7 +113,7 @@ if [ -z "${SKIP_K8S}" ]; then
         -e CGO_ENABLED=0 \
         -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dind-dynamic-provisioning \
         dotmesh-builder:$ARTEFACT_CONTAINER \
-        go build -pkgdir /go/pkg -a -ldflags '-extldflags "-static"' -o /target/dind-provisioner .
+        go build -pkgdir /go/pkg -o /target/dind-provisioner .
     echo "copy binary: /target/dind-provisioner"
     docker cp dotmesh-builder-dind-provisioner-$ARTEFACT_CONTAINER:/target/dind-provisioner target/
     docker rm -f dotmesh-builder-dind-provisioner-$ARTEFACT_CONTAINER
