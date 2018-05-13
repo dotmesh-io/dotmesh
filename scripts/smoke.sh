@@ -4,7 +4,8 @@ set -xe
 # Smoke test to see whether basics still work on e.g. macOS; also tests the 
 
 DM="$1"
-VOL="volume_`date +%s`_`openssl rand -base64 32`"
+NEW_UUID=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
+VOL="volume_`date +%s`_${NEW_UUID}"
 IMAGE="${CI_DOCKER_REGISTRY:-`hostname`.local:80/dotmesh}/"$2":${CI_DOCKER_TAG:-latest}"
 
 # We use a bespoke config path to isolate us from other runs (although
