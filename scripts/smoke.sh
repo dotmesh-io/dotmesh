@@ -13,7 +13,7 @@ IMAGE="${CI_DOCKER_REGISTRY:-`hostname`.local:80/dotmesh}/"$2":${CI_DOCKER_TAG:-
 CONFIG=/tmp/smoke_test_$$.dmconfig
 trap 'rm "$CONFIG" || true' EXIT
 
-sudo "$DM" -c "$CONFIG" cluster reset || (sleep 30; sudo "$DM" cluster reset) || true
+sudo "$DM" -c "$CONFIG" cluster reset || (sleep 10; sudo "$DM" cluster reset) || true
 
 echo "### Installing image ${IMAGE}"
 

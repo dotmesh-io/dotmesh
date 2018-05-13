@@ -1320,7 +1320,36 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 				s.etcdWaitTimestamp = time.Now().UnixNano()
 				s.etcdWaitState = fmt.Sprintf("watcher error %+v", err)
 			}()
-			return err
+			if strings.Contains(fmt.Sprintf("%v", err), "the requested history has been cleared") {
+				// Too much stuff changed in etcd since we processed all of it.
+				// Try to recover from this case. Just make a watcher from the
+				// current state, which means we'll have missed some events,
+				// but at least we won't crashloop.
+				watcher = kapi.Watcher(
+					fmt.Sprintf(ETCD_PREFIX),
+					&client.WatcherOptions{
+						// NB: no AfterIndex option, throw away interim
+						// history...
+						Recursive: true,
+					},
+				)
+				node, err = watcher.Next(context.Background())
+				if err != nil {
+					func() {
+						s.etcdWaitTimestampLock.Lock()
+						defer s.etcdWaitTimestampLock.Unlock()
+						s.etcdWaitTimestamp = time.Now().UnixNano()
+						s.etcdWaitState = fmt.Sprintf("recovered watcher error %+v", err)
+					}()
+					log.Printf(
+						"[fetchAndWatchEtcd] failed fetching next event after creating recovered watcher: %v",
+						err,
+					)
+					return err
+				}
+			} else {
+				return err
+			}
 		}
 		func() {
 			s.etcdWaitTimestampLock.Lock()
