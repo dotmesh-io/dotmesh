@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/nu7hatch/gouuid"
 	"k8s.io/api/core/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	//"k8s.io/apimachinery/pkg/labels"
@@ -44,8 +45,9 @@ import (
 const DOTMESH_NAMESPACE = "dotmesh"
 const DOTMESH_CONFIG_MAP = "configuration"
 const DOTMESH_NODE_LABEL = "dotmesh.io/node"
-const DOTMESH_POD_ROLE_LABEL = "dotmesh.io/role"
+const DOTMESH_ROLE_LABEL = "dotmesh.io/role"
 const DOTMESH_ROLE_SERVER = "dotmesh-server"
+const DOTMESH_ROLE_PVC = "dotmesh-pvc"
 
 // ConfigMap keys
 
@@ -60,6 +62,10 @@ const CONFIG_MODE = "storageMode"
 const CONFIG_MODE_LOCAL = "local" // Value for CONFIG_MODE
 const CONFIG_LOCAL_POOL_SIZE_PER_NODE = "local.poolSizePerNode"
 const CONFIG_LOCAL_POOL_LOCATION = "local.poolLocation"
+
+const CONFIG_MODE_PPN = "pvcPerNode" // Value for CONFIG_MODE
+const CONFIG_PPN_POOL_SIZE_PER_NODE = "pvcPerNode.pvSizePerNode"
+const CONFIG_PPN_POOL_STORAGE_CLASS = "pvcPerNode.storageClass"
 
 // These values are fed in via the build system at link time
 var DOTMESH_VERSION string
@@ -108,8 +114,10 @@ func main() {
 type dotmeshController struct {
 	client       kubernetes.Interface
 	nodeLister   lister_v1.NodeLister
+	pvcLister    lister_v1.PersistentVolumeClaimLister
 	podLister    lister_v1.PodLister
 	nodeInformer cache.Controller
+	pvcInformer  cache.Controller
 	podInformer  cache.Controller
 
 	updatesNeeded     bool
@@ -154,9 +162,8 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 	provideDefault(&rc.config.Data, CONFIG_MODE, CONFIG_MODE_LOCAL)
 	provideDefault(&rc.config.Data, CONFIG_LOCAL_POOL_SIZE_PER_NODE, "10G")
 	provideDefault(&rc.config.Data, CONFIG_LOCAL_POOL_LOCATION, "/var/lib/dotmesh")
-
-	// TODO: listen for node_list_changed, dotmesh_pod_list_changed,
-	// config_changed or pv_list_changed
+	provideDefault(&rc.config.Data, CONFIG_PPN_POOL_SIZE_PER_NODE, "10G")
+	provideDefault(&rc.config.Data, CONFIG_PPN_POOL_STORAGE_CLASS, "standard")
 
 	// TRACK NODES
 
@@ -215,13 +222,13 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 			ListFunc: func(lo meta_v1.ListOptions) (runtime.Object, error) {
 				// Add selectors to only list Dotmesh pods
 				dmLo := lo.DeepCopy()
-				dmLo.LabelSelector = fmt.Sprintf("%s=%s", DOTMESH_POD_ROLE_LABEL, DOTMESH_ROLE_SERVER)
+				dmLo.LabelSelector = fmt.Sprintf("%s=%s", DOTMESH_ROLE_LABEL, DOTMESH_ROLE_SERVER)
 				return client.Core().Pods(DOTMESH_NAMESPACE).List(*dmLo)
 			},
 			WatchFunc: func(lo meta_v1.ListOptions) (watch.Interface, error) {
 				// Add selectors to only list Dotmesh pods
 				dmLo := lo.DeepCopy()
-				dmLo.LabelSelector = fmt.Sprintf("%s=%s", DOTMESH_POD_ROLE_LABEL, DOTMESH_ROLE_SERVER)
+				dmLo.LabelSelector = fmt.Sprintf("%s=%s", DOTMESH_ROLE_LABEL, DOTMESH_ROLE_SERVER)
 				return client.Core().Pods(DOTMESH_NAMESPACE).Watch(*dmLo)
 			},
 		},
@@ -253,6 +260,52 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 	// PodLister avoids some boilerplate code (e.g. convert runtime.Object to
 	// *v1.pod)
 	rc.podLister = lister_v1.NewPodLister(podIndexer)
+
+	// TRACK DOTMESH PVCS
+
+	pvcIndexer, pvcInformer := cache.NewIndexerInformer(
+		&cache.ListWatch{
+			ListFunc: func(lo meta_v1.ListOptions) (runtime.Object, error) {
+				// Add selectors to only list Dotmesh pvcs
+				dmLo := lo.DeepCopy()
+				dmLo.LabelSelector = fmt.Sprintf("%s=%s", DOTMESH_ROLE_LABEL, DOTMESH_ROLE_PVC)
+				return client.Core().PersistentVolumeClaims(DOTMESH_NAMESPACE).List(*dmLo)
+			},
+			WatchFunc: func(lo meta_v1.ListOptions) (watch.Interface, error) {
+				// Add selectors to only list Dotmesh pvcs
+				dmLo := lo.DeepCopy()
+				dmLo.LabelSelector = fmt.Sprintf("%s=%s", DOTMESH_ROLE_LABEL, DOTMESH_ROLE_PVC)
+				return client.Core().PersistentVolumeClaims(DOTMESH_NAMESPACE).Watch(*dmLo)
+			},
+		},
+		// The types of objects this informer will return
+		&v1.PersistentVolumeClaim{},
+		// The resync period of this object. This will force a re-update of all
+		// cached objects at this interval.  Every object will trigger the
+		// `Updatefunc` even if there have been no actual updates triggered.
+		60*time.Second,
+		// Callback Functions to trigger on add/update/delete
+		cache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				glog.V(3).Info("PVC ADD %+v", obj)
+				rc.scheduleUpdate()
+			},
+			UpdateFunc: func(old, new interface{}) {
+				glog.V(3).Info("PVC UPDATE %+v -> %+v", old, new)
+				rc.scheduleUpdate()
+			},
+			DeleteFunc: func(obj interface{}) {
+				glog.V(3).Info("PVC DELETE %+v", obj)
+				rc.scheduleUpdate()
+			},
+		},
+		cache.Indexers{},
+	)
+
+	rc.pvcInformer = pvcInformer
+	// PvcLister avoids some boilerplate code (e.g. convert runtime.Object to
+	// *v1.pvc)
+	rc.pvcLister = lister_v1.NewPvcLister(pvcIndexer)
 
 	return rc
 }
@@ -372,6 +425,22 @@ func (c *dotmeshController) process() error {
 		}
 	}
 
+	// GET A LIST OF DOTMESH PVCS
+
+	// pvcs is a []*v1.PersistentVolumeClaim
+	// v1.PersistentVolumeClaim is documented at https://godoc.org/k8s.io/api/core/v1#PersistentVolumeClaim
+	pvcs, err := c.pvcLister.List(labels.Everything())
+	if err != nil {
+		return err
+	}
+
+	unusedPVCs := map[string]struct{}{}
+	for _, pvc := range pvcs {
+		// We will eliminate PVCs we find bound to pods as we go, to
+		// leave just the unused ones after we've looked at every pod.
+		unusedPVCs[pvc.ObjectMeta.Name] = struct{}{}
+	}
+
 	// EXAMINE DOTMESH PODS
 
 	// dotmeshes is a []*v1.Pod
@@ -393,6 +462,16 @@ func (c *dotmeshController) process() error {
 		dotmeshIsRunning[podName] = status == v1.PodRunning
 		if status == v1.PodRunning {
 			runningPodCount++
+		}
+
+		// Find any PVCs bound to this pod, and knock them out of
+		// unusedPVCs as they're used. This is done before all the pod
+		// sanity checks, so that PVCs in use by a weird pod are not
+		// immediatelly reallocated (until the pod is killed).
+		for _, volume := range dotmesh.Spec.Volumes {
+			if volume.PersistentVolumeClaimVolumeSource != nil {
+				delete(unusedPVCs, volume.PersistentVolumeClaimVolumeSource.ClaimName)
+			}
 		}
 
 		// Find the node this pod is bound to, as if it's starting up it
@@ -541,11 +620,6 @@ func (c *dotmeshController) process() error {
 		}
 	}
 
-	/* TODO: Analyse available PVs
-	pvs = list_of_dotmesh_pvs_in_az()
-	unused_pvs = pvs - map(pv_of_dotmesh, dotmesh_nodes)
-	*/
-
 	// FIXME: This hardcodes the name of the Deployment to be the
 	// ownerRef of created pods. It would be nicer to use an API to
 	// find the Pod containing the currently running process and then
@@ -562,6 +636,7 @@ func (c *dotmeshController) process() error {
 
 	// CREATE NEW DOTMESH PODS WHERE NEEDED
 
+nodeLoop:
 	for node, _ := range undottedNodes {
 		_, suspended := suspendedNodes[node]
 		if suspended {
@@ -569,22 +644,150 @@ func (c *dotmeshController) process() error {
 			continue
 		}
 
-		/* TODO
-		if config.use_pv_storage:
-			if len(unused_pvs) == 0:
-				unused_pvs.push(make_new_pv(config.new_pv_size))
-			storage = unused_pvs.pop()
-		else:
-		*/
+		volumeMounts := []v1.VolumeMount{
+			{Name: "docker-sock", MountPath: "/var/run/docker.sock"},
+			{Name: "run-docker", MountPath: "/run/docker"},
+			{Name: "var-lib", MountPath: "/var/lib"},
+			{Name: "system-lib", MountPath: "/system-lib/lib"},
+			{Name: "dotmesh-kernel-modules", MountPath: "/bundled-lib"},
+			{Name: "dotmesh-secret", MountPath: "/secret"},
+			{Name: "test-pools-dir", MountPath: "/dotmesh-test-pools"},
+		}
+
+		volumes := []v1.Volume{
+			{Name: "test-pools-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/dotmesh-test-pools"}}},
+			{Name: "run-docker", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/docker"}}},
+			{Name: "docker-sock", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/docker.sock"}}},
+			{Name: "var-lib", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/lib"}}},
+			{Name: "system-lib", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/lib"}}},
+			{Name: "dotmesh-kernel-modules", VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{}}},
+			{Name: "dotmesh-secret", VolumeSource: v1.VolumeSource{Secret: &v1.SecretVolumeSource{SecretName: "dotmesh"}}},
+		}
+
+		env := []v1.EnvVar{
+			{Name: "HOSTNAME", ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{APIVersion: "v1", FieldPath: "spec.nodeName"}}},
+			{Name: "DOTMESH_ETCD_ENDPOINT", Value: "http://dotmesh-etcd-cluster-client.dotmesh.svc.cluster.local:2379"},
+			{Name: "DOTMESH_DOCKER_IMAGE", Value: DOTMESH_IMAGE},
+			{Name: "PATH", Value: "/bundled-lib/sbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
+			{Name: "LD_LIBRARY_PATH", Value: "/bundled-lib/lib:/bundled-lib/usr/lib/"},
+			{Name: "ALLOW_PUBLIC_REGISTRATION", Value: "1"},
+			{Name: "INITIAL_ADMIN_PASSWORD_FILE", Value: "/secret/dotmesh-admin-password.txt"},
+			{Name: "INITIAL_ADMIN_API_KEY_FILE", Value: "/secret/dotmesh-api-key.txt"},
+			{Name: "USE_POOL_NAME", Value: c.config.Data[CONFIG_POOL_NAME]},
+			{Name: "USE_POOL_DIR", Value: c.config.Data[CONFIG_LOCAL_POOL_LOCATION]},
+			{Name: "POOL_SIZE", Value: c.config.Data[CONFIG_LOCAL_POOL_SIZE_PER_NODE]},
+			{Name: "LOG_ADDR", Value: c.config.Data[CONFIG_LOG_ADDRESS]},
+			{Name: "DOTMESH_UPGRADES_URL", Value: c.config.Data[CONFIG_UPGRADES_URL]},
+			{Name: "DOTMESH_UPGRADES_INTERVAL_SECONDS", Value: c.config.Data[CONFIG_UPGRADES_INTERVAL_SECONDS]},
+			{Name: "FLEXVOLUME_DRIVER_DIR", Value: c.config.Data[CONFIG_FLEXVOLUME_DRIVER_DIR]},
+		}
+
+		switch c.config.Data[CONFIG_STORAGE_MODE] {
+		case CONFIG_MODE_LOCAL:
+			podName := fmt.Sprintf("server-%s", node)
+		case CONFIG_MODE_PPN:
+			// The name of the PVC we're going to use for this pod
+			var pvc string
+
+			if len(unusedPVCs) == 0 {
+				// Create a new PVC, as we don't have a spare.
+
+				// Pick a name
+				id, err := uuid.NewV4()
+				if err != nil {
+					glog.Errorf("Error creating UUID for a new PVC name: %+v", err)
+					continue nodeLoop
+				}
+				pvc = fmt.Sprintf("pvc-%s", id.String())
+
+				// Create a PVC with that name
+				storageNeeded, err := resource.ParseQuantity(c.config.Data[CONFIG_PPN_POOL_SIZE_PER_NODE])
+				if err != nil {
+					glog.Errorf("Error parsing storage size %s: %+v", c.config.Data[CONFIG_PPN_POOL_SIZE_PER_NODE], err)
+					continue nodeLoop
+				}
+
+				newPVC := v1.PersistentVolumeClaim{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: DOTMESH_NAMESPACE,
+						Name:      pvc,
+						Labels: map[string]string{
+							DOTMESH_ROLE_LABEL: DOTMESH_ROLE_PVC,
+						},
+						Annotations: map[string]string{},
+					},
+					Spec: v1.PersistentVolumeClaimSpec{
+						Resources: v1.ResourceRequirements{
+							Requests: v1.ResourceList{
+								v1.ResourceStorage: storageNeeded,
+							},
+						},
+						StorageClassName: c.config.Data[CONFIG_PPN_POOL_STORAGE_CLASS],
+					},
+				}
+
+				glog.Infof("Creating new pvc %s", pvc)
+				_, err = c.client.Core().PersistentVolumeClaims(DOTMESH_NAMESPACE).Create(&newPVC)
+				if err != nil {
+					glog.Errorf("Error creating pvc: %+v", err)
+					continue nodeloop
+				}
+
+				env := append(env,
+					v1.EnvVar{
+						Name:  "CONTAINER_POOL_MNT_IS_NEW_PVC",
+						Value: "OH YEAH",
+					})
+
+			} else {
+				// Pick the first one in unusedPVCs
+				// TODO: Is there a better basis for picking one? Most recently used?
+				for pvcName, _ := range unusedPVCs {
+					pvc = pvcName
+					break
+				}
+				// It's claimed now, so take it off the list
+				delete(unusedPVCs, pvc)
+				glog.Infof("Reusing existing pvc %s", pvc)
+			}
+
+			// Configure the pod to use PV storage
+
+			podName := fmt.Sprintf("server-%s", pvc)
+			volumeMounts := append(volumeMounts,
+				v1.VolumeMount{
+					Name:      "backend-pv",
+					MountPath: "/backend-pv",
+				})
+			volumes := append(volumes,
+				v1.Volume{
+					Name: "backend-pv",
+					VolumeSource: v1.VolumeSource{
+						PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+							ClaimName: pvc,
+							ReadOnly:  false,
+						},
+					},
+				})
+			env := append(env,
+				v1.EnvVar{
+					Name:  "CONTAINER_POOL_MNT",
+					Value: "/backend-pv",
+				},
+				v1.EnvVar{
+					Name:  "CONTAINER_POOL_MNT_ID",
+					Value: pvc,
+				})
+		}
 
 		// Create a dotmesh pod (with local storage for now) assigned to this node
 		privileged := true
 		newDotmesh := v1.Pod{
 			ObjectMeta: meta_v1.ObjectMeta{
-				Name:      fmt.Sprintf("server-%s", node),
+				Name:      podName,
 				Namespace: "dotmesh",
 				Labels: map[string]string{
-					DOTMESH_POD_ROLE_LABEL: DOTMESH_ROLE_SERVER,
+					DOTMESH_ROLE_LABEL: DOTMESH_ROLE_SERVER,
 				},
 				Annotations: map[string]string{},
 				OwnerReferences: []meta_v1.OwnerReference{
@@ -621,32 +824,8 @@ func (c *dotmeshController) process() error {
 								Protocol:      v1.ProtocolTCP,
 							},
 						},
-						VolumeMounts: []v1.VolumeMount{
-							{Name: "docker-sock", MountPath: "/var/run/docker.sock"},
-							{Name: "run-docker", MountPath: "/run/docker"},
-							{Name: "var-lib", MountPath: "/var/lib"},
-							{Name: "system-lib", MountPath: "/system-lib/lib"},
-							{Name: "dotmesh-kernel-modules", MountPath: "/bundled-lib"},
-							{Name: "dotmesh-secret", MountPath: "/secret"},
-							{Name: "test-pools-dir", MountPath: "/dotmesh-test-pools"},
-						},
-						Env: []v1.EnvVar{
-							{Name: "HOSTNAME", ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{APIVersion: "v1", FieldPath: "spec.nodeName"}}},
-							{Name: "DOTMESH_ETCD_ENDPOINT", Value: "http://dotmesh-etcd-cluster-client.dotmesh.svc.cluster.local:2379"},
-							{Name: "DOTMESH_DOCKER_IMAGE", Value: DOTMESH_IMAGE},
-							{Name: "PATH", Value: "/bundled-lib/sbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
-							{Name: "LD_LIBRARY_PATH", Value: "/bundled-lib/lib:/bundled-lib/usr/lib/"},
-							{Name: "ALLOW_PUBLIC_REGISTRATION", Value: "1"},
-							{Name: "INITIAL_ADMIN_PASSWORD_FILE", Value: "/secret/dotmesh-admin-password.txt"},
-							{Name: "INITIAL_ADMIN_API_KEY_FILE", Value: "/secret/dotmesh-api-key.txt"},
-							{Name: "USE_POOL_NAME", Value: c.config.Data[CONFIG_POOL_NAME]},
-							{Name: "USE_POOL_DIR", Value: c.config.Data[CONFIG_LOCAL_POOL_LOCATION]},
-							{Name: "POOL_SIZE", Value: c.config.Data[CONFIG_LOCAL_POOL_SIZE_PER_NODE]},
-							{Name: "LOG_ADDR", Value: c.config.Data[CONFIG_LOG_ADDRESS]},
-							{Name: "DOTMESH_UPGRADES_URL", Value: c.config.Data[CONFIG_UPGRADES_URL]},
-							{Name: "DOTMESH_UPGRADES_INTERVAL_SECONDS", Value: c.config.Data[CONFIG_UPGRADES_INTERVAL_SECONDS]},
-							{Name: "FLEXVOLUME_DRIVER_DIR", Value: c.config.Data[CONFIG_FLEXVOLUME_DRIVER_DIR]},
-						},
+						VolumeMounts:    volumeMounts,
+						Env:             env,
 						ImagePullPolicy: v1.PullAlways,
 						LivenessProbe: &v1.Probe{
 							Handler: v1.Handler{
@@ -666,15 +845,7 @@ func (c *dotmeshController) process() error {
 				},
 				RestartPolicy:      v1.RestartPolicyNever,
 				ServiceAccountName: "dotmesh",
-				Volumes: []v1.Volume{
-					{Name: "test-pools-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/dotmesh-test-pools"}}},
-					{Name: "run-docker", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/docker"}}},
-					{Name: "docker-sock", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/docker.sock"}}},
-					{Name: "var-lib", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/lib"}}},
-					{Name: "system-lib", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/lib"}}},
-					{Name: "dotmesh-kernel-modules", VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{}}},
-					{Name: "dotmesh-secret", VolumeSource: v1.VolumeSource{Secret: &v1.SecretVolumeSource{SecretName: "dotmesh"}}},
-				},
+				Volumes:            volumes,
 			},
 		}
 		glog.Infof("Creating pod %s running %s on node %s", newDotmesh.ObjectMeta.Name, DOTMESH_IMAGE, node)
