@@ -689,7 +689,7 @@ func activeState(f *fsMachine) stateFn {
 			// refuse to move if we have any containers running
 			containers, err := f.containersRunning()
 			if err != nil {
-				log.Printf("Can't move filesystem while we can't list whether containers are using it")
+				log.Printf("[activeState:%s] Can't move filesystem while we can't list whether containers are using it. %s", f.filesystemId, err)
 				f.innerResponses <- &Event{
 					Name: "error-listing-containers-during-move",
 					Args: &EventArgs{"err": err},
@@ -697,7 +697,7 @@ func activeState(f *fsMachine) stateFn {
 				return backoffState
 			}
 			if len(containers) > 0 {
-				log.Printf("Can't move filesystem while containers are using it")
+				log.Printf("[activeState:%s] Can't move filesystem when ontainers are using it. %s", f.filesystemId)
 				f.innerResponses <- &Event{
 					Name: "cannot-move-while-containers-running",
 					Args: &EventArgs{"containers": containers},
@@ -847,7 +847,7 @@ func activeState(f *fsMachine) stateFn {
 			// fail if any containers running
 			containers, err := f.containersRunning()
 			if err != nil {
-				log.Printf("Can't unmount filesystem when we are unable to list containers using it")
+				log.Printf("[activeState:%s] %s Can't unmount filesystem when we are unable to list containers using it", f.filesystemId, err)
 				f.innerResponses <- &Event{
 					Name: "error-listing-containers-during-unmount",
 					Args: &EventArgs{"err": err},
@@ -855,7 +855,7 @@ func activeState(f *fsMachine) stateFn {
 				return backoffState
 			}
 			if len(containers) > 0 {
-				log.Printf("Can't unmount filesystem while containers are using it")
+				log.Printf("[activeState:%s] Can't unmount filesystem while containers are using it", f.filesystemId)
 				f.innerResponses <- &Event{
 					Name: "cannot-unmount-while-running-containers",
 					Args: &EventArgs{"containers": containers},
