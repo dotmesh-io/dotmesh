@@ -6,8 +6,10 @@ import (
 	"sync"
 	"time"
 
+	"crypto/rand"
+	"encoding/hex"
+
 	"github.com/golang/glog"
-	"github.com/nu7hatch/gouuid"
 	"k8s.io/api/core/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	//"k8s.io/apimachinery/pkg/labels"
@@ -41,6 +43,8 @@ import (
 
 // The easiest way to do this is to prohibit meaningful state inside
 // the operator process :-)
+
+const PVC_NAME_RANDOM_BYTES = 8
 
 const DOTMESH_NAMESPACE = "dotmesh"
 const DOTMESH_CONFIG_MAP = "configuration"
@@ -695,17 +699,18 @@ nodeLoop:
 				// Create a new PVC, as we don't have a spare.
 
 				// Pick a name
-				id, err := uuid.NewV4()
+				randBytes := make([]byte, PVC_NAME_RANDOM_BYTES)
+				_, err := rand.Read(randBytes)
 				if err != nil {
-					glog.Errorf("Error creating UUID for a new PVC name: %+v", err)
+					glog.Errorf("Error picking a random PVC name: %+v", err)
 					continue nodeLoop
 				}
-				pvc = fmt.Sprintf("pvc-%s", id.String())
+				pvc = fmt.Sprintf("pvc-%s", hex.EncodeToString(randBytes))
 
 				// Create a PVC with that name
 				storageNeeded, err := resource.ParseQuantity(c.config.Data[CONFIG_PPN_POOL_SIZE_PER_NODE])
 				if err != nil {
-					glog.Errorf("Error parsing storage size %s: %+v", c.config.Data[CONFIG_PPN_POOL_SIZE_PER_NODE], err)
+					glog.Errorf("Error parsing %s value %s: %+v", CONFIG_PPN_POOL_SIZE_PER_NODE, c.config.Data[CONFIG_PPN_POOL_SIZE_PER_NODE], err)
 					continue nodeLoop
 				}
 
