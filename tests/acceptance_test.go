@@ -1859,10 +1859,133 @@ func TestThreeSingleNodeClusters(t *testing.T) {
 	*/
 }
 
+func TestKubernetesOperator(t *testing.T) {
+	citools.TeardownFinishedTestRuns()
+
+	f := citools.Federation{citools.NewKubernetes(3, "pvcPerNode", true)}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
+
+	citools.StartTiming()
+	err := f.Start(t)
+	if err != nil {
+		t.Fatal(err) // there's no point carrying on
+	}
+	node1 := f[0].GetNode(0)
+
+	citools.LogTiming("setup")
+
+	t.Run("DynamicProvisioning", func(t *testing.T) {
+		// Ok, now we have the plumbing set up, try creating a PVC and see if it gets a PV dynamically provisioned
+		citools.KubectlApply(t, node1.Container, `
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: admin-grapes-pvc
+  annotations:
+    # Also available: dotmeshNamespace (defaults to the one from the storage class)
+    dotmeshNamespace: k8s
+    dotmeshName: dynamic-grapes
+    dotmeshSubdot: static-html
+spec:
+  storageClassName: dotmesh
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+`)
+
+		citools.LogTiming("DynamicProvisioning: PV Claim")
+		err = citools.TryUntilSucceeds(func() error {
+			result := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pv")
+			// We really want a line like:
+			// "pvc-85b6beb0-bb1f-11e7-8633-0242ff9ba756   1Gi        RWO           Delete          Bound     default/admin-grapes-pvc   dotmesh                 15s"
+			if !strings.Contains(result, "default/admin-grapes-pvc") {
+				return fmt.Errorf("grapes PV didn't get created")
+			}
+			return nil
+		}, "finding the grapes PV")
+		if err != nil {
+			t.Error(err)
+		}
+
+		citools.LogTiming("DynamicProvisioning: finding grapes PV")
+
+		// Now let's see if a container can see it, and put content there that a k8s container can pick up
+		citools.RunOnNode(t, node1.Container,
+			"docker run --rm -i -v k8s/dynamic-grapes.static-html:/foo --volume-driver dm "+
+				"busybox sh -c \"echo 'grapes' > /foo/on-the-vine\"",
+		)
+
+		citools.KubectlApply(t, node1.Container, `
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: grape-deployment
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: grape-server
+    spec:
+      volumes:
+      - name: grape-storage
+        persistentVolumeClaim:
+         claimName: admin-grapes-pvc
+      containers:
+      - name: grape-server
+        image: nginx:1.12.1
+        volumeMounts:
+        - mountPath: "/usr/share/nginx/html"
+          name: grape-storage
+`)
+
+		citools.LogTiming("DynamicProvisioning: grape Deployment")
+		citools.KubectlApply(t, node1.Container, `
+apiVersion: v1
+kind: Service
+metadata:
+   name: grape-service
+spec:
+   type: NodePort
+   selector:
+       app: grape-server
+   ports:
+     - port: 80
+       nodePort: 30050
+`)
+
+		citools.LogTiming("DynamicProvisioning: grape Service")
+		err = citools.TryUntilSucceeds(func() error {
+			resp, err := http.Get(fmt.Sprintf("http://%s:30050/on-the-vine", node1.IP))
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+			body, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				return err
+			}
+			if !strings.Contains(string(body), "grapes") {
+				return fmt.Errorf("No grapes on the vine, got this instead: %v", string(body))
+			}
+			return nil
+		}, "finding grapes on the vine")
+		if err != nil {
+			t.Error(err)
+		}
+
+		citools.LogTiming("DynamicProvisioning: Grapes on the vine")
+	})
+	citools.DumpTiming()
+}
+
 func TestKubernetesVolumes(t *testing.T) {
 	citools.TeardownFinishedTestRuns()
 
-	f := citools.Federation{citools.NewKubernetes(3)}
+	f := citools.Federation{citools.NewKubernetes(3, "local", false)}
 	defer citools.TestMarkForCleanup(f)
 	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 
@@ -2109,7 +2232,7 @@ spec:
 func TestKubernetesTestTooling(t *testing.T) {
 	citools.TeardownFinishedTestRuns()
 
-	f := citools.Federation{citools.NewKubernetes(3)}
+	f := citools.Federation{citools.NewKubernetes(3, "local", true)}
 	defer citools.TestMarkForCleanup(f)
 	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 
@@ -2120,41 +2243,8 @@ func TestKubernetesTestTooling(t *testing.T) {
 	}
 	node1 := f[0].GetNode(0)
 
-	dindProvisioner := fmt.Sprintf(`
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: dind-dynamic-provisioner
-  namespace: dotmesh
-  labels:
-    app: dind-dynamic-provisioner
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: dind-dynamic-provisioner
-  template:
-    metadata:
-      labels:
-        app: dind-dynamic-provisioner
-    spec:
-      containers:
-      - name: dind-dynamic-provisioner
-        image: %s
-        imagePullPolicy: "IfNotPresent"
-`, citools.LocalImage("dind-dynamic-provisioner"))
-	citools.KubectlApply(t, node1.Container, dindProvisioner)
-
-	storageClass := `
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: dind-pv
-provisioner: dotmesh/dind-dynamic-provisioner
-`
-	citools.KubectlApply(t, node1.Container, storageClass)
-
 	citools.LogTiming("setup")
+
 	t.Run("DynamicProvisioning", func(t *testing.T) {
 		citools.KubectlApply(t, node1.Container, `
 kind: PersistentVolumeClaim

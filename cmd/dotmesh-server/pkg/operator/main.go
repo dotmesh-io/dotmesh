@@ -726,6 +726,9 @@ nodeLoop:
 								v1.ResourceStorage: storageNeeded,
 							},
 						},
+						AccessModes: []v1.PersistentVolumeAccessMode{
+							v1.ReadWriteOnce,
+						},
 						StorageClassName: &storageClass,
 					},
 				}
@@ -757,7 +760,8 @@ nodeLoop:
 
 			// Configure the pod to use PV storage
 
-			podName = fmt.Sprintf("server-%s", pvc)
+			podName = fmt.Sprintf("server-%s-node-%s", pvc, node)
+
 			volumeMounts = append(volumeMounts,
 				v1.VolumeMount{
 					Name:      "backend-pv",

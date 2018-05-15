@@ -745,6 +745,8 @@ type Cluster struct {
 type Kubernetes struct {
 	DesiredNodeCount int
 	Nodes            []Node
+	StorageMode      string
+	DindStorage      bool
 }
 
 type Pair struct {
@@ -768,8 +770,12 @@ func NewClusterWithArgs(desiredNodeCount int, env map[string]string, args string
 	return &Cluster{DesiredNodeCount: desiredNodeCount, Env: env, ClusterArgs: args}
 }
 
-func NewKubernetes(desiredNodeCount int) *Kubernetes {
-	return &Kubernetes{DesiredNodeCount: desiredNodeCount}
+func NewKubernetes(desiredNodeCount int, storageMode string, dindStorage bool) *Kubernetes {
+	return &Kubernetes{
+		DesiredNodeCount: desiredNodeCount,
+		StorageMode:      storageMode,
+		DindStorage:      dindStorage,
+	}
 }
 
 type Federation []Startable
@@ -1073,10 +1079,11 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 	// now install dotmesh yaml (setting initial admin pw)
 
 	configMapCmd := fmt.Sprintf(
-		"kubectl create configmap -n dotmesh configuration --from-literal=upgradesUrl= '--from-literal=poolName=%s-#HOSTNAME#' '--from-literal=local.poolLocation=/dotmesh-test-pools/%s-#HOSTNAME#' --from-literal=logAddress=%s",
+		"kubectl create configmap -n dotmesh configuration --from-literal=upgradesUrl= '--from-literal=poolName=%s-#HOSTNAME#' '--from-literal=local.poolLocation=/dotmesh-test-pools/%s-#HOSTNAME#' --from-literal=logAddress=%s --from-literal=storageMode=%s --from-literal=pvcPerNode.storageClass=dind-pv",
 		poolId(now, i, 0),
 		poolId(now, i, 0),
 		logAddr,
+		c.StorageMode,
 	)
 
 	st, err = docker(
@@ -1108,6 +1115,79 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 	)
 	if err != nil {
 		return err
+	}
+
+	if c.DindStorage { // Release the DIND provisioner!!!
+
+		// Install the dind-flexvolume driver on all nodes (test tooling to
+		// simulate cloud PVs).
+		for j := 0; j < c.DesiredNodeCount; j++ {
+			nodeName := nodeName(now, i, j)
+			getFlexCommand := fmt.Sprintf(`
+			export NODE=%s
+			docker exec -i $NODE mkdir -p \
+				/usr/libexec/kubernetes/kubelet-plugins/volume/exec/dotmesh.io~dind
+			docker cp ../cmd/dotmesh-server/target/dind-flexvolume \
+				$NODE:/usr/libexec/kubernetes/kubelet-plugins/volume/exec/dotmesh.io~dind/dind
+			docker exec -i $NODE systemctl restart kubelet
+			`,
+				// Restarting the kubelet (line above) shouldn't be
+				// necessary, but in this case for some reason it seems to be
+				// necessary to make the flexvolume plugin be seen on all
+				// nodes :-(
+				nodeName,
+			)
+			err = System("bash", "-c", getFlexCommand)
+			if err != nil {
+				return err
+			}
+		}
+
+		st, err = docker(
+			nodeName(now, i, 0),
+			fmt.Sprintf(
+				"cat > /dotmesh-kube-yaml/dind-provisioner.yaml <<END\n"+
+					"apiVersion: apps/v1\n"+
+					"kind: Deployment\n"+
+					"metadata:\n"+
+					"  name: dind-dynamic-provisioner\n"+
+					"  namespace: dotmesh\n"+
+					"  labels:\n"+
+					"    app: dind-dynamic-provisioner\n"+
+					"spec:\n"+
+					"  replicas: 1\n"+
+					"  selector:\n"+
+					"    matchLabels:\n"+
+					"      app: dind-dynamic-provisioner\n"+
+					"  template:\n"+
+					"    metadata:\n"+
+					"      labels:\n"+
+					"        app: dind-dynamic-provisioner\n"+
+					"    spec:\n"+
+					"      containers:\n"+
+					"      - name: dind-dynamic-provisioner\n"+
+					"        image: %s\n"+
+					"        imagePullPolicy: \"IfNotPresent\"\n"+
+					"END\n",
+				LocalImage("dind-dynamic-provisioner")),
+			nil)
+
+		st, err = docker(
+			nodeName(now, i, 0),
+			fmt.Sprintf(
+				"cat > /dotmesh-kube-yaml/dind-storageclass.yaml <<END\n"+
+					"apiVersion: storage.k8s.io/v1\n"+
+					"kind: StorageClass\n"+
+					"metadata:\n"+
+					"  name: dind-pv\n"+
+					"provisioner: dotmesh/dind-dynamic-provisioner\n"+
+					"END"),
+			nil)
+
+		st, err = docker(
+			nodeName(now, i, 0),
+			fmt.Sprintf("kubectl apply -f /dotmesh-kube-yaml/dind-provisioner.yaml && kubectl apply -f /dotmesh-kube-yaml/dind-storageclass.yaml"),
+			nil)
 	}
 	// Add the nodes at the end, because NodeFromNodeName expects dotmesh
 	// config to be set up.
@@ -1158,30 +1238,6 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			KUBE_DEBUG_CMD,
 			nil,
 		)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Install the dind-flexvolume driver on all nodes (test tooling to
-	// simulate cloud PVs).
-	for j := 0; j < c.DesiredNodeCount; j++ {
-		nodeName := nodeName(now, i, j)
-		getFlexCommand := fmt.Sprintf(`
-			export NODE=%s
-			docker exec -i $NODE mkdir -p \
-				/usr/libexec/kubernetes/kubelet-plugins/volume/exec/dotmesh.io~dind
-			docker cp ../cmd/dotmesh-server/target/dind-flexvolume \
-				$NODE:/usr/libexec/kubernetes/kubelet-plugins/volume/exec/dotmesh.io~dind/dind
-			docker exec -i $NODE systemctl restart kubelet
-			`,
-			// Restarting the kubelet (line above) shouldn't be
-			// necessary, but in this case for some reason it seems to be
-			// necessary to make the flexvolume plugin be seen on all
-			// nodes :-(
-			nodeName,
-		)
-		err = System("bash", "-c", getFlexCommand)
 		if err != nil {
 			return err
 		}
