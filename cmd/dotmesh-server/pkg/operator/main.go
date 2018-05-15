@@ -305,7 +305,7 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 	rc.pvcInformer = pvcInformer
 	// PvcLister avoids some boilerplate code (e.g. convert runtime.Object to
 	// *v1.pvc)
-	rc.pvcLister = lister_v1.NewPvcLister(pvcIndexer)
+	rc.pvcLister = lister_v1.NewPersistentVolumeClaimLister(pvcIndexer)
 
 	return rc
 }
@@ -469,8 +469,8 @@ func (c *dotmeshController) process() error {
 		// sanity checks, so that PVCs in use by a weird pod are not
 		// immediatelly reallocated (until the pod is killed).
 		for _, volume := range dotmesh.Spec.Volumes {
-			if volume.PersistentVolumeClaimVolumeSource != nil {
-				delete(unusedPVCs, volume.PersistentVolumeClaimVolumeSource.ClaimName)
+			if volume.VolumeSource.PersistentVolumeClaim != nil {
+				delete(unusedPVCs, volume.VolumeSource.PersistentVolumeClaim.ClaimName)
 			}
 		}
 
@@ -682,9 +682,11 @@ nodeLoop:
 			{Name: "FLEXVOLUME_DRIVER_DIR", Value: c.config.Data[CONFIG_FLEXVOLUME_DRIVER_DIR]},
 		}
 
-		switch c.config.Data[CONFIG_STORAGE_MODE] {
+		var podName string
+
+		switch c.config.Data[CONFIG_MODE] {
 		case CONFIG_MODE_LOCAL:
-			podName := fmt.Sprintf("server-%s", node)
+			podName = fmt.Sprintf("server-%s", node)
 		case CONFIG_MODE_PPN:
 			// The name of the PVC we're going to use for this pod
 			var pvc string
@@ -707,8 +709,10 @@ nodeLoop:
 					continue nodeLoop
 				}
 
+				storageClass := c.config.Data[CONFIG_PPN_POOL_STORAGE_CLASS]
+
 				newPVC := v1.PersistentVolumeClaim{
-					ObjectMeta: metav1.ObjectMeta{
+					ObjectMeta: meta_v1.ObjectMeta{
 						Namespace: DOTMESH_NAMESPACE,
 						Name:      pvc,
 						Labels: map[string]string{
@@ -722,7 +726,7 @@ nodeLoop:
 								v1.ResourceStorage: storageNeeded,
 							},
 						},
-						StorageClassName: c.config.Data[CONFIG_PPN_POOL_STORAGE_CLASS],
+						StorageClassName: &storageClass,
 					},
 				}
 
@@ -730,10 +734,10 @@ nodeLoop:
 				_, err = c.client.Core().PersistentVolumeClaims(DOTMESH_NAMESPACE).Create(&newPVC)
 				if err != nil {
 					glog.Errorf("Error creating pvc: %+v", err)
-					continue nodeloop
+					continue nodeLoop
 				}
 
-				env := append(env,
+				env = append(env,
 					v1.EnvVar{
 						Name:  "CONTAINER_POOL_MNT_IS_NEW_PVC",
 						Value: "OH YEAH",
@@ -753,13 +757,13 @@ nodeLoop:
 
 			// Configure the pod to use PV storage
 
-			podName := fmt.Sprintf("server-%s", pvc)
-			volumeMounts := append(volumeMounts,
+			podName = fmt.Sprintf("server-%s", pvc)
+			volumeMounts = append(volumeMounts,
 				v1.VolumeMount{
 					Name:      "backend-pv",
 					MountPath: "/backend-pv",
 				})
-			volumes := append(volumes,
+			volumes = append(volumes,
 				v1.Volume{
 					Name: "backend-pv",
 					VolumeSource: v1.VolumeSource{
@@ -769,7 +773,7 @@ nodeLoop:
 						},
 					},
 				})
-			env := append(env,
+			env = append(env,
 				v1.EnvVar{
 					Name:  "CONTAINER_POOL_MNT",
 					Value: "/backend-pv",
@@ -778,6 +782,9 @@ nodeLoop:
 					Name:  "CONTAINER_POOL_MNT_ID",
 					Value: pvc,
 				})
+		default:
+			glog.Errorf("Unsupported %s: %s", CONFIG_MODE, c.config.Data[CONFIG_MODE])
+			continue nodeLoop
 		}
 
 		// Create a dotmesh pod (with local storage for now) assigned to this node

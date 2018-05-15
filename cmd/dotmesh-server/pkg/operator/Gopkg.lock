@@ -118,6 +118,12 @@
 
 [[projects]]
   branch = "master"
+  name = "github.com/nu7hatch/gouuid"
+  packages = ["."]
+  revision = "179d4d0c4d8d407a32af483c2354df1d2c91e6c3"
+
+[[projects]]
+  branch = "master"
   name = "github.com/petar/GoLLRB"
   packages = ["llrb"]
   revision = "53be0d36a84c2a886ca057d34b6aa4468df9ccb4"
@@ -334,6 +340,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "c1d1c9bfcce8f865810cccb94cf6af23ec7182fcacdf9b2047f272bf3367074e"
+  inputs-digest = "607b7539b3f54f74b47d4364de237faa508fce32520d1f1219abeac03a0f2f61"
   solver-name = "gps-cdcl"
   solver-version = 1
