@@ -2405,7 +2405,7 @@ func stopContainers(t *testing.T, node string) {
 }
 
 func startContainers(t *testing.T, node string) {
-	citools.RunOnNode(t, node, "docker start dotmesh-server dotmesh-server-inner")
+	citools.RunOnNode(t, node, "docker start dotmesh-server")
 
 	for try := 1; try <= 5; try++ {
 		fmt.Printf("Dotmesh containers running on %s: ", node)
