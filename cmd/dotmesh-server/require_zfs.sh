@@ -47,6 +47,14 @@ DOTMESH_INNER_SERVER_NAME=${DOTMESH_INNER_SERVER_NAME:-dotmesh-server-inner}
 FLEXVOLUME_DRIVER_DIR=${FLEXVOLUME_DRIVER_DIR:-/usr/libexec/kubernetes/kubelet-plugins/volume/exec}
 INHERIT_ENVIRONMENT_NAMES=( "FILESYSTEM_METADATA_TIMEOUT" "DOTMESH_UPGRADES_URL" "DOTMESH_UPGRADES_INTERVAL_SECONDS")
 
+if [ $POOL_SIZE = AUTO ]
+then
+    # Scale the pool to the size of the filesystem, minus 16MiB for metadata files
+    MIB_FREE=`df --sync -B 1048576 --output=avail "$DIR" | tail -1`
+    POOL_SIZE="$(( $MIB_FREE - 16 ))M"
+    echo "Automatic pool size selection: $MIB_FREE megabytes free in $DIR, setting pool size to $POOL_SIZE"
+fi
+
 echo "=== Using mountpoint $MOUNTPOINT"
 
 # Docker volume where we can cache downloaded, "bundled" zfs
@@ -102,9 +110,12 @@ if ! zpool status $POOL; then
     #
     # Further reading: https://github.com/dotmesh-io/dotmesh/issues/333
 
-    if [ -n "$FIND_OUTER_MOUNT" ]; then
+    if [ -n "$CONTAINER_POOL_MNT" ]; then
+        echo "Attaching to a zpool from a container mount. $DIR is the mountpoint in the container..."
         BLOCK_DEVICE=`mount | grep $DIR | cut -d ' ' -f 1 | head -n 1`
+        echo "$DIR seems to be mounted from $BLOCK_DEVICE"
         OUTER_DIR=`nsenter -t 1 -m -u -n -i /bin/sh -c 'mount' | grep $BLOCK_DEVICE | cut -f 3 -d ' ' | head -n 1`
+        echo "$BLOCK_DEVICE seems to be mounted on $OUTER_DIR in the host"
     else
         OUTER_DIR="$DIR"
     fi
@@ -116,6 +127,9 @@ if ! zpool status $POOL; then
         zpool create -m $MOUNTPOINT $POOL "$OUTER_DIR/dotmesh_data"
         echo "This directory contains dotmesh data files, please leave them alone unless you know what you're doing. See github.com/dotmesh-io/dotmesh for more information." > $DIR/README
         zpool get -H guid $POOL |cut -f 3 > $DIR/dotmesh_identity
+        if [ -n "$CONTAINER_POOL_PVC_NAME" ]; then
+            echo "$CONTAINER_POOL_PVC_NAME" > $DIR/dotmesh_pvc_name
+        fi
     else
         zpool import -f -d $OUTER_DIR $POOL
     fi

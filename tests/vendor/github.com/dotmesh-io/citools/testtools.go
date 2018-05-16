@@ -1079,7 +1079,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 	// now install dotmesh yaml (setting initial admin pw)
 
 	configMapCmd := fmt.Sprintf(
-		"kubectl create configmap -n dotmesh configuration --from-literal=upgradesUrl= '--from-literal=poolName=%s-#HOSTNAME#' '--from-literal=local.poolLocation=/dotmesh-test-pools/%s-#HOSTNAME#' --from-literal=logAddress=%s --from-literal=storageMode=%s --from-literal=pvcPerNode.storageClass=dind-pv",
+		"kubectl create configmap -n dotmesh configuration --from-literal=upgradesUrl= '--from-literal=poolNamePrefix=%s-#HOSTNAME#-' '--from-literal=local.poolLocation=/dotmesh-test-pools/%s-#HOSTNAME#' --from-literal=logAddress=%s --from-literal=storageMode=%s --from-literal=pvcPerNode.storageClass=dind-pv",
 		poolId(now, i, 0),
 		poolId(now, i, 0),
 		logAddr,

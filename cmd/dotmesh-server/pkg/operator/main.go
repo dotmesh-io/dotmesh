@@ -59,7 +59,7 @@ const CONFIG_NODE_SELECTOR = "nodeSelector"
 const CONFIG_UPGRADES_URL = "upgradesUrl"
 const CONFIG_UPGRADES_INTERVAL_SECONDS = "upgradesIntervalSeconds"
 const CONFIG_FLEXVOLUME_DRIVER_DIR = "flexvolumeDriverDir"
-const CONFIG_POOL_NAME = "poolName"
+const CONFIG_POOL_NAME_PREFIX = "poolNamePrefix"
 const CONFIG_LOG_ADDRESS = "logAddress"
 const CONFIG_MODE = "storageMode"
 
@@ -161,7 +161,7 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 	provideDefault(&rc.config.Data, CONFIG_UPGRADES_URL, "https://checkpoint.dotmesh.com/")
 	provideDefault(&rc.config.Data, CONFIG_UPGRADES_INTERVAL_SECONDS, "14400")
 	provideDefault(&rc.config.Data, CONFIG_FLEXVOLUME_DRIVER_DIR, "/usr/libexec/kubernetes/kubelet-plugins/volume/exec")
-	provideDefault(&rc.config.Data, CONFIG_POOL_NAME, "pool")
+	provideDefault(&rc.config.Data, CONFIG_POOL_NAME_PREFIX, "")
 	provideDefault(&rc.config.Data, CONFIG_LOG_ADDRESS, "")
 	provideDefault(&rc.config.Data, CONFIG_MODE, CONFIG_MODE_LOCAL)
 	provideDefault(&rc.config.Data, CONFIG_LOCAL_POOL_SIZE_PER_NODE, "10G")
@@ -326,6 +326,7 @@ func (c *dotmeshController) Run(stopCh chan struct{}) {
 
 	go c.nodeInformer.Run(stopCh)
 	go c.podInformer.Run(stopCh)
+	go c.pvcInformer.Run(stopCh)
 
 	// Wait for all caches to be synced, before processing is started
 	if !cache.WaitForCacheSync(stopCh, c.nodeInformer.HasSynced) {
@@ -335,6 +336,11 @@ func (c *dotmeshController) Run(stopCh chan struct{}) {
 
 	if !cache.WaitForCacheSync(stopCh, c.podInformer.HasSynced) {
 		glog.Error(fmt.Errorf("Timed out waiting for pod cache to sync"))
+		return
+	}
+
+	if !cache.WaitForCacheSync(stopCh, c.pvcInformer.HasSynced) {
+		glog.Error(fmt.Errorf("Timed out waiting for pvc cache to sync"))
 		return
 	}
 
@@ -635,7 +641,8 @@ func (c *dotmeshController) process() error {
 	operatorDeployment, err := c.client.AppsV1().Deployments(DOTMESH_NAMESPACE).Get("dotmesh-operator", meta_v1.GetOptions{})
 
 	if err != nil {
-		glog.Fatal(err)
+		glog.Warning(err)
+		operatorDeployment = nil
 	}
 
 	// CREATE NEW DOTMESH PODS WHERE NEEDED
@@ -677,9 +684,6 @@ nodeLoop:
 			{Name: "ALLOW_PUBLIC_REGISTRATION", Value: "1"},
 			{Name: "INITIAL_ADMIN_PASSWORD_FILE", Value: "/secret/dotmesh-admin-password.txt"},
 			{Name: "INITIAL_ADMIN_API_KEY_FILE", Value: "/secret/dotmesh-api-key.txt"},
-			{Name: "USE_POOL_NAME", Value: c.config.Data[CONFIG_POOL_NAME]},
-			{Name: "USE_POOL_DIR", Value: c.config.Data[CONFIG_LOCAL_POOL_LOCATION]},
-			{Name: "POOL_SIZE", Value: c.config.Data[CONFIG_LOCAL_POOL_SIZE_PER_NODE]},
 			{Name: "LOG_ADDR", Value: c.config.Data[CONFIG_LOG_ADDRESS]},
 			{Name: "DOTMESH_UPGRADES_URL", Value: c.config.Data[CONFIG_UPGRADES_URL]},
 			{Name: "DOTMESH_UPGRADES_INTERVAL_SECONDS", Value: c.config.Data[CONFIG_UPGRADES_INTERVAL_SECONDS]},
@@ -691,6 +695,20 @@ nodeLoop:
 		switch c.config.Data[CONFIG_MODE] {
 		case CONFIG_MODE_LOCAL:
 			podName = fmt.Sprintf("server-%s", node)
+			env = append(env,
+				v1.EnvVar{
+					Name:  "USE_POOL_DIR",
+					Value: c.config.Data[CONFIG_LOCAL_POOL_LOCATION],
+				},
+				v1.EnvVar{
+					Name:  "USE_POOL_NAME",
+					Value: c.config.Data[CONFIG_POOL_NAME_PREFIX] + "pool",
+				},
+				v1.EnvVar{
+					Name:  "POOL_SIZE",
+					Value: c.config.Data[CONFIG_LOCAL_POOL_SIZE_PER_NODE],
+				},
+			)
 		case CONFIG_MODE_PPN:
 			// The name of the PVC we're going to use for this pod
 			var pvc string
@@ -744,13 +762,6 @@ nodeLoop:
 					glog.Errorf("Error creating pvc: %+v", err)
 					continue nodeLoop
 				}
-
-				env = append(env,
-					v1.EnvVar{
-						Name:  "CONTAINER_POOL_MNT_IS_NEW_PVC",
-						Value: "OH YEAH",
-					})
-
 			} else {
 				// Pick the first one in unusedPVCs
 				// TODO: Is there a better basis for picking one? Most recently used?
@@ -788,9 +799,31 @@ nodeLoop:
 					Value: "/backend-pv",
 				},
 				v1.EnvVar{
-					Name:  "CONTAINER_POOL_MNT_ID",
+					Name:  "CONTAINER_POOL_PVC_NAME",
 					Value: pvc,
-				})
+				},
+				v1.EnvVar{
+					Name:  "USE_POOL_DIR",
+					Value: "/backend-pv",
+				},
+				v1.EnvVar{
+					Name: "USE_POOL_NAME",
+					// Pool is named after the PVC, as per
+					// https://github.com/dotmesh-io/dotmesh/issues/348
+					Value: c.config.Data[CONFIG_POOL_NAME_PREFIX] + pvc,
+				},
+				v1.EnvVar{
+					Name: "POOL_SIZE",
+					// Size the pool to match the size of the filesystem
+					// we're putting it in. We could take the size we
+					// request for the PVC and subtract a larger margin
+					// for FS metadata and so on, but that involves more
+					// flakey second-guessing of filesystem internals;
+					// best to ask require_zfs.sh to ask df how much space
+					// is really available in the FS once it's mounted.
+					Value: "AUTO",
+				},
+			)
 		default:
 			glog.Errorf("Unsupported %s: %s", CONFIG_MODE, c.config.Data[CONFIG_MODE])
 			continue nodeLoop
@@ -798,6 +831,7 @@ nodeLoop:
 
 		// Create a dotmesh pod (with local storage for now) assigned to this node
 		privileged := true
+
 		newDotmesh := v1.Pod{
 			ObjectMeta: meta_v1.ObjectMeta{
 				Name:      podName,
@@ -806,9 +840,6 @@ nodeLoop:
 					DOTMESH_ROLE_LABEL: DOTMESH_ROLE_SERVER,
 				},
 				Annotations: map[string]string{},
-				OwnerReferences: []meta_v1.OwnerReference{
-					*meta_v1.NewControllerRef(operatorDeployment, schema.FromAPIVersionAndKind("apps/v1beta", "Deployment")),
-				},
 			},
 			Spec: v1.PodSpec{
 				HostPID: true,
@@ -864,6 +895,13 @@ nodeLoop:
 				Volumes:            volumes,
 			},
 		}
+
+		if operatorDeployment != nil {
+			newDotmesh.ObjectMeta.OwnerReferences = []meta_v1.OwnerReference{
+				*meta_v1.NewControllerRef(operatorDeployment, schema.FromAPIVersionAndKind("apps/v1beta", "Deployment")),
+			}
+		}
+
 		glog.Infof("Creating pod %s running %s on node %s", newDotmesh.ObjectMeta.Name, DOTMESH_IMAGE, node)
 		_, err = c.client.Core().Pods(DOTMESH_NAMESPACE).Create(&newDotmesh)
 		if err != nil {
