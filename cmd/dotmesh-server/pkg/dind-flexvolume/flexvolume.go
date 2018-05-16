@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"strings"
 )
 
@@ -34,6 +35,14 @@ var logger *log.Logger
 var flexVolumeDebug = false
 
 const DIND_SHARED_FOLDER = "/dotmesh-test-pools/dind-flexvolume"
+
+func System(cmd string, args ...string) error {
+	log.Printf("[system] running %s %s", cmd, args)
+	c := exec.Command(cmd, args...)
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+	return c.Run()
+}
 
 func init() {
 	// XXX: invent a better way to decide whether debugging should
@@ -68,7 +77,7 @@ func (d *FlexVolumeDriver) mount(targetMountDir, jsonOptions string) (map[string
 	logger.Printf("MOUNT: targetMountDir: %v, jsonOptions: %+v", targetMountDir, jsonOptions)
 
 	pvId := opts["id"].(string)
-	sourceDir := fmt.Sprintf("%s/%s", DIND_SHARED_FOLDER, pvId)
+	sourceFile := fmt.Sprintf("%s/%s", DIND_SHARED_FOLDER, pvId)
 
 	// make sure the shared folder exists on the host
 	// we keep our PV folders one level down (dind-flexvolume)
@@ -84,47 +93,35 @@ func (d *FlexVolumeDriver) mount(targetMountDir, jsonOptions string) (map[string
 
 	// see if our target folder exists (because we are the target of a migration)
 	// if not - then make it!
-	_, err = os.Stat(sourceDir)
+	_, err = os.Stat(sourceFile)
 	if os.IsNotExist(err) {
-		err = os.Mkdir(sourceDir, 0777)
+		// FIXME: Pull the requested size from the opts, must be "NNNk" to NNN kilobytes etc.
+		err = System("mkfs.ext4", sourceFile, "10g")
 		if err != nil {
-			logger.Printf("MOUNT: mkdir err for %s: %v", sourceDir, err)
+			logger.Printf("MOUNT: mkfs err for %s: %v", sourceFile, err)
 			return nil, err
 		}
 	}
 
-	logger.Printf("MOUNT: Procured source folder %s", sourceDir)
+	logger.Printf("MOUNT: Procured source file %s", sourceFile)
 
-	// hackity hack, let's see how kube feels about being given a symlink
-	_, err = os.Stat(targetMountDir)
-	if os.IsNotExist(err) {
-		err = os.Symlink(sourceDir, targetMountDir)
-		if err != nil {
-			logger.Printf("MOUNT: symlink err: %v", err)
-			return nil, err
-		}
-	} else if err != nil {
-		logger.Printf("MOUNT: stat err: %v", err)
+	// FIXME: Mount sourceFile at targetMountDir, -o loop
+	err = System("mount", sourceFile, targetMountDir)
+	if err != nil {
+		logger.Printf("MOUNT: mount err for %s on %s: %v", sourceFile, targetMountDir, err)
 		return nil, err
-	} else if err == nil {
-		logger.Printf("MOUNT: symlink already existed!")
-		err = os.Remove(targetMountDir)
-		if err != nil {
-			logger.Printf("MOUNT: remove err: %v", err)
-			return nil, err
-		}
-		err = os.Symlink(sourceDir, targetMountDir)
-		if err != nil {
-			logger.Printf("MOUNT: symlink err: %v", err)
-			return nil, err
-		}
 	}
+
 	return nil, nil
 }
 
 // Invocation: <driver executable> unmount <mount dir>
 func (d *FlexVolumeDriver) unmount(targetMountDir string) (map[string]interface{}, error) {
-	// TODO
+	err := System("umount", targetMountDir)
+	if err != nil {
+		logger.Printf("MOUNT: unmount err for %s: %v", targetMountDir, err)
+		return nil, err
+	}
 	return nil, nil
 }
 
@@ -209,7 +206,7 @@ func formatResult(fields map[string]interface{}, err error) string {
 }
 
 func main() {
-	f, err := os.OpenFile("/var/log/dotmesh-flexvolume.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile("/var/log/dotmesh-dind-flexvolume.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Fatal(err)
 	}
