@@ -417,7 +417,7 @@ linux_kubernetes_operator:
     except:
         - schedules
 
-trigger_e2e_test:
+.trigger_e2e_test:
     stage: deploy
     tags:
         - ubuntu
@@ -429,7 +429,7 @@ trigger_e2e_test:
         - /^release-.*$/
         - schedules
 
-deploy_unstable_build:
+.deploy_unstable_build:
     stage: deploy
     dependencies:
         - build_client_linux
@@ -446,7 +446,7 @@ deploy_unstable_build:
         - /^release-.*$/
         - schedules
 
-deploy_release_build:
+.deploy_release_build:
     stage: deploy
     dependencies:
         - build_client_linux
@@ -464,7 +464,7 @@ deploy_release_build:
     except:
         - schedules
 
-mark_release_as_stable:
+.mark_release_as_stable:
   stage: manual_deploy
   script:
     - VERSION=`cd cmd/versioner; go run versioner.go`
