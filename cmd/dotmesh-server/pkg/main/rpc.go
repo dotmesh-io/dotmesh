@@ -1046,7 +1046,7 @@ func (d *DotmeshRPC) RegisterTransfer(
 	// tying a transfer to a filesystem id is probably wrong. except, the thing
 	// being updated is a specific branch (filesystem id), it's ok if it drags
 	// dependent snapshots along with it.
-	_, err = d.state.globalFsRequest(args.FilesystemId, &Event{
+	responseChan, err := d.state.globalFsRequest(args.FilesystemId, &Event{
 		Name: "peer-transfer",
 		Args: &EventArgs{
 			"Transfer": args,
@@ -1055,16 +1055,19 @@ func (d *DotmeshRPC) RegisterTransfer(
 	if err != nil {
 		return err
 	}
-	/*
-		// XXX should we be throwing away a result? not doing so probably leaks
-		// goroutines.
-		go func() {
-			// asynchronously throw away the response, transfers can be polled via
-			// their own entries in etcd
-			e := <-f.responses // XXX is this right???
-			log.Printf("finished peer-transfer of %s, %s", args, e)
-		}()
-	*/
+
+	// Block until the fsmachine is ready to transfer
+	log.Printf("[RegisterTransfer:%s] waiting for ack from the fsmachine...", args.FilesystemId)
+	e := <-responseChan
+	log.Printf("[RegisterTransfer:%s] received ack from the fsmachine: %+v", args.FilesystemId, e)
+
+	if e.Name != "awaiting-transfer" {
+		// Something went wrong!
+		return fmt.Errorf("Error requesting peer transfer: %+v", e)
+	} else {
+		return nil
+	}
+
 	return nil
 }
 
@@ -1616,7 +1619,7 @@ func (d *DotmeshRPC) Delete(
 		// Block until the filesystem is gone locally (it may still be
 		// dying on other nodes in the cluster, but it's too costly to
 		// track that for the gains it gives us)
-		waitForFilesystemDeath(fsid)
+		d.state.waitForFilesystemDeath(fsid)
 
 		// As we only block for completion locally, there IS a chance
 		// that the deletions will happen in the wrong order on other
@@ -1693,8 +1696,7 @@ func (d *DotmeshRPC) SetDebugFlag(
 
 func (d *DotmeshRPC) DumpInternalState(
 	r *http.Request,
-	args *struct {
-	},
+	filter *string,
 	result *map[string]string,
 ) error {
 	err := ensureAdminUser(r)
@@ -1713,7 +1715,10 @@ func (d *DotmeshRPC) DumpInternalState(
 			key := pair[0]
 			val := pair[1]
 
-			(*result)[key] = val
+			// empty string is prefix of everything
+			if filter == nil || strings.HasPrefix(key, *filter) {
+				(*result)[key] = val
+			}
 		}
 		doneChan <- true
 	}()

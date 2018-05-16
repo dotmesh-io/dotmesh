@@ -306,7 +306,19 @@ func terminateRunnersWhileFilesystemLived(filesystemId string) {
 	deathObserver.Publish(filesystemId, struct{ reason string }{"runWhileFilesystemLives"})
 }
 
-func waitForFilesystemDeath(filesystemId string) {
+func (s *InMemoryState) waitForFilesystemDeath(filesystemId string) {
+
+	func() {
+		s.filesystemsLock.Lock()
+		defer s.filesystemsLock.Unlock()
+		fs, ok := (*s.filesystems)[filesystemId]
+		if ok {
+			log.Printf("[waitForFilesystemDeath:%s] state: %s, status: %s", filesystemId, fs.currentState, fs.status)
+		} else {
+			log.Printf("[waitForFilesystemDeath:%s] no fsMachine")
+		}
+	}()
+
 	deathChan := make(chan interface{})
 	deathObserver.Subscribe(filesystemId, deathChan)
 	<-deathChan

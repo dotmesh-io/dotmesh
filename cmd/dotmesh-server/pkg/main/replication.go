@@ -46,6 +46,7 @@ func (z ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(fmt.Sprintf("Can't establish API key to proxy pull: %+v.\n", err)))
+			log.Printf("[ZFSSender:%s] Can't establish API key to proxy pull: %+v.", z.filesystem, err)
 			return
 		}
 
@@ -53,6 +54,7 @@ func (z ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(fmt.Sprintf("%s", err)))
+			log.Printf("[ZFSSender:%s] Can't establish URL to proxy pull: %+v.", z.filesystem, err)
 			return
 		}
 		url = fmt.Sprintf(
@@ -74,8 +76,15 @@ func (z ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			apiKey,
 		)
 		postClient := new(http.Client)
-		log.Printf("[ZFSSender:ServeHTTP] Proxying pull from %s: %s", master, url)
+		log.Printf("[ZFSSender:%s] Proxying pull from %s: %s", z.filesystem, master, url)
 		resp, err := postClient.Do(req)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(fmt.Sprintf("Can't proxy pull from %s: %+v.\n", url, err)))
+			log.Printf("[ZFSSender:%s] Can't proxy pull from %s: %+v.", z.filesystem, url, err)
+			return
+		}
+
 		finished := make(chan bool)
 		log.Printf("[ZFSSender:ServeHTTP] Got HTTP response +v", resp.StatusCode)
 		w.WriteHeader(resp.StatusCode)
@@ -88,12 +97,7 @@ func (z ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"none",
 		)
 		defer resp.Body.Close()
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(fmt.Sprintf("Can't proxy pull from %s: %+v.\n", url, err)))
-			return
-		}
-		log.Printf("[ZFSSender:ServeHTTP] Waiting for finish signal...")
+		log.Printf("[ZFSSender:ServeHTTP:%s] Waiting for finish signal...", z.filesystem)
 		_ = <-finished
 		return
 	}
@@ -149,6 +153,7 @@ func (z ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(fmt.Sprintf("Can't encode prelude: %s\n", err)))
+		log.Printf("[ZFSSender:%s] Can't encode prelude: %+v.", z.filesystem, err)
 		return
 	}
 
@@ -167,36 +172,35 @@ func (z ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	)
 
 	log.Printf(
-		"[ZFSSender:ServeHTTP] Writing prelude of %d bytes (encoded): %s",
-		len(preludeEncoded), preludeEncoded,
+		"[ZFSSender:%s] Writing prelude of %d bytes (encoded): %s",
+		z.filesystem, len(preludeEncoded), preludeEncoded,
 	)
 	pipeWriter.Write(preludeEncoded)
 
 	log.Printf(
-		"[ZFSSender:ServeHTTP] About to Run() for %s %s => %s",
+		"[ZFSSender:%s] About to Run() for %s => %s",
 		z.filesystem, z.fromSnap, z.toSnap,
 	)
 	err = cmd.Run()
 	log.Printf(
-		"[ZFSSender:ServeHTTP] Finished Run() for %s %s => %s: %s",
+		"[ZFSSender:%s] Finished Run() for %s => %s: %s",
 		z.filesystem, z.fromSnap, z.toSnap, err,
 	)
 	if err != nil {
 		log.Printf(
-			"[ZFSSender:ServeHTTP] Error from zfs send of %s from %s => %s: %s, check zfs-send-errors.log",
+			"[ZFSSender:%s] Error from zfs send from %s => %s: %s, check zfs-send-errors.log",
 			z.filesystem, z.fromSnap, z.toSnap, err,
 		)
 	}
 	// XXX Adding the log messages below seemed to stop a deadlock, not sure
 	// why. For now, let's just leave them in...
-	log.Printf("[ZFSSender:ServeHTTP] Closing pipes...")
+	log.Printf("[ZFSSender:%s] Closing pipes...", z.filesystem)
 	pipeWriter.Close()
 	pipeReader.Close()
 
-	log.Printf("[ZFSSender:ServeHTTP] Waiting for finish signal...")
+	log.Printf("[ZFSSender:%s] Waiting for finish signal...", z.filesystem)
 	_ = <-finished
-	log.Printf("[ZFSSender:ServeHTTP] Done!")
-
+	log.Printf("[ZFSSender:%s] Done!", z.filesystem)
 }
 
 // POST request => zfs recv command (only used by recipient of "dm push", ie pushPeerState)
@@ -229,6 +233,8 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(fmt.Sprintf(
 				"Host is master for this filesystem (%s), but can't write to it "+
 					"because state is %s.\n", z.filesystem, state)))
+			log.Printf("[ZFSReceiver:ServeHTTP] Host is master for this filesystem (%s), but can't write to it "+
+				"because state is %s.\n", z.filesystem, state)
 			return
 		}
 		// else OK, we can proceed
@@ -242,6 +248,7 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(fmt.Sprintf("Can't establish API key to proxy push: %+v.\n", err)))
+			log.Printf("[ZFSReceiver:ServeHTTP:%s] Can't establish API key to proxy push: %+v", z.filesystem, err)
 			return
 		}
 
@@ -249,6 +256,7 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(fmt.Sprintf("%s", err)))
+			log.Printf("[ZFSReceiver:ServeHTTP:%s] Can't establish URL to proxy push: %+v", z.filesystem, err)
 			return
 		}
 		url = fmt.Sprintf(
@@ -270,10 +278,17 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			apiKey,
 		)
 		postClient := new(http.Client)
-		log.Printf("[ZFSReceiver] Proxying push to %s: %s", master, url)
+		log.Printf("[ZFSReceiver:%s] Proxying push to %s: %s", z.filesystem, master, url)
 		resp, err := postClient.Do(req)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(fmt.Sprintf("Can't proxy push to %s: %+v.\n", url, err)))
+			log.Printf("[ZFSReceiver:%s] Can't proxy push to %s: %+v", z.filesystem, url, err)
+			return
+		}
+
 		finished := make(chan bool)
-		log.Printf("[ZFSReceiver] Got HTTP response +v", resp.StatusCode)
+		log.Printf("[ZFSReceiver:%s] Got HTTP response +v", z.filesystem, resp.StatusCode)
 		w.WriteHeader(resp.StatusCode)
 		go pipe(resp.Body, url,
 			w, "proxied push recipient",
@@ -284,15 +299,14 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"compress",
 		)
 		defer resp.Body.Close()
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(fmt.Sprintf("Can't proxy push to %s: %+v.\n", url, err)))
-			return
-		}
-		log.Printf("[ZFSReceiver] Waiting for finish signal...")
+		log.Printf("[ZFSReceiver:%s] Waiting for finish signal...", z.filesystem)
 		_ = <-finished
 		return
 	}
+
+	// Ok, so we're ready to receive the push. Our fsmachine must be in pushPeerState,
+	// and is therefore blocking on us to tell it we've finished, one way or another, via
+	// z.state.notifyPushCompleted(z.filesystem, true/false) so we'd better do that in every path.
 
 	cmd := exec.Command("zfs", "recv", fq(z.filesystem))
 	pipeReader, pipeWriter := io.Pipe()
@@ -320,27 +334,31 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				// ~~~~~~~~~~~~~
 				err := z.state.localReceiveProgress.Publish(z.filesystem, bytes)
 				if err != nil {
-					log.Printf("[ZFSReceiver] error notifying localReceiveProcess")
+					log.Printf("[ZFSReceiver:%s] error notifying localReceiveProcess", z.filesystem)
 				}
 			}()
 		},
 		"decompress",
 	)
 
-	log.Printf("[ZFSReceiver] about to start consuming prelude on %v", pipeReader)
+	log.Printf("[ZFSReceiver:%s] about to start consuming prelude on %v", z.filesystem, pipeReader)
 	prelude, err := consumePrelude(pipeReader)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(fmt.Sprintf("Unable to parse prelude for %s: %s\n", z.filesystem, err)))
+		log.Printf("[ZFSReceiver:%s] Unable to parse prelude: %s\n", z.filesystem, err)
+
+		go z.state.notifyPushCompleted(z.filesystem, false)
+
 		return
 	}
-	log.Printf("[ZFSReceiver] Got prelude %v", prelude)
+	log.Printf("[ZFSReceiver:%s] Got prelude %v", z.filesystem, prelude)
 
 	err = cmd.Run()
 	if err != nil {
 		log.Printf(
-			"Got error %s when running zfs recv for %s, check zfs-recv-stderr.log",
-			err, z.filesystem,
+			"[ZFSReceiver:%s] Got error %s when running zfs recv, check zfs-recv-stderr.log",
+			z.filesystem, err,
 		)
 		pipeReader.Close()
 		pipeWriter.Close()
@@ -349,7 +367,13 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			// an error with your error. this is a bad day.
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(fmt.Sprintf("Unable to read error: %s\n", err)))
+			w.Write([]byte(fmt.Sprintf("Unable to read error: %+v\n", err)))
+			log.Printf(
+				"[ZFSReceiver:%s] Unable to read: %+v",
+				z.filesystem, err,
+			)
+
+			go z.state.notifyPushCompleted(z.filesystem, false)
 			return
 		}
 		w.WriteHeader(http.StatusBadRequest)
@@ -357,6 +381,12 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"Unable to receive %s: %s, stderr: %s\n",
 			z.filesystem, err, readErr,
 		)))
+		log.Printf(
+			"[ZFSReceiver:%s] Unable to receive: %+v, stderr: %s",
+			z.filesystem, err, readErr,
+		)
+
+		go z.state.notifyPushCompleted(z.filesystem, false)
 		return
 	}
 
@@ -368,13 +398,18 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(fmt.Sprintf("Unable to apply prelude for %s: %s\n", z.filesystem, err)))
+		log.Printf(
+			"[ZFSReceiver:%s] Unable to apply prelude: %+v",
+			z.filesystem, err,
+		)
+
+		go z.state.notifyPushCompleted(z.filesystem, false)
 		return
 	}
 
-	// XXX might this leak goroutines in any cases where fsMachine isn't in
-	// pushPeerState when a push completes for some reason?
-	go z.state.notifyNewSnapshotsAfterPush(z.filesystem)
-	log.Printf("Closing pipe, and returning from ServeHTTP.")
+	log.Printf("[ZFSReceiver:%s] Notifying fsmachine of success", z.filesystem)
+
+	go z.state.notifyPushCompleted(z.filesystem, true)
 }
 
 type ZFSSender struct {

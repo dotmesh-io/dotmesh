@@ -727,43 +727,44 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 		if debugMode != "" {
 			log.Printf("\nGot DotmeshRPC.GetTransfer response:  %+v", result)
 		}
-		if result.Size > 0 {
-			if !started {
-				bar = pb.New64(result.Size)
-				bar.ShowFinalTime = false
-				bar.SetMaxWidth(80)
-				bar.SetUnits(pb.U_BYTES)
-				bar.Start()
-				started = true
-			}
-			// Numbers reported by data transferred thru dotmesh versus size
-			// of stream reported by 'zfs send -nP' are off by a few kilobytes,
-			// fudge it (maybe no one will notice).
-			if result.Sent > result.Size {
-				bar.Set64(result.Size)
-			} else {
-				bar.Set64(result.Sent)
-			}
-			_ = fmt.Sprintf(
-				"%s: transferred %.2f/%.2fMiB in %.2fs (%.2fMiB/s)...\n",
-				result.Status,
-				// bytes => mebibytes
-				float64(result.Sent)/(1024*1024),
-				float64(result.Size)/(1024*1024),
-				// nanoseconds => seconds
-				float64(result.NanosecondsElapsed)/(1000*1000*1000),
-			)
-			bar.Prefix(result.Status)
-			speed := fmt.Sprintf(" %.2f MiB/s",
+		if !started {
+			bar = pb.New64(result.Size)
+			bar.ShowFinalTime = false
+			bar.SetMaxWidth(80)
+			bar.SetUnits(pb.U_BYTES)
+			bar.Start()
+			started = true
+		}
+		// Numbers reported by data transferred thru dotmesh versus size
+		// of stream reported by 'zfs send -nP' are off by a few kilobytes,
+		// fudge it (maybe no one will notice).
+		if result.Sent > result.Size {
+			bar.Set64(result.Size)
+		} else {
+			bar.Set64(result.Sent)
+		}
+		_ = fmt.Sprintf(
+			"%s: transferred %.2f/%.2fMiB in %.2fs (%.2fMiB/s)...\n",
+			result.Status,
+			// bytes => mebibytes
+			float64(result.Sent)/(1024*1024),
+			float64(result.Size)/(1024*1024),
+			// nanoseconds => seconds
+			float64(result.NanosecondsElapsed)/(1000*1000*1000),
+		)
+		bar.Prefix(result.Status)
+		var speed string
+		if result.NanosecondsElapsed > 0 {
+			speed = fmt.Sprintf(" %.2f MiB/s",
 				// mib/sec
 				(float64(result.Sent)/(1024*1024))/
 					(float64(result.NanosecondsElapsed)/(1000*1000*1000)),
 			)
-			quotient := fmt.Sprintf(" (%d/%d)", result.Index, result.Total)
-			bar.Postfix(speed + quotient)
 		} else {
-			out.Write([]byte(fmt.Sprintf("Awaiting transfer... \n")))
+			speed = " ? MiB/s"
 		}
+		quotient := fmt.Sprintf(" (%d/%d)", result.Index, result.Total)
+		bar.Postfix(speed + quotient)
 
 		if result.Index == result.Total && result.Status == "finished" {
 			if started {

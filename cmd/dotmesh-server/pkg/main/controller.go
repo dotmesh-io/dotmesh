@@ -284,17 +284,17 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 	}
 }
 
-func (s *InMemoryState) notifyNewSnapshotsAfterPush(filesystemId string) {
+func (s *InMemoryState) notifyPushCompleted(filesystemId string, success bool) {
 	s.filesystemsLock.Lock()
 	f, ok := (*s.filesystems)[filesystemId]
 	s.filesystemsLock.Unlock()
 	if !ok {
-		log.Printf("[notifyNewSnapshotsAfterPush] No such filesystem id %s", filesystemId)
+		log.Printf("[notifyPushCompleted] No such filesystem id %s", filesystemId)
 		return
 	}
-	log.Printf("[notifyNewSnapshotsAfterPush:%s] about to notify chan", filesystemId)
-	f.externalSnapshotsChanged <- true
-	log.Printf("[notifyNewSnapshotsAfterPush:%s] done notify chan", filesystemId)
+	log.Printf("[notifyPushCompleted:%s] about to notify chan with success=%t", filesystemId, success)
+	f.pushCompleted <- success
+	log.Printf("[notifyPushCompleted:%s] done notify chan", filesystemId)
 }
 
 func (s *InMemoryState) getCurrentState(filesystemId string) (string, error) {

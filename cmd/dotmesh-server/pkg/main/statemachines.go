@@ -48,9 +48,9 @@ func newFilesystemMachine(filesystemId string, s *InMemoryState) *fsMachine {
 		// reload the list of snapshots, update etcd and coordinate our own
 		// state changes, which we do via the POST handler sending on this
 		// channel.
-		externalSnapshotsChanged: make(chan bool),
-		dirtyDelta:               0,
-		sizeBytes:                0,
+		pushCompleted: make(chan bool),
+		dirtyDelta:    0,
+		sizeBytes:     0,
 	}
 }
 
@@ -689,9 +689,7 @@ func activeState(f *fsMachine) stateFn {
 			// refuse to move if we have any containers running
 			containers, err := f.containersRunning()
 			if err != nil {
-				log.Printf(
-					"Can't move filesystem while we can't list whether containers are using it",
-				)
+				log.Printf("[activeState:%s] Can't move filesystem while we can't list whether containers are using it. %s", f.filesystemId, err)
 				f.innerResponses <- &Event{
 					Name: "error-listing-containers-during-move",
 					Args: &EventArgs{"err": err},
@@ -699,7 +697,7 @@ func activeState(f *fsMachine) stateFn {
 				return backoffState
 			}
 			if len(containers) > 0 {
-				log.Printf("Can't move filesystem while containers are using it")
+				log.Printf("[activeState:%s] Can't move filesystem when ontainers are using it. %s", f.filesystemId)
 				f.innerResponses <- &Event{
 					Name: "cannot-move-while-containers-running",
 					Args: &EventArgs{"containers": containers},
@@ -849,7 +847,7 @@ func activeState(f *fsMachine) stateFn {
 			// fail if any containers running
 			containers, err := f.containersRunning()
 			if err != nil {
-				log.Printf("Can't unmount filesystem while containers are using it")
+				log.Printf("[activeState:%s] %s Can't unmount filesystem when we are unable to list containers using it", f.filesystemId, err)
 				f.innerResponses <- &Event{
 					Name: "error-listing-containers-during-unmount",
 					Args: &EventArgs{"err": err},
@@ -857,6 +855,7 @@ func activeState(f *fsMachine) stateFn {
 				return backoffState
 			}
 			if len(containers) > 0 {
+				log.Printf("[activeState:%s] Can't unmount filesystem while containers are using it", f.filesystemId)
 				f.innerResponses <- &Event{
 					Name: "cannot-unmount-while-running-containers",
 					Args: &EventArgs{"containers": containers},
@@ -924,6 +923,7 @@ func inactiveState(f *fsMachine) stateFn {
 	log.Printf("entering inactive state for %s", f.filesystemId)
 
 	handleEvent := func(e *Event) (bool, stateFn) {
+		f.transitionedTo("inactive", fmt.Sprintf("handling %s", e.Name))
 		if e.Name == "delete" {
 			err := f.state.deleteFilesystem(f.filesystemId)
 			if err != nil {
@@ -942,12 +942,20 @@ func inactiveState(f *fsMachine) stateFn {
 			event, nextState := f.mount()
 			f.innerResponses <- event
 			return true, nextState
+
+		} else if e.Name == "unmount" {
+			f.innerResponses <- &Event{
+				Name: "unmounted",
+				Args: &EventArgs{},
+			}
+			return true, inactiveState
+
 		} else {
 			f.innerResponses <- &Event{
 				Name: "unhandled",
 				Args: &EventArgs{"current-state": f.currentState, "event": e},
 			}
-			log.Printf("unhandled event %s while in inactiveState", e)
+			log.Printf("[inactiveState:%s] unhandled event %s", f.filesystemId, e)
 		}
 		return false, nil
 	}
@@ -958,6 +966,7 @@ func inactiveState(f *fsMachine) stateFn {
 	// checking going back into receive...
 	// TODO test this behaviour
 
+	f.transitionedTo("inactive", "waiting for requests")
 	select {
 	case e := <-f.innerRequests:
 		doTransition, nextState := handleEvent(e)
@@ -969,6 +978,7 @@ func inactiveState(f *fsMachine) stateFn {
 	}
 
 	if f.attemptReceive() {
+		f.transitionedTo("inactive", "found snapshots on master")
 		return receivingState
 	}
 
@@ -976,6 +986,7 @@ func inactiveState(f *fsMachine) stateFn {
 	f.state.newSnapsOnMaster.Subscribe(f.filesystemId, newSnapsOnMaster)
 	defer f.state.newSnapsOnMaster.Unsubscribe(f.filesystemId, newSnapsOnMaster)
 
+	f.transitionedTo("inactive", "waiting for requests or snapshots")
 	select {
 	case _ = <-newSnapsOnMaster:
 		return receivingState
@@ -985,6 +996,7 @@ func inactiveState(f *fsMachine) stateFn {
 			return nextState
 		}
 	}
+	f.transitionedTo("inactive", "backing off because we don't know what else to do")
 	return backoffState
 }
 
@@ -1017,20 +1029,24 @@ func (f *fsMachine) attemptReceive() bool {
 		switch err := err.(type) {
 		case *ToSnapsUpToDate:
 			// no action, we're up-to-date
+			log.Printf("[attemptReceive:%s] We're up to date", f.filesystemId)
 			return false
 		case *NoFromSnaps:
 			// no snaps; can't replicate yet
+			log.Printf("[attemptReceive:%s] There are no snapshots to receive", f.filesystemId)
 			return false
 		case *ToSnapsDiverged:
 			// detected divergence, attempt to recieve and resolve
+			log.Printf("[attemptReceive:%s] Detected divergence, attempting to receive", f.filesystemId)
 			return true
 		default:
 			// some other error
-			log.Printf("Not attempting to receive %s because: %s", f.filesystemId, err)
+			log.Printf("[attemptReceive:%s] Error %+v, not attempting to receive", f.filesystemId, err)
 			return false
 		}
 	} else {
 		// non-error canApply implies clean fastforward apply is possible
+		log.Printf("[attemptReceive:%s] Detected clean fastforward, attempting to receive", f.filesystemId)
 		return true
 	}
 }
@@ -1080,6 +1096,7 @@ func missingState(f *fsMachine) stateFn {
 	}
 
 	if f.attemptReceive() {
+		f.transitionedTo("missing", "going to receiving because we found snapshots")
 		return receivingState
 	}
 
@@ -1087,10 +1104,12 @@ func missingState(f *fsMachine) stateFn {
 	f.state.newSnapsOnMaster.Subscribe(f.filesystemId, newSnapsOnMaster)
 	defer f.state.newSnapsOnMaster.Unsubscribe(f.filesystemId, newSnapsOnMaster)
 
+	f.transitionedTo("missing", "waiting for snapshots or requests")
 	select {
 	case _ = <-newSnapsOnMaster:
 		return receivingState
 	case e := <-f.innerRequests:
+		f.transitionedTo("missing", fmt.Sprintf("handling %s", e.Name))
 		if e.Name == "delete" {
 			// We're in the missing state, so the filesystem
 			// theoretically isn't here anyway. But it may be present in
@@ -1208,6 +1227,7 @@ func missingState(f *fsMachine) stateFn {
 	}
 	// something unknown happened, go and check the state of the system after a
 	// short timeout to avoid busylooping
+	f.transitionedTo("missing", "backing off as we don't know what else to do")
 	return backoffState
 }
 
@@ -1481,6 +1501,7 @@ func receivingState(f *fsMachine) stateFn {
 	log.Printf("[pull] about to start consuming prelude on %v", pipeReader)
 	prelude, err := consumePrelude(pipeReader)
 	if err != nil {
+		_ = <-finished
 		return backoffState
 	}
 	log.Printf("[pull] Got prelude %v", prelude)
@@ -2021,6 +2042,7 @@ func (f *fsMachine) pull(
 	log.Printf("[pull] about to start consuming prelude on %v", pipeReader)
 	prelude, err := consumePrelude(pipeReader)
 	if err != nil {
+		_ = <-finished
 		return &Event{
 			Name: "consume-prelude-failed",
 			Args: &EventArgs{"err": err, "filesystemId": toFilesystemId},
@@ -2268,7 +2290,7 @@ func (f *fsMachine) push(
 		}, backoffState
 	}
 
-	log.Printf("[actualPush] size: %d", size)
+	log.Printf("[actualPush:%s] size: %d", filesystemId, size)
 	pollResult.Size = size
 	pollResult.Status = "pushing"
 	err = updatePollResult(*transferRequestId, *pollResult)
@@ -2325,19 +2347,13 @@ func (f *fsMachine) push(
 		"compress",
 	)
 
-	log.Printf(
-		"[actualPush] Writing prelude of %d bytes (encoded): %s",
-		len(preludeEncoded), preludeEncoded,
-	)
-	pipeWriter.Write(preludeEncoded)
-
 	req.SetBasicAuth(
 		transferRequest.User,
 		transferRequest.ApiKey,
 	)
 	postClient := new(http.Client)
 
-	log.Printf("About to postClient.Do with req %s", req)
+	log.Printf("[actualPush:%s] About to postClient.Do with req %s", filesystemId, req)
 
 	// postClient.Do will block trying to read the first byte of the request
 	// body. But, we won't be able to provide the first byte until we start
@@ -2347,47 +2363,75 @@ func (f *fsMachine) push(
 
 	errch := make(chan error)
 	go func() {
+		// This goroutine does all the writing to the HTTP POST
 		log.Printf(
-			"[actualPush] About to Run() for %s %s => %s",
+			"[actualPush:%s] Writing prelude of %d bytes (encoded): %s",
+			filesystemId,
+			len(preludeEncoded), preludeEncoded,
+		)
+		_, err = pipeWriter.Write(preludeEncoded)
+		if err != nil {
+			log.Printf("[actualPush:%s] Error writing prelude: %+v (sent to errch)", filesystemId, err)
+			errch <- err
+			log.Printf("[actualPush:%s] errch accepted prelude error, woohoo", filesystemId)
+		}
+
+		log.Printf(
+			"[actualPush:%s] About to Run() for %s => %s",
 			filesystemId, fromSnapshotId, toSnapshotId,
 		)
+
 		runErr := cmd.Run()
 
 		log.Printf(
-			"[actualPush] Run() got result %s, about to put it into errch after closing pipeWriter",
+			"[actualPush:%s] Run() got result %s, about to put it into errch after closing pipeWriter",
+			filesystemId,
 			runErr,
 		)
 		err := pipeWriter.Close()
 		if err != nil {
-			log.Printf("[actualPush] error closing pipeWriter: %s", err)
+			log.Printf("[actualPush:%s] error closing pipeWriter: %s", filesystemId, err)
 		}
+		log.Printf(
+			"[actualPush:%s] Writing to errch",
+			filesystemId,
+			runErr,
+		)
 		errch <- runErr
-		log.Printf("[actualPush] errch accepted it, woohoo")
+		log.Printf("[actualPush:%s] errch accepted it, woohoo", filesystemId)
 	}()
 
 	resp, err := postClient.Do(req)
 	if err != nil {
-		log.Printf("[actualPush] error in postClient.Do: %s", err)
+		log.Printf("[actualPush:%s] error in postClient.Do: %s", filesystemId, err)
+		_ = <-finished
 		return &Event{
 			Name: "error-from-post-when-pushing",
 			Args: &EventArgs{"err": err},
 		}, backoffState
 	}
 	defer resp.Body.Close()
+	log.Printf("[actualPush:%s] started HTTP request", filesystemId)
 
 	responseBody, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf(
-			"[actualPush] Got error while reading response body %s: %s",
+			"[actualPush:%s] Got error while reading response body %s: %s",
+			filesystemId,
 			string(responseBody), err,
 		)
+		_ = <-finished
 		return &Event{
 			Name: "error-reading-push-response-body",
 			Args: &EventArgs{"err": err},
 		}, backoffState
 	}
 
+	log.Printf("[actualPush:%s] Got response body while pushing: status %d, body %s", filesystemId, resp.StatusCode, string(responseBody))
+
 	if resp.StatusCode != 200 {
+		log.Printf("ABS TEST: Aborting!")
+		_ = <-finished
 		return &Event{
 			Name: "error-pushing-posting",
 			Args: &EventArgs{
@@ -2399,25 +2443,23 @@ func (f *fsMachine) push(
 		}, backoffState
 	}
 
-	log.Printf("[actualPush] Got response body while pushing: %s", string(responseBody))
-
-	log.Printf("[actualPush] Waiting for finish signal...")
+	log.Printf("[actualPush:%s] Waiting for finish signal...", filesystemId)
 	_ = <-finished
-	log.Printf("[actualPush] Done!")
+	log.Printf("[actualPush:%s] Done!", filesystemId)
 
-	log.Printf("[actualPush] reading from errch")
+	log.Printf("[actualPush:%s] reading from errch", filesystemId)
 	err = <-errch
 	log.Printf(
-		"[actualPush] Finished Run() for %s %s => %s: %s",
+		"[actualPush:%s] Finished Run() for %s => %s: %s",
 		filesystemId, fromSnapshotId, toSnapshotId, err,
 	)
 	if err != nil {
 		log.Printf(
-			"[actualPush] Error from zfs send of %s from %s => %s: %s, check zfs-send-errors.log",
+			"[actualPush:%s] Error from zfs send from %s => %s: %s, check zfs-send-errors.log",
 			filesystemId, fromSnapshotId, toSnapshotId, err,
 		)
 		return &Event{
-			Name: "error-from-zfs-send",
+			Name: "error-from-writing-prelude-and-zfs-send",
 			Args: &EventArgs{"err": err},
 		}, backoffState
 	}
@@ -2425,7 +2467,7 @@ func (f *fsMachine) push(
 	// XXX Adding the log messages below seemed to stop a deadlock, not sure
 	// why. For now, let's just leave them in...
 	// XXX what about closing post{Writer,Reader}?
-	log.Printf("[actualPush] Closing pipes...")
+	log.Printf("[actualPush:%s] Closing pipes...", filesystemId)
 	pipeWriter.Close()
 	pipeReader.Close()
 
@@ -2544,53 +2586,61 @@ func pushPeerState(f *fsMachine) stateFn {
 		}()
 	}()
 
-	for {
-		log.Printf("[pushPeerState:%s] about to read from externalSnapshotsChanged", f.filesystemId)
+	// Here we are about to block, so confirm we are ready at this
+	// point or the caller won't start to push and unblock us
+	log.Printf("[pushPeerState:%s] clearing peer to send", f.filesystemId)
+	f.innerResponses <- &Event{
+		Name: "awaiting-transfer",
+		Args: &EventArgs{},
+	}
 
-		select {
-		case <-timeoutTimer.C:
-			log.Printf(
-				"[pushPeerState:%s] Timed out waiting for externalSnapshotsChanged",
-				f.filesystemId,
-			)
-			f.innerResponses <- &Event{
-				Name: "timed-out-external-snaps",
-				Args: &EventArgs{},
-			}
-			return backoffState
-		case <-f.externalSnapshotsChanged:
-			// onwards!
-		}
+	log.Printf("[pushPeerState:%s] blocking for ZFSReceiver to tell us to proceed via pushCompleted", f.filesystemId)
+
+	select {
+	case <-timeoutTimer.C:
 		log.Printf(
-			"[pushPeerState:%s] read from externalSnapshotsChanged! doing inline load",
+			"[pushPeerState:%s] Timed out waiting for pushCompleted",
 			f.filesystemId,
 		)
+		return backoffState
+	case success := <-f.pushCompleted:
+		// onwards!
+		if !success {
+			log.Printf(
+				"[pushPeerState:%s] ZFS receive failed.",
+				f.filesystemId,
+			)
+			return backoffState
+		}
+	}
+	log.Printf(
+		"[pushPeerState:%s] ZFS receive succeeded.",
+		f.filesystemId,
+	)
 
-		// inline load, async because discover() blocks on publishing to
-		// newSnapsOnMaster chan, which we're subscribed to and so have to read
-		// from concurrently with discover() to avoid deadlock.
-		go func() {
-			err = f.discover()
-			log.Printf("[pushPeerState] done inline load")
-			if err != nil {
-				// XXX how to propogate the error to the initiator? should their
-				// retry include sending a new peer-transfer message every time?
-				log.Printf("[pushPeerState] error during inline load: %s", err)
-			}
-		}()
+	// inline load, async because discover() blocks on publishing to
+	// newSnapsOnMaster chan, which we're subscribed to and so have to read
+	// from concurrently with discover() to avoid deadlock.
+	go func() {
+		err = f.discover()
+		log.Printf("[pushPeerState] done inline load")
+		if err != nil {
+			// XXX how to propogate the error to the initiator? should their
+			// retry include sending a new peer-transfer message every time?
+			log.Printf("[pushPeerState] error during inline load: %s", err)
+		}
+	}()
 
-		// give ourselves another 60 seconds while loading
-		log.Printf("[pushPeerState] resetting timer because we're waiting for loading")
-		reset()
+	// give ourselves another 60 seconds while loading
+	log.Printf("[pushPeerState] resetting timer because we're waiting for loading")
+	reset()
 
+	for {
+		// Loops as notifications of the new snapshots arrive
 		log.Printf("[pushPeerState] about to read from newSnapsOnMaster")
 		select {
 		case <-timeoutTimer.C:
 			log.Printf("[pushPeerState] Timed out waiting for newSnapsOnMaster")
-			f.innerResponses <- &Event{
-				Name: "timed-out-snaps-on-master",
-				Args: &EventArgs{},
-			}
 			return backoffState
 		// check that the snapshot is the one we're expecting
 		case s := <-newSnapsOnMaster:
@@ -2607,10 +2657,6 @@ func pushPeerState(f *fsMachine) stateFn {
 				mounted := f.filesystem.mounted
 				f.snapshotsLock.Unlock()
 				if mounted {
-					f.innerResponses <- &Event{
-						Name: "receiving-push-complete",
-						Args: &EventArgs{},
-					}
 					log.Printf(
 						"[pushPeerState:%s] mounted case, returning activeState on snap %s",
 						f.filesystemId, sn.Id,
@@ -2621,18 +2667,18 @@ func pushPeerState(f *fsMachine) stateFn {
 					// receiving further pushes?
 					responseEvent, nextState := f.mount()
 					if responseEvent.Name == "mounted" {
-						f.innerResponses <- &Event{
-							Name: "receiving-push-complete",
-							Args: &EventArgs{},
-						}
+						log.Printf(
+							"[pushPeerState:%s] unmounted case, returning nextState %s on snap %s",
+							f.filesystemId, nextState, sn.Id,
+						)
+						return nextState
 					} else {
-						f.innerResponses <- responseEvent
+						log.Printf(
+							"[pushPeerState:%s] unmounted case, returning nextState %s as mount failed: %+v",
+							f.filesystemId, nextState, responseEvent,
+						)
+						return nextState
 					}
-					log.Printf(
-						"[pushPeerState:%s] unmounted case, returning nextState %s on snap %s",
-						f.filesystemId, nextState, sn.Id,
-					)
-					return nextState
 				}
 			} else {
 				log.Printf(
@@ -2885,6 +2931,10 @@ func pullPeerState(f *fsMachine) stateFn {
 	// events while this is happening? (Although I think we want to do that for
 	// GETs in general?)
 	f.transitionedTo("pullPeerState", "immediate-return")
+	f.innerResponses <- &Event{
+		Name: "awaiting-transfer",
+		Args: &EventArgs{},
+	}
 	return discoveringState
 }
 

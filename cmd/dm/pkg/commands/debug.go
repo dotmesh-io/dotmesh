@@ -23,7 +23,11 @@ func NewCmdDebug(out io.Writer) *cobra.Command {
 					return err
 				}
 				var response interface{}
-				err = dm.CallRemote(context.Background(), method, nil, &response)
+				if len(args) > 1 {
+					err = dm.CallRemote(context.Background(), method, args[1], &response)
+				} else {
+					err = dm.CallRemote(context.Background(), method, nil, &response)
+				}
 				r, err := json.Marshal(response)
 				if err != nil {
 					return err

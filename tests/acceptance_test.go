@@ -226,6 +226,31 @@ func TestSingleNode(t *testing.T) {
 		}
 	})
 
+	t.Run("DotShow", func(t *testing.T) {
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/X")
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+		citools.RunOnNode(t, node1, "dm commit -m 'hello'")
+		citools.RunOnNode(t, node1, "dm checkout -b branch1")
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/Y")
+		citools.RunOnNode(t, node1, "dm commit -m 'there'")
+		resp := citools.OutputFromRunOnNode(t, node1, "dm dot show")
+		if !strings.Contains(resp, "master") {
+			t.Error("failed to show master status")
+		}
+		if !strings.Contains(resp, "branch1") {
+			t.Error("failed to show branch status")
+		}
+		re, _ := regexp.Compile(`server.*up to date`)
+		matches := re.FindAllStringSubmatch(resp, -1)
+		masterReplicationStatus := matches[0][0]
+		branchReplicationStatus := matches[1][0]
+		if masterReplicationStatus == branchReplicationStatus {
+			t.Error("master and branch replication statusse are suspiciously similar")
+		}
+
+	})
+
 	t.Run("Reset", func(t *testing.T) {
 		fsname := citools.UniqName()
 		// Run a container in the background so that we can observe it get
@@ -493,6 +518,16 @@ func TestSingleNode(t *testing.T) {
 		}
 	})
 
+	t.Run("InstrumentationMiddleware", func(t *testing.T) {
+		metrics := citools.OutputFromRunOnNode(t, node1, "docker exec -t dotmesh-server-inner curl localhost:32607/metrics")
+		if !strings.Contains(metrics, "dm_req_total") {
+			t.Error("unable to find data on total request counter on /metrics")
+		}
+		if !strings.Contains(metrics, "dm_req_duration_seconds") {
+			t.Error("unable to find data on duration of requests on /metrics")
+		}
+	})
+
 	t.Run("MountExistingDot", func(t *testing.T) {
 		fsname := citools.UniqName()
 
@@ -579,7 +614,7 @@ func TestSingleNode(t *testing.T) {
 			t.Error(err)
 		}
 		if resp.ApiKey == apiKey {
-			t.Errorf("Got API key %v, expected a new one!", resp.ApiKey, apiKey)
+			t.Errorf("Got API key %v, expected a new one (got %v)!", resp.ApiKey, apiKey)
 		}
 
 		var user struct {
@@ -776,6 +811,24 @@ func TestDeletionSimple(t *testing.T) {
 
 		checkDeletionWorked(t, fsname, 10*time.Second, node1, node2)
 	})
+
+	t.Run("DeleteQuicklyOnOtherNode", func(t *testing.T) {
+		// Does deletion succeed if you attempt to initate it from another node
+		// in the cluster?
+
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO'")
+		citools.RunOnNode(t, node2, "dm dot delete -f "+fsname)
+
+		// Ensure the initial delete has happened, but the metadata is
+		// still draining. This is less than half the metadata timeout
+		// configured above; the system should be in the process of
+		// cleaning up after the volume, but it should be fine to reuse
+		// the name by now.
+
+		checkDeletionWorked(t, fsname, 2*time.Second, node1, node2)
+	})
+
 }
 
 func setupBranchesForDeletion(t *testing.T, fsname string, node1 string, node2 string) {
@@ -872,7 +925,7 @@ func TestTwoNodesSameCluster(t *testing.T) {
 		st := citools.OutputFromRunOnNode(t, node2, citools.DockerRun(fsname)+" cat /foo/HELLO")
 
 		if !strings.Contains(st, "WORLD") {
-			t.Error(fmt.Sprintf("Unable to find world in transported data capsule, got '%s'", st))
+			t.Errorf("Unable to find world in transported data capsule, got '%s'", st)
 		}
 	})
 
@@ -930,71 +983,70 @@ func TestTwoNodesSameCluster(t *testing.T) {
 		}
 	})
 
-	//t.Run("Divergence", func(t *testing.T) {
-	//	fsname := citools.UniqName()
-	//	citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO'")
-	//	citools.RunOnNode(t, node1, "dm switch "+fsname)
-	//	citools.RunOnNode(t, node1, "dm commit -m 'First commit'")
-	//	ensureCurrentDotIsFullyReplicated(t, node1)
-	//	citools.RunOnNode(t, node1, "dm dot show")
-	//	citools.RunOnNode(t, node2, "dm switch "+fsname)
-	//	citools.RunOnNode(t, node2, "dm dot show")
-	//
-	//	fsId := strings.TrimSpace(citools.OutputFromRunOnNode(t, node1, "dm dot show -H | grep masterBranchId | cut -f 2"))
-	//
-	//	// Kill node1
-	//	stopContainers(t, node1)
-	//
-	//	// Commit on node2
-	//	citools.RunOnNode(t, node2, "dm dot smash-branch-master "+fsname+" master")
-	//	citools.RunOnNode(t, node2, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO2'")
-	//	citools.RunOnNode(t, node2, "dm switch "+fsname)
-	//	citools.RunOnNode(t, node2, "dm commit -m 'node2 commit'")
-	//	citools.RunOnNode(t, node2, "dm dot show")
-	//
-	//	// Kill node2
-	//	stopContainers(t, node2)
-	//
-	//	// Start node1
-	//	startContainers(t, node1)
-	//
-	//	// Commit on node1
-	//	citools.RunOnNode(t, node1, "dm dot smash-branch-master "+fsname+" master")
-	//
-	//	zfsPath := strings.Replace(node1, "cluster", "testpool", -1) + "/dmfs/" + fsId + "@Node1CommitHash"
-	//
-	//	// Manual ZFS snapshot to circumvent etcd
-	//	citools.RunOnNode(t, node1, "docker exec -t dotmesh-server-inner zfs snapshot "+zfsPath)
-	//
-	//	stopContainers(t, node1)
-	//	startContainers(t, node1)
-	//	citools.RunOnNode(t, node1, "dm dot show")
-	//
-	//	// Start node2 and enjoy the diverged state
-	//	startContainers(t, node2)
-	//	citools.RunOnNode(t, node1, "dm dot show")
-	//	citools.RunOnNode(t, node2, "dm dot show")
-	//
-	//	// Check status of convergence
-	//	for _, node := range [...]string{node1, node2} {
-	//		dotStatus := citools.OutputFromRunOnNode(t, node, "dm dot show")
-	//		if !strings.Contains(dotStatus, "DIVERGED") || strings.Contains(dotStatus, "is missing") {
-	//			t.Errorf("Absence of Divergence branch or incomplete resolution on node: %s\n%s", node, dotStatus)
-	//		}
-	//		dmLog := citools.OutputFromRunOnNode(t, node, "dm log")
-	//		if !strings.Contains(dmLog, "First commit") || !strings.Contains(dmLog, "Node1CommitHash") {
-	//			t.Errorf("Absence of converged commits on  branch master on node :%s\n%s", node, dmLog)
-	//		}
-	//
-	//		dmBranch := citools.OutputFromRunOnNode(t, node, "dm branch | grep DIVERGED")
-	//		citools.RunOnNode(t, node, fmt.Sprintf("dm checkout %s", strings.TrimSpace(dmBranch)))
-	//
-	//		dmLog = citools.OutputFromRunOnNode(t, node, "dm log")
-	//		if !strings.Contains(dmLog, "node2 commit") {
-	//			t.Errorf("Absence of non-master diverged commits on  branch *DIVERGED on node :%s\n%s", node, dmLog)
-	//		}
-	//	}
-	//})
+	t.Run("Divergence", func(t *testing.T) {
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO'")
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+		citools.RunOnNode(t, node1, "dm commit -m 'First commit'")
+		ensureDotIsFullyReplicated(t, node1, fsname)
+		ensureDotIsFullyReplicated(t, node2, fsname)
+		time.Sleep(3 * time.Second)
+
+		fsId := strings.TrimSpace(citools.OutputFromRunOnNode(t, node1, "dm dot show -H | grep masterBranchId | cut -f 2"))
+
+		// Kill node1
+		stopContainers(t, node1)
+
+		// Commit on node2
+		citools.RunOnNode(t, node2, "dm dot smash-branch-master "+fsname+" master")
+		citools.RunOnNode(t, node2, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO2'")
+		citools.RunOnNode(t, node2, "dm switch "+fsname)
+		citools.RunOnNode(t, node2, "dm commit -m 'node2 commit'")
+		citools.RunOnNode(t, node2, "dm dot show")
+
+		// Kill node2
+		stopContainers(t, node2)
+
+		// Start node1
+		startContainers(t, node1)
+
+		// Commit on node1
+		citools.RunOnNode(t, node1, "dm dot smash-branch-master "+fsname+" master")
+
+		zfsPath := strings.Replace(node1, "cluster", "testpool", -1) + "/dmfs/" + fsId + "@Node1CommitHash"
+
+		// Manual ZFS snapshot to circumvent etcd
+		citools.RunOnNode(t, node1, "docker exec -t dotmesh-server-inner zfs snapshot "+zfsPath)
+
+		stopContainers(t, node1)
+		startContainers(t, node1)
+		citools.RunOnNode(t, node1, "dm dot show")
+
+		// Start node2 and enjoy the diverged state
+		startContainers(t, node2)
+		citools.RunOnNode(t, node1, "dm dot show")
+		citools.RunOnNode(t, node2, "dm dot show")
+
+		// Check status of convergence
+		for _, node := range [...]string{node1, node2} {
+			dotStatus := citools.OutputFromRunOnNode(t, node, "dm dot show")
+			if !strings.Contains(dotStatus, "DIVERGED") || strings.Contains(dotStatus, "is missing") {
+				t.Errorf("Absence of Divergence branch or incomplete resolution on node: %s\n%s", node, dotStatus)
+			}
+			dmLog := citools.OutputFromRunOnNode(t, node, "dm log")
+			if !strings.Contains(dmLog, "First commit") || !strings.Contains(dmLog, "Node1CommitHash") {
+				t.Errorf("Absence of converged commits on  branch master on node :%s\n%s", node, dmLog)
+			}
+
+			dmBranch := citools.OutputFromRunOnNode(t, node, "dm branch | grep DIVERGED")
+			citools.RunOnNode(t, node, fmt.Sprintf("dm checkout %s", strings.TrimSpace(dmBranch)))
+
+			dmLog = citools.OutputFromRunOnNode(t, node, "dm log")
+			if !strings.Contains(dmLog, "node2 commit") {
+				t.Errorf("Absence of non-master diverged commits on  branch *DIVERGED on node :%s\n%s", node, dmLog)
+			}
+		}
+	})
 }
 
 func TestTwoDoubleNodeClusters(t *testing.T) {
@@ -1369,7 +1421,7 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		// 1) dm init
 		resp := citools.OutputFromRunOnNode(t, node1, "if dm init @; then false; else true; fi ")
 		if !strings.Contains(resp, "Invalid dot name") {
-			t.Error("Didn't get an error when attempting to dm init an invalid volume name: %s", resp)
+			t.Errorf("Didn't get an error when attempting to dm init an invalid volume name: %s", resp)
 		}
 
 		// 2) pull/clone it
@@ -1382,18 +1434,18 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		resp = citools.OutputFromRunOnNode(t, node1, "if dm clone cluster_0 "+fsname+" --local-name @; then false; else true; fi ")
 
 		if !strings.Contains(resp, "Invalid dot name") {
-			t.Error("Didn't get an error when attempting to dm clone to an invalid volume name: %s", resp)
+			t.Errorf("Didn't get an error when attempting to dm clone to an invalid volume name: %s", resp)
 		}
 
 		resp = citools.OutputFromRunOnNode(t, node1, "if dm pull cluster_0 @ --remote-name "+fsname+"; then false; else true; fi ")
 		if !strings.Contains(resp, "Invalid dot name") {
-			t.Error("Didn't get an error when attempting to dm pull to an invalid volume name: %s", resp)
+			t.Errorf("Didn't get an error when attempting to dm pull to an invalid volume name: %s", resp)
 		}
 
 		// 3) push it
 		resp = citools.OutputFromRunOnNode(t, node2, "if dm push cluster_0 "+fsname+" --remote-name @; then false; else true; fi ")
 		if !strings.Contains(resp, "Invalid dot name") {
-			t.Error("Didn't get an error when attempting to dm push to an invalid volume name: %s", resp)
+			t.Errorf("Didn't get an error when attempting to dm push to an invalid volume name: %s", resp)
 		}
 	})
 }
@@ -1817,10 +1869,133 @@ func TestThreeSingleNodeClusters(t *testing.T) {
 	*/
 }
 
+func TestKubernetesOperator(t *testing.T) {
+	citools.TeardownFinishedTestRuns()
+
+	f := citools.Federation{citools.NewKubernetes(3, "pvcPerNode", true)}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
+
+	citools.StartTiming()
+	err := f.Start(t)
+	if err != nil {
+		t.Fatal(err) // there's no point carrying on
+	}
+	node1 := f[0].GetNode(0)
+
+	citools.LogTiming("setup")
+
+	t.Run("DynamicProvisioning", func(t *testing.T) {
+		// Ok, now we have the plumbing set up, try creating a PVC and see if it gets a PV dynamically provisioned
+		citools.KubectlApply(t, node1.Container, `
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: admin-grapes-pvc
+  annotations:
+    # Also available: dotmeshNamespace (defaults to the one from the storage class)
+    dotmeshNamespace: k8s
+    dotmeshName: dynamic-grapes
+    dotmeshSubdot: static-html
+spec:
+  storageClassName: dotmesh
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+`)
+
+		citools.LogTiming("DynamicProvisioning: PV Claim")
+		err = citools.TryUntilSucceeds(func() error {
+			result := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pv")
+			// We really want a line like:
+			// "pvc-85b6beb0-bb1f-11e7-8633-0242ff9ba756   1Gi        RWO           Delete          Bound     default/admin-grapes-pvc   dotmesh                 15s"
+			if !strings.Contains(result, "default/admin-grapes-pvc") {
+				return fmt.Errorf("grapes PV didn't get created")
+			}
+			return nil
+		}, "finding the grapes PV")
+		if err != nil {
+			t.Error(err)
+		}
+
+		citools.LogTiming("DynamicProvisioning: finding grapes PV")
+
+		// Now let's see if a container can see it, and put content there that a k8s container can pick up
+		citools.RunOnNode(t, node1.Container,
+			"docker run --rm -i -v k8s/dynamic-grapes.static-html:/foo --volume-driver dm "+
+				"busybox sh -c \"echo 'grapes' > /foo/on-the-vine\"",
+		)
+
+		citools.KubectlApply(t, node1.Container, `
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: grape-deployment
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: grape-server
+    spec:
+      volumes:
+      - name: grape-storage
+        persistentVolumeClaim:
+         claimName: admin-grapes-pvc
+      containers:
+      - name: grape-server
+        image: nginx:1.12.1
+        volumeMounts:
+        - mountPath: "/usr/share/nginx/html"
+          name: grape-storage
+`)
+
+		citools.LogTiming("DynamicProvisioning: grape Deployment")
+		citools.KubectlApply(t, node1.Container, `
+apiVersion: v1
+kind: Service
+metadata:
+   name: grape-service
+spec:
+   type: NodePort
+   selector:
+       app: grape-server
+   ports:
+     - port: 80
+       nodePort: 30050
+`)
+
+		citools.LogTiming("DynamicProvisioning: grape Service")
+		err = citools.TryUntilSucceeds(func() error {
+			resp, err := http.Get(fmt.Sprintf("http://%s:30050/on-the-vine", node1.IP))
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+			body, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				return err
+			}
+			if !strings.Contains(string(body), "grapes") {
+				return fmt.Errorf("No grapes on the vine, got this instead: %v", string(body))
+			}
+			return nil
+		}, "finding grapes on the vine")
+		if err != nil {
+			t.Error(err)
+		}
+
+		citools.LogTiming("DynamicProvisioning: Grapes on the vine")
+	})
+	citools.DumpTiming()
+}
+
 func TestKubernetesVolumes(t *testing.T) {
 	citools.TeardownFinishedTestRuns()
 
-	f := citools.Federation{citools.NewKubernetes(3)}
+	f := citools.Federation{citools.NewKubernetes(3, "local", false)}
 	defer citools.TestMarkForCleanup(f)
 	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 
@@ -2067,7 +2242,7 @@ spec:
 func TestKubernetesTestTooling(t *testing.T) {
 	citools.TeardownFinishedTestRuns()
 
-	f := citools.Federation{citools.NewKubernetes(3)}
+	f := citools.Federation{citools.NewKubernetes(3, "local", true)}
 	defer citools.TestMarkForCleanup(f)
 	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 
@@ -2078,41 +2253,8 @@ func TestKubernetesTestTooling(t *testing.T) {
 	}
 	node1 := f[0].GetNode(0)
 
-	dindProvisioner := fmt.Sprintf(`
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: dind-dynamic-provisioner
-  namespace: dotmesh
-  labels:
-    app: dind-dynamic-provisioner
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: dind-dynamic-provisioner
-  template:
-    metadata:
-      labels:
-        app: dind-dynamic-provisioner
-    spec:
-      containers:
-      - name: dind-dynamic-provisioner
-        image: %s
-        imagePullPolicy: "IfNotPresent"
-`, citools.LocalImage("dind-dynamic-provisioner"))
-	citools.KubectlApply(t, node1.Container, dindProvisioner)
-
-	storageClass := `
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: dind-pv
-provisioner: dotmesh/dind-dynamic-provisioner
-`
-	citools.KubectlApply(t, node1.Container, storageClass)
-
 	citools.LogTiming("setup")
+
 	t.Run("DynamicProvisioning", func(t *testing.T) {
 		citools.KubectlApply(t, node1.Container, `
 kind: PersistentVolumeClaim
@@ -2233,13 +2375,14 @@ spec:
 	citools.DumpTiming()
 }
 
-func ensureCurrentDotIsFullyReplicated(t *testing.T, node string) {
+func ensureDotIsFullyReplicated(t *testing.T, node string, fsname string) {
 	for try := 1; try <= 5; try++ {
-		fmt.Printf("Dotmesh containers running on %s: ", node)
-		st := citools.OutputFromRunOnNode(t, node, "dm dot show | grep missing || true")
-		if st == "" {
+		st := citools.OutputFromRunOnNode(t, node, fmt.Sprintf("dm dot show %s", fsname))
+		if !strings.Contains(st, "missing") {
+			fmt.Print("Replicated")
 			return
 		} else {
+			fmt.Print("Failed to replicate, sleeping and retrying")
 			time.Sleep(1 * time.Second)
 		}
 	}
@@ -2262,10 +2405,10 @@ func stopContainers(t *testing.T, node string) {
 }
 
 func startContainers(t *testing.T, node string) {
-	citools.RunOnNode(t, node, "docker start dotmesh-server dotmesh-server-inner")
+	citools.RunOnNode(t, node, "docker start dotmesh-server")
 
 	for try := 1; try <= 5; try++ {
-		fmt.Print("Dotmesh containers running on %s: ", node)
+		fmt.Printf("Dotmesh containers running on %s: ", node)
 		st := citools.OutputFromRunOnNode(t, node, "dm version | grep 'Unable to connect' | wc -l")
 		if st == "0\n" {
 			return
@@ -2298,7 +2441,61 @@ func testServiceAvailability(t *testing.T, IP string) {
 	}
 }
 
-func TestStress(t *testing.T) {
+func TestStressLotsOfCommits(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping lots of commits test in short mode.")
+	}
+
+	citools.TeardownFinishedTestRuns()
+
+	f := citools.Federation{
+		citools.NewCluster(1),
+		citools.NewCluster(1),
+	}
+
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
+
+	citools.StartTiming()
+	err := f.Start(t)
+	if err != nil {
+		t.Error(err)
+	}
+	cluster0 := f[0].GetNode(0)
+	cluster1 := f[1].GetNode(0)
+
+	NUMBER_OF_COMMITS := 1000
+
+	t.Run("PushLotsOfCommitsTest", func(t *testing.T) {
+		fsname := citools.UniqName()
+		for i := 0; i < NUMBER_OF_COMMITS; i++ {
+			citools.RunOnNode(t, cluster0.Container, citools.DockerRun(fsname)+
+				fmt.Sprintf(" sh -c 'echo STUFF-%d > /foo/whatever'", i))
+			if i == 0 {
+				citools.RunOnNode(t, cluster0.Container, fmt.Sprintf("dm switch %s", fsname))
+			}
+			citools.RunOnNode(t, cluster0.Container, fmt.Sprintf("dm commit -m'Commit %d - the rain in spain falls mainly on the plain; the fox jumped over the dog and all that'", i))
+		}
+
+		citools.RunOnNode(t, cluster0.Container, fmt.Sprintf("dm push cluster_1"))
+
+		// Now go to cluster1 and do dm list, dm log and look for all those commits
+
+		st := citools.OutputFromRunOnNode(t, cluster1.Container, "dm list")
+		if !strings.Contains(st, fsname) {
+			t.Errorf("We didn't see the fsname we expected (%s) in %s", fsname, st)
+		}
+
+		citools.RunOnNode(t, cluster1.Container, fmt.Sprintf("dm switch %s", fsname))
+		st = citools.OutputFromRunOnNode(t, cluster1.Container, "dm log | grep 'the rain in spain' | wc -l")
+		if st != fmt.Sprintf("%d\n", NUMBER_OF_COMMITS) {
+			t.Errorf("We didn't see the right number of commits: Got '%s', wanted %d", st, NUMBER_OF_COMMITS)
+		}
+		citools.RunOnNode(t, cluster1.Container, fmt.Sprintf("dm dot delete -f %s", fsname))
+	})
+}
+
+func TestStressHandover(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping stress tests in short mode.")
 	}

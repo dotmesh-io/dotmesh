@@ -114,7 +114,7 @@ build_server:
 #          cd cmd/dotmesh-server;
 #          docker build -t dotmesh-server . || (sleep 30; docker build -t dotmesh-server .)
 #          cd ../..
-#          ./smoke.sh $(pwd)/binaries/Linux/dm dotmesh-server
+#          ./scripts/smoke.sh $(pwd)/binaries/Linux/dm dotmesh-server
 #          docker system prune -fa
 #          "
 
@@ -127,14 +127,8 @@ macos_docker_stable:
         - macos
         - docker-stable
     script:
-        - cd cmd/dotmesh-server
-        # Possible to build just the "prod" image because binaries got passed
-        # as artifact in cmd/dotmesh-server/target
-        # TODO: pull the built image from $CI_DOCKER_REGISTRY, rather than
-        # rebuilding it here.
-        - docker build -t dotmesh-server . || (sleep 30; docker build -t dotmesh-server .)
-        - cd ../..
-        - ./smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
+        - docker pull $CI_DOCKER_REGISTRY/dotmesh-server:$CI_DOCKER_TAG
+        - ./scripts/smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
         - docker version
         - which docker
         - docker container prune -f
@@ -148,14 +142,23 @@ macos_docker_edge:
         - macos
         - docker-edge
     script:
-        - cd cmd/dotmesh-server
-        # Possible to build just the "prod" image because binaries got passed
-        # as artifact in cmd/dotmesh-server/target
-        # TODO: pull the built image from $CI_DOCKER_REGISTRY, rather than
-        # rebuilding it here.
-        - docker build -t dotmesh-server . || (sleep 30; docker build -t dotmesh-server .)
-        - cd ../..
-        - ./smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
+        - docker pull $CI_DOCKER_REGISTRY/dotmesh-server:$CI_DOCKER_TAG
+        - ./scripts/smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
+        - docker version
+        - which docker
+        - docker container prune -f
+
+linux_smoke:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - docker pull $CI_DOCKER_REGISTRY/dotmesh-server:$CI_DOCKER_TAG
+        - ./scripts/smoke.sh $(pwd)/binaries/Linux/dm dotmesh-server
         - docker version
         - which docker
         - docker container prune -f
@@ -167,6 +170,8 @@ versioner_unit_tests:
         - fast
     script:
         - cd cmd/versioner && go test
+    except:
+        - schedules
 
 # run full dind tests on linux
 linux_default_dot:
@@ -183,6 +188,8 @@ linux_default_dot:
         paths:
         - extracted_logs
         when: always
+    except:
+        - schedules
 
 linux_single_node:
     stage: test
@@ -198,6 +205,8 @@ linux_single_node:
         paths:
         - extracted_logs
         when: always
+    except:
+        - schedules
 
 linux_two_nodes_same_cluster:
     stage: test
@@ -213,6 +222,8 @@ linux_two_nodes_same_cluster:
         paths:
         - extracted_logs
         when: always
+    except:
+        - schedules
 
 linux_kubernetes_volumes:
     stage: test
@@ -229,6 +240,8 @@ linux_kubernetes_volumes:
         paths:
         - extracted_logs
         when: always
+    except:
+        - schedules
 
 linux_deletion_simple:
     stage: test
@@ -244,6 +257,8 @@ linux_deletion_simple:
         paths:
         - extracted_logs
         when: always
+    except:
+        - schedules
 
 linux_deletion_complex:
     stage: test
@@ -259,7 +274,8 @@ linux_deletion_complex:
         paths:
         - extracted_logs
         when: always
-    allow_failure: true
+    except:
+        - schedules
 
 linux_backup_and_restore_two_single_node_clusters:
     stage: test
@@ -275,6 +291,8 @@ linux_backup_and_restore_two_single_node_clusters:
         paths:
         - extracted_logs
         when: always
+    except:
+        - schedules
 
 linux_two_single_node_clusters:
     stage: test
@@ -290,6 +308,8 @@ linux_two_single_node_clusters:
         paths:
         - extracted_logs
         when: always
+    except:
+        - schedules
 
 linux_three_single_node_clusters:
     stage: test
@@ -305,6 +325,8 @@ linux_three_single_node_clusters:
         paths:
         - extracted_logs
         when: always
+    except:
+        - schedules
 
 linux_two_double_node_clusters:
     stage: test
@@ -320,6 +342,8 @@ linux_two_double_node_clusters:
         paths:
         - extracted_logs
         when: always
+    except:
+        - schedules
 
 # Test disabled while we rethink how it works (see comments in acceptance_test.go)
 .linux_kubernetes_test_tooling:
@@ -336,8 +360,10 @@ linux_two_double_node_clusters:
         paths:
         - extracted_logs
         when: always
+    except:
+        - schedules
 
-linux_stress:
+linux_stress_lots_of_commits:
     stage: test
     dependencies:
         - build_server
@@ -346,12 +372,32 @@ linux_stress:
         - ubuntu
         - fast
     script:
-        - ./test.sh -timeout 30m -run TestStress
+        - ./test.sh -timeout 30m -run TestStressLotsOfCommits
     artifacts:
         paths:
         - extracted_logs
         when: always
     when: manual
+    except:
+        - schedules
+
+linux_stress_handover:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - ./test.sh -timeout 30m -run TestStressHandover
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
+    when: manual
+    except:
+        - schedules
 
 trigger_e2e_test:
     stage: deploy
@@ -363,6 +409,7 @@ trigger_e2e_test:
         - curl -X POST -F "token=$E2E_TRIGGER_TOKEN" -F "ref=master" -F "variables[DOTMESH_CI_COMMIT_SHA]=$CI_COMMIT_SHA" -F "variables[DOTMESH_CI_BUILD_REF_NAME]=$CI_BUILD_REF_NAME" http://gitlab.dotmesh.io:9999/api/v4/projects/31/trigger/pipeline
     except:
         - /^release-.*$/
+        - schedules
 
 deploy_unstable_build:
     stage: deploy
@@ -379,6 +426,7 @@ deploy_unstable_build:
         - "echo \"Deployed to https://get.dotmesh.io/unstable/$CI_COMMIT_REF_NAME\""
     except:
         - /^release-.*$/
+        - schedules
 
 deploy_release_build:
     stage: deploy
@@ -395,6 +443,8 @@ deploy_release_build:
         - "rsync -e 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no' -avz binaries/{Linux,Darwin} yaml releases@get.dotmesh.io:/pool/releases/$VERSION"
     only:
         - /^release-.*$/
+    except:
+        - schedules
 
 mark_release_as_stable:
   stage: manual_deploy
@@ -404,3 +454,5 @@ mark_release_as_stable:
   only:
     - /^release-.*$/
   when: manual
+  except:
+    - schedules

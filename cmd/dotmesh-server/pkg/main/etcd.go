@@ -522,10 +522,38 @@ func (s *InMemoryState) handleOneFilesystemDeletion(node *client.Node) error {
 
 	pieces := strings.Split(node.Key, "/")
 	fs := pieces[len(pieces)-1]
+
+	func() {
+		s.filesystemsLock.Lock()
+		defer s.filesystemsLock.Unlock()
+		f, ok := (*s.filesystems)[fs]
+		if ok {
+			log.Printf("[handleOneFilesystemDeletion:%s] before initFs..  state: %s, status: %s", fs, f.currentState, f.status)
+		} else {
+			log.Printf("[handleOneFilesystemDeletion:%s] before initFs.. no fsMachine")
+		}
+	}()
+
 	s.initFilesystemMachine(fs)
+
+	func() {
+		s.filesystemsLock.Lock()
+		defer s.filesystemsLock.Unlock()
+		f, ok := (*s.filesystems)[fs]
+		if ok {
+			log.Printf("[handleOneFilesystemDeletion:%s] after initFs.. state: %s, status: %s", fs, f.currentState, f.status)
+		} else {
+			log.Printf("[handleOneFilesystemDeletion:%s] after initFs.. no fsMachine")
+		}
+	}()
+
 	var responseChan chan *Event
 	var err error
-	requestId := pieces[len(pieces)-1]
+	id, err := uuid.NewV4()
+	if err != nil {
+		return err
+	}
+	requestId := id.String()
 	responseChan, err = s.dispatchEvent(fs, &Event{Name: "delete"}, requestId)
 	if err != nil {
 		return err
@@ -690,7 +718,7 @@ func (s *InMemoryState) deserializeDispatchAndRespond(fs string, node *client.No
 	// etcd and anyone waiting for it will be waiting on the response key to
 	// show up, not on the return of this function.
 
-	log.Printf("About to dispatch %s to %s", fs, e)
+	log.Printf("About to dispatch %s to %s", e, fs)
 	c, err := s.dispatchEvent(fs, e, requestId)
 	if err != nil {
 		return err
@@ -821,7 +849,9 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 	filesystemBelongsToMe := map[string]bool{}
 
 	// handy inline funcs to avoid duplication
-	updateMine := func(node *client.Node) {
+
+	// returns whether mastersCache was modified
+	updateMine := func(node *client.Node) bool {
 		// (0)/(1)dotmesh.io/(2)servers/(3)masters/(4):filesystem = master
 		pieces := strings.Split(node.Key, "/")
 		fs := pieces[4]
@@ -829,10 +859,19 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		s.mastersCacheLock.Lock()
 		defer s.mastersCacheLock.Unlock()
 
+		var modified bool
 		if node.Value == "" {
 			delete(*s.mastersCache, fs)
 			delete(filesystemBelongsToMe, fs)
 		} else {
+			old, ok := (*s.mastersCache)[fs]
+			if ok && old != node.Value {
+				modified = true
+			}
+			if !ok {
+				// new value
+				modified = true
+			}
 			(*s.mastersCache)[fs] = node.Value
 			if node.Value == s.myNodeId {
 				filesystemBelongsToMe[fs] = true
@@ -840,6 +879,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 				filesystemBelongsToMe[fs] = false
 			}
 		}
+		return modified
 	}
 	updateAddresses := func(node *client.Node) error {
 		// (0)/(1)dotmesh.io/(2)servers/(3)addresses/(4):server = addresses
@@ -880,13 +920,13 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 					// ok, we'll be setting it below...
 				} else {
 					// state already exists. check that we're updating with a
-					// revision that is strictly newer...
+					// revision that is the same or newer...
 					currentVersion := (*s.globalStateCache)[server][filesystem]["version"]
 					i, err := strconv.ParseUint(currentVersion, 10, 64)
 					if err != nil {
 						return err
 					}
-					if i >= node.ModifiedIndex {
+					if i > node.ModifiedIndex {
 						log.Printf(
 							"Out of order updates! %s is older than %s",
 							(*s.globalStateCache)[server][filesystem],
@@ -1157,32 +1197,6 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 			}
 		}
 	}
-	if masters != nil {
-		for _, node := range masters.Nodes {
-			updateMine(node)
-			if err = s.handleOneFilesystemMaster(node); err != nil {
-				return err
-			}
-		}
-	}
-	if requests != nil {
-		for _, requestsForFilesystem := range requests.Nodes {
-			for _, node := range requestsForFilesystem.Nodes {
-				if err = maybeDispatchEvent(node); err != nil {
-					return err
-				}
-			}
-		}
-	}
-	if serverSnapshots != nil {
-		for _, servers := range serverSnapshots.Nodes {
-			for _, filesystem := range servers.Nodes {
-				if err = updateSnapshots(filesystem); err != nil {
-					return err
-				}
-			}
-		}
-	}
 	if serverStates != nil {
 		for _, servers := range serverStates.Nodes {
 			for _, filesystem := range servers.Nodes {
@@ -1235,6 +1249,34 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 			}
 		}
 	}
+	if serverSnapshots != nil {
+		for _, servers := range serverSnapshots.Nodes {
+			for _, filesystem := range servers.Nodes {
+				if err = updateSnapshots(filesystem); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	if masters != nil {
+		for _, node := range masters.Nodes {
+			modified := updateMine(node)
+			if modified {
+				if err = s.handleOneFilesystemMaster(node); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	if requests != nil {
+		for _, requestsForFilesystem := range requests.Nodes {
+			for _, node := range requestsForFilesystem.Nodes {
+				if err = maybeDispatchEvent(node); err != nil {
+					return err
+				}
+			}
+		}
+	}
 	// now that our state is initialized, maybe we're in a good place to
 	// interrogate docker for running containers as part of initial
 	// bootstrap, and also start the docker plugin
@@ -1278,7 +1320,36 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 				s.etcdWaitTimestamp = time.Now().UnixNano()
 				s.etcdWaitState = fmt.Sprintf("watcher error %+v", err)
 			}()
-			return err
+			if strings.Contains(fmt.Sprintf("%v", err), "the requested history has been cleared") {
+				// Too much stuff changed in etcd since we processed all of it.
+				// Try to recover from this case. Just make a watcher from the
+				// current state, which means we'll have missed some events,
+				// but at least we won't crashloop.
+				watcher = kapi.Watcher(
+					fmt.Sprintf(ETCD_PREFIX),
+					&client.WatcherOptions{
+						// NB: no AfterIndex option, throw away interim
+						// history...
+						Recursive: true,
+					},
+				)
+				node, err = watcher.Next(context.Background())
+				if err != nil {
+					func() {
+						s.etcdWaitTimestampLock.Lock()
+						defer s.etcdWaitTimestampLock.Unlock()
+						s.etcdWaitTimestamp = time.Now().UnixNano()
+						s.etcdWaitState = fmt.Sprintf("recovered watcher error %+v", err)
+					}()
+					log.Printf(
+						"[fetchAndWatchEtcd] failed fetching next event after creating recovered watcher: %v",
+						err,
+					)
+					return err
+				}
+			} else {
+				return err
+			}
 		}
 		func() {
 			s.etcdWaitTimestampLock.Lock()
@@ -1309,9 +1380,11 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 
 		variant := getVariant(node.Node)
 		if variant == "filesystems/masters" {
-			updateMine(node.Node)
-			if err = s.handleOneFilesystemMaster(node.Node); err != nil {
-				return err
+			modified := updateMine(node.Node)
+			if modified {
+				if err = s.handleOneFilesystemMaster(node.Node); err != nil {
+					return err
+				}
 			}
 		} else if variant == "filesystems/deleted" {
 			if err = s.handleOneFilesystemDeletion(node.Node); err != nil {
