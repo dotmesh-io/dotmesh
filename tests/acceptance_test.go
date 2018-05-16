@@ -518,6 +518,16 @@ func TestSingleNode(t *testing.T) {
 		}
 	})
 
+	t.Run("InstrumentationMiddleware", func(t *testing.T) {
+		metrics := citools.OutputFromRunOnNode(t, node1, "docker exec -t dotmesh-server-inner curl localhost:32607/metrics")
+		if !strings.Contains(metrics, "dm_req_total") {
+			t.Error("unable to find data on total request counter on /metrics")
+		}
+		if !strings.Contains(metrics, "dm_req_duration_seconds") {
+			t.Error("unable to find data on duration of requests on /metrics")
+		}
+	})
+
 	t.Run("MountExistingDot", func(t *testing.T) {
 		fsname := citools.UniqName()
 

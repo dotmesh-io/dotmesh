@@ -8,6 +8,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"time"
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
@@ -15,20 +16,16 @@ import (
 	rpcjson "github.com/gorilla/rpc/v2/json2"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/openzipkin/zipkin-go-opentracing/examples/middleware"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-var (
-	rpcRequests = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "rpc_requests_total",
-			Help: "Number of rpc requests.",
-		},
-		[]string{"status_code"},
-	)
-)
+var requestCounter *prometheus.CounterVec
+var requestDuration *prometheus.SummaryVec
+
+func prometheusHandler() http.Handler {
+	return prometheus.Handler()
+}
 
 func pathExists(path string) (bool, error) {
 	_, err := os.Stat(path)
@@ -59,6 +56,7 @@ func (state *InMemoryState) runServer() {
 		log.Printf("Error while registering services %s", err)
 	}
 
+	registerMetrics()
 	router := mux.NewRouter()
 
 	// only use the zipkin middleware if we have a TRACE_ADDR
@@ -66,7 +64,7 @@ func (state *InMemoryState) runServer() {
 		tracer := opentracing.GlobalTracer()
 
 		router.Handle("/rpc",
-			middleware.FromHTTPRequest(tracer, "rpc")(NewAuthHandler(r)),
+			middleware.FromHTTPRequest(tracer, "rpc")(Instrument()(NewAuthHandler(r))),
 		)
 
 		router.Handle(
@@ -84,16 +82,16 @@ func (state *InMemoryState) runServer() {
 		).Methods("POST")
 
 	} else {
-		router.Handle("/rpc", NewAuthHandler(r))
+		router.Handle("/rpc", Instrument()(NewAuthHandler(r)))
 
 		router.Handle(
 			"/filesystems/{filesystem}/{fromSnap}/{toSnap}",
-			NewAuthHandler(state.NewZFSSendingServer()),
+			Instrument()(NewAuthHandler(state.NewZFSSendingServer())),
 		).Methods("GET")
 
 		router.Handle(
 			"/filesystems/{filesystem}/{fromSnap}/{toSnap}",
-			NewAuthHandler(state.NewZFSReceivingServer()),
+			Instrument()(NewAuthHandler(state.NewZFSReceivingServer())),
 		).Methods("POST")
 
 	}
@@ -117,6 +115,24 @@ func (state *InMemoryState) runServer() {
 		out(fmt.Sprintf("Unable to listen on port %s: '%s'\n", SERVER_PORT, err))
 		log.Fatalf("Unable to listen on port %s: '%s'", SERVER_PORT, err)
 	}
+}
+
+func registerMetrics() {
+	requestCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "dm_req_total",
+			Help: "How many requests processed, partitioned by status code and method.",
+		},
+		[]string{"url", "method", "status_code"},
+	)
+
+	requestDuration = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+		Name: "dm_req_duration_seconds",
+		Help: "Response time by rpc method/http status code.",
+	}, []string{"url", "method", "status_code"})
+
+	prometheus.MustRegister(requestCounter, requestDuration)
+	log.Println("registering /metrics url as prometheus handler")
 }
 
 func (state *InMemoryState) runUnixDomainServer() {
@@ -237,4 +253,37 @@ type AdminHandler struct {
 func (a AdminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r = r.WithContext(AdminContext(r.Context()))
 	a.subHandler.ServeHTTP(w, r)
+}
+
+type MetricsMiddleware func(http.Handler) http.Handler
+
+type instrResponseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func NewInstrResponseWriter(w http.ResponseWriter) *instrResponseWriter {
+	return &instrResponseWriter{w, http.StatusOK}
+}
+
+func (irw *instrResponseWriter) WriteHeader(code int) {
+	irw.statusCode = code
+	irw.ResponseWriter.WriteHeader(code)
+}
+
+func Instrument() MetricsMiddleware {
+	return func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			startedAt := time.Now()
+			irw := NewInstrResponseWriter(w)
+			defer func() {
+				duration := time.Since(startedAt)
+				url := fmt.Sprintf("%s", r.URL)
+				statusCode := fmt.Sprintf("%v", irw.statusCode)
+				requestDuration.WithLabelValues(url, r.Method, statusCode).Observe(duration.Seconds())
+				requestCounter.WithLabelValues(url, r.Method, statusCode).Add(1)
+			}()
+			h.ServeHTTP(irw, r)
+		})
+	}
 }
