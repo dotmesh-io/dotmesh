@@ -148,7 +148,7 @@ build_server:
         - which docker
         - docker container prune -f
 
-linux_smoke:
+.linux_smoke:
     stage: test
     dependencies:
         - build_server
@@ -163,7 +163,7 @@ linux_smoke:
         - which docker
         - docker container prune -f
 
-versioner_unit_tests:
+.versioner_unit_tests:
     stage: test
     tags:
         - ubuntu
