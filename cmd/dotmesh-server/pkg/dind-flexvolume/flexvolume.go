@@ -88,7 +88,7 @@ func (d *FlexVolumeDriver) mount(targetMountDir, jsonOptions string) (map[string
 	// make sure the shared folder exists on the host
 	// we keep our PV folders one level down (dind-flexvolume)
 	// so we can see the PV folders apart from the dot folders
-	_, err := os.Stat(DIND_SHARED_FOLDER)
+	_, err = os.Stat(DIND_SHARED_FOLDER)
 	if os.IsNotExist(err) {
 		err = os.Mkdir(DIND_SHARED_FOLDER, 0777)
 		if err != nil {
