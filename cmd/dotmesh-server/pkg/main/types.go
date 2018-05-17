@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus"
 	"reflect"
 	"strings"
 	"sync"
@@ -189,6 +190,9 @@ type InMemoryState struct {
 
 	debugPartialFailCreateFilesystem bool
 	versionInfo                      *VersionInfo
+	requestCounter                   *prometheus.CounterVec
+	requestDuration                  *prometheus.SummaryVec
+	transitionCounter                *prometheus.CounterVec
 }
 
 type VersionInfo struct {

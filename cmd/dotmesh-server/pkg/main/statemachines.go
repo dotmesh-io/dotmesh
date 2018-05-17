@@ -302,10 +302,14 @@ func (f *fsMachine) transitionedTo(state string, status string) {
 		f.filesystemId, state, status, f.currentState, f.status,
 		float64(now-f.lastTransitionTimestamp)/float64(time.Second),
 	)
+
+	f.state.transitionCounter.WithLabelValues(f.currentState, state, status).Add(1)
+
 	f.currentState = state
 	f.status = status
 	f.lastTransitionTimestamp = now
 	f.transitionObserver.Publish("transitions", state)
+
 	// update etcd
 	kapi, err := getEtcdKeysApi()
 	if err != nil {

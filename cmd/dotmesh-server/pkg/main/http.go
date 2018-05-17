@@ -20,9 +20,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-var requestCounter *prometheus.CounterVec
-var requestDuration *prometheus.SummaryVec
-
 func prometheusHandler() http.Handler {
 	return prometheus.Handler()
 }
@@ -56,7 +53,7 @@ func (state *InMemoryState) runServer() {
 		log.Printf("Error while registering services %s", err)
 	}
 
-	registerMetrics()
+	state.registerMetrics()
 	router := mux.NewRouter()
 
 	// only use the zipkin middleware if we have a TRACE_ADDR
@@ -64,34 +61,34 @@ func (state *InMemoryState) runServer() {
 		tracer := opentracing.GlobalTracer()
 
 		router.Handle("/rpc",
-			middleware.FromHTTPRequest(tracer, "rpc")(Instrument()(NewAuthHandler(r))),
+			middleware.FromHTTPRequest(tracer, "rpc")(Instrument(state)(NewAuthHandler(r))),
 		)
 
 		router.Handle(
 			"/filesystems/{filesystem}/{fromSnap}/{toSnap}",
 			middleware.FromHTTPRequest(tracer, "zfs-sender")(
-				NewAuthHandler(state.NewZFSSendingServer()),
+				Instrument(state)(NewAuthHandler(state.NewZFSSendingServer())),
 			),
 		).Methods("GET")
 
 		router.Handle(
 			"/filesystems/{filesystem}/{fromSnap}/{toSnap}",
 			middleware.FromHTTPRequest(tracer, "zfs-receiver")(
-				NewAuthHandler(state.NewZFSReceivingServer()),
+				Instrument(state)(NewAuthHandler(state.NewZFSReceivingServer())),
 			),
 		).Methods("POST")
 
 	} else {
-		router.Handle("/rpc", Instrument()(NewAuthHandler(r)))
+		router.Handle("/rpc", Instrument(state)(NewAuthHandler(r)))
 
 		router.Handle(
 			"/filesystems/{filesystem}/{fromSnap}/{toSnap}",
-			Instrument()(NewAuthHandler(state.NewZFSSendingServer())),
+			Instrument(state)(NewAuthHandler(state.NewZFSSendingServer())),
 		).Methods("GET")
 
 		router.Handle(
 			"/filesystems/{filesystem}/{fromSnap}/{toSnap}",
-			Instrument()(NewAuthHandler(state.NewZFSReceivingServer())),
+			Instrument(state)(NewAuthHandler(state.NewZFSReceivingServer())),
 		).Methods("POST")
 
 	}
@@ -117,8 +114,8 @@ func (state *InMemoryState) runServer() {
 	}
 }
 
-func registerMetrics() {
-	requestCounter = prometheus.NewCounterVec(
+func (state *InMemoryState) registerMetrics() {
+	state.requestCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "dm_req_total",
 			Help: "How many requests processed, partitioned by status code and method.",
@@ -126,12 +123,20 @@ func registerMetrics() {
 		[]string{"url", "method", "status_code"},
 	)
 
-	requestDuration = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+	state.transitionCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "dm_state_transition_total",
+			Help: "How many state transitions take place partitioned by previous state (from), current state (to) and status",
+		},
+		[]string{"from", "to", "status"},
+	)
+
+	state.requestDuration = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 		Name: "dm_req_duration_seconds",
 		Help: "Response time by rpc method/http status code.",
 	}, []string{"url", "method", "status_code"})
 
-	prometheus.MustRegister(requestCounter, requestDuration)
+	prometheus.MustRegister(state.requestCounter, state.requestDuration, state.transitionCounter)
 	log.Println("registering /metrics url as prometheus handler")
 }
 
@@ -271,7 +276,7 @@ func (irw *instrResponseWriter) WriteHeader(code int) {
 	irw.ResponseWriter.WriteHeader(code)
 }
 
-func Instrument() MetricsMiddleware {
+func Instrument(state *InMemoryState) MetricsMiddleware {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			startedAt := time.Now()
@@ -280,8 +285,8 @@ func Instrument() MetricsMiddleware {
 				duration := time.Since(startedAt)
 				url := fmt.Sprintf("%s", r.URL)
 				statusCode := fmt.Sprintf("%v", irw.statusCode)
-				requestDuration.WithLabelValues(url, r.Method, statusCode).Observe(duration.Seconds())
-				requestCounter.WithLabelValues(url, r.Method, statusCode).Add(1)
+				state.requestDuration.WithLabelValues(url, r.Method, statusCode).Observe(duration.Seconds())
+				state.requestCounter.WithLabelValues(url, r.Method, statusCode).Add(1)
 			}()
 			h.ServeHTTP(irw, r)
 		})
