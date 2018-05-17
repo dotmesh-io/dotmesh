@@ -1171,6 +1171,9 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 					"END\n",
 				LocalImage("dind-dynamic-provisioner")),
 			nil)
+		if err != nil {
+			return err
+		}
 
 		st, err = docker(
 			nodeName(now, i, 0),
@@ -1183,12 +1186,19 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 					"provisioner: dotmesh/dind-dynamic-provisioner\n"+
 					"END"),
 			nil)
+		if err != nil {
+			return err
+		}
 
 		st, err = docker(
 			nodeName(now, i, 0),
 			fmt.Sprintf("kubectl apply -f /dotmesh-kube-yaml/dind-provisioner.yaml && kubectl apply -f /dotmesh-kube-yaml/dind-storageclass.yaml"),
 			nil)
+		if err != nil {
+			return err
+		}
 	}
+
 	// Add the nodes at the end, because NodeFromNodeName expects dotmesh
 	// config to be set up.
 	for j := 0; j < c.DesiredNodeCount; j++ {

@@ -29,9 +29,10 @@ import (
 
 // Log verbosities:
 
-// -v3 = log every raw watch event
-// -v2 = log relevant status of pods and nodes
-// -v1 = log summary of cluster checks
+// -v 4 = do not deleted failed pods, so they can be debugged
+// -v 3 = log every raw watch event
+// -v 2 = log relevant status of pods and nodes
+// -v 1 = log summary of cluster checks
 
 // --- PLEASE NOTE --- PLEASE NOTE ---
 
@@ -610,23 +611,27 @@ func (c *dotmeshController) process() error {
 		clusterMinimumPopulation)
 
 	for dotmeshName, _ := range dotmeshesToKill {
-		if !dotmeshIsRunning[dotmeshName] || clusterPopulation > clusterMinimumPopulation {
-			glog.Infof("Deleting pod %s", dotmeshName)
-			dp := meta_v1.DeletePropagationBackground
-			err = c.client.Core().Pods(DOTMESH_NAMESPACE).Delete(dotmeshName, &meta_v1.DeleteOptions{
-				PropagationPolicy: &dp,
-			})
-			if err != nil {
-				// Do not abort in error case, just keep pressing on
-				glog.Error(err)
-			}
-
-			if dotmeshIsRunning[dotmeshName] {
-				// We're killing a running pod
-				clusterPopulation--
-			}
+		if glog.V(4) {
+			glog.Infof("Sparing pod %s so it can be debugged", dotmeshName)
 		} else {
-			glog.Infof("Sparing pod %s to rate-limit the deletion of running pods", dotmeshName)
+			if !dotmeshIsRunning[dotmeshName] || clusterPopulation > clusterMinimumPopulation {
+				glog.Infof("Deleting pod %s", dotmeshName)
+				dp := meta_v1.DeletePropagationBackground
+				err = c.client.Core().Pods(DOTMESH_NAMESPACE).Delete(dotmeshName, &meta_v1.DeleteOptions{
+					PropagationPolicy: &dp,
+				})
+				if err != nil {
+					// Do not abort in error case, just keep pressing on
+					glog.Error(err)
+				}
+
+				if dotmeshIsRunning[dotmeshName] {
+					// We're killing a running pod
+					clusterPopulation--
+				}
+			} else {
+				glog.Infof("Sparing pod %s to rate-limit the deletion of running pods", dotmeshName)
+			}
 		}
 	}
 
