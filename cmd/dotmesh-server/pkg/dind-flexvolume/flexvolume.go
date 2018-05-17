@@ -26,6 +26,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 )
 
@@ -77,6 +78,11 @@ func (d *FlexVolumeDriver) mount(targetMountDir, jsonOptions string) (map[string
 	logger.Printf("MOUNT: targetMountDir: %v, jsonOptions: %+v", targetMountDir, jsonOptions)
 
 	pvId := opts["id"].(string)
+	sizeBytes, err := strconv.Atoi(opts["size"].(string))
+	if err != nil {
+		logger.Printf("MOUNT: Invalid size %s: %v", opts["size"].(string), err)
+		return nil, err
+	}
 	sourceFile := fmt.Sprintf("%s/%s", DIND_SHARED_FOLDER, pvId)
 
 	// make sure the shared folder exists on the host
@@ -96,7 +102,7 @@ func (d *FlexVolumeDriver) mount(targetMountDir, jsonOptions string) (map[string
 	_, err = os.Stat(sourceFile)
 	if os.IsNotExist(err) {
 		// FIXME: Pull the requested size from the opts, must be "NNNk" to NNN kilobytes etc.
-		err = System("mkfs.ext4", sourceFile, "10g")
+		err = System("mkfs.ext4", sourceFile, fmt.Sprintf("%dk", (sizeBytes+1023)/1024))
 		if err != nil {
 			logger.Printf("MOUNT: mkfs err for %s: %v", sourceFile, err)
 			return nil, err
