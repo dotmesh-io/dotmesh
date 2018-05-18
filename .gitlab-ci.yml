@@ -128,7 +128,7 @@ macos_docker_stable:
         - docker-stable
     script:
         - docker pull $CI_DOCKER_REGISTRY/dotmesh-server:$CI_DOCKER_TAG
-        - timeout 5m ./scripts/smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
+        - gtimeout 5m ./scripts/smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
     after_script:
         - echo "DOTMESH LOGS"
         - docker logs dotmesh-server
@@ -147,7 +147,7 @@ macos_docker_edge:
         - docker-edge
     script:
         - docker pull $CI_DOCKER_REGISTRY/dotmesh-server:$CI_DOCKER_TAG
-        - timeout 5m ./scripts/smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
+        - gtimeout 5m ./scripts/smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
     after_script:
         - echo "DOTMESH LOGS"
         - docker logs dotmesh-server
