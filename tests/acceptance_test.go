@@ -2395,7 +2395,8 @@ func ensureDotIsFullyReplicated(t *testing.T, node string, fsname string) {
 }
 
 func stopContainers(t *testing.T, node string) {
-	citools.RunOnNode(t, node, "docker stop dotmesh-server dotmesh-server-inner")
+	citools.RunOnNode(t, node, "docker stop dotmesh-server")
+	citools.RunOnNode(t, node, "docker rm -f dotmesh-server-inner || true")
 
 	for try := 1; try <= 5; try++ {
 		fmt.Printf("Dotmesh containers running on %s: ", node)
@@ -2421,7 +2422,14 @@ func startContainers(t *testing.T, node string) {
 			time.Sleep(1 * time.Second)
 		}
 	}
-	t.Fatalf("Containers wouldn't start on %+v", node)
+	t.Fatalf(
+		"Containers wouldn't start on %+v; SERVER\n%s\n INNER\n%s\n SERVER LOGS\n%s\n INNER LOGS\n%s",
+		node,
+		citools.OutputFromRunOnNode(t, node, "docker inspect dotmesh-server"),
+		citools.OutputFromRunOnNode(t, node, "docker inspect dotmesh-server-inner"),
+		citools.OutputFromRunOnNode(t, node, "docker logs dotmesh-server"),
+		citools.OutputFromRunOnNode(t, node, "docker logs dotmesh-server-inner"),
+	)
 }
 
 func testServiceAvailability(t *testing.T, IP string) {

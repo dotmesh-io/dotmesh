@@ -53,7 +53,6 @@ func (state *InMemoryState) runServer() {
 		log.Printf("Error while registering services %s", err)
 	}
 
-	state.registerMetrics()
 	router := mux.NewRouter()
 
 	// only use the zipkin middleware if we have a TRACE_ADDR
