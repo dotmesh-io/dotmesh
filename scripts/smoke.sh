@@ -19,7 +19,14 @@ export DEBUG_MODE=1
 # we do hog the node's docker state, so it's far from perfect)
 
 CONFIG=/tmp/smoke_test_$$.dmconfig
-trap 'rm "$CONFIG" || true' EXIT
+
+function finish {
+    echo "INTERNAL STATE"
+    "$DM" -c "$CONFIG" debug DotmeshRPC.DumpInternalState
+    rm "$CONFIG" || true
+}
+
+trap finish EXIT
 
 sudo "$DM" -c "$CONFIG" cluster reset || (sleep 10; sudo "$DM" cluster reset) || true
 
