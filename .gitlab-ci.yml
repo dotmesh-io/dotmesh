@@ -129,6 +129,12 @@ macos_docker_stable:
     script:
         - docker pull $CI_DOCKER_REGISTRY/dotmesh-server:$CI_DOCKER_TAG
         - ./scripts/smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
+    after_script:
+        - echo "INTERNAL STATE"
+        - $(pwd)/binaries/Darwin/dm debug DotmeshRPC.DumpInternalState
+        - echo "DOTMESH LOGS"
+        - docker logs dotmesh-server
+        - echo "DOCKER VERSION"
         - docker version
         - which docker
         - docker container prune -f
@@ -144,6 +150,12 @@ macos_docker_edge:
     script:
         - docker pull $CI_DOCKER_REGISTRY/dotmesh-server:$CI_DOCKER_TAG
         - ./scripts/smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
+    after_script:
+        - echo "INTERNAL STATE"
+        - $(pwd)/binaries/Darwin/dm debug DotmeshRPC.DumpInternalState
+        - echo "DOTMESH LOGS"
+        - docker logs dotmesh-server
+        - echo "DOCKER VERSION"
         - docker version
         - which docker
         - docker container prune -f
@@ -159,9 +171,14 @@ linux_smoke:
     script:
         - docker pull $CI_DOCKER_REGISTRY/dotmesh-server:$CI_DOCKER_TAG
         - ./scripts/smoke.sh $(pwd)/binaries/Linux/dm dotmesh-server
+    after_script:
+        - echo "INTERNAL STATE"
+        - $(pwd)/binaries/Darwin/dm debug DotmeshRPC.DumpInternalState
+        - echo "DOTMESH LOGS"
+        - docker logs dotmesh-server
+        - echo "DOCKER VERSION"
         - docker version
         - which docker
-        - docker container prune -f
 
 versioner_unit_tests:
     stage: test
