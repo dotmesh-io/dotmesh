@@ -68,6 +68,7 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 	// a registry of names of filesystems and branches (clones) mapping to
 	// their ids
 	s.registry = NewRegistry(s)
+	s.registerMetrics()
 	return s
 }
 
