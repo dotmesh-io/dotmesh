@@ -254,6 +254,24 @@ linux_kubernetes_volumes:
     except:
         - schedules
 
+linux_kubernetes_operator:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - pwd
+        - ./test.sh -run TestKubernetesOperator
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
+    except:
+        - schedules
+
 linux_deletion_simple:
     stage: test
     dependencies:

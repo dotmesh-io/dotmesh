@@ -1007,6 +1007,30 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		logAddr = HOST_IP_FROM_CONTAINER
 	}
 
+	// Move k8s root dir into /dotmesh-test-pools on every node.
+
+	// This is required for the tests of k8s using PV storage with the
+	// DIND provisioner to work; the container mountpoints must be
+	// consistent between the actual host and the dind kubelet node, or
+	// ZFS will barf on them. Putting the k8s root dir in
+	// /dotmesh-test-pools means the paths are consistent across all
+	// containers, as we keep the same filesystem mounted there
+	// throughput.
+	for j := 0; j < c.DesiredNodeCount; j++ {
+		node := nodeName(now, i, j)
+		path := fmt.Sprintf("/dotmesh-test-pools/k8s-%s", node)
+		cmd := fmt.Sprintf("sed -i 's!hyperkube kubelet !hyperkube kubelet --root-dir %s !' /lib/systemd/system/kubelet.service && mkdir -p %s && systemctl restart kubelet", path, path)
+		st, err := docker(
+			node,
+			cmd,
+			nil,
+		)
+		fmt.Printf("FUDGING KUBELET DIR: %s\n%s\n", cmd, st)
+		if err != nil {
+			return err
+		}
+	}
+
 	// TODO regex the following yamels to refer to the newly pushed
 	// dotmesh container image, rather than the latest stable
 
@@ -1171,6 +1195,9 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 					"END\n",
 				LocalImage("dind-dynamic-provisioner")),
 			nil)
+		if err != nil {
+			return err
+		}
 
 		st, err = docker(
 			nodeName(now, i, 0),
@@ -1183,12 +1210,19 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 					"provisioner: dotmesh/dind-dynamic-provisioner\n"+
 					"END"),
 			nil)
+		if err != nil {
+			return err
+		}
 
 		st, err = docker(
 			nodeName(now, i, 0),
 			fmt.Sprintf("kubectl apply -f /dotmesh-kube-yaml/dind-provisioner.yaml && kubectl apply -f /dotmesh-kube-yaml/dind-storageclass.yaml"),
 			nil)
+		if err != nil {
+			return err
+		}
 	}
+
 	// Add the nodes at the end, because NodeFromNodeName expects dotmesh
 	// config to be set up.
 	for j := 0; j < c.DesiredNodeCount; j++ {
