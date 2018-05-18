@@ -200,15 +200,15 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 		// Callback Functions to trigger on add/update/delete
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				glog.V(3).Info("NODE ADD %+v", obj)
+				glog.V(3).Info("NODE ADD %#v", obj)
 				rc.scheduleUpdate()
 			},
 			UpdateFunc: func(old, new interface{}) {
-				glog.V(3).Info("NODE UPDATE %+v -> %+v", old, new)
+				glog.V(3).Info("NODE UPDATE %#v -> %#v", old, new)
 				rc.scheduleUpdate()
 			},
 			DeleteFunc: func(obj interface{}) {
-				glog.V(3).Info("NODE DELETE %+v", obj)
+				glog.V(3).Info("NODE DELETE %#v", obj)
 				rc.scheduleUpdate()
 			},
 		},
@@ -246,15 +246,15 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 		// Callback Functions to trigger on add/update/delete
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				glog.V(3).Info("POD ADD %+v", obj)
+				glog.V(3).Info("POD ADD %#v", obj)
 				rc.scheduleUpdate()
 			},
 			UpdateFunc: func(old, new interface{}) {
-				glog.V(3).Info("POD UPDATE %+v -> %+v", old, new)
+				glog.V(3).Info("POD UPDATE %#v -> %#v", old, new)
 				rc.scheduleUpdate()
 			},
 			DeleteFunc: func(obj interface{}) {
-				glog.V(3).Info("POD DELETE %+v", obj)
+				glog.V(3).Info("POD DELETE %#v", obj)
 				rc.scheduleUpdate()
 			},
 		},
@@ -292,15 +292,15 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 		// Callback Functions to trigger on add/update/delete
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				glog.V(3).Info("PVC ADD %+v", obj)
+				glog.V(3).Info("PVC ADD %#v", obj)
 				rc.scheduleUpdate()
 			},
 			UpdateFunc: func(old, new interface{}) {
-				glog.V(3).Info("PVC UPDATE %+v -> %+v", old, new)
+				glog.V(3).Info("PVC UPDATE %#v -> %#v", old, new)
 				rc.scheduleUpdate()
 			},
 			DeleteFunc: func(obj interface{}) {
-				glog.V(3).Info("PVC DELETE %+v", obj)
+				glog.V(3).Info("PVC DELETE %#v", obj)
 				rc.scheduleUpdate()
 			},
 		},
@@ -546,10 +546,10 @@ func (c *dotmeshController) process() error {
 				dotmesh.Status.Reason,
 			)
 			for _, cond := range dotmesh.Status.Conditions {
-				glog.Infof("Failed pod %s - condition %+v", podName, cond)
+				glog.Infof("Failed pod %s - condition %#v", podName, cond)
 			}
 			for _, cont := range dotmesh.Status.ContainerStatuses {
-				glog.Infof("Failed pod %s - container %+v", podName, cont)
+				glog.Infof("Failed pod %s - container %#v", podName, cont)
 			}
 
 			// Broken, mark it for death
