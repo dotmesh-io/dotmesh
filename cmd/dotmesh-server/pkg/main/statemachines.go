@@ -127,8 +127,6 @@ func (f *fsMachine) run() {
 
 		f.transitionedTo("gone", "")
 
-		terminateRunnersWhileFilesystemLived(f.filesystemId)
-
 		// Senders close channels, receivers check for closedness.
 
 		close(f.innerResponses)
@@ -136,6 +134,9 @@ func (f *fsMachine) run() {
 		// Remove ourself from the filesystems map
 		f.state.filesystemsLock.Lock()
 		defer f.state.filesystemsLock.Unlock()
+		// We must hold the fslock while calling terminateRunners... to avoid a deadlock with
+		// waitForFilesystemDeath in utils.go
+		terminateRunnersWhileFilesystemLived(f.filesystemId)
 		delete(*(f.state.filesystems), f.filesystemId)
 
 		log.Printf("[run:%s] terminated", f.filesystemId)
