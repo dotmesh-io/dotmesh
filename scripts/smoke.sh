@@ -4,12 +4,16 @@ set -o pipefail
 
 ((
 
-# Smoke test to see whether basics still work on e.g. macOS; also tests the 
+# Smoke test to see whether basics still work on e.g. macOS; also tests pushing
+# to the dothub.
 
 DM="$1"
 NEW_UUID=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1 || true)
 VOL="volume_`date +%s`_${NEW_UUID}"
 IMAGE="${CI_DOCKER_REGISTRY:-`hostname`.local:80/dotmesh}/"$2":${CI_DOCKER_TAG:-latest}"
+
+# Verbose output on push
+export DEBUG_MODE=1
 
 # We use a bespoke config path to isolate us from other runs (although
 # we do hog the node's docker state, so it's far from perfect)
@@ -52,6 +56,7 @@ else
     exit 1
 fi
 
+# This variable is set up in GitLab.
 if [ x$SMOKE_TEST_REMOTE != x ]
 then
     echo "### Testing push to remote..."
