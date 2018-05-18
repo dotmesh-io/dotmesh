@@ -47,7 +47,7 @@ build_client_linux:
             - binaries
         expire_in: 1 week
 
-.build_client_macos:
+build_client_macos:
     stage: build
     tags:
         - ubuntu
@@ -174,7 +174,7 @@ versioner_unit_tests:
         - schedules
 
 # run full dind tests on linux
-.linux_default_dot:
+linux_default_dot:
     stage: test
     dependencies:
         - build_server
@@ -191,7 +191,7 @@ versioner_unit_tests:
     except:
         - schedules
 
-.linux_single_node:
+linux_single_node:
     stage: test
     dependencies:
         - build_server
@@ -208,7 +208,7 @@ versioner_unit_tests:
     except:
         - schedules
 
-.linux_two_nodes_same_cluster:
+linux_two_nodes_same_cluster:
     stage: test
     dependencies:
         - build_server
@@ -261,7 +261,7 @@ linux_kubernetes_operator:
     except:
         - schedules
 
-.linux_deletion_simple:
+linux_deletion_simple:
     stage: test
     dependencies:
         - build_server
@@ -278,7 +278,7 @@ linux_kubernetes_operator:
     except:
         - schedules
 
-.linux_deletion_complex:
+linux_deletion_complex:
     stage: test
     dependencies:
         - build_server
@@ -295,7 +295,7 @@ linux_kubernetes_operator:
     except:
         - schedules
 
-.linux_backup_and_restore_two_single_node_clusters:
+linux_backup_and_restore_two_single_node_clusters:
     stage: test
     dependencies:
         - build_server
@@ -312,7 +312,7 @@ linux_kubernetes_operator:
     except:
         - schedules
 
-.linux_two_single_node_clusters:
+linux_two_single_node_clusters:
     stage: test
     dependencies:
         - build_server
@@ -329,7 +329,7 @@ linux_kubernetes_operator:
     except:
         - schedules
 
-.linux_three_single_node_clusters:
+linux_three_single_node_clusters:
     stage: test
     dependencies:
         - build_server
@@ -346,7 +346,7 @@ linux_kubernetes_operator:
     except:
         - schedules
 
-.linux_two_double_node_clusters:
+linux_two_double_node_clusters:
     stage: test
     dependencies:
         - build_server
@@ -381,7 +381,7 @@ linux_kubernetes_operator:
     except:
         - schedules
 
-.linux_stress_lots_of_commits:
+linux_stress_lots_of_commits:
     stage: test
     dependencies:
         - build_server
@@ -399,7 +399,7 @@ linux_kubernetes_operator:
     except:
         - schedules
 
-.linux_stress_handover:
+linux_stress_handover:
     stage: test
     dependencies:
         - build_server
