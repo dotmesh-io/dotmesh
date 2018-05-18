@@ -2395,7 +2395,8 @@ func ensureDotIsFullyReplicated(t *testing.T, node string, fsname string) {
 }
 
 func stopContainers(t *testing.T, node string) {
-	citools.RunOnNode(t, node, "docker stop dotmesh-server dotmesh-server-inner")
+	citools.RunOnNode(t, node, "docker stop dotmesh-server")
+	citools.RunOnNode(t, node, "docker rm -f dotmesh-server-inner || true")
 
 	for try := 1; try <= 5; try++ {
 		fmt.Printf("Dotmesh containers running on %s: ", node)
