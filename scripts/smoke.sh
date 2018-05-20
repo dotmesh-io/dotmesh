@@ -22,7 +22,9 @@ export CONFIG=/tmp/smoke_test_$$.dmconfig
 # triggered!
 function finish {
     echo "INTERNAL STATE"
+    "$DM" -c "$CONFIG" remote switch local
     "$DM" -c "$CONFIG" debug DotmeshRPC.DumpInternalState
+    "$DM" -c "$CONFIG" remote rm "$REMOTE"
     rm "$CONFIG" || true
 }
 
