@@ -17,6 +17,7 @@ export DEBUG_MODE=1
 # we do hog the node's docker state, so it's far from perfect)
 
 export CONFIG=/tmp/smoke_test_$$.dmconfig
+export REMOTE="smoke_test_`date +%s`"
 
 # Set traps before we go into the subshells, otherwise they'll never be
 # triggered!
@@ -71,7 +72,6 @@ fi
 if [ x$SMOKE_TEST_REMOTE != x ]
 then
     echo "### Testing push to remote..."
-    REMOTE="smoke_test_`date +%s`"
 
     (set +x; echo "$SMOKE_TEST_APIKEY"; set -x) | "$DM" -c "$CONFIG" remote add "$REMOTE" "$SMOKE_TEST_REMOTE"
 
