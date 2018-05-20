@@ -2,15 +2,13 @@
 set -xe
 set -o pipefail
 
-((
-
 # Smoke test to see whether basics still work on e.g. macOS; also tests pushing
 # to the dothub.
 
-DM="$1"
-NEW_UUID=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1 || true)
-VOL="volume_`date +%s`_${NEW_UUID}"
-IMAGE="${CI_DOCKER_REGISTRY:-`hostname`.local:80/dotmesh}/"$2":${CI_DOCKER_TAG:-latest}"
+export DM="$1"
+export NEW_UUID=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1 || true)
+export VOL="volume_`date +%s`_${NEW_UUID}"
+export IMAGE="${CI_DOCKER_REGISTRY:-`hostname`.local:80/dotmesh}/"$2":${CI_DOCKER_TAG:-latest}"
 
 # Verbose output on push
 export DEBUG_MODE=1
@@ -18,8 +16,10 @@ export DEBUG_MODE=1
 # We use a bespoke config path to isolate us from other runs (although
 # we do hog the node's docker state, so it's far from perfect)
 
-CONFIG=/tmp/smoke_test_$$.dmconfig
+export CONFIG=/tmp/smoke_test_$$.dmconfig
 
+# Set traps before we go into the subshells, otherwise they'll never be
+# triggered!
 function finish {
     echo "INTERNAL STATE"
     "$DM" -c "$CONFIG" debug DotmeshRPC.DumpInternalState
@@ -27,6 +27,8 @@ function finish {
 }
 
 trap finish EXIT
+
+((
 
 sudo "$DM" -c "$CONFIG" cluster reset || (sleep 10; sudo "$DM" cluster reset) || true
 
