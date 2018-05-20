@@ -25,7 +25,7 @@ function finish {
     echo "INTERNAL STATE"
     "$DM" -c "$CONFIG" remote switch local
     "$DM" -c "$CONFIG" debug DotmeshRPC.DumpInternalState
-    "$DM" -c "$CONFIG" remote rm "$REMOTE"
+    "$DM" -c "$CONFIG" remote rm "$REMOTE" || true
     rm "$CONFIG" || true
 }
 
