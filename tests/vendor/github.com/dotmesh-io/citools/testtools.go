@@ -1020,12 +1020,11 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		node := nodeName(now, i, j)
 		path := fmt.Sprintf("/dotmesh-test-pools/k8s-%s", node)
 		cmd := fmt.Sprintf("sed -i 's!hyperkube kubelet !hyperkube kubelet --root-dir %s !' /lib/systemd/system/kubelet.service && mkdir -p %s && systemctl restart kubelet", path, path)
-		st, err := docker(
+		_, err := docker(
 			node,
 			cmd,
 			nil,
 		)
-		fmt.Printf("FUDGING KUBELET DIR: %s\n%s\n", cmd, st)
 		if err != nil {
 			return err
 		}
