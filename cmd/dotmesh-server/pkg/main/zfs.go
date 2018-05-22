@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -90,6 +91,46 @@ func findLocalPoolId() (string, error) {
 		return string(output), err
 	}
 	return fmt.Sprintf("%x", i), nil
+}
+
+func getZpoolCapacity() (map[string]float64, error) {
+	capacity := make(map[string]float64)
+	output, err := exec.Command(ZPOOL,
+		"list", "-H", "-o", "capacity,name").Output()
+	if err != nil {
+		log.Fatalf("%s, when running zpool list", err)
+		return nil, err
+	}
+	zpools := strings.Split(string(output), "\n")
+	for _, value := range zpools {
+		if value != "" {
+			result := strings.Fields(value)
+			parsedCapacity := strings.Trim(result[0], "% ")
+			capacityF, err := strconv.ParseFloat(parsedCapacity, 64)
+			if err != nil {
+				return nil, err
+			}
+
+			capacity[result[1]] = capacityF
+
+		}
+	}
+
+	if len(capacity) < 1 {
+		return nil, errors.New("no zpools found on node")
+	}
+	return capacity, err
+}
+
+func (state *InMemoryState) reportZpoolCapacity() error {
+	capacity, err := getZpoolCapacity()
+	if err != nil {
+		return err
+	}
+	for poolName, poolPercentageFull := range capacity {
+		state.zpoolCapacity.WithLabelValues(state.myNodeId, poolName).Set(poolPercentageFull)
+	}
+	return nil
 }
 
 func findFilesystemIdsOnSystem() []string {

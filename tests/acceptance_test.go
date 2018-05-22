@@ -531,6 +531,9 @@ func TestSingleNode(t *testing.T) {
 		if !strings.Contains(metrics, "dm_state_transition_total") {
 			t.Error("unable to find data on duration of state transitinos on /metrics")
 		}
+		if !strings.Contains(metrics, "dm_zpool_usage_percentage") {
+			t.Error("unable to find data on zpool capacity used on /metrics")
+		}
 	})
 
 	t.Run("MountExistingDot", func(t *testing.T) {

@@ -135,7 +135,12 @@ func (state *InMemoryState) registerMetrics() {
 		Help: "Response time by rpc method/http status code.",
 	}, []string{"url", "method", "status_code"})
 
-	prometheus.MustRegister(state.requestCounter, state.requestDuration, state.transitionCounter)
+	state.zpoolCapacity = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "dm_zpool_usage_percentage",
+		Help: "Percentage of zpool capacity used.",
+	}, []string{"node_name", "pool_name"})
+
+	prometheus.MustRegister(state.requestCounter, state.requestDuration, state.transitionCounter, state.zpoolCapacity)
 	log.Println("registering /metrics url as prometheus handler")
 }
 

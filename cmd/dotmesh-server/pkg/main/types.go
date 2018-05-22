@@ -193,6 +193,7 @@ type InMemoryState struct {
 	requestCounter                   *prometheus.CounterVec
 	requestDuration                  *prometheus.SummaryVec
 	transitionCounter                *prometheus.CounterVec
+	zpoolCapacity                    *prometheus.GaugeVec
 }
 
 type VersionInfo struct {
