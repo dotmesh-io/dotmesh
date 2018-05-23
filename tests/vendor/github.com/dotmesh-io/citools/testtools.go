@@ -11,13 +11,14 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
 
-	"github.com/gorilla/rpc/v2/json2"
+	"github.com/dotmesh-io/rpc/v2/json2"
 )
 
 // props to https://github.com/kubernetes/kubernetes/issues/49387
@@ -945,6 +946,46 @@ func (c *Kubernetes) GetDesiredNodeCount() int {
 	return c.DesiredNodeCount
 }
 
+func ChangeOperatorNodeSelector(masterNode, nodeSelector string) error {
+	st, err := docker(
+		masterNode,
+		"kubectl get configmap -n dotmesh configuration -o yaml",
+		nil,
+	)
+	if err != nil {
+		return err
+	}
+
+	re := regexp.MustCompile("nodeSelector: .*\n")
+	newYaml := re.ReplaceAllLiteralString(st, "nodeSelector: "+nodeSelector+"\n")
+
+	st, err = docker(
+		masterNode,
+		"kubectl delete configmap -n dotmesh configuration ; "+
+			"kubectl apply -f - -n dotmesh "+
+			"<<DOTMESHEOF\n"+newYaml+"\nDOTMESHEOF",
+		nil,
+	)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func RestartOperator(t *testing.T, masterNode string) {
+	podName := strings.TrimSpace(OutputFromRunOnNode(t, masterNode, "kubectl get pods -n dotmesh | grep dotmesh-operator | cut -f 1 -d ' '"))
+	RunOnNode(t, masterNode, "kubectl delete pod -n dotmesh "+podName)
+	fmt.Printf("Counting operator pods:\n")
+	for tries := 1; tries < 10; tries++ {
+		podsExceptOld := OutputFromRunOnNode(t, masterNode, "kubectl get pods -n dotmesh | grep dotmesh-operator | grep -v "+podName+" | wc -l")
+		if podsExceptOld == "1\n" {
+			break
+		}
+		time.Sleep(5 * time.Second)
+	}
+}
+
 func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 	if c.DesiredNodeCount == 0 {
 		panic("no such thing as a zero-node cluster")
@@ -1099,15 +1140,41 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		}
 		LogTiming("join_" + poolId(now, i, j))
 	}
-	// now install dotmesh yaml (setting initial admin pw)
 
-	configMapCmd := fmt.Sprintf(
-		"kubectl create configmap -n dotmesh configuration --from-literal=upgradesUrl= '--from-literal=poolNamePrefix=%s-#HOSTNAME#-' '--from-literal=local.poolLocation=/dotmesh-test-pools/%s-#HOSTNAME#' --from-literal=logAddress=%s --from-literal=storageMode=%s --from-literal=pvcPerNode.storageClass=dind-pv",
-		poolId(now, i, 0),
-		poolId(now, i, 0),
-		logAddr,
-		c.StorageMode,
-	)
+	// Wait until all nodes are Ready, or the next step will fail.
+	for try := 0; try < 10; try++ {
+		st, err = docker(nodeName(now, i, 0), fmt.Sprintf(
+			"kubectl get no | grep ' Ready ' | wc -l",
+		), nil)
+		if err != nil {
+			return err
+		}
+		if st == fmt.Sprintf("%d\n", c.DesiredNodeCount) {
+			break
+		} else {
+			fmt.Printf("Nodes ready: %s", st)
+			time.Sleep(10 * time.Second)
+		}
+	}
+
+	// Set node labels, for testing the operator.
+	// Node N should have labels "clusterSize-X=yes" for X in N..(max-1)
+	// so we can limit a pod to "clusterSize-5=yes" to make it only run on 5 nodes.
+	time.Sleep(5 * time.Second) // Sleep to let kubelets all get started properly
+	for j := 0; j < c.DesiredNodeCount; j++ {
+		for k := j; k < c.DesiredNodeCount; k++ {
+			_, err = docker(nodeName(now, i, 0), fmt.Sprintf(
+				"kubectl label nodes %s clusterSize-%d=yes",
+				nodeName(now, i, j),
+				k+1,
+			), nil)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// now install dotmesh yaml (setting initial admin pw)
 
 	st, err = docker(
 		nodeName(now, i, 0),
@@ -1120,11 +1187,41 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			"kubectl create secret generic dotmesh "+
 			"    --from-file=./dotmesh-admin-password.txt --from-file=./dotmesh-api-key.txt -n dotmesh && "+
 			"rm dotmesh-admin-password.txt && "+
-			"rm dotmesh-api-key.txt && "+
-			// create configmap
-			configMapCmd+" && "+
-			// install etcd operator on the cluster
-			"echo '#### STARTING ETCD OPERATOR' && "+
+			"rm dotmesh-api-key.txt",
+		nil,
+	)
+	if err != nil {
+		return err
+	}
+
+	st, err = docker(
+		nodeName(now, i, 0),
+		fmt.Sprintf(
+			"kubectl create configmap -n dotmesh configuration "+
+				"--from-literal=upgradesUrl= "+
+				"'--from-literal=poolNamePrefix=%s-#HOSTNAME#-' "+
+				"'--from-literal=local.poolLocation=/dotmesh-test-pools/%s-#HOSTNAME#' "+
+				"--from-literal=logAddress=%s "+
+				"--from-literal=storageMode=%s "+
+				"--from-literal=pvcPerNode.storageClass=dind-pv "+
+				"--from-literal=nodeSelector=clusterSize-%d=yes", // This needs to be in here so it can be replaced with sed
+			poolId(now, i, 0),
+			poolId(now, i, 0),
+			logAddr,
+			c.StorageMode,
+			c.DesiredNodeCount,
+		),
+		nil,
+	)
+
+	if err != nil {
+		return err
+	}
+
+	st, err = docker(
+		nodeName(now, i, 0),
+		// install etcd operator on the cluster
+		"echo '#### STARTING ETCD OPERATOR' && "+
 			"kubectl apply -f /dotmesh-kube-yaml/etcd-operator-clusterrole.yaml && "+
 			"kubectl apply -f /dotmesh-kube-yaml/etcd-operator-dep.yaml && "+
 			// install dotmesh once on the master (retry because etcd operator

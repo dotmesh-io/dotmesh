@@ -8,7 +8,7 @@
     "v2",
     "v2/json2"
   ]
-  revision = "28424423fbdb996641cc23d347db7b286db66907"
+  revision = "a4d307ba3406b4c16a55897a1f1f494cd61d4cdd"
 
 [solve-meta]
   analyzer-name = "dep"

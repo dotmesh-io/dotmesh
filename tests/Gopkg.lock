@@ -5,7 +5,16 @@
   branch = "master"
   name = "github.com/dotmesh-io/citools"
   packages = ["."]
-  revision = "59ec402d576b487b83f08bf7a96c694f3bf6900b"
+  revision = "ecf02a26df8bb9b35b81a0e0acb8f0efea8211ab"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/dotmesh-io/rpc"
+  packages = [
+    "v2",
+    "v2/json2"
+  ]
+  revision = "a4d307ba3406b4c16a55897a1f1f494cd61d4cdd"
 
 [solve-meta]
   analyzer-name = "dep"
