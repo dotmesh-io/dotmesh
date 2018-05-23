@@ -114,7 +114,7 @@ func (state *InMemoryState) reportZpoolCapacity() error {
 	if err != nil {
 		return err
 	}
-	state.zpoolCapacity.WithLabelValues(state.myNodeId, POOL).Set(capacity)
+	zpoolCapacity.WithLabelValues(state.myNodeId, POOL).Set(capacity)
 	return nil
 }
 

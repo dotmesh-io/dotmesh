@@ -304,7 +304,7 @@ func (f *fsMachine) transitionedTo(state string, status string) {
 		float64(now-f.lastTransitionTimestamp)/float64(time.Second),
 	)
 
-	f.state.transitionCounter.WithLabelValues(f.currentState, state, status).Add(1)
+	transitionCounter.WithLabelValues(f.currentState, state, status).Add(1)
 
 	f.currentState = state
 	f.status = status
