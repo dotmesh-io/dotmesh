@@ -7,15 +7,6 @@
   packages = ["."]
   revision = "59ec402d576b487b83f08bf7a96c694f3bf6900b"
 
-[[projects]]
-  name = "github.com/gorilla/rpc"
-  packages = [
-    "v2",
-    "v2/json2"
-  ]
-  revision = "22c016f3df3febe0c1f6727598b6389507e03a18"
-  version = "v1.1.0"
-
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
