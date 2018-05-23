@@ -84,15 +84,6 @@
   revision = "44d81051d367757e1c7c6a5a86423ece9afcf63c"
 
 [[projects]]
-  name = "github.com/gorilla/rpc"
-  packages = [
-    "v2",
-    "v2/json2"
-  ]
-  revision = "22c016f3df3febe0c1f6727598b6389507e03a18"
-  version = "v1.1.0"
-
-[[projects]]
   name = "github.com/juju/ratelimit"
   packages = ["."]
   revision = "77ed1c8a01217656d2080ad51981f6e99adaa177"
@@ -318,6 +309,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "f30f19932e9f90a6613836edf0103f8d8ed91bde6dc7cefb29927afb4d1861e2"
+  inputs-digest = "df8136a64526905da9ae57bb9aa00bf55a7518e2d5cdb4d4735cfc662ad040b2"
   solver-name = "gps-cdcl"
   solver-version = 1

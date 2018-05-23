@@ -33,7 +33,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/gorilla/rpc/v2/json2"
+	"github.com/dotmesh-io/rpc/v2/json2"
 )
 
 var logger *log.Logger

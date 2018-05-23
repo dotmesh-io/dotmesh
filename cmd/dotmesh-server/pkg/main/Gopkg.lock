@@ -38,6 +38,15 @@
   revision = "ef090642f98ccf2fdff0af7eaef6c29e6e43903b"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/dotmesh-io/rpc"
+  packages = [
+    "v2",
+    "v2/json2"
+  ]
+  revision = "28424423fbdb996641cc23d347db7b286db66907"
+
+[[projects]]
   name = "github.com/eapache/go-resiliency"
   packages = ["breaker"]
   revision = "b86b1ec0dd4209a588dc1285cdd471e73525c0b3"
@@ -109,14 +118,6 @@
   name = "github.com/gorilla/mux"
   packages = ["."]
   revision = "4c1c3952b7d9d0a061a3fa7b36fd373ba0398ebc"
-
-[[projects]]
-  name = "github.com/gorilla/rpc"
-  packages = [
-    "v2",
-    "v2/json2"
-  ]
-  revision = "e592e2e099465ae27afa66ec089d570904cd2d53"
 
 [[projects]]
   branch = "master"
@@ -241,6 +242,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "b9deab122c43e94b32c761a49c31e4ac51507f0e7cf40037859b84aeaa984ebe"
+  inputs-digest = "e4e4a02b554864480c4e736e24ea305c4c83f1a26192b25a4476f2000d2fd5f2"
   solver-name = "gps-cdcl"
   solver-version = 1
