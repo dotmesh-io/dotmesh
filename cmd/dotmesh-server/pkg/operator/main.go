@@ -540,8 +540,9 @@ func (c *dotmeshController) process() error {
 
 		if status == v1.PodFailed {
 			// We're deleting the pod, so the user can't "kubectl describe" it, so let's log lots of stuff
-			glog.Infof("Observing pod %s - FAILED (Message: %s) (Reason: %s)",
+			glog.Infof("Observing pod %s - status %s: FAILED (Message: %s) (Reason: %s)",
 				podName,
+				status,
 				dotmesh.Status.Message,
 				dotmesh.Status.Reason,
 			)
@@ -876,7 +877,14 @@ nodeLoop:
 								Protocol:      v1.ProtocolTCP,
 							},
 						},
-						VolumeMounts:    volumeMounts,
+						VolumeMounts: volumeMounts,
+						Lifecycle: &v1.Lifecycle{
+							PreStop: &v1.Handler{
+								Exec: &v1.ExecAction{
+									Command: []string{"docker", "rm", "-f", "dotmesh-server-inner"},
+								},
+							},
+						},
 						Env:             env,
 						ImagePullPolicy: v1.PullAlways,
 						LivenessProbe: &v1.Probe{

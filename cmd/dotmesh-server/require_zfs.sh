@@ -130,6 +130,7 @@ if ! zpool status $POOL; then
         if [ -n "$CONTAINER_POOL_PVC_NAME" ]; then
             echo "$CONTAINER_POOL_PVC_NAME" > $DIR/dotmesh_pvc_name
         fi
+        echo "$POOL" > $DIR/dotmesh_pool_name
     else
         zpool import -f -d $OUTER_DIR $POOL
     fi
@@ -266,6 +267,40 @@ done
 # 5. Be able to install a Kubernetes FlexVolume driver (we make symlinks
 #    where it tells us to).
 
+TERMINATING=no
+
+shutdown() {
+    local SIGNAL=$1
+
+    # Remove the handler now it's happened once
+    trap - $SIGNAL
+
+    if [ $TERMINATING = no ]
+    then
+        echo "`date`: Shutting down due to $SIGNAL" >> "/dotmesh-test-pools/export-$POOL"
+        TERMINATING=yes
+    else
+        echo "`date`: Ignoring $SIGNAL" >> "/dotmesh-test-pools/export-$POOL"
+        return
+    fi
+
+    # Release the ZFS pool
+    zpool export -f "$POOL" >> "/dotmesh-test-pools/export-$POOL" 2>&1
+
+    echo "`date`: DONE from $SIGNAL: $?" >> "/dotmesh-test-pools/export-$POOL"
+
+    exit 0
+}
+
+trap 'shutdown EXIT' EXIT
+trap 'shutdown SIGTERM' SIGTERM
+trap 'shutdown SIGINT' SIGINT
+trap 'shutdown SIGQUIT' SIGQUIT
+trap 'shutdown SIGHUP' SIGHUP
+trap 'shutdown SIGKILL' SIGKILL
+
+set +e
+
 docker run -i $rm_opt --privileged --name=$DOTMESH_INNER_SERVER_NAME \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v /run/docker/plugins:/run/docker/plugins \
@@ -288,3 +323,9 @@ docker run -i $rm_opt --privileged --name=$DOTMESH_INNER_SERVER_NAME \
     -v dotmesh-kernel-modules:/bundled-lib \
     $DOTMESH_DOCKER_IMAGE \
     "$@" >/dev/null
+
+RETVAL=$?
+
+echo "`date`: Returning from inner docker run with retval=$RETVAL" >> "/dotmesh-test-pools/export-$POOL"
+
+exit $RETVAL

@@ -1937,6 +1937,7 @@ func TestKubernetesOperator(t *testing.T) {
 
 	citools.LogTiming("setup")
 
+	// A quick smoke test of basic operation in this mode
 	t.Run("DynamicProvisioning", func(t *testing.T) {
 		// Ok, now we have the plumbing set up, try creating a PVC and see if it gets a PV dynamically provisioned
 		citools.KubectlApply(t, node1.Container, `
@@ -2041,6 +2042,88 @@ spec:
 
 		citools.LogTiming("DynamicProvisioning: Grapes on the vine")
 	})
+
+	t.Run("PVCReuse", func(t *testing.T) {
+		// FIXME: Modify nodeSelector to clusterSize-2=yes in the configmap and restart operator.
+		// FIXME: Check we go down to two pods.
+		// FIXME: Modify nodeSelector to clusterSize-3=yes in the configmap and restart operator.
+		// FIXME: Check we go up to three pods and re-connect the PVC.
+	})
+
+	t.Run("NodeShenanigans", func(t *testing.T) {
+		// Modify nodeSelector to clusterSize-2=yes in the configmap and restart operator.
+		err := citools.ChangeOperatorNodeSelector(node1.Container, "clusterSize-2=yes")
+		if err != nil {
+			t.Error(err)
+		}
+		citools.RestartOperator(t, node1.Container)
+
+		// Check we go down to two pods.
+		for tries := 1; tries < 10; tries++ {
+			serverPods := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pods -n dotmesh | grep server | wc -l")
+			if serverPods == "2\n" {
+				break
+			}
+			if tries == 9 {
+				t.Error("Didn't go down to two pods")
+			}
+			time.Sleep(1 * time.Second)
+		}
+
+		// Delete the abandoned PVC
+		pvcs := map[string]struct{}{}
+		pvcNames := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pvc -n dotmesh | grep pvc- | cut -f 1 -d ' '")
+		for _, pvcName := range strings.Split(pvcNames, "\n") {
+			if pvcName != "" {
+				pvcs[pvcName] = struct{}{}
+			}
+		}
+		serverPvcNames := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pods -n dotmesh | grep server- | sed s/^server-// | sed s/-node-.*//")
+		for _, pvcName := range strings.Split(serverPvcNames, "\n") {
+			if pvcName != "" {
+				delete(pvcs, pvcName)
+			}
+		}
+
+		if len(pvcs) != 1 {
+			t.Fatalf("Couldn't find the abandoned PVC name! Ended up with %#v", pvcs)
+		}
+
+		for pvcName, _ := range pvcs {
+			citools.RunOnNode(t, node1.Container, "kubectl delete pvc -n dotmesh "+pvcName)
+		}
+
+		// Modify nodeSelector to clusterSize-3=yes in the configmap and restart operator.
+		err = citools.ChangeOperatorNodeSelector(node1.Container, "clusterSize-3=yes")
+		if err != nil {
+			t.Error(err)
+		}
+		citools.RestartOperator(t, node1.Container)
+
+		// Check we go up to three pods and create a new PVC.
+		for tries := 1; tries < 10; tries++ {
+			serverPods := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pods -n dotmesh | grep server- | wc -l")
+			serverPvcs := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pvc -n dotmesh | grep pvc- | wc -l")
+			fmt.Printf("DM server pods: %s, DM server PVCs: %s\n",
+				strings.TrimSpace(serverPods),
+				strings.TrimSpace(serverPvcs))
+			if serverPods == "3\n" && serverPvcs == "3\n" {
+				break
+			}
+			if tries == 9 {
+				t.Error("Didn't go up to three pods/pvcs")
+			}
+			time.Sleep(1 * time.Second)
+		}
+	})
+
+	t.Run("ClusterGrowth", func(t *testing.T) {
+		// FIXME: Stop the operator.
+		// FIXME: Kill two pods and their associated PVCs.
+		// FIXME: Restart the operator.
+		// FIXME: Check we go up to three running pods.
+	})
+
 	citools.DumpTiming()
 }
 
