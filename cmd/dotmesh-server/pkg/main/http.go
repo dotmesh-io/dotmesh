@@ -10,14 +10,50 @@ import (
 	"os"
 	"time"
 
+	rpc "github.com/dotmesh-io/rpc/v2"
+	rpcjson "github.com/dotmesh-io/rpc/v2/json2"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
-	rpc "github.com/gorilla/rpc/v2"
-	rpcjson "github.com/gorilla/rpc/v2/json2"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/openzipkin/zipkin-go-opentracing/examples/middleware"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+)
+
+var (
+	rpcRequestCounter *prometheus.CounterVec = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "dm_rpc_req_total",
+			Help: "How many requests processed, partitioned by status code and method.",
+		},
+		[]string{"url", "path", "method", "status_code"},
+	)
+
+	requestCounter *prometheus.CounterVec = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "dm_req_total",
+			Help: "How many requests processed, partitioned by status code and method.",
+		},
+		[]string{"url", "method", "status_code"},
+	)
+
+	transitionCounter *prometheus.CounterVec = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "dm_state_transition_total",
+			Help: "How many state transitions take place partitioned by previous state (from), current state (to) and status",
+		},
+		[]string{"from", "to", "status"},
+	)
+
+	requestDuration *prometheus.SummaryVec = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+		Name: "dm_req_duration_seconds",
+		Help: "Response time by rpc method/http status code.",
+	}, []string{"url", "method", "status_code"})
+
+	zpoolCapacity *prometheus.GaugeVec = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "dm_zpool_usage_percentage",
+		Help: "Percentage of zpool capacity used.",
+	}, []string{"node_name", "pool_name"})
 )
 
 func prometheusHandler() http.Handler {
@@ -45,8 +81,10 @@ func (state *InMemoryState) runServer() {
 		log.Println(http.ListenAndServe(":6060", nil))
 	}()
 	r := rpc.NewServer()
+	registerMetrics()
 	r.RegisterCodec(rpcjson.NewCodec(), "application/json")
 	r.RegisterCodec(rpcjson.NewCodec(), "application/json;charset=UTF-8")
+	r.RegisterAfterFunc(rpcMiddleware)
 	d := NewDotmeshRPC(state)
 	err := r.RegisterService(d, "") // deduces name from type name
 	if err != nil {
@@ -113,29 +151,12 @@ func (state *InMemoryState) runServer() {
 	}
 }
 
-func (state *InMemoryState) registerMetrics() {
-	state.requestCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "dm_req_total",
-			Help: "How many requests processed, partitioned by status code and method.",
-		},
-		[]string{"url", "method", "status_code"},
-	)
-
-	state.transitionCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "dm_state_transition_total",
-			Help: "How many state transitions take place partitioned by previous state (from), current state (to) and status",
-		},
-		[]string{"from", "to", "status"},
-	)
-
-	state.requestDuration = prometheus.NewSummaryVec(prometheus.SummaryOpts{
-		Name: "dm_req_duration_seconds",
-		Help: "Response time by rpc method/http status code.",
-	}, []string{"url", "method", "status_code"})
-
-	prometheus.MustRegister(state.requestCounter, state.requestDuration, state.transitionCounter)
+func registerMetrics() {
+	prometheus.MustRegister(requestCounter,
+		requestDuration,
+		transitionCounter,
+		zpoolCapacity,
+		rpcRequestCounter)
 	log.Println("registering /metrics url as prometheus handler")
 }
 
@@ -284,10 +305,17 @@ func Instrument(state *InMemoryState) MetricsMiddleware {
 				duration := time.Since(startedAt)
 				url := fmt.Sprintf("%s", r.URL)
 				statusCode := fmt.Sprintf("%v", irw.statusCode)
-				state.requestDuration.WithLabelValues(url, r.Method, statusCode).Observe(duration.Seconds())
-				state.requestCounter.WithLabelValues(url, r.Method, statusCode).Add(1)
+				requestDuration.WithLabelValues(url, r.Method, statusCode).Observe(duration.Seconds())
+				requestCounter.WithLabelValues(url, r.Method, statusCode).Add(1)
 			}()
 			h.ServeHTTP(irw, r)
 		})
 	}
+}
+
+func rpcMiddleware(reqInfo *rpc.RequestInfo) {
+	fmt.Printf("Logging request %#v\n", reqInfo)
+	url := fmt.Sprintf("%s", reqInfo.Request.URL)
+	statusCode := fmt.Sprintf("%v", reqInfo.StatusCode)
+	rpcRequestCounter.WithLabelValues(url, reqInfo.Method, reqInfo.Request.Method, statusCode).Add(1)
 }

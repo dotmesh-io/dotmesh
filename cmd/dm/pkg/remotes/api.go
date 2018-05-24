@@ -489,7 +489,15 @@ func deMasterify(s string) string {
 	return s
 }
 
-func (dm *DotmeshAPI) Commit(activeVolumeName, activeBranch, commitMessage string) (string, error) {
+type CommitArgs struct {
+	Namespace string
+	Name      string
+	Branch    string
+	Message   string
+	Metadata  map[string]string
+}
+
+func (dm *DotmeshAPI) Commit(activeVolumeName, activeBranch, commitMessage string, metadata map[string]string) (string, error) {
 	var result bool
 
 	activeNamespace, activeVolume, err := ParseNamespacedVolume(activeVolumeName)
@@ -502,11 +510,12 @@ func (dm *DotmeshAPI) Commit(activeVolumeName, activeBranch, commitMessage strin
 		"DotmeshRPC.Commit",
 		// TODO replace these map[string]string's with typed structs that are
 		// shared between the client and the server for cross-rpc type safety
-		map[string]string{
-			"Namespace": activeNamespace,
-			"Name":      activeVolume,
-			"Branch":    deMasterify(activeBranch),
-			"Message":   commitMessage,
+		&CommitArgs{
+			Namespace: activeNamespace,
+			Name:      activeVolume,
+			Branch:    deMasterify(activeBranch),
+			Message:   commitMessage,
+			Metadata:  metadata,
 		},
 		&result,
 	)

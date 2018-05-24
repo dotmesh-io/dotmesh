@@ -531,6 +531,12 @@ func TestSingleNode(t *testing.T) {
 		if !strings.Contains(metrics, "dm_state_transition_total") {
 			t.Error("unable to find data on duration of state transitinos on /metrics")
 		}
+		if !strings.Contains(metrics, "dm_zpool_usage_percentage") {
+			t.Error("unable to find data on zpool capacity used on /metrics")
+		}
+		if !strings.Contains(metrics, "dm_rpc_req_total") {
+			t.Error("unable to find data on total rpc requests on /metrics")
+		}
 	})
 
 	t.Run("MountExistingDot", func(t *testing.T) {
@@ -578,6 +584,47 @@ func TestSingleNode(t *testing.T) {
 
 		if !strings.Contains(st, fmt.Sprintf("Dot %s does not exist.", fsname)) {
 			t.Error(fmt.Sprintf("We didn't get an error when the --create flag was not used: %+v", st))
+		}
+	})
+
+	t.Run("CommitMetadata", func(t *testing.T) {
+		fsname := citools.UniqName()
+
+		citools.RunOnNode(t, node1, "dm init "+fsname)
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+		citools.RunOnNode(t, node1, "dm commit -m \"commit message\" --metadata apples=green")
+		st := citools.OutputFromRunOnNode(t, node1, "dm log")
+
+		if !strings.Contains(st, "apples: green") {
+			t.Error(fmt.Sprintf("We didn't get the metadata back from dm log: %+v", st))
+		}
+	})
+
+	t.Run("CommitMetadataUppercaseFailure", func(t *testing.T) {
+		fsname := citools.UniqName()
+
+		citools.RunOnNode(t, node1, "dm init "+fsname)
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+
+		// fail to commit a dot because we used an uppercase metadata fieldname
+		st := citools.OutputFromRunOnNode(t, node1, "if dm commit -m \"commit message\" --metadata Apples=green; then false; else true; fi")
+
+		if !strings.Contains(st, fmt.Sprintf("Metadata field names must start with lowercase characters: Apples")) {
+			t.Error(fmt.Sprintf("We didn't get an error when we used an uppercase metadata fieldname: %+v", st))
+		}
+	})
+
+	t.Run("CommitMetadataNoEqualsFailure", func(t *testing.T) {
+		fsname := citools.UniqName()
+
+		citools.RunOnNode(t, node1, "dm init "+fsname)
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+
+		// fail to commit a dot because we used an uppercase metadata fieldname
+		st := citools.OutputFromRunOnNode(t, node1, "if dm commit -m \"commit message\" --metadata Applesgreen; then false; else true; fi")
+
+		if !strings.Contains(st, fmt.Sprintf("Each metadata value must be a name=value pair: Applesgreen")) {
+			t.Error(fmt.Sprintf("We didn't get an error when we didn't use an equals sign in the metadata string: %+v", st))
 		}
 	})
 

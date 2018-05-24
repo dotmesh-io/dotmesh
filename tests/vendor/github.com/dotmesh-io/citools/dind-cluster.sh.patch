@@ -1,0 +1,74 @@
+--- dind-cluster-original.sh	2018-05-24 11:44:15.500431869 +0100
++++ dind-cluster-patched.sh	2018-05-24 11:45:52.746703004 +0100
+@@ -242,9 +242,9 @@
+ function dind::prepare-sys-mounts {
+   if [[ ! ${using_linuxkit} ]]; then
+     sys_volume_args=()
+-    if [[ -d /boot ]]; then
+-      sys_volume_args+=(-v /boot:/boot)
+-    fi
++#    if [[ -d /boot ]]; then
++#      sys_volume_args+=(-v /boot:/boot)
++#    fi
+     if [[ -d /lib/modules ]]; then
+       sys_volume_args+=(-v /lib/modules:/lib/modules)
+     fi
+@@ -622,7 +622,7 @@
+   dind::step "Starting DIND container:" "${container_name}"
+ 
+   if [[ ! ${using_linuxkit} ]]; then
+-    opts+=(-v /boot:/boot -v /lib/modules:/lib/modules)
++    opts+=(-v /lib/modules:/lib/modules)
+   fi
+ 
+   volume_name="kubeadm-dind-${container_name}"
+@@ -645,6 +645,7 @@
+          --hostname "${container_name}" \
+          -l mirantis.kubeadm_dind_cluster \
+          -v ${volume_name}:/dind \
++	 ${EXTRA_DOCKER_ARGS:-} \
+          ${opts[@]+"${opts[@]}"} \
+          "${DIND_IMAGE}" \
+          ${args[@]+"${args[@]}"}
+@@ -664,16 +665,16 @@
+   return ${status}
+ }
+ 
+-# function dind::bare {
+-#   local container_name="${1:-}"
+-#   if [[ ! "${container_name}" ]]; then
+-#     echo >&2 "Must specify container name"
+-#     exit 1
+-#   fi
+-#   shift
+-#   run_opts=(${@+"$@"})
+-#   dind::run "${container_name}"
+-# }
++function dind::bare {
++  local container_name="${1:-}"
++  if [[ ! "${container_name}" ]]; then
++    echo >&2 "Must specify container name"
++    exit 1
++  fi
++  shift
++  run_opts=(${@+"$@"})
++  dind::run "${container_name}"
++}
+ 
+ function dind::configure-kubectl {
+   dind::step "Setting cluster config"
+@@ -1420,10 +1421,10 @@
+     dind::ensure-kubectl
+     dind::join "$(dind::create-node-container)" "$@"
+     ;;
+-  # bare)
+-  #   shift
+-  #   dind::bare "$@"
+-  #   ;;
++  bare)
++    shift
++    dind::bare "$@"
++    ;;
+   snapshot)
+     shift
+     dind::snapshot

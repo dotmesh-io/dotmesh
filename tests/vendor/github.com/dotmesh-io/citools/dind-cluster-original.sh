@@ -1,6 +1,3 @@
-package citools
-
-const DIND_SCRIPT = `
 #!/bin/bash
 # Copyright 2017 Mirantis
 #
@@ -245,9 +242,9 @@ function dind::create-volume {
 function dind::prepare-sys-mounts {
   if [[ ! ${using_linuxkit} ]]; then
     sys_volume_args=()
-#    if [[ -d /boot ]]; then
-#      sys_volume_args+=(-v /boot:/boot)
-#    fi
+    if [[ -d /boot ]]; then
+      sys_volume_args+=(-v /boot:/boot)
+    fi
     if [[ -d /lib/modules ]]; then
       sys_volume_args+=(-v /lib/modules:/lib/modules)
     fi
@@ -625,7 +622,7 @@ function dind::run {
   dind::step "Starting DIND container:" "${container_name}"
 
   if [[ ! ${using_linuxkit} ]]; then
-    opts+=(-v /lib/modules:/lib/modules)
+    opts+=(-v /boot:/boot -v /lib/modules:/lib/modules)
   fi
 
   volume_name="kubeadm-dind-${container_name}"
@@ -648,7 +645,6 @@ function dind::run {
          --hostname "${container_name}" \
          -l mirantis.kubeadm_dind_cluster \
          -v ${volume_name}:/dind \
-	 ${EXTRA_DOCKER_ARGS:-} \
          ${opts[@]+"${opts[@]}"} \
          "${DIND_IMAGE}" \
          ${args[@]+"${args[@]}"}
@@ -668,16 +664,16 @@ function dind::kubeadm {
   return ${status}
 }
 
-function dind::bare {
-  local container_name="${1:-}"
-  if [[ ! "${container_name}" ]]; then
-    echo >&2 "Must specify container name"
-    exit 1
-  fi
-  shift
-  run_opts=(${@+"$@"})
-  dind::run "${container_name}"
-}
+# function dind::bare {
+#   local container_name="${1:-}"
+#   if [[ ! "${container_name}" ]]; then
+#     echo >&2 "Must specify container name"
+#     exit 1
+#   fi
+#   shift
+#   run_opts=(${@+"$@"})
+#   dind::run "${container_name}"
+# }
 
 function dind::configure-kubectl {
   dind::step "Setting cluster config"
@@ -896,14 +892,14 @@ function dind::create-static-routes-for-bridge {
       if [[ ${IP_MODE} = "ipv4" ]]; then
 	# Assuming pod subnets will all be /24
         dest="${POD_NET_PREFIX}${id}.0/24"
-        gw=`+"`"+`docker exec ${dest_node} ifconfig eth0 | grep "inet addr" | cut -f 2 -d: | cut -f 1 -d' '`+"`"+`
+        gw=`docker exec ${dest_node} ifconfig eth0 | grep "inet addr" | cut -f 2 -d: | cut -f 1 -d' '`
       else
 	instance=$(printf "%02x" ${id})
 	if [[ $((${POD_NET_SIZE} % 16)) -ne 0 ]]; then
 	  instance+="00" # Move node ID to upper byte
 	fi
 	dest="${POD_NET_PREFIX}${instance}::/${POD_NET_SIZE}"
-        gw=`+"`"+`docker exec ${dest_node} ifconfig eth0 | grep "inet6" | grep -i global | awk '{ print $3 }' | cut -f 1 -d/`+"`"+`
+        gw=`docker exec ${dest_node} ifconfig eth0 | grep "inet6" | grep -i global | awk '{ print $3 }' | cut -f 1 -d/`
       fi
       docker exec ${node} ip route add ${dest} via ${gw}
     done
@@ -1424,10 +1420,10 @@ case "${1:-}" in
     dind::ensure-kubectl
     dind::join "$(dind::create-node-container)" "$@"
     ;;
-  bare)
-    shift
-    dind::bare "$@"
-    ;;
+  # bare)
+  #   shift
+  #   dind::bare "$@"
+  #   ;;
   snapshot)
     shift
     dind::snapshot
@@ -1481,4 +1477,3 @@ case "${1:-}" in
     exit 1
     ;;
 esac
-`

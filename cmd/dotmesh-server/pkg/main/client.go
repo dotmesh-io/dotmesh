@@ -8,7 +8,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/gorilla/rpc/v2/json2"
+	"github.com/dotmesh-io/rpc/v2/json2"
 	"github.com/opentracing/opentracing-go"
 	"github.com/openzipkin/zipkin-go-opentracing/examples/middleware"
 )

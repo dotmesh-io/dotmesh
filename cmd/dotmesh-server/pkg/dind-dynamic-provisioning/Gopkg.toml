@@ -30,10 +30,6 @@
   name = "github.com/golang/glog"
 
 [[constraint]]
-  name = "github.com/gorilla/rpc"
-  version = "1.1.0"
-
-[[constraint]]
   name = "github.com/kubernetes-incubator/external-storage"
   version = "2.0.0"
 

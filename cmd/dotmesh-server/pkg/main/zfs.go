@@ -92,6 +92,32 @@ func findLocalPoolId() (string, error) {
 	return fmt.Sprintf("%x", i), nil
 }
 
+func getZpoolCapacity() (float64, error) {
+	output, err := exec.Command(ZPOOL,
+		"list", "-H", "-o", "capacity", POOL).Output()
+	if err != nil {
+		log.Fatalf("%s, when running zpool list", err)
+		return 0, err
+	}
+
+	parsedCapacity := strings.Trim(string(output), "% \n")
+	capacityF, err := strconv.ParseFloat(parsedCapacity, 64)
+	if err != nil {
+		return 0, err
+	}
+
+	return capacityF, err
+}
+
+func (state *InMemoryState) reportZpoolCapacity() error {
+	capacity, err := getZpoolCapacity()
+	if err != nil {
+		return err
+	}
+	zpoolCapacity.WithLabelValues(state.myNodeId, POOL).Set(capacity)
+	return nil
+}
+
 func findFilesystemIdsOnSystem() []string {
 	// synchronously, return slice of filesystem ids that exist.
 	log.Print("Finding filesystem ids...")
