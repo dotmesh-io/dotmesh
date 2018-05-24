@@ -18,7 +18,10 @@ import (
 	"github.com/openzipkin/zipkin-go-opentracing/examples/middleware"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/satori/go.uuid"
 )
+
+const REQUEST_ID = "X-Request-Id"
 
 var (
 	rpcRequestCounter *prometheus.CounterVec = prometheus.NewCounterVec(
@@ -26,7 +29,7 @@ var (
 			Name: "dm_rpc_req_total",
 			Help: "How many requests processed, partitioned by status code and method.",
 		},
-		[]string{"url", "path", "method", "status_code"},
+		[]string{"url", "path", "method", "status_code", "request_id"},
 	)
 
 	requestCounter *prometheus.CounterVec = prometheus.NewCounterVec(
@@ -34,7 +37,7 @@ var (
 			Name: "dm_req_total",
 			Help: "How many requests processed, partitioned by status code and method.",
 		},
-		[]string{"url", "method", "status_code"},
+		[]string{"url", "method", "status_code", "request_id"},
 	)
 
 	transitionCounter *prometheus.CounterVec = prometheus.NewCounterVec(
@@ -48,7 +51,7 @@ var (
 	requestDuration *prometheus.SummaryVec = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 		Name: "dm_req_duration_seconds",
 		Help: "Response time by rpc method/http status code.",
-	}, []string{"url", "method", "status_code"})
+	}, []string{"url", "method", "status_code", "request_id"})
 
 	zpoolCapacity *prometheus.GaugeVec = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "dm_zpool_usage_percentage",
@@ -300,13 +303,16 @@ func Instrument(state *InMemoryState) MetricsMiddleware {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			startedAt := time.Now()
+			reqId := uuid.NewV4()
+			r.Header.Set(REQUEST_ID, reqId.String())
+			fmt.Println("Request headers in Instrument ---- > %#v\n", r.Header)
 			irw := NewInstrResponseWriter(w)
 			defer func() {
 				duration := time.Since(startedAt)
 				url := fmt.Sprintf("%s", r.URL)
 				statusCode := fmt.Sprintf("%v", irw.statusCode)
-				requestDuration.WithLabelValues(url, r.Method, statusCode).Observe(duration.Seconds())
-				requestCounter.WithLabelValues(url, r.Method, statusCode).Add(1)
+				requestDuration.WithLabelValues(url, r.Method, statusCode, reqId.String()).Observe(duration.Seconds())
+				requestCounter.WithLabelValues(url, r.Method, statusCode, reqId.String()).Add(1)
 			}()
 			h.ServeHTTP(irw, r)
 		})
@@ -314,8 +320,13 @@ func Instrument(state *InMemoryState) MetricsMiddleware {
 }
 
 func rpcMiddleware(reqInfo *rpc.RequestInfo) {
-	fmt.Printf("Logging request %#v\n", reqInfo)
+	fmt.Printf("Request headers in Instrument ---- > %#v\n", reqInfo.Request.Header)
 	url := fmt.Sprintf("%s", reqInfo.Request.URL)
 	statusCode := fmt.Sprintf("%v", reqInfo.StatusCode)
-	rpcRequestCounter.WithLabelValues(url, reqInfo.Method, reqInfo.Request.Method, statusCode).Add(1)
+	reqId, ok := reqInfo.Request.Header[REQUEST_ID]
+	if !ok {
+		rpcRequestCounter.WithLabelValues(url, reqInfo.Method, reqInfo.Request.Method, statusCode, "UNKNOWN").Add(1)
+	} else {
+		rpcRequestCounter.WithLabelValues(url, reqInfo.Method, reqInfo.Request.Method, statusCode, reqId[0]).Add(1)
+	}
 }
