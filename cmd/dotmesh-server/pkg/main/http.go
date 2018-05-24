@@ -305,7 +305,6 @@ func Instrument(state *InMemoryState) MetricsMiddleware {
 			startedAt := time.Now()
 			reqId := uuid.NewV4()
 			r.Header.Set(REQUEST_ID, reqId.String())
-			fmt.Println("Request headers in Instrument ---- > %#v\n", r.Header)
 			irw := NewInstrResponseWriter(w)
 			defer func() {
 				duration := time.Since(startedAt)
@@ -320,7 +319,6 @@ func Instrument(state *InMemoryState) MetricsMiddleware {
 }
 
 func rpcMiddleware(reqInfo *rpc.RequestInfo) {
-	fmt.Printf("Request headers in Instrument ---- > %#v\n", reqInfo.Request.Header)
 	url := fmt.Sprintf("%s", reqInfo.Request.URL)
 	statusCode := fmt.Sprintf("%v", reqInfo.StatusCode)
 	reqId, ok := reqInfo.Request.Header[REQUEST_ID]
