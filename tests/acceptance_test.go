@@ -587,6 +587,47 @@ func TestSingleNode(t *testing.T) {
 		}
 	})
 
+	t.Run("CommitMetadata", func(t *testing.T) {
+		fsname := citools.UniqName()
+
+		citools.RunOnNode(t, node1, "dm init "+fsname)
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+		citools.RunOnNode(t, node1, "dm commit -m \"commit message\" --metadata apples=green")
+		st := citools.OutputFromRunOnNode(t, node1, "dm log")
+
+		if !strings.Contains(st, "apples: green") {
+			t.Error(fmt.Sprintf("We didn't get the metadata back from dm log: %+v", st))
+		}
+	})
+
+	t.Run("CommitMetadataUppercaseFailure", func(t *testing.T) {
+		fsname := citools.UniqName()
+
+		citools.RunOnNode(t, node1, "dm init "+fsname)
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+
+		// fail to commit a dot because we used an uppercase metadata fieldname
+		st := citools.OutputFromRunOnNode(t, node1, "if dm commit -m \"commit message\" --metadata Apples=green; then false; else true; fi")
+
+		if !strings.Contains(st, fmt.Sprintf("Metadata field names must start with lowercase characters: Apples")) {
+			t.Error(fmt.Sprintf("We didn't get an error when we used an uppercase metadata fieldname: %+v", st))
+		}
+	})
+
+	t.Run("CommitMetadataNoEqualsFailure", func(t *testing.T) {
+		fsname := citools.UniqName()
+
+		citools.RunOnNode(t, node1, "dm init "+fsname)
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+
+		// fail to commit a dot because we used an uppercase metadata fieldname
+		st := citools.OutputFromRunOnNode(t, node1, "if dm commit -m \"commit message\" --metadata Applesgreen; then false; else true; fi")
+
+		if !strings.Contains(st, fmt.Sprintf("Each metadata value must be a name=value pair: Applesgreen")) {
+			t.Error(fmt.Sprintf("We didn't get an error when we didn't use an equals sign in the metadata string: %+v", st))
+		}
+	})
+
 	t.Run("ApiKeys", func(t *testing.T) {
 		apiKey := f[0].GetNode(0).ApiKey
 		password := f[0].GetNode(0).Password
