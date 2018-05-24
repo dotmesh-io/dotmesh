@@ -498,7 +498,7 @@ type CommitArgs struct {
 }
 
 func (dm *DotmeshAPI) Commit(activeVolumeName, activeBranch, commitMessage string, metadata map[string]string) (string, error) {
-	var result bool
+	var result string
 
 	activeNamespace, activeVolume, err := ParseNamespacedVolume(activeVolumeName)
 	if err != nil {
@@ -522,8 +522,7 @@ func (dm *DotmeshAPI) Commit(activeVolumeName, activeBranch, commitMessage strin
 	if err != nil {
 		return "", err
 	}
-	// TODO pass through the commit (snapshot) ID
-	return "", nil
+	return result, nil
 }
 
 type metadata map[string]string
