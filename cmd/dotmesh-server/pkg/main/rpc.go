@@ -642,7 +642,7 @@ type CommitArgs struct {
 // Take a snapshot of a specific filesystem on the master.
 func (d *DotmeshRPC) Commit(
 	r *http.Request, args *CommitArgs,
-	result *bool,
+	result *string,
 ) error {
 	/* Non-admin users are allowed to commit, as a temporary measure
 		      until a way of making the frontend tests work without it is found.
@@ -695,7 +695,7 @@ func (d *DotmeshRPC) Commit(
 	e := <-responseChan
 	if e.Name == "snapshotted" {
 		log.Printf("Snapshotted %s", filesystemId)
-		*result = true
+		*result = (*e.Args)["SnapshotId"].(string)
 	} else {
 		return maybeError(e)
 	}

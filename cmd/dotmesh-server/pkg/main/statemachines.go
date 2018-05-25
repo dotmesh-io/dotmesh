@@ -574,7 +574,7 @@ func (f *fsMachine) snapshot(e *Event) (responseEvent *Event, nextState stateFn)
 		&snapshot{Id: snapshotId, Metadata: &meta})
 	f.snapshotsLock.Unlock()
 	f.snapshotsModified <- true
-	return &Event{Name: "snapshotted"}, activeState
+	return &Event{Name: "snapshotted", Args: &EventArgs{"SnapshotId": snapshotId}}, activeState
 }
 
 // find the user-facing name of a given filesystem id. if we're a branch
