@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -2422,24 +2421,30 @@ spec:
 			t.Error(err)
 		}
 
-		go func() {
-			err := citools.TryUntilSucceeds(func() error {
-				// write something into the directory (by parsing out the pvc name)
-				// e.g. /dotmesh-test-pools/dind-flexvolume/pvc-<id>
-				// keep trying because it'll only exist when the flexvolume driver kicks in
-				target, err := os.Create(fmt.Sprintf("/dotmesh-test-pools/dind-flexvolume/%s/on-the-vine", dindPvc))
-				if err != nil {
-					fmt.Printf(">>> ERROR CREATING DINDS, retrying...: %+v\n", err)
-				} else {
-					target.Write([]byte("dinds"))
-					target.Close()
-				}
-				return err
-			}, "trying to write to dind-flexvolume directory manually")
-			if err != nil {
-				fmt.Printf("gave up trying to write to dind flexvolume directory: %s\n", err)
-			}
-		}()
+		citools.KubectlApply(t, node1.Container, `
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dind-setup
+spec:
+  template:
+    metadata:
+      labels:
+        app: dind-setup
+    spec:
+      volumes:
+      - name: dind-storage
+        persistentVolumeClaim:
+         claimName: dind-pvc-test
+      restartPolicy: Never
+      containers:
+      - name: dind-setup
+        image: busybox
+        command: ['/bin/sh', '-c', 'echo dinds > /stuff/on-the-vine; ls /stuff']
+        volumeMounts:
+        - mountPath: "/stuff"
+          name: dind-storage
+`)
 
 		citools.LogTiming("DynamicProvisioning: finding dind PV")
 
