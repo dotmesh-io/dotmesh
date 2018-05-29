@@ -108,6 +108,10 @@ items:
             - name: dotmesh-operator
               image: 'quay.io/dotmesh/dotmesh-operator:DOCKER_TAG'
               imagePullPolicy: "IfNotPresent"
+              ports:
+                - name: op-monitor
+                  containerPort: 32608
+                  protocol: TCP
   - apiVersion: v1
     kind: ServiceAccount
     metadata:

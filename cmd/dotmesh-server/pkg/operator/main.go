@@ -25,6 +25,11 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
+
+	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"net/http"
 )
 
 // Log verbosities:
@@ -129,6 +134,14 @@ type dotmeshController struct {
 	updatesNeededLock *sync.Mutex
 
 	config *v1.ConfigMap
+
+	nodesGauge           *prometheus.GaugeVec
+	dottedNodesGauge     *prometheus.GaugeVec
+	undottedNodesGauge   *prometheus.GaugeVec
+	runningPodsGauge     *prometheus.GaugeVec
+	dotmeshesToKillGauge *prometheus.GaugeVec
+	suspendedNodesGauge  *prometheus.GaugeVec
+	targetMinPodsGauge   *prometheus.GaugeVec
 }
 
 func provideDefault(m *map[string]string, key string, deflt string) {
@@ -146,6 +159,36 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 		client:            client,
 		updatesNeeded:     false,
 		updatesNeededLock: &sync.Mutex{},
+
+		nodesGauge: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "dm_operator_nodes",
+			Help: "Number of eligible nodes in the cluster",
+		}, []string{}),
+		dottedNodesGauge: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "dm_operator_nodes_running_dotmesh",
+			Help: "Number of nodes running Dotmesh",
+		}, []string{}),
+		undottedNodesGauge: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "dm_operator_nodes_not_running_dotmesh",
+			Help: "Number of nodes not running Dotmesh",
+		}, []string{}),
+		suspendedNodesGauge: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "dm_operator_nodes_on_hold",
+			Help: "Number of nodes not ready to run a new Dotmesh yet",
+		}, []string{}),
+
+		runningPodsGauge: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "dm_operator_pods",
+			Help: "Number of Dotmesh pods in the cluster",
+		}, []string{}),
+		dotmeshesToKillGauge: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "dm_operator_pods_to_kill",
+			Help: "Number of Dotmesh pods marked for termination",
+		}, []string{}),
+		targetMinPodsGauge: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "dm_operator_pods_low_water_mark",
+			Help: "Number of Dotmesh pods we won't go below if we can help it",
+		}, []string{}),
 	}
 
 	config, err := client.Core().ConfigMaps(DOTMESH_NAMESPACE).Get(DOTMESH_CONFIG_MAP, meta_v1.GetOptions{})
@@ -344,6 +387,24 @@ func (c *dotmeshController) Run(stopCh chan struct{}) {
 		glog.Error(fmt.Errorf("Timed out waiting for pvc cache to sync"))
 		return
 	}
+
+	// Set up the monitoring HTTP server
+
+	router := mux.NewRouter()
+	router.Handle("/metrics", promhttp.Handler())
+	prometheus.MustRegister(c.nodesGauge)
+	prometheus.MustRegister(c.dottedNodesGauge)
+	prometheus.MustRegister(c.undottedNodesGauge)
+	prometheus.MustRegister(c.runningPodsGauge)
+	prometheus.MustRegister(c.dotmeshesToKillGauge)
+	prometheus.MustRegister(c.suspendedNodesGauge)
+	prometheus.MustRegister(c.targetMinPodsGauge)
+	go func() {
+		err := http.ListenAndServe(":32608", router)
+		glog.Fatal(err)
+	}()
+
+	// Start the polling loop
 
 	go wait.Until(c.runWorker, time.Second, stopCh)
 
@@ -578,6 +639,14 @@ func (c *dotmeshController) process() error {
 	}
 
 	dottedNodeCount := len(validNodes) - len(undottedNodes)
+
+	c.nodesGauge.WithLabelValues().Set(float64(len(validNodes)))
+	c.dottedNodesGauge.WithLabelValues().Set(float64(dottedNodeCount))
+	c.undottedNodesGauge.WithLabelValues().Set(float64(len(undottedNodes)))
+	c.runningPodsGauge.WithLabelValues().Set(float64(runningPodCount))
+	c.dotmeshesToKillGauge.WithLabelValues().Set(float64(len(dotmeshesToKill)))
+	c.suspendedNodesGauge.WithLabelValues().Set(float64(len(suspendedNodes)))
+
 	glog.V(1).Infof("%d healthy-looking dotmeshes exist to run on %d nodes; %d of them seem to be actually running; %d dotmeshes need deleting, and %d out of %d undotted nodes are temporarily suspended",
 		dottedNodeCount, len(validNodes),
 		runningPodCount,
@@ -609,6 +678,8 @@ func (c *dotmeshController) process() error {
 	glog.V(1).Infof("%d/%d nodes might just be running or getting there, minimum target is %d",
 		clusterPopulation, len(validNodes),
 		clusterMinimumPopulation)
+
+	c.targetMinPodsGauge.WithLabelValues().Set(float64(clusterMinimumPopulation))
 
 	for dotmeshName, _ := range dotmeshesToKill {
 		if glog.V(4) {
