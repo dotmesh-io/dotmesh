@@ -119,20 +119,7 @@ This currently needs to be manually updated.
  * Create a new release tag in the github UI. This opens up a window to enter details.
  * Call the tag `release-X.Y.Z` and pick the correct release branch
  * Write a description and release notes, by copying the pattern from an existing tag.
- * Upload tarballs of the binaries from `get.dotmesh.io`.
  * Press the button to create the release
-
-I created the binary tarballs like so:
-
-```
-mybox$ ssh releases@get.dotmesh.io
-get$ cd /pool/releases/release-0.2.0
-get$ tar -czvf ~/Darwin.tar.gz Darwin/
-get$ tar -czvf ~/Linux.tar.gz Linux/
-get$ tar -czvf ~/kubernetes-cluster-yamls.tar.gz yaml/
-get$ ^D
-mybox$ scp releases@get.dotmesh.io:*.tar.gz .
-```
 
 Try the latest binary on https://dotmesh.com/try-dotmesh/ with a dm
 version to check that it's all deployed correctly.
