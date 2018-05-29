@@ -534,8 +534,8 @@ func TestSingleNode(t *testing.T) {
 		if !strings.Contains(metrics, "dm_zpool_usage_percentage") {
 			t.Error("unable to find data on zpool capacity used on /metrics")
 		}
-		if !strings.Contains(metrics, "dm_rpc_req_total") {
-			t.Error("unable to find data on total rpc requests on /metrics")
+		if !strings.Contains(metrics, "dm_rpc_req_duration_seconds") {
+			t.Error("unable to find data on rpc request duration on /metrics")
 		}
 	})
 
