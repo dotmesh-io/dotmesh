@@ -274,9 +274,8 @@ ssh-keygen ## If you haven't already
 ## Now add your ~/.ssh/id_rsa.pub to your user settings on Gitlab and Github
 mkdir -p $GOPATH/src/github.com/dotmesh-io
 cd $GOPATH/src/github.com/dotmesh-io
-git clone git@gitlab.dotmesh.io:dotmesh/dotmesh
+git clone git@github.com/dotmesh-io/dotmesh
 ```
-Note: The directory structure above is $GOPATH/src/github.com and the cloned repo is from neo.lukemarsden.net (gitlab), this is in preparation for a future migration from gitlab to github.
 
 We're going to create `~/dotmesh-instrumentation` and
 `~/discovery.dotmesh.io` directories:

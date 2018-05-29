@@ -25,10 +25,11 @@ To do a new version release, just create a branch called
 like so:
 
 ```
-$ git checkout release-0.1
+$ git checkout release-x.y
+$ git pull origin release-x.y
 $ git merge --no-ff master
 $ (cd cmd/versioner/; go run versioner.go)
-release-0.1.1
+release-x.y.z
 ```
 
 ## The build artefacts
@@ -118,20 +119,7 @@ This currently needs to be manually updated.
  * Create a new release tag in the github UI. This opens up a window to enter details.
  * Call the tag `release-X.Y.Z` and pick the correct release branch
  * Write a description and release notes, by copying the pattern from an existing tag.
- * Upload tarballs of the binaries from `get.dotmesh.io`.
  * Press the button to create the release
-
-I created the binary tarballs like so:
-
-```
-mybox$ ssh releases@get.dotmesh.io
-get$ cd /pool/releases/release-0.2.0
-get$ tar -czvf ~/Darwin.tar.gz Darwin/
-get$ tar -czvf ~/Linux.tar.gz Linux/
-get$ tar -czvf ~/kubernetes-cluster-yamls.tar.gz yaml/
-get$ ^D
-mybox$ scp releases@get.dotmesh.io:*.tar.gz .
-```
 
 Try the latest binary on https://dotmesh.com/try-dotmesh/ with a dm
 version to check that it's all deployed correctly.
@@ -141,8 +129,9 @@ version to check that it's all deployed correctly.
 There might be docs issues that talk about as yet unreleased features.  These
 issues should be in the `blocked` column of the kanban board.
 
-Once the release is complete - open the pipeline for the docs repo and click
-the `deploy to production` job.
+Once the release is complete - open [the pipeline for the docs
+repo](http://gitlab.dotmesh.io:9999/dotmesh/docs-sync/pipelines) and
+click the `deploy to production` job on the latest pipeline run.
 
 Do this once the release is complete - now the docs and the released software
 should be lining up!

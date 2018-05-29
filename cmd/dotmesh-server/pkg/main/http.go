@@ -29,7 +29,7 @@ var (
 			Name: "dm_rpc_req_total",
 			Help: "How many requests processed, partitioned by status code and method.",
 		},
-		[]string{"url", "path", "method", "status_code", "request_id"},
+		[]string{"url", "path", "rpc_method", "status_code"},
 	)
 
 	requestCounter *prometheus.CounterVec = prometheus.NewCounterVec(
@@ -37,7 +37,7 @@ var (
 			Name: "dm_req_total",
 			Help: "How many requests processed, partitioned by status code and method.",
 		},
-		[]string{"url", "method", "status_code", "request_id"},
+		[]string{"url", "http_method", "status_code"},
 	)
 
 	transitionCounter *prometheus.CounterVec = prometheus.NewCounterVec(
@@ -50,8 +50,13 @@ var (
 
 	requestDuration *prometheus.SummaryVec = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 		Name: "dm_req_duration_seconds",
+		Help: "Response time by method/http status code.",
+	}, []string{"url", "http_method", "status_code"})
+
+	rpcRequestDuration *prometheus.SummaryVec = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+		Name: "dm_rpc_req_duration_seconds",
 		Help: "Response time by rpc method/http status code.",
-	}, []string{"url", "method", "status_code", "request_id"})
+	}, []string{"url", "rpc_method", "status_code"})
 
 	zpoolCapacity *prometheus.GaugeVec = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "dm_zpool_usage_percentage",
@@ -310,8 +315,8 @@ func Instrument(state *InMemoryState) MetricsMiddleware {
 				duration := time.Since(startedAt)
 				url := fmt.Sprintf("%s", r.URL)
 				statusCode := fmt.Sprintf("%v", irw.statusCode)
-				requestDuration.WithLabelValues(url, r.Method, statusCode, reqId.String()).Observe(duration.Seconds())
-				requestCounter.WithLabelValues(url, r.Method, statusCode, reqId.String()).Add(1)
+				requestDuration.WithLabelValues(url, r.Method, statusCode).Observe(duration.Seconds())
+				requestCounter.WithLabelValues(url, r.Method, statusCode).Add(1)
 			}()
 			h.ServeHTTP(irw, r)
 		})
@@ -321,10 +326,5 @@ func Instrument(state *InMemoryState) MetricsMiddleware {
 func rpcMiddleware(reqInfo *rpc.RequestInfo) {
 	url := fmt.Sprintf("%s", reqInfo.Request.URL)
 	statusCode := fmt.Sprintf("%v", reqInfo.StatusCode)
-	reqId, ok := reqInfo.Request.Header[REQUEST_ID]
-	if !ok {
-		rpcRequestCounter.WithLabelValues(url, reqInfo.Method, reqInfo.Request.Method, statusCode, "UNKNOWN").Add(1)
-	} else {
-		rpcRequestCounter.WithLabelValues(url, reqInfo.Method, reqInfo.Request.Method, statusCode, reqId[0]).Add(1)
-	}
+	rpcRequestCounter.WithLabelValues(url, reqInfo.Method, reqInfo.Request.Method, statusCode).Add(1)
 }
