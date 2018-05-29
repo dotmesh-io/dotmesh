@@ -129,8 +129,9 @@ version to check that it's all deployed correctly.
 There might be docs issues that talk about as yet unreleased features.  These
 issues should be in the `blocked` column of the kanban board.
 
-Once the release is complete - open the pipeline for the docs repo and click
-the `deploy to production` job.
+Once the release is complete - open [the pipeline for the docs
+repo](http://gitlab.dotmesh.io:9999/dotmesh/docs-sync/pipelines) and
+click the `deploy to production` job on the latest pipeline run.
 
 Do this once the release is complete - now the docs and the released software
 should be lining up!
