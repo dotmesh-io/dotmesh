@@ -29,9 +29,10 @@ import (
 
 // Log verbosities:
 
-// -v3 = log every raw watch event
-// -v2 = log relevant status of pods and nodes
-// -v1 = log summary of cluster checks
+// -v 4 = do not deleted failed pods, so they can be debugged
+// -v 3 = log every raw watch event
+// -v 2 = log relevant status of pods and nodes
+// -v 1 = log summary of cluster checks
 
 // --- PLEASE NOTE --- PLEASE NOTE ---
 
@@ -199,15 +200,15 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 		// Callback Functions to trigger on add/update/delete
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				glog.V(3).Info("NODE ADD %+v", obj)
+				glog.V(3).Info("NODE ADD %#v", obj)
 				rc.scheduleUpdate()
 			},
 			UpdateFunc: func(old, new interface{}) {
-				glog.V(3).Info("NODE UPDATE %+v -> %+v", old, new)
+				glog.V(3).Info("NODE UPDATE %#v -> %#v", old, new)
 				rc.scheduleUpdate()
 			},
 			DeleteFunc: func(obj interface{}) {
-				glog.V(3).Info("NODE DELETE %+v", obj)
+				glog.V(3).Info("NODE DELETE %#v", obj)
 				rc.scheduleUpdate()
 			},
 		},
@@ -245,15 +246,15 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 		// Callback Functions to trigger on add/update/delete
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				glog.V(3).Info("POD ADD %+v", obj)
+				glog.V(3).Info("POD ADD %#v", obj)
 				rc.scheduleUpdate()
 			},
 			UpdateFunc: func(old, new interface{}) {
-				glog.V(3).Info("POD UPDATE %+v -> %+v", old, new)
+				glog.V(3).Info("POD UPDATE %#v -> %#v", old, new)
 				rc.scheduleUpdate()
 			},
 			DeleteFunc: func(obj interface{}) {
-				glog.V(3).Info("POD DELETE %+v", obj)
+				glog.V(3).Info("POD DELETE %#v", obj)
 				rc.scheduleUpdate()
 			},
 		},
@@ -291,15 +292,15 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 		// Callback Functions to trigger on add/update/delete
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				glog.V(3).Info("PVC ADD %+v", obj)
+				glog.V(3).Info("PVC ADD %#v", obj)
 				rc.scheduleUpdate()
 			},
 			UpdateFunc: func(old, new interface{}) {
-				glog.V(3).Info("PVC UPDATE %+v -> %+v", old, new)
+				glog.V(3).Info("PVC UPDATE %#v -> %#v", old, new)
 				rc.scheduleUpdate()
 			},
 			DeleteFunc: func(obj interface{}) {
-				glog.V(3).Info("PVC DELETE %+v", obj)
+				glog.V(3).Info("PVC DELETE %#v", obj)
 				rc.scheduleUpdate()
 			},
 		},
@@ -545,10 +546,10 @@ func (c *dotmeshController) process() error {
 				dotmesh.Status.Reason,
 			)
 			for _, cond := range dotmesh.Status.Conditions {
-				glog.Infof("Failed pod %s - condition %+v", podName, cond)
+				glog.Infof("Failed pod %s - condition %#v", podName, cond)
 			}
 			for _, cont := range dotmesh.Status.ContainerStatuses {
-				glog.Infof("Failed pod %s - container %+v", podName, cont)
+				glog.Infof("Failed pod %s - container %#v", podName, cont)
 			}
 
 			// Broken, mark it for death
@@ -610,23 +611,27 @@ func (c *dotmeshController) process() error {
 		clusterMinimumPopulation)
 
 	for dotmeshName, _ := range dotmeshesToKill {
-		if !dotmeshIsRunning[dotmeshName] || clusterPopulation > clusterMinimumPopulation {
-			glog.Infof("Deleting pod %s", dotmeshName)
-			dp := meta_v1.DeletePropagationBackground
-			err = c.client.Core().Pods(DOTMESH_NAMESPACE).Delete(dotmeshName, &meta_v1.DeleteOptions{
-				PropagationPolicy: &dp,
-			})
-			if err != nil {
-				// Do not abort in error case, just keep pressing on
-				glog.Error(err)
-			}
-
-			if dotmeshIsRunning[dotmeshName] {
-				// We're killing a running pod
-				clusterPopulation--
-			}
+		if glog.V(4) {
+			glog.Infof("Sparing pod %s so it can be debugged", dotmeshName)
 		} else {
-			glog.Infof("Sparing pod %s to rate-limit the deletion of running pods", dotmeshName)
+			if !dotmeshIsRunning[dotmeshName] || clusterPopulation > clusterMinimumPopulation {
+				glog.Infof("Deleting pod %s", dotmeshName)
+				dp := meta_v1.DeletePropagationBackground
+				err = c.client.Core().Pods(DOTMESH_NAMESPACE).Delete(dotmeshName, &meta_v1.DeleteOptions{
+					PropagationPolicy: &dp,
+				})
+				if err != nil {
+					// Do not abort in error case, just keep pressing on
+					glog.Error(err)
+				}
+
+				if dotmeshIsRunning[dotmeshName] {
+					// We're killing a running pod
+					clusterPopulation--
+				}
+			} else {
+				glog.Infof("Sparing pod %s to rate-limit the deletion of running pods", dotmeshName)
+			}
 		}
 	}
 

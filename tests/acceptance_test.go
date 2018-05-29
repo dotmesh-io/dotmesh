@@ -519,12 +519,23 @@ func TestSingleNode(t *testing.T) {
 	})
 
 	t.Run("InstrumentationMiddleware", func(t *testing.T) {
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/whatever")
 		metrics := citools.OutputFromRunOnNode(t, node1, "docker exec -t dotmesh-server-inner curl localhost:32607/metrics")
 		if !strings.Contains(metrics, "dm_req_total") {
 			t.Error("unable to find data on total request counter on /metrics")
 		}
 		if !strings.Contains(metrics, "dm_req_duration_seconds") {
 			t.Error("unable to find data on duration of requests on /metrics")
+		}
+		if !strings.Contains(metrics, "dm_state_transition_total") {
+			t.Error("unable to find data on duration of state transitinos on /metrics")
+		}
+		if !strings.Contains(metrics, "dm_zpool_usage_percentage") {
+			t.Error("unable to find data on zpool capacity used on /metrics")
+		}
+		if !strings.Contains(metrics, "dm_rpc_req_total") {
+			t.Error("unable to find data on total rpc requests on /metrics")
 		}
 	})
 
@@ -573,6 +584,47 @@ func TestSingleNode(t *testing.T) {
 
 		if !strings.Contains(st, fmt.Sprintf("Dot %s does not exist.", fsname)) {
 			t.Error(fmt.Sprintf("We didn't get an error when the --create flag was not used: %+v", st))
+		}
+	})
+
+	t.Run("CommitMetadata", func(t *testing.T) {
+		fsname := citools.UniqName()
+
+		citools.RunOnNode(t, node1, "dm init "+fsname)
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+		citools.RunOnNode(t, node1, "dm commit -m \"commit message\" --metadata apples=green")
+		st := citools.OutputFromRunOnNode(t, node1, "dm log")
+
+		if !strings.Contains(st, "apples: green") {
+			t.Error(fmt.Sprintf("We didn't get the metadata back from dm log: %+v", st))
+		}
+	})
+
+	t.Run("CommitMetadataUppercaseFailure", func(t *testing.T) {
+		fsname := citools.UniqName()
+
+		citools.RunOnNode(t, node1, "dm init "+fsname)
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+
+		// fail to commit a dot because we used an uppercase metadata fieldname
+		st := citools.OutputFromRunOnNode(t, node1, "if dm commit -m \"commit message\" --metadata Apples=green; then false; else true; fi")
+
+		if !strings.Contains(st, fmt.Sprintf("Metadata field names must start with lowercase characters: Apples")) {
+			t.Error(fmt.Sprintf("We didn't get an error when we used an uppercase metadata fieldname: %+v", st))
+		}
+	})
+
+	t.Run("CommitMetadataNoEqualsFailure", func(t *testing.T) {
+		fsname := citools.UniqName()
+
+		citools.RunOnNode(t, node1, "dm init "+fsname)
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+
+		// fail to commit a dot because we used an uppercase metadata fieldname
+		st := citools.OutputFromRunOnNode(t, node1, "if dm commit -m \"commit message\" --metadata Applesgreen; then false; else true; fi")
+
+		if !strings.Contains(st, fmt.Sprintf("Each metadata value must be a name=value pair: Applesgreen")) {
+			t.Error(fmt.Sprintf("We didn't get an error when we didn't use an equals sign in the metadata string: %+v", st))
 		}
 	})
 
@@ -2390,7 +2442,8 @@ func ensureDotIsFullyReplicated(t *testing.T, node string, fsname string) {
 }
 
 func stopContainers(t *testing.T, node string) {
-	citools.RunOnNode(t, node, "docker stop dotmesh-server dotmesh-server-inner")
+	citools.RunOnNode(t, node, "docker stop dotmesh-server")
+	citools.RunOnNode(t, node, "docker rm -f dotmesh-server-inner || true")
 
 	for try := 1; try <= 5; try++ {
 		fmt.Printf("Dotmesh containers running on %s: ", node)
@@ -2416,7 +2469,14 @@ func startContainers(t *testing.T, node string) {
 			time.Sleep(1 * time.Second)
 		}
 	}
-	t.Fatalf("Containers wouldn't start on %+v", node)
+	t.Fatalf(
+		"Containers wouldn't start on %+v; SERVER\n%s\n INNER\n%s\n SERVER LOGS\n%s\n INNER LOGS\n%s",
+		node,
+		citools.OutputFromRunOnNode(t, node, "docker inspect dotmesh-server"),
+		citools.OutputFromRunOnNode(t, node, "docker inspect dotmesh-server-inner"),
+		citools.OutputFromRunOnNode(t, node, "docker logs dotmesh-server"),
+		citools.OutputFromRunOnNode(t, node, "docker logs dotmesh-server-inner"),
+	)
 }
 
 func testServiceAvailability(t *testing.T, IP string) {

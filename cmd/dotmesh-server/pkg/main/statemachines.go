@@ -127,8 +127,6 @@ func (f *fsMachine) run() {
 
 		f.transitionedTo("gone", "")
 
-		terminateRunnersWhileFilesystemLived(f.filesystemId)
-
 		// Senders close channels, receivers check for closedness.
 
 		close(f.innerResponses)
@@ -136,6 +134,9 @@ func (f *fsMachine) run() {
 		// Remove ourself from the filesystems map
 		f.state.filesystemsLock.Lock()
 		defer f.state.filesystemsLock.Unlock()
+		// We must hold the fslock while calling terminateRunners... to avoid a deadlock with
+		// waitForFilesystemDeath in utils.go
+		terminateRunnersWhileFilesystemLived(f.filesystemId)
 		delete(*(f.state.filesystems), f.filesystemId)
 
 		log.Printf("[run:%s] terminated", f.filesystemId)
@@ -302,10 +303,14 @@ func (f *fsMachine) transitionedTo(state string, status string) {
 		f.filesystemId, state, status, f.currentState, f.status,
 		float64(now-f.lastTransitionTimestamp)/float64(time.Second),
 	)
+
+	transitionCounter.WithLabelValues(f.currentState, state, status).Add(1)
+
 	f.currentState = state
 	f.status = status
 	f.lastTransitionTimestamp = now
 	f.transitionObserver.Publish("transitions", state)
+
 	// update etcd
 	kapi, err := getEtcdKeysApi()
 	if err != nil {
@@ -569,7 +574,7 @@ func (f *fsMachine) snapshot(e *Event) (responseEvent *Event, nextState stateFn)
 		&snapshot{Id: snapshotId, Metadata: &meta})
 	f.snapshotsLock.Unlock()
 	f.snapshotsModified <- true
-	return &Event{Name: "snapshotted"}, activeState
+	return &Event{Name: "snapshotted", Args: &EventArgs{"SnapshotId": snapshotId}}, activeState
 }
 
 // find the user-facing name of a given filesystem id. if we're a branch

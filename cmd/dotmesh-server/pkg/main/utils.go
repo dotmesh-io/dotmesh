@@ -307,7 +307,9 @@ func terminateRunnersWhileFilesystemLived(filesystemId string) {
 }
 
 func (s *InMemoryState) waitForFilesystemDeath(filesystemId string) {
-
+	// We hold this lock to avoid a race between subscribe and check.
+	var returnImmediately bool
+	deathChan := make(chan interface{})
 	func() {
 		s.filesystemsLock.Lock()
 		defer s.filesystemsLock.Unlock()
@@ -317,12 +319,17 @@ func (s *InMemoryState) waitForFilesystemDeath(filesystemId string) {
 		} else {
 			log.Printf("[waitForFilesystemDeath:%s] no fsMachine")
 		}
+		if !ok {
+			// filesystem is already gone!
+			returnImmediately = true
+			return
+		}
+		deathObserver.Subscribe(filesystemId, deathChan)
 	}()
-
-	deathChan := make(chan interface{})
-	deathObserver.Subscribe(filesystemId, deathChan)
-	<-deathChan
-	deathObserver.Unsubscribe(filesystemId, deathChan)
+	if !returnImmediately {
+		<-deathChan
+		deathObserver.Unsubscribe(filesystemId, deathChan)
+	}
 }
 
 // general purpose function, intended to be runnable in a goroutine, which

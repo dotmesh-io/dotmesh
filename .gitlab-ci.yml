@@ -128,7 +128,11 @@ macos_docker_stable:
         - docker-stable
     script:
         - docker pull $CI_DOCKER_REGISTRY/dotmesh-server:$CI_DOCKER_TAG
-        - ./scripts/smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
+        - gtimeout 5m ./scripts/smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
+    after_script:
+        - echo "DOTMESH LOGS"
+        - docker logs dotmesh-server
+        - echo "DOCKER VERSION"
         - docker version
         - which docker
         - docker container prune -f
@@ -143,7 +147,11 @@ macos_docker_edge:
         - docker-edge
     script:
         - docker pull $CI_DOCKER_REGISTRY/dotmesh-server:$CI_DOCKER_TAG
-        - ./scripts/smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
+        - gtimeout 5m ./scripts/smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
+    after_script:
+        - echo "DOTMESH LOGS"
+        - docker logs dotmesh-server
+        - echo "DOCKER VERSION"
         - docker version
         - which docker
         - docker container prune -f
@@ -158,10 +166,13 @@ linux_smoke:
         - fast
     script:
         - docker pull $CI_DOCKER_REGISTRY/dotmesh-server:$CI_DOCKER_TAG
-        - ./scripts/smoke.sh $(pwd)/binaries/Linux/dm dotmesh-server
+        - timeout 5m ./scripts/smoke.sh $(pwd)/binaries/Linux/dm dotmesh-server
+    after_script:
+        - echo "DOTMESH LOGS"
+        - docker logs dotmesh-server
+        - echo "DOCKER VERSION"
         - docker version
         - which docker
-        - docker container prune -f
 
 versioner_unit_tests:
     stage: test
@@ -236,6 +247,24 @@ linux_kubernetes_volumes:
     script:
         - pwd
         - ./test.sh -run TestKubernetesVolumes
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
+    except:
+        - schedules
+
+linux_kubernetes_operator:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - pwd
+        - ./test.sh -run TestKubernetesOperator
     artifacts:
         paths:
         - extracted_logs

@@ -67,6 +67,12 @@ func (p *dindProvisioner) Provision(options controller.VolumeOptions) (*v1.Persi
 
 	glog.Info(fmt.Sprintf("Creating PV %s in response to PVC %s", options.PVName, options.PVName))
 
+	size := options.PVC.Spec.Resources.Requests[v1.ResourceName(v1.ResourceStorage)]
+	sizeBytes, ok := size.AsInt64()
+	if !ok {
+		return nil, fmt.Errorf("Cannot handle storage size %s", size.String())
+	}
+
 	pv := &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        options.PVName,
@@ -85,7 +91,8 @@ func (p *dindProvisioner) Provision(options controller.VolumeOptions) (*v1.Persi
 					Driver: "dotmesh.io/dind",
 					FSType: "ext4",
 					Options: map[string]string{
-						"id": options.PVName,
+						"id":   options.PVName,
+						"size": fmt.Sprintf("%d", sizeBytes),
 					},
 				},
 			},

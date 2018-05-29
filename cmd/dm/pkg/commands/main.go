@@ -21,6 +21,7 @@ var makeBranch bool
 var forceMode bool
 var scriptingMode bool
 var commitMsg string
+var commitMetadata *[]string
 var resetHard bool
 
 var MainCmd = &cobra.Command{
@@ -470,6 +471,7 @@ func NewCmdSwitch(out io.Writer) *cobra.Command {
 }
 
 func NewCmdCommit(out io.Writer) *cobra.Command {
+
 	cmd := &cobra.Command{
 		Use:   "commit",
 		Short: "Record changes to a dot",
@@ -479,6 +481,17 @@ func NewCmdCommit(out io.Writer) *cobra.Command {
 				if commitMsg == "" {
 					return fmt.Errorf("Please provide a commit message")
 				}
+
+				var metadataPairs = make(map[string]string)
+
+				for _, metadataString := range *commitMetadata {
+					if strings.Index(metadataString, "=") == -1 {
+						return fmt.Errorf("Each metadata value must be a name=value pair: %s", metadataString)
+					}
+					metadataStringParts := strings.Split(metadataString, "=")
+					metadataPairs[metadataStringParts[0]] = metadataStringParts[1]
+				}
+
 				dm, err := remotes.NewDotmeshAPI(configPath)
 				if err != nil {
 					return err
@@ -492,7 +505,8 @@ func NewCmdCommit(out io.Writer) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				id, err := dm.Commit(v, b, commitMsg)
+
+				id, err := dm.Commit(v, b, commitMsg, metadataPairs)
 				if err != nil {
 					return err
 				}
@@ -507,6 +521,10 @@ func NewCmdCommit(out io.Writer) *cobra.Command {
 	}
 	cmd.PersistentFlags().StringVarP(&commitMsg, "message", "m", "",
 		"Use the given string as the commit message.")
+
+	commitMetadata = cmd.Flags().StringSliceP("metadata", "d", []string{},
+		"Add custom metadata to the commit (e.g. --metadata name=value).")
+
 	return cmd
 }
 
@@ -543,8 +561,16 @@ func NewCmdLog(out io.Writer) *cobra.Command {
 				}
 				for _, commit := range commits {
 					fmt.Fprintf(out, "commit %s\n", commit.Id)
-					fmt.Fprintf(out, "Author: %s\n", (*commit.Metadata)["author"])
-					fmt.Fprintf(out, "Date: %s\n\n", (*commit.Metadata)["timestamp"])
+					fmt.Fprintf(out, "author: %s\n", (*commit.Metadata)["author"])
+					fmt.Fprintf(out, "date: %s\n", (*commit.Metadata)["timestamp"])
+
+					for name, value := range *commit.Metadata {
+						if name != "author" && name != "message" && name != "timestamp" {
+							fmt.Fprintf(out, "%s: %s\n", name, value)
+						}
+					}
+
+					fmt.Fprintf(out, "\n")
 					fmt.Fprintf(out, "    %s\n\n", (*commit.Metadata)["message"])
 				}
 				return nil

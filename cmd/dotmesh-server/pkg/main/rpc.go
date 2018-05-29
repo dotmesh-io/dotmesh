@@ -631,10 +631,18 @@ func (d *DotmeshRPC) Ping(r *http.Request, args *struct{}, result *bool) error {
 	return nil
 }
 
+type CommitArgs struct {
+	Namespace string
+	Name      string
+	Branch    string
+	Message   string
+	Metadata  metadata
+}
+
 // Take a snapshot of a specific filesystem on the master.
 func (d *DotmeshRPC) Commit(
-	r *http.Request, args *struct{ Namespace, Name, Branch, Message string },
-	result *bool,
+	r *http.Request, args *CommitArgs,
+	result *string,
 ) error {
 	/* Non-admin users are allowed to commit, as a temporary measure
 		      until a way of making the frontend tests work without it is found.
@@ -663,6 +671,15 @@ func (d *DotmeshRPC) Commit(
 	user, _, _ := r.BasicAuth()
 	meta := metadata{"message": args.Message, "author": user}
 
+	// check that user submitted metadata field names all start with lowercase
+	for name, value := range args.Metadata {
+		firstCharacter := string(name[0])
+		if firstCharacter == strings.ToUpper(firstCharacter) {
+			return fmt.Errorf("Metadata field names must start with lowercase characters: %s", name)
+		}
+		meta[name] = value
+	}
+
 	responseChan, err := d.state.globalFsRequest(
 		filesystemId,
 		&Event{Name: "snapshot",
@@ -678,7 +695,7 @@ func (d *DotmeshRPC) Commit(
 	e := <-responseChan
 	if e.Name == "snapshotted" {
 		log.Printf("Snapshotted %s", filesystemId)
-		*result = true
+		*result = (*e.Args)["SnapshotId"].(string)
 	} else {
 		return maybeError(e)
 	}

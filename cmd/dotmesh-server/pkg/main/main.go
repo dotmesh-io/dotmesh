@@ -165,6 +165,11 @@ func main() {
 	go runForever(s.cleanupDeletedFilesystems, "cleanupDeletedFilesystems",
 		1*time.Second, 1*time.Second,
 	)
+	// kick off reporting on zpool status
+	go runForever(s.reportZpoolCapacity, "reportZPoolUsageReporter",
+		10*time.Minute, 10*time.Minute,
+	)
+
 	// TODO proper flag parsing
 	if len(os.Args) > 1 && os.Args[1] == "--debug" {
 		go runForever(s.fetchAndWatchEtcd, "fetchAndWatchEtcd",

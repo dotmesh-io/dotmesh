@@ -489,8 +489,16 @@ func deMasterify(s string) string {
 	return s
 }
 
-func (dm *DotmeshAPI) Commit(activeVolumeName, activeBranch, commitMessage string) (string, error) {
-	var result bool
+type CommitArgs struct {
+	Namespace string
+	Name      string
+	Branch    string
+	Message   string
+	Metadata  map[string]string
+}
+
+func (dm *DotmeshAPI) Commit(activeVolumeName, activeBranch, commitMessage string, metadata map[string]string) (string, error) {
+	var result string
 
 	activeNamespace, activeVolume, err := ParseNamespacedVolume(activeVolumeName)
 	if err != nil {
@@ -502,19 +510,19 @@ func (dm *DotmeshAPI) Commit(activeVolumeName, activeBranch, commitMessage strin
 		"DotmeshRPC.Commit",
 		// TODO replace these map[string]string's with typed structs that are
 		// shared between the client and the server for cross-rpc type safety
-		map[string]string{
-			"Namespace": activeNamespace,
-			"Name":      activeVolume,
-			"Branch":    deMasterify(activeBranch),
-			"Message":   commitMessage,
+		&CommitArgs{
+			Namespace: activeNamespace,
+			Name:      activeVolume,
+			Branch:    deMasterify(activeBranch),
+			Message:   commitMessage,
+			Metadata:  metadata,
 		},
 		&result,
 	)
 	if err != nil {
 		return "", err
 	}
-	// TODO pass through the commit (snapshot) ID
-	return "", nil
+	return result, nil
 }
 
 type metadata map[string]string
@@ -696,7 +704,12 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 	var bar *pb.ProgressBar
 	started := false
 
+	debugMode := os.Getenv("DEBUG_MODE") != ""
+
 	for {
+		if debugMode {
+			out.Write([]byte("DEBUG About to sleep for 1s...\n"))
+		}
 		time.Sleep(time.Second)
 		result := &TransferPollResult{}
 
@@ -706,16 +719,35 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 		defer cancel()
 
 		go func() {
+			if debugMode {
+				out.Write([]byte(fmt.Sprintf("DEBUG Calling GetTransfer(%s)...\n", transferId)))
+			}
 			err := dm.client.CallRemote(
 				ctx, "DotmeshRPC.GetTransfer", transferId, result,
 			)
+			if debugMode {
+				out.Write([]byte(fmt.Sprintf(
+					"DEBUG done GetTransfer(%s), got err %#v and result %#v...\n",
+					transferId, err, result,
+				)))
+			}
 			rpcError <- err
+			if debugMode {
+				out.Write([]byte("DEBUG rpcError consumed!\n"))
+			}
 		}()
 
+		if debugMode {
+			out.Write([]byte("DEBUG About to select...\n"))
+		}
 		select {
 		case <-ctx.Done():
-			out.Write([]byte(fmt.Sprintf("Got error from API, trying again: %s\n", ctx.Err())))
+			out.Write([]byte(fmt.Sprintf("Got timeout error from API, trying again: %s\n", ctx.Err())))
+			// TODO: should we asynchronously read from rpcError here?
 		case err := <-rpcError:
+			if debugMode {
+				out.Write([]byte(fmt.Sprintf("DEBUG Got err: %s\n", err)))
+			}
 			if err != nil {
 				if !strings.Contains(fmt.Sprintf("%s", err), "No such intercluster transfer") {
 					out.Write([]byte(fmt.Sprintf("Got error, trying again: %s\n", err)))
@@ -723,8 +755,7 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 			}
 		}
 
-		debugMode := os.Getenv("DEBUG_MODE")
-		if debugMode != "" {
+		if debugMode {
 			log.Printf("\nGot DotmeshRPC.GetTransfer response:  %+v", result)
 		}
 		if !started {
@@ -743,15 +774,6 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 		} else {
 			bar.Set64(result.Sent)
 		}
-		_ = fmt.Sprintf(
-			"%s: transferred %.2f/%.2fMiB in %.2fs (%.2fMiB/s)...\n",
-			result.Status,
-			// bytes => mebibytes
-			float64(result.Sent)/(1024*1024),
-			float64(result.Size)/(1024*1024),
-			// nanoseconds => seconds
-			float64(result.NanosecondsElapsed)/(1000*1000*1000),
-		)
 		bar.Prefix(result.Status)
 		var speed string
 		if result.NanosecondsElapsed > 0 {

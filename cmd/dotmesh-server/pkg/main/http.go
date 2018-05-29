@@ -10,18 +10,59 @@ import (
 	"os"
 	"time"
 
+	rpc "github.com/dotmesh-io/rpc/v2"
+	rpcjson "github.com/dotmesh-io/rpc/v2/json2"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
-	rpc "github.com/gorilla/rpc/v2"
-	rpcjson "github.com/gorilla/rpc/v2/json2"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/openzipkin/zipkin-go-opentracing/examples/middleware"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/satori/go.uuid"
 )
 
-var requestCounter *prometheus.CounterVec
-var requestDuration *prometheus.SummaryVec
+const REQUEST_ID = "X-Request-Id"
+
+var (
+	rpcRequestCounter *prometheus.CounterVec = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "dm_rpc_req_total",
+			Help: "How many requests processed, partitioned by status code and method.",
+		},
+		[]string{"url", "path", "rpc_method", "status_code"},
+	)
+
+	requestCounter *prometheus.CounterVec = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "dm_req_total",
+			Help: "How many requests processed, partitioned by status code and method.",
+		},
+		[]string{"url", "http_method", "status_code"},
+	)
+
+	transitionCounter *prometheus.CounterVec = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "dm_state_transition_total",
+			Help: "How many state transitions take place partitioned by previous state (from), current state (to) and status",
+		},
+		[]string{"from", "to", "status"},
+	)
+
+	requestDuration *prometheus.SummaryVec = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+		Name: "dm_req_duration_seconds",
+		Help: "Response time by method/http status code.",
+	}, []string{"url", "http_method", "status_code"})
+
+	rpcRequestDuration *prometheus.SummaryVec = prometheus.NewSummaryVec(prometheus.SummaryOpts{
+		Name: "dm_rpc_req_duration_seconds",
+		Help: "Response time by rpc method/http status code.",
+	}, []string{"url", "rpc_method", "status_code"})
+
+	zpoolCapacity *prometheus.GaugeVec = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "dm_zpool_usage_percentage",
+		Help: "Percentage of zpool capacity used.",
+	}, []string{"node_name", "pool_name"})
+)
 
 func prometheusHandler() http.Handler {
 	return prometheus.Handler()
@@ -48,15 +89,16 @@ func (state *InMemoryState) runServer() {
 		log.Println(http.ListenAndServe(":6060", nil))
 	}()
 	r := rpc.NewServer()
+	registerMetrics()
 	r.RegisterCodec(rpcjson.NewCodec(), "application/json")
 	r.RegisterCodec(rpcjson.NewCodec(), "application/json;charset=UTF-8")
+	r.RegisterAfterFunc(rpcMiddleware)
 	d := NewDotmeshRPC(state)
 	err := r.RegisterService(d, "") // deduces name from type name
 	if err != nil {
 		log.Printf("Error while registering services %s", err)
 	}
 
-	registerMetrics()
 	router := mux.NewRouter()
 
 	// only use the zipkin middleware if we have a TRACE_ADDR
@@ -64,34 +106,34 @@ func (state *InMemoryState) runServer() {
 		tracer := opentracing.GlobalTracer()
 
 		router.Handle("/rpc",
-			middleware.FromHTTPRequest(tracer, "rpc")(Instrument()(NewAuthHandler(r))),
+			middleware.FromHTTPRequest(tracer, "rpc")(Instrument(state)(NewAuthHandler(r))),
 		)
 
 		router.Handle(
 			"/filesystems/{filesystem}/{fromSnap}/{toSnap}",
 			middleware.FromHTTPRequest(tracer, "zfs-sender")(
-				NewAuthHandler(state.NewZFSSendingServer()),
+				Instrument(state)(NewAuthHandler(state.NewZFSSendingServer())),
 			),
 		).Methods("GET")
 
 		router.Handle(
 			"/filesystems/{filesystem}/{fromSnap}/{toSnap}",
 			middleware.FromHTTPRequest(tracer, "zfs-receiver")(
-				NewAuthHandler(state.NewZFSReceivingServer()),
+				Instrument(state)(NewAuthHandler(state.NewZFSReceivingServer())),
 			),
 		).Methods("POST")
 
 	} else {
-		router.Handle("/rpc", Instrument()(NewAuthHandler(r)))
+		router.Handle("/rpc", Instrument(state)(NewAuthHandler(r)))
 
 		router.Handle(
 			"/filesystems/{filesystem}/{fromSnap}/{toSnap}",
-			Instrument()(NewAuthHandler(state.NewZFSSendingServer())),
+			Instrument(state)(NewAuthHandler(state.NewZFSSendingServer())),
 		).Methods("GET")
 
 		router.Handle(
 			"/filesystems/{filesystem}/{fromSnap}/{toSnap}",
-			Instrument()(NewAuthHandler(state.NewZFSReceivingServer())),
+			Instrument(state)(NewAuthHandler(state.NewZFSReceivingServer())),
 		).Methods("POST")
 
 	}
@@ -118,20 +160,11 @@ func (state *InMemoryState) runServer() {
 }
 
 func registerMetrics() {
-	requestCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "dm_req_total",
-			Help: "How many requests processed, partitioned by status code and method.",
-		},
-		[]string{"url", "method", "status_code"},
-	)
-
-	requestDuration = prometheus.NewSummaryVec(prometheus.SummaryOpts{
-		Name: "dm_req_duration_seconds",
-		Help: "Response time by rpc method/http status code.",
-	}, []string{"url", "method", "status_code"})
-
-	prometheus.MustRegister(requestCounter, requestDuration)
+	prometheus.MustRegister(requestCounter,
+		requestDuration,
+		transitionCounter,
+		zpoolCapacity,
+		rpcRequestCounter)
 	log.Println("registering /metrics url as prometheus handler")
 }
 
@@ -271,10 +304,12 @@ func (irw *instrResponseWriter) WriteHeader(code int) {
 	irw.ResponseWriter.WriteHeader(code)
 }
 
-func Instrument() MetricsMiddleware {
+func Instrument(state *InMemoryState) MetricsMiddleware {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			startedAt := time.Now()
+			reqId := uuid.NewV4()
+			r.Header.Set(REQUEST_ID, reqId.String())
 			irw := NewInstrResponseWriter(w)
 			defer func() {
 				duration := time.Since(startedAt)
@@ -286,4 +321,10 @@ func Instrument() MetricsMiddleware {
 			h.ServeHTTP(irw, r)
 		})
 	}
+}
+
+func rpcMiddleware(reqInfo *rpc.RequestInfo) {
+	url := fmt.Sprintf("%s", reqInfo.Request.URL)
+	statusCode := fmt.Sprintf("%v", reqInfo.StatusCode)
+	rpcRequestCounter.WithLabelValues(url, reqInfo.Method, reqInfo.Request.Method, statusCode).Add(1)
 }
