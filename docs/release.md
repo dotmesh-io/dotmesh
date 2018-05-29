@@ -25,10 +25,11 @@ To do a new version release, just create a branch called
 like so:
 
 ```
-$ git checkout release-0.1
+$ git checkout release-x.y
+$ git pull origin release-x.y
 $ git merge --no-ff master
 $ (cd cmd/versioner/; go run versioner.go)
-release-0.1.1
+release-x.y.z
 ```
 
 ## The build artefacts
