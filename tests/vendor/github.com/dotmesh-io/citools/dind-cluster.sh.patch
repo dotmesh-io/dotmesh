@@ -1,5 +1,14 @@
---- dind-cluster-original.sh	2018-05-24 11:44:15.500431869 +0100
-+++ dind-cluster-patched.sh	2018-05-24 11:45:52.746703004 +0100
+--- dind-cluster-original.sh	2018-05-30 13:45:06.000000000 +0100
++++ dind-cluster-patched.sh	2018-05-30 16:24:31.000000000 +0100
+@@ -51,7 +51,7 @@
+     using_linuxdocker=1
+ fi
+ 
+-EMBEDDED_CONFIG=y;DIND_IMAGE=mirantis/kubeadm-dind-cluster:v1.10
++EMBEDDED_CONFIG=y;DIND_IMAGE=quay.io/dotmesh/kubeadm-dind-cluster:v1.10
+ 
+ IP_MODE="${IP_MODE:-ipv4}"  # ipv4, ipv6, (future) dualstack
+ if [[ ! ${EMBEDDED_CONFIG:-} ]]; then
 @@ -242,9 +242,9 @@
  function dind::prepare-sys-mounts {
    if [[ ! ${using_linuxkit} ]]; then
