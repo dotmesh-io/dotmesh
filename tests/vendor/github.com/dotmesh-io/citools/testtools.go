@@ -1049,9 +1049,14 @@ func RestartOperator(t *testing.T, masterNode string) {
 	RunOnNode(t, masterNode, "kubectl delete pod -n dotmesh "+podName)
 	fmt.Printf("Counting operator pods:\n")
 	for tries := 1; tries < 10; tries++ {
-		podsExceptOld := OutputFromRunOnNode(t, masterNode, "kubectl get pods -n dotmesh | grep dotmesh-operator | grep -v "+podName+" | wc -l")
-		if podsExceptOld == "1\n" {
+		podsExceptOld := strings.Split(
+			OutputFromRunOnNode(t, masterNode, "kubectl get pods -n dotmesh | grep dotmesh-operator | grep -v "+podName),
+			"\n",
+		)
+		if len(podsExceptOld) == 1 {
 			break
+		} else {
+			fmt.Printf("Operator pods running: %#v\n", podsExceptOld)
 		}
 		time.Sleep(5 * time.Second)
 	}
