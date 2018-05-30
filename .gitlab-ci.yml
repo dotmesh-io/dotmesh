@@ -118,7 +118,7 @@ build_server:
 #          docker system prune -fa
 #          "
 
-macos_docker_stable:
+.macos_docker_stable:
     stage: test
     dependencies:
         - build_server
@@ -137,7 +137,7 @@ macos_docker_stable:
         - which docker
         - docker container prune -f
 
-macos_docker_edge:
+.macos_docker_edge:
     stage: test
     dependencies:
         - build_server
@@ -156,7 +156,7 @@ macos_docker_edge:
         - which docker
         - docker container prune -f
 
-linux_smoke:
+.linux_smoke:
     stage: test
     dependencies:
         - build_server
