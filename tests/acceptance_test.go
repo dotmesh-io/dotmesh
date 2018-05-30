@@ -2043,13 +2043,58 @@ spec:
 	})
 
 	t.Run("PVCReuse", func(t *testing.T) {
-		// FIXME: Modify nodeSelector to clusterSize-2=yes in the configmap and restart operator.
-		// FIXME: Check we go down to two pods.
-		// FIXME: Modify nodeSelector to clusterSize-3=yes in the configmap and restart operator.
-		// FIXME: Check we go up to three pods and re-connect the PVC.
+		// Record the names of the PVCs we use
+		initialPvcs := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pvc -n dotmesh | cut -f 1 -d ' ' | sort")
+
+		// Modify nodeSelector to clusterSize-2=yes in the configmap and restart operator.
+		err := citools.ChangeOperatorNodeSelector(node1.Container, "clusterSize-2=yes")
+		if err != nil {
+			t.Error(err)
+		}
+		citools.RestartOperator(t, node1.Container)
+
+		// Check we go down to two pods.
+		for tries := 1; tries < 10; tries++ {
+			serverPods := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pods -n dotmesh | grep server | wc -l")
+			if serverPods == "2\n" {
+				break
+			}
+			if tries == 9 {
+				t.Error("Didn't go down to two pods")
+			}
+			time.Sleep(5 * time.Second)
+		}
+
+		// Modify nodeSelector to clusterSize-3=yes in the configmap and restart operator.
+		err = citools.ChangeOperatorNodeSelector(node1.Container, "clusterSize-3=yes")
+		if err != nil {
+			t.Error(err)
+		}
+		citools.RestartOperator(t, node1.Container)
+
+		// Check we go up to three pods and don't create a new PVC.
+		for tries := 1; tries < 10; tries++ {
+			serverPods := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pods -n dotmesh | grep server- | wc -l")
+			serverPvcs := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pvc -n dotmesh | grep pvc- | wc -l")
+			fmt.Printf("DM server pods: %s, DM server PVCs: %s\n",
+				strings.TrimSpace(serverPods),
+				strings.TrimSpace(serverPvcs))
+			if serverPods == "3\n" && serverPvcs == "3\n" {
+				break
+			}
+			if tries == 9 {
+				t.Error("Didn't go up to three pods/pvcs")
+			}
+			time.Sleep(5 * time.Second)
+		}
+
+		finalPvcs := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pvc -n dotmesh | cut -f 1 -d ' ' | sort")
+		if initialPvcs != finalPvcs {
+			t.Error("Didn't end up with the same PVCs as we started with. Before: %+v After: %+v", initialPvcs, finalPvcs)
+		}
 	})
 
-	t.Run("NodeShenanigans", func(t *testing.T) {
+	t.Run("MakeANewPVC", func(t *testing.T) {
 		// Modify nodeSelector to clusterSize-2=yes in the configmap and restart operator.
 		err := citools.ChangeOperatorNodeSelector(node1.Container, "clusterSize-2=yes")
 		if err != nil {
@@ -2112,15 +2157,8 @@ spec:
 			if tries == 9 {
 				t.Error("Didn't go up to three pods/pvcs")
 			}
-			time.Sleep(1 * time.Second)
+			time.Sleep(5 * time.Second)
 		}
-	})
-
-	t.Run("ClusterGrowth", func(t *testing.T) {
-		// FIXME: Stop the operator.
-		// FIXME: Kill two pods and their associated PVCs.
-		// FIXME: Restart the operator.
-		// FIXME: Check we go up to three running pods.
 	})
 
 	citools.DumpTiming()
