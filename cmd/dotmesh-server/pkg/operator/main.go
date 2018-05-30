@@ -950,15 +950,15 @@ nodeLoop:
 						VolumeMounts:    volumeMounts,
 						Env:             env,
 						ImagePullPolicy: v1.PullAlways,
-						LivenessProbe: &v1.Probe{
-							Handler: v1.Handler{
-								HTTPGet: &v1.HTTPGetAction{
-									Path: "/status",
-									Port: intstr.FromInt(32607),
-								},
-							},
-							InitialDelaySeconds: int32(30),
-						},
+						// LivenessProbe: &v1.Probe{
+						// 	Handler: v1.Handler{
+						// 		HTTPGet: &v1.HTTPGetAction{
+						// 			Path: "/status",
+						// 			Port: intstr.FromInt(32607),
+						// 		},
+						// 	},
+						// 	InitialDelaySeconds: int32(30),
+						// },
 						Resources: v1.ResourceRequirements{
 							Requests: v1.ResourceList{
 								v1.ResourceCPU: resource.MustParse("10m"),
