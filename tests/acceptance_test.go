@@ -2066,7 +2066,7 @@ spec:
 			if tries == 9 {
 				t.Error("Didn't go down to two pods")
 			}
-			time.Sleep(1 * time.Second)
+			time.Sleep(5 * time.Second)
 		}
 
 		// Delete the abandoned PVC

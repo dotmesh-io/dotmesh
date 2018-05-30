@@ -1053,12 +1053,18 @@ func RestartOperator(t *testing.T, masterNode string) {
 			OutputFromRunOnNode(t, masterNode, "kubectl get pods -n dotmesh | grep dotmesh-operator | grep -v "+podName),
 			"\n",
 		)
-		if len(podsExceptOld) == 1 {
+		// We subtract 1 as strings.Split gives us an empty final element due to the trailing \n
+		running := len(podsExceptOld) - 1
+		if running == 1 {
 			break
-		} else {
-			fmt.Printf("Operator pods running: %#v\n", podsExceptOld)
 		}
-		time.Sleep(5 * time.Second)
+
+		if tries == 9 {
+			t.Error("Couldn't seem to get back to a single operator pod running after restart :-(")
+		} else {
+			fmt.Printf("%d operator pods running: %#v\n", running, podsExceptOld)
+			time.Sleep(5 * time.Second)
+		}
 	}
 }
 
