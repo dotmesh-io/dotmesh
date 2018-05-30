@@ -140,7 +140,7 @@ func (state *InMemoryState) runServer() {
 
 	}
 
-	router.HandleFunc("/status",
+	router.HandleFunc("/check",
 		func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "OK")
 		},

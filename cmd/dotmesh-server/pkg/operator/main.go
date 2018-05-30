@@ -17,7 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	//	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
@@ -946,19 +946,33 @@ nodeLoop:
 								ContainerPort: int32(32607),
 								Protocol:      v1.ProtocolTCP,
 							},
+							{
+								Name:          "dotmesh-live",
+								ContainerPort: int32(32608),
+								Protocol:      v1.ProtocolTCP,
+							},
 						},
 						VolumeMounts:    volumeMounts,
 						Env:             env,
 						ImagePullPolicy: v1.PullAlways,
-						// LivenessProbe: &v1.Probe{
-						// 	Handler: v1.Handler{
-						// 		HTTPGet: &v1.HTTPGetAction{
-						// 			Path: "/status",
-						// 			Port: intstr.FromInt(32607),
-						// 		},
-						// 	},
-						// 	InitialDelaySeconds: int32(30),
-						// },
+						LivenessProbe: &v1.Probe{
+							Handler: v1.Handler{
+								HTTPGet: &v1.HTTPGetAction{
+									Path: "/check",
+									Port: intstr.FromInt(32608),
+								},
+							},
+							InitialDelaySeconds: int32(30),
+						},
+						ReadinessProbe: &v1.Probe{
+							Handler: v1.Handler{
+								HTTPGet: &v1.HTTPGetAction{
+									Path: "/check",
+									Port: intstr.FromInt(32607),
+								},
+							},
+							InitialDelaySeconds: int32(30),
+						},
 						Resources: v1.ResourceRequirements{
 							Requests: v1.ResourceList{
 								v1.ResourceCPU: resource.MustParse("10m"),

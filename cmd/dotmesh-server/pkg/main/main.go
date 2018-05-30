@@ -26,6 +26,7 @@ const META_KEY_PREFIX = "io.dotmesh:meta-"
 const ETCD_PREFIX = "/dotmesh.io"
 const CONTAINER_MOUNT_PREFIX = "/var/dotmesh"
 const SERVER_PORT = "32607"
+const LIVENESS_PORT = "32608"
 const SERVER_PORT_OLD = "6969"
 
 var LOG_TO_STDOUT bool
@@ -169,6 +170,8 @@ func main() {
 	go runForever(s.reportZpoolCapacity, "reportZPoolUsageReporter",
 		10*time.Minute, 10*time.Minute,
 	)
+
+	go s.runLivenessServer()
 
 	// TODO proper flag parsing
 	if len(os.Args) > 1 && os.Args[1] == "--debug" {
