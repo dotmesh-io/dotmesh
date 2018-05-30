@@ -947,6 +947,11 @@ nodeLoop:
 								ContainerPort: int32(32607),
 								Protocol:      v1.ProtocolTCP,
 							},
+							{
+								Name:          "dotmesh-live",
+								ContainerPort: int32(32608),
+								Protocol:      v1.ProtocolTCP,
+							},
 						},
 						VolumeMounts: volumeMounts,
 						Lifecycle: &v1.Lifecycle{
@@ -958,15 +963,24 @@ nodeLoop:
 						},
 						Env:             env,
 						ImagePullPolicy: v1.PullAlways,
-						// LivenessProbe: &v1.Probe{
-						// 	Handler: v1.Handler{
-						// 		HTTPGet: &v1.HTTPGetAction{
-						// 			Path: "/status",
-						// 			Port: intstr.FromInt(32607),
-						// 		},
-						// 	},
-						// 	InitialDelaySeconds: int32(30),
-						// },
+						LivenessProbe: &v1.Probe{
+							Handler: v1.Handler{
+								HTTPGet: &v1.HTTPGetAction{
+									Path: "/check",
+									Port: intstr.FromInt(32608),
+								},
+							},
+							InitialDelaySeconds: int32(30),
+						},
+						ReadinessProbe: &v1.Probe{
+							Handler: v1.Handler{
+								HTTPGet: &v1.HTTPGetAction{
+									Path: "/check",
+									Port: intstr.FromInt(32607),
+								},
+							},
+							InitialDelaySeconds: int32(30),
+						},
 						Resources: v1.ResourceRequirements{
 							Requests: v1.ResourceList{
 								v1.ResourceCPU: resource.MustParse("10m"),

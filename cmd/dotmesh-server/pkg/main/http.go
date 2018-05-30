@@ -8,6 +8,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"sync"
 	"time"
 
 	rpc "github.com/dotmesh-io/rpc/v2"
@@ -23,15 +24,14 @@ import (
 
 const REQUEST_ID = "X-Request-Id"
 
-var (
-	rpcRequestCounter *prometheus.CounterVec = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "dm_rpc_req_total",
-			Help: "How many requests processed, partitioned by status code and method.",
-		},
-		[]string{"url", "path", "rpc_method", "status_code"},
-	)
+type rpcTracking struct {
+	rpcDuration map[uuid.UUID]time.Time
+	mutex       *sync.Mutex
+}
 
+var rpcTracker = rpcTracking{rpcDuration: make(map[uuid.UUID]time.Time), mutex: &sync.Mutex{}}
+
+var (
 	requestCounter *prometheus.CounterVec = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "dm_req_total",
@@ -88,11 +88,13 @@ func (state *InMemoryState) runServer() {
 		// http://stackoverflow.com/questions/19094099/how-to-dump-goroutine-stacktraces
 		log.Println(http.ListenAndServe(":6060", nil))
 	}()
+
 	r := rpc.NewServer()
 	registerMetrics()
 	r.RegisterCodec(rpcjson.NewCodec(), "application/json")
 	r.RegisterCodec(rpcjson.NewCodec(), "application/json;charset=UTF-8")
-	r.RegisterAfterFunc(rpcMiddleware)
+	r.RegisterInterceptFunc(rpcInterceptFunc)
+	r.RegisterAfterFunc(rpcAfterFunc)
 	d := NewDotmeshRPC(state)
 	err := r.RegisterService(d, "") // deduces name from type name
 	if err != nil {
@@ -138,7 +140,7 @@ func (state *InMemoryState) runServer() {
 
 	}
 
-	router.HandleFunc("/status",
+	router.HandleFunc("/check",
 		func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "OK")
 		},
@@ -164,7 +166,7 @@ func registerMetrics() {
 		requestDuration,
 		transitionCounter,
 		zpoolCapacity,
-		rpcRequestCounter)
+		rpcRequestDuration)
 	log.Println("registering /metrics url as prometheus handler")
 }
 
@@ -308,8 +310,6 @@ func Instrument(state *InMemoryState) MetricsMiddleware {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			startedAt := time.Now()
-			reqId := uuid.NewV4()
-			r.Header.Set(REQUEST_ID, reqId.String())
 			irw := NewInstrResponseWriter(w)
 			defer func() {
 				duration := time.Since(startedAt)
@@ -323,8 +323,34 @@ func Instrument(state *InMemoryState) MetricsMiddleware {
 	}
 }
 
-func rpcMiddleware(reqInfo *rpc.RequestInfo) {
-	url := fmt.Sprintf("%s", reqInfo.Request.URL)
-	statusCode := fmt.Sprintf("%v", reqInfo.StatusCode)
-	rpcRequestCounter.WithLabelValues(url, reqInfo.Method, reqInfo.Request.Method, statusCode).Add(1)
+func rpcAfterFunc(reqInfo *rpc.RequestInfo) {
+	reqId, ok := reqInfo.Request.Header[REQUEST_ID]
+	if ok && len(reqId) != 0 {
+		reqUUID, err := uuid.FromString(reqId[0])
+		if err != nil {
+			fmt.Printf("Error: Unable to parse requestID UUID: %s", reqId)
+			return
+		}
+		rpcTracker.mutex.Lock()
+		startedAt, found := rpcTracker.rpcDuration[reqUUID]
+		if !found {
+			fmt.Printf("Error: Unable to find requestUUID in requestTracker: %s", reqUUID)
+			return
+		}
+		rpcTracker.mutex.Unlock()
+		duration := time.Since(startedAt)
+		url := fmt.Sprintf("%s", reqInfo.Request.URL)
+		statusCode := fmt.Sprintf("%v", reqInfo.StatusCode)
+		rpcRequestDuration.WithLabelValues(url, reqInfo.Method, statusCode).Observe(duration.Seconds())
+		delete(rpcTracker.rpcDuration, reqUUID)
+	}
+}
+
+func rpcInterceptFunc(reqInfo *rpc.RequestInfo) *http.Request {
+	reqId := uuid.NewV4()
+	reqInfo.Request.Header.Set(REQUEST_ID, reqId.String())
+	rpcTracker.mutex.Lock()
+	defer rpcTracker.mutex.Unlock()
+	rpcTracker.rpcDuration[reqId] = time.Now()
+	return reqInfo.Request
 }
