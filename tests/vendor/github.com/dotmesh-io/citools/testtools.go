@@ -206,7 +206,7 @@ NUM_NODES=${NUM_NODES:-2}
 # KUBEADM_DIND_LOCAL=
 
 # Use prebuilt DIND image
-DIND_IMAGE="${DIND_IMAGE:-mirantis/kubeadm-dind-cluster:v1.10}"
+DIND_IMAGE="${DIND_IMAGE:-quay.io/dotmesh/kubeadm-dind-cluster:v1.10}"
 
 # Set to non-empty string to enable building kubeadm
 # BUILD_KUBEADM=y
@@ -1049,11 +1049,22 @@ func RestartOperator(t *testing.T, masterNode string) {
 	RunOnNode(t, masterNode, "kubectl delete pod -n dotmesh "+podName)
 	fmt.Printf("Counting operator pods:\n")
 	for tries := 1; tries < 10; tries++ {
-		podsExceptOld := OutputFromRunOnNode(t, masterNode, "kubectl get pods -n dotmesh | grep dotmesh-operator | grep -v "+podName+" | wc -l")
-		if podsExceptOld == "1\n" {
+		podsExceptOld := strings.Split(
+			OutputFromRunOnNode(t, masterNode, "kubectl get pods -n dotmesh | grep dotmesh-operator | grep -v "+podName),
+			"\n",
+		)
+		// We subtract 1 as strings.Split gives us an empty final element due to the trailing \n
+		running := len(podsExceptOld) - 1
+		if running == 1 {
 			break
 		}
-		time.Sleep(5 * time.Second)
+
+		if tries == 9 {
+			t.Error("Couldn't seem to get back to a single operator pod running after restart :-(")
+		} else {
+			fmt.Printf("%d operator pods running: %#v\n", running, podsExceptOld)
+			time.Sleep(5 * time.Second)
+		}
 	}
 }
 
