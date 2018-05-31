@@ -2094,7 +2094,7 @@ spec:
 		}
 	})
 
-	t.Run("MakeANewPVC", func(t *testing.T) {
+	t.Run("PVCMakeNew", func(t *testing.T) {
 		// Modify nodeSelector to clusterSize-2=yes in the configmap and restart operator.
 		err := citools.ChangeOperatorNodeSelector(node1.Container, "clusterSize-2=yes")
 		if err != nil {
