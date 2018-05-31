@@ -282,7 +282,7 @@ linux_kubernetes_operator_PVC:
         - fast
     script:
         - pwd
-        - ./test.sh -run /DynamicProvisioning/PVC*
+        - ./test.sh -run TestKubernetesOperator/PVC*
     artifacts:
         paths:
         - extracted_logs
