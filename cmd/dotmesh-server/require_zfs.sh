@@ -79,12 +79,18 @@ if [ -n "$CONTAINER_POOL_MNT" ]; then
     OUTER_DIR=`nsenter -t 1 -m -u -n -i /bin/sh -c 'mount' | grep $BLOCK_DEVICE | cut -f 3 -d ' ' | head -n 1`
     echo "$BLOCK_DEVICE seems to be mounted on $OUTER_DIR in the host"
 
-    if [ $OUTER_DIR != $DIR}
+    if [ $OUTER_DIR != $DIR ]
     then
         # Make paths involving $OUTER_DIR work in OUR namespace, by binding $DIR to $OUTER_DIR
         mkdir -p $OUTER_DIR
+        mount --make-rshared /
         mount --bind $DIR $OUTER_DIR
         mount --make-rshared $OUTER_DIR
+        echo "Here's the contents of $OUTER_DIR in the require_zfs.sh container:"
+        ls -l $OUTER_DIR
+        echo "Here's the contents of $DIR in the require_zfs.sh container:"
+        ls -l $DIR
+        echo "They should be the same!"
     fi
 else
     OUTER_DIR="$DIR"
@@ -101,6 +107,7 @@ nsenter -t 1 -m -u -n -i /bin/sh -c \
     if [ $(mount |grep $OUTER_DIR |wc -l) -eq 0 ]; then
         echo \"Creating and bind-mounting shared $OUTER_DIR\"
         mkdir -p $OUTER_DIR && \
+        mount --make-rshared / && \
         mount --bind $OUTER_DIR $OUTER_DIR && \
         mount --make-rshared $OUTER_DIR;
     fi
@@ -325,7 +332,7 @@ set +e
 docker run -i $rm_opt --privileged --name=$DOTMESH_INNER_SERVER_NAME \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v /run/docker/plugins:/run/docker/plugins \
-    -v $DIR:$OUTER_DIR:rshared \
+    -v $OUTER_DIR:$OUTER_DIR:rshared \
     -v $FLEXVOLUME_DRIVER_DIR:/system-flexvolume \
     $net \
     $link \
@@ -348,5 +355,7 @@ docker run -i $rm_opt --privileged --name=$DOTMESH_INNER_SERVER_NAME \
 RETVAL=$?
 
 echo "`date`: Returning from inner docker run with retval=$RETVAL" >> $POOL_LOGFILE
+
+docker logs $DOTMESH_INNER_SERVER_NAME > $DIR/dotmesh_server_inner_log
 
 exit $RETVAL
