@@ -1295,9 +1295,10 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 	// etcd gets wiped underneath us.
 	err = s.insertInitialAdminPassword()
 	if err != nil {
-		log.Printf("[insertInitialAdminPassword] err: %v", err)
+		log.Printf("[insertInitialAdminPassword] ignoring error: %v", err)
 	}
 
+	log.Printf("[fetchAndWatchEtcd] Starting watcher...")
 	// now watch for changes, and pipe them into the state machines
 	watcher := kapi.Watcher(
 		fmt.Sprintf(ETCD_PREFIX),

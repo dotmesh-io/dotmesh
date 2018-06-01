@@ -84,6 +84,7 @@ if [ -n "$CONTAINER_POOL_MNT" ]; then
         # Make paths involving $OUTER_DIR work in OUR namespace, by binding $DIR to $OUTER_DIR
         mkdir -p $OUTER_DIR
         mount --bind $DIR $OUTER_DIR
+        mount --make-shared $OUTER_DIR
     fi
 else
     OUTER_DIR="$DIR"
@@ -97,9 +98,9 @@ CONTAINER_MOUNT_PREFIX=${CONTAINER_MOUNT_PREFIX:-$OUTER_DIR/container_mnt}
 nsenter -t 1 -m -u -n -i /bin/sh -c \
     "set -xe
     $EXTRA_HOST_COMMANDS
-    if [ $(mount |grep $DIR |wc -l) -eq 0 ]; then
+    if [ $(mount |grep $OUTER_DIR |wc -l) -eq 0 ]; then
         echo \"Creating and bind-mounting shared $OUTER_DIR\"
-        mkdir -p $DIR && \
+        mkdir -p $OUTER_DIR && \
         mount --bind $OUTER_DIR $OUTER_DIR && \
         mount --make-shared $OUTER_DIR;
     fi
