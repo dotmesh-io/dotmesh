@@ -313,6 +313,11 @@ shutdown() {
     fi
 
     # Release the ZFS pool
+    echo "`date`: DEBUG: Mount table:" >> $POOL_LOGFILE
+    mount >> $POOL_LOGFILE
+    echo "`date`: Unmounting $MOUNTPOINT:" >> $POOL_LOGFILE
+    umount "$MOUNTPOINT" >> $POOL_LOGFILE 2>&1 || true
+    echo "`date`: zpool exporting $POOL:" >> $POOL_LOGFILE
     zpool export -f "$POOL" >> $POOL_LOGFILE 2>&1
 
     echo "`date`: DONE from $SIGNAL: zpool export returned $?" >> $POOL_LOGFILE
