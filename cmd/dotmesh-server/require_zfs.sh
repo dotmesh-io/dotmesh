@@ -182,7 +182,7 @@ if [ "$PKI_PATH" != "" ]; then
     pki_volume_mount="-v $PKI_PATH:/pki"
 fi
 
-net="-p 32607:32607 -p 32608:32608"
+net=""
 link=""
 
 # this setting means we have set DOTMESH_ETCD_ENDPOINT to a known working
@@ -223,6 +223,15 @@ fi
 if [ -n "$DOTMESH_JOIN_DOCKER_NETWORK" ]; then
     net="$net --net=$DOTMESH_JOIN_DOCKER_NETWORK"
 fi
+
+# we only add the ports if we are not using an existing container network
+case $DOTMESH_JOIN_DOCKER_NETWORK in 
+    container:*)
+        ;;
+    *)
+        net="$net -p 32607:32607 -p 32608:32608"
+        ;;
+esac
 
 secret=""
 
