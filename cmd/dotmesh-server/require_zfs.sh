@@ -42,7 +42,6 @@ DIR=$(echo $DIR |sed s/\#HOSTNAME\#/$(hostname)/)
 FILE=${DIR}/dotmesh_data
 POOL=${USE_POOL_NAME:-pool}
 POOL=$(echo $POOL |sed s/\#HOSTNAME\#/$(hostname)/)
-MOUNTPOINT=${MOUNTPOINT:-/var/lib/dotmesh/mnt}
 DOTMESH_INNER_SERVER_NAME=${DOTMESH_INNER_SERVER_NAME:-dotmesh-server-inner}
 FLEXVOLUME_DRIVER_DIR=${FLEXVOLUME_DRIVER_DIR:-/usr/libexec/kubernetes/kubelet-plugins/volume/exec}
 INHERIT_ENVIRONMENT_NAMES=( "FILESYSTEM_METADATA_TIMEOUT" "DOTMESH_UPGRADES_URL" "DOTMESH_UPGRADES_INTERVAL_SECONDS")
@@ -55,7 +54,7 @@ then
     echo "Automatic pool size selection: $MIB_FREE megabytes free in $DIR, setting pool size to $POOL_SIZE"
 fi
 
-echo "=== Using mountpoint $MOUNTPOINT"
+echo "=== Using storage dir $DIR and mountpoint $MOUNTPOINT"
 
 # Docker volume where we can cache downloaded, "bundled" zfs
 BUNDLED_LIB=/bundled-lib
@@ -64,18 +63,48 @@ BUNDLED_LIB=/bundled-lib
 # by user
 SYSTEM_LIB=/system-lib
 
+# If we're asked to find the outer mount, then we need to feed `zpool` the
+# path to where it's mounted _on the host_. So, nsenter up to the host and
+# find where the block device is mounted there.
+#
+# This assumes that $DIR _is_ the mountpoint of the block device, for
+# example a kubernetes-provided PV.
+#
+# Further reading: https://github.com/dotmesh-io/dotmesh/issues/333
+
+if [ -n "$CONTAINER_POOL_MNT" ]; then
+    echo "Attaching to a zpool from a container mount. $DIR is the mountpoint in the container..."
+    BLOCK_DEVICE=`mount | grep $DIR | cut -d ' ' -f 1 | head -n 1`
+    echo "$DIR seems to be mounted from $BLOCK_DEVICE"
+    OUTER_DIR=`nsenter -t 1 -m -u -n -i /bin/sh -c 'mount' | grep $BLOCK_DEVICE | cut -f 3 -d ' ' | head -n 1`
+    echo "$BLOCK_DEVICE seems to be mounted on $OUTER_DIR in the host"
+
+    if [ $OUTER_DIR != $DIR}
+    then
+        # Make paths involving $OUTER_DIR work in OUR namespace, by binding $DIR to $OUTER_DIR
+        mkdir -p $OUTER_DIR
+        mount --bind $DIR $OUTER_DIR
+    fi
+else
+    OUTER_DIR="$DIR"
+fi
+
+# Set up paths we'll use for stuff
+MOUNTPOINT=${MOUNTPOINT:-$OUTER_DIR/mnt}
+CONTAINER_MOUNT_PREFIX=${CONTAINER_MOUNT_PREFIX:-$OUTER_DIR/container_mnt}
+
 # Set up mounts that are needed
 nsenter -t 1 -m -u -n -i /bin/sh -c \
     "set -xe
     $EXTRA_HOST_COMMANDS
-    if [ $(mount |grep $MOUNTPOINT |wc -l) -eq 0 ]; then
-        echo \"Creating and bind-mounting shared $MOUNTPOINT\"
-        mkdir -p $MOUNTPOINT && \
-        mount --bind $MOUNTPOINT $MOUNTPOINT && \
-        mount --make-shared $MOUNTPOINT;
+    if [ $(mount |grep $DIR |wc -l) -eq 0 ]; then
+        echo \"Creating and bind-mounting shared $OUTER_DIR\"
+        mkdir -p $DIR && \
+        mount --bind $OUTER_DIR $OUTER_DIR && \
+        mount --make-shared $OUTER_DIR;
     fi
     mkdir -p /run/docker/plugins
-    mkdir -p /var/dotmesh"
+    mkdir -p $CONTAINER_MOUNT_PREFIX"
 
 if [ ! -e /sys ]; then
     mount -t sysfs sys sys/
@@ -96,29 +125,14 @@ else
     fi
 fi
 
+POOL_LOGFILE=$DIR/dotmesh_pool.log
+
+set -ex
+
 if [ ! -e /dev/zfs ]; then
     mknod -m 660 /dev/zfs c $(cat /sys/class/misc/zfs/dev |sed 's/:/ /g')
 fi
 if ! zpool status $POOL; then
-
-    # If we're asked to find the outer mount, then we need to feed `zpool` the
-    # path to where it's mounted _on the host_. So, nsenter up to the host and
-    # find where the block device is mounted there.
-    #
-    # This assumes that $DIR _is_ the mountpoint of the block device, for
-    # example a kubernetes-provided PV.
-    #
-    # Further reading: https://github.com/dotmesh-io/dotmesh/issues/333
-
-    if [ -n "$CONTAINER_POOL_MNT" ]; then
-        echo "Attaching to a zpool from a container mount. $DIR is the mountpoint in the container..."
-        BLOCK_DEVICE=`mount | grep $DIR | cut -d ' ' -f 1 | head -n 1`
-        echo "$DIR seems to be mounted from $BLOCK_DEVICE"
-        OUTER_DIR=`nsenter -t 1 -m -u -n -i /bin/sh -c 'mount' | grep $BLOCK_DEVICE | cut -f 3 -d ' ' | head -n 1`
-        echo "$BLOCK_DEVICE seems to be mounted on $OUTER_DIR in the host"
-    else
-        OUTER_DIR="$DIR"
-    fi
 
     # TODO: make case where truncate previously succeeded but zpool create
     # failed or never run recoverable.
@@ -126,14 +140,16 @@ if ! zpool status $POOL; then
         truncate -s $POOL_SIZE $FILE
         zpool create -m $MOUNTPOINT $POOL "$OUTER_DIR/dotmesh_data"
         echo "This directory contains dotmesh data files, please leave them alone unless you know what you're doing. See github.com/dotmesh-io/dotmesh for more information." > $DIR/README
-        zpool get -H guid $POOL |cut -f 3 > $DIR/dotmesh_identity
+        zpool get -H guid $POOL |cut -f 3 > $DIR/dotmesh_pool_id
         if [ -n "$CONTAINER_POOL_PVC_NAME" ]; then
             echo "$CONTAINER_POOL_PVC_NAME" > $DIR/dotmesh_pvc_name
         fi
-        echo "$POOL" > $DIR/dotmesh_pool_name
     else
         zpool import -f -d $OUTER_DIR $POOL
     fi
+    echo "`date`: Pool '$POOL' mounted from host mountpoint '$OUTER_DIR', zfs mountpoint '$MOUNTPOINT'" >> $POOL_LOGFILE
+else
+    echo "`date`: Pool '$POOL' already exists, adopted by new dotmesh server" >> $POOL_LOGFILE
 fi
 
 # Clear away stale socket if existing
@@ -277,17 +293,17 @@ shutdown() {
 
     if [ $TERMINATING = no ]
     then
-        echo "`date`: Shutting down due to $SIGNAL" >> "/dotmesh-test-pools/export-$POOL"
+        echo "`date`: Shutting down due to $SIGNAL" >> $POOL_LOGFILE
         TERMINATING=yes
     else
-        echo "`date`: Ignoring $SIGNAL" >> "/dotmesh-test-pools/export-$POOL"
+        echo "`date`: Ignoring $SIGNAL" >> $POOL_LOGFILE
         return
     fi
 
     # Release the ZFS pool
-    zpool export -f "$POOL" >> "/dotmesh-test-pools/export-$POOL" 2>&1
+    zpool export -f "$POOL" >> $POOL_LOGFILE 2>&1
 
-    echo "`date`: DONE from $SIGNAL: $?" >> "/dotmesh-test-pools/export-$POOL"
+    echo "`date`: DONE from $SIGNAL: zpool export returned $?" >> $POOL_LOGFILE
 
     exit 0
 }
@@ -304,14 +320,14 @@ set +e
 docker run -i $rm_opt --privileged --name=$DOTMESH_INNER_SERVER_NAME \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v /run/docker/plugins:/run/docker/plugins \
-    -v $MOUNTPOINT:$MOUNTPOINT:rshared \
-    -v /var/dotmesh:/var/dotmesh \
+    -v $DIR:$OUTER_DIR:rshared \
     -v $FLEXVOLUME_DRIVER_DIR:/system-flexvolume \
     $net \
     $link \
     -e "DISABLE_FLEXVOLUME=$DISABLE_FLEXVOLUME" \
     -e "PATH=$PATH" \
     -e "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" \
+    -e "CONTAINER_MOUNT_PREFIX=$CONTAINER_MOUNT_PREFIX" \
     -e "MOUNT_PREFIX=$MOUNTPOINT" \
     -e "POOL=$POOL" \
     -e "YOUR_IPV4_ADDRS=$YOUR_IPV4_ADDRS" \
@@ -326,6 +342,6 @@ docker run -i $rm_opt --privileged --name=$DOTMESH_INNER_SERVER_NAME \
 
 RETVAL=$?
 
-echo "`date`: Returning from inner docker run with retval=$RETVAL" >> "/dotmesh-test-pools/export-$POOL"
+echo "`date`: Returning from inner docker run with retval=$RETVAL" >> $POOL_LOGFILE
 
 exit $RETVAL

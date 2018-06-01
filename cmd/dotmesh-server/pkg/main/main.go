@@ -24,17 +24,28 @@ const ZFS = "zfs"
 const ZPOOL = "zpool"
 const META_KEY_PREFIX = "io.dotmesh:meta-"
 const ETCD_PREFIX = "/dotmesh.io"
-const CONTAINER_MOUNT_PREFIX = "/var/dotmesh"
 const SERVER_PORT = "32607"
 const LIVENESS_PORT = "32608"
 const SERVER_PORT_OLD = "6969"
 
 var LOG_TO_STDOUT bool
 var POOL string
+var CONTAINER_MOUNT_PREFIX string
 
 var serverVersion string = "<uninitialized>"
 
 func main() {
+
+	// TODO proper flag parsing
+	if len(os.Args) > 1 && os.Args[1] == "--guess-ipv4-addresses" {
+		addresses, err := guessIPv4Addresses()
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		fmt.Println(strings.Join(addresses, ","))
+		return
+	}
 
 	var config Config
 
@@ -57,8 +68,15 @@ func main() {
 
 	POOL = os.Getenv("POOL")
 	if POOL == "" {
-		POOL = "pool"
+		fmt.Printf("Environment variable POOL must be set\n")
+		os.Exit(1)
 	}
+	CONTAINER_MOUNT_PREFIX = os.Getenv("CONTAINER_MOUNT_PREFIX")
+	if CONTAINER_MOUNT_PREFIX == "" {
+		fmt.Printf("Environment variable CONTAINER_MOUNT_PREFIX must be set\n")
+		os.Exit(1)
+	}
+
 	traceAddr := os.Getenv("TRACE_ADDR")
 	if traceAddr != "" {
 		collector, err := zipkin.NewHTTPCollector(
@@ -78,16 +96,6 @@ func main() {
 			os.Exit(1)
 		}
 		opentracing.InitGlobalTracer(tracer)
-	}
-	// TODO proper flag parsing
-	if len(os.Args) > 1 && os.Args[1] == "--guess-ipv4-addresses" {
-		addresses, err := guessIPv4Addresses()
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-		fmt.Println(strings.Join(addresses, ","))
-		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "--temporary-error-plugin" {
 		s := NewInMemoryState("<unknown>", config)
