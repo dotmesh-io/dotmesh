@@ -221,11 +221,18 @@ Now we login and run the `ubuntu` prepare script:
 
 ```bash
 vagrant ssh
-bash /vagrant/scripts/prepare_vagrant.sh
+bash /vagrant/scripts/install_vagrant.sh
 exit
 vagrant ssh
 ```
+Set up GOROOT and GOPATH on vagrant
+On ubuntu the stable version of go (1.6) is rather out of date, so we pick up golang-1.8 via the install scripts. 
 
+> This is an issue with the debian package itself. Go distributions expect they will be installed in /usr/local/go. For other locations like /usr/lib/go-1.10, you have to set it up yourself.
+```
+$ export GOROOT="/usr/lib/go-1.x"
+$ export PATH="$GOROOT/bin:$PATH"
+```
 Install dep from https://golang.github.io/dep/docs/installation.html
 
 NOTE: you must exit and re-ssh to get the GOPATH to work
