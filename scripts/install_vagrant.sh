@@ -10,7 +10,7 @@ apt-get -y update
 apt-get install -y docker.io zfsutils-linux jq curl software-properties-common
 add-apt-repository -y ppa:gophers/archive
 apt-get -y update
-apt-get install -y golang-1.8 moreutils
+apt-get install -y golang-1.10 moreutils
 
 # make elastic search work
 echo 'vm.max_map_count=262144' >> /etc/sysctl.conf

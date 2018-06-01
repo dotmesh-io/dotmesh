@@ -21,10 +21,10 @@ Host $GITHUB_HOST
 EOF
 
 if [ -z "${GOPATH}" ]; then
+  ln -s  /usr/lib/go-1.10/bin/go /usr/local/bin/go
+  ln -s  /usr/lib/go-1.10/bin/gofmt /usr/local/bin/gofmt
   export GOPATH=/home/vagrant/gocode
-  export PATH=$PATH:/usr/lib/go-1.8/bin
   echo "export GOPATH=${GOPATH}" >> $HOME/.bash_profile
-  echo "export PATH=\$PATH:/usr/lib/go-1.8/bin:$GOPATH/bin" >> $HOME/.bash_profile
 fi
 
 mkdir -p $GOPATH

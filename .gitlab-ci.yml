@@ -156,7 +156,7 @@ build_server:
         - which docker
         - docker container prune -f
 
-.linux_smoke:
+linux_smoke:
     stage: test
     dependencies:
         - build_server
