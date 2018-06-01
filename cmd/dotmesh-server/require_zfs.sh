@@ -84,7 +84,7 @@ if [ -n "$CONTAINER_POOL_MNT" ]; then
         # Make paths involving $OUTER_DIR work in OUR namespace, by binding $DIR to $OUTER_DIR
         mkdir -p $OUTER_DIR
         mount --bind $DIR $OUTER_DIR
-        mount --make-shared $OUTER_DIR
+        mount --make-rshared $OUTER_DIR
     fi
 else
     OUTER_DIR="$DIR"
@@ -102,7 +102,7 @@ nsenter -t 1 -m -u -n -i /bin/sh -c \
         echo \"Creating and bind-mounting shared $OUTER_DIR\"
         mkdir -p $OUTER_DIR && \
         mount --bind $OUTER_DIR $OUTER_DIR && \
-        mount --make-shared $OUTER_DIR;
+        mount --make-rshared $OUTER_DIR;
     fi
     mkdir -p /run/docker/plugins
     mkdir -p $CONTAINER_MOUNT_PREFIX"
@@ -275,13 +275,17 @@ done
 (while true; do docker logs -f dotmesh-server-inner || true; sleep 1; done) &
 
 # In order of the -v options below:
+
 # 1. Mount the docker socket so that we can stop and start containers around
 #    e.g. dm reset.
+
 # 2. Be able to install the docker plugin.
-# 3. Be able to mount zfs filesystems in e.g. /var/lib/dotmesh/mnt from inside
-#    the container in such a way that they propogate up to the host.
-# 4. Be able to create some symlinks that we hand to the docker volume plugin.
-# 5. Be able to install a Kubernetes FlexVolume driver (we make symlinks
+
+# 3. Be able to mount zfs filesystems from inside the container in
+#    such a way that they propogate up to the host, and be able to
+#    create some symlinks that we hand to the docker volume plugin.
+
+# 4. Be able to install a Kubernetes FlexVolume driver (we make symlinks
 #    where it tells us to).
 
 TERMINATING=no

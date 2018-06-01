@@ -735,6 +735,7 @@ nodeLoop:
 			{Name: "dotmesh-kernel-modules", MountPath: "/bundled-lib"},
 			{Name: "dotmesh-secret", MountPath: "/secret"},
 			{Name: "test-pools-dir", MountPath: "/dotmesh-test-pools"},
+			{Name: "pool-dir", MountPath: c.config.Data[CONFIG_LOCAL_POOL_LOCATION]},
 		}
 
 		volumes := []v1.Volume{
@@ -745,6 +746,7 @@ nodeLoop:
 			{Name: "system-lib", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/lib"}}},
 			{Name: "dotmesh-kernel-modules", VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{}}},
 			{Name: "dotmesh-secret", VolumeSource: v1.VolumeSource{Secret: &v1.SecretVolumeSource{SecretName: "dotmesh"}}},
+			{Name: "pool-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: c.config.Data[CONFIG_LOCAL_POOL_LOCATION]}}},
 		}
 
 		env := []v1.EnvVar{
