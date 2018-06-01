@@ -308,13 +308,13 @@ shutdown() {
         echo "`date`: Shutting down due to $SIGNAL" >> $POOL_LOGFILE
         TERMINATING=yes
     else
-        echo "`date`: Ignoring $SIGNAL" >> $POOL_LOGFILE
+        echo "`date`: Ignoring $SIGNAL as we're already shutting down" >> $POOL_LOGFILE
         return
     fi
 
     # Release the ZFS pool
     echo "`date`: DEBUG: Mount table:" >> $POOL_LOGFILE
-    mount >> $POOL_LOGFILE
+    mount >> $POOL_LOGFILE || true
     echo "`date`: Unmounting $MOUNTPOINT:" >> $POOL_LOGFILE
     umount "$MOUNTPOINT" >> $POOL_LOGFILE 2>&1 || true
     echo "`date`: zpool exporting $POOL:" >> $POOL_LOGFILE
@@ -359,7 +359,7 @@ docker run -i $rm_opt --privileged --name=$DOTMESH_INNER_SERVER_NAME \
 
 RETVAL=$?
 
-echo "`date`: Returning from inner docker run with retval=$RETVAL" >> $POOL_LOGFILE
+shutdown "inner container terminating with retval=$RETVAL"
 
 docker logs $DOTMESH_INNER_SERVER_NAME > $DIR/dotmesh_server_inner_log
 
