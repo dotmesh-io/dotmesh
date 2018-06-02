@@ -485,9 +485,11 @@ func (s *InMemoryState) handleOneFilesystemMaster(node *client.Node) error {
 
 		deleted, err = isFilesystemDeletedInEtcd(fs)
 		if err != nil {
+			log.Printf("[handleOneFilesystemMaster] error determining if file system is deleted: fs: %s, etcd nodeValue: %s, error: %+v", fs, node.Value, err)
 			return err
 		}
 		if deleted {
+			log.Printf("[handleOneFilesystemMaster] filesystem is deleted so no need to mount/unmount fs: %s, etcd nodeValue: %s", fs, node.Value)
 			// Filesystem is being deleted, so ignore it.
 			return nil
 		}
