@@ -235,16 +235,9 @@ fi
 if [ -z "$DOTMESH_ETCD_ENDPOINT" ]; then
     if [ -n "$DOTMESH_JOIN_DOCKER_NETWORK" ]; then
         net="$net --net=$DOTMESH_JOIN_DOCKER_NETWORK"
+    else
+        net="$net -p 32607:32607 -p 32608:32608"
     fi
-
-    # we only add the ports if we are not using an existing container network
-    case $DOTMESH_JOIN_DOCKER_NETWORK in
-        container:*)
-            ;;
-        *)
-            net="$net -p 32607:32607 -p 32608:32608"
-            ;;
-    esac
 fi
 
 secret=""
@@ -256,14 +249,21 @@ if [ -n "$INITIAL_ADMIN_PASSWORD" ] && [ -n "$INITIAL_ADMIN_API_KEY" ]; then
     secret="-e INITIAL_ADMIN_PASSWORD=$INITIAL_ADMIN_PASSWORD -e INITIAL_ADMIN_API_KEY=$INITIAL_ADMIN_API_KEY"
 # otherwise we gonna use the filepaths given
 else
+    echo "INITIAL_ADMIN_PASSWORD_FILE: $INITIAL_ADMIN_PASSWORD_FILE"
+    echo "INITIAL_ADMIN_API_KEY_FILE: $INITIAL_ADMIN_API_KEY_FILE"
     if [[ "$INITIAL_ADMIN_PASSWORD_FILE" != "" && \
           -e $INITIAL_ADMIN_PASSWORD_FILE && \
           "$INITIAL_ADMIN_API_KEY_FILE" != "" && \
           -e $INITIAL_ADMIN_API_KEY_FILE ]]; then
+        echo "INITIAL_ADMIN_API_KEY_FILE && INITIAL_ADMIN_API_KEY_FILE both exist"
         pw=$(cat $INITIAL_ADMIN_PASSWORD_FILE |tr -d '\n' |base64 -w 0)
         ak=$(cat $INITIAL_ADMIN_API_KEY_FILE |tr -d '\n' |base64 -w 0)
         secret="-e INITIAL_ADMIN_PASSWORD=$pw -e INITIAL_ADMIN_API_KEY=$ak"
         echo "set secret: $secret"
+    else
+        # exit because we have no admin credentials to work with
+        echo "INITIAL_ADMIN_API_KEY_FILE && INITIAL_ADMIN_API_KEY_FILE do not exist"
+        exit 1
     fi
 fi
 
