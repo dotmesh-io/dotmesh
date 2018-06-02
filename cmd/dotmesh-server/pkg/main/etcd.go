@@ -1118,6 +1118,20 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		s.etcdWaitTimestampLock.Lock()
 		defer s.etcdWaitTimestampLock.Unlock()
 		s.etcdWaitTimestamp = time.Now().UnixNano()
+		s.etcdWaitState = "insert initial admin password if not exists"
+	}()
+
+	// Do this every time, even if it fails.  This is to handle the case where
+	// etcd gets wiped underneath us.
+	err = s.insertInitialAdminPassword()
+	if err != nil {
+		log.Printf("[insertInitialAdminPassword] err: %v", err)
+	}
+
+	func() {
+		s.etcdWaitTimestampLock.Lock()
+		defer s.etcdWaitTimestampLock.Unlock()
+		s.etcdWaitTimestamp = time.Now().UnixNano()
 		s.etcdWaitState = "initial get"
 	}()
 
@@ -1290,13 +1304,6 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		go s.runUnixDomainServer()
 		go s.runPlugin()
 	})
-
-	// Do this every time, even if it fails.  This is to handle the case where
-	// etcd gets wiped underneath us.
-	err = s.insertInitialAdminPassword()
-	if err != nil {
-		log.Printf("[insertInitialAdminPassword] err: %v", err)
-	}
 
 	// now watch for changes, and pipe them into the state machines
 	watcher := kapi.Watcher(
