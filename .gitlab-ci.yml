@@ -236,7 +236,7 @@ linux_two_nodes_same_cluster:
     except:
         - schedules
 
-.linux_kubernetes_volumes:
+linux_kubernetes_volumes:
     stage: test
     dependencies:
         - build_server
@@ -254,7 +254,7 @@ linux_two_nodes_same_cluster:
     except:
         - schedules
 
-.linux_kubernetes_operator:
+linux_kubernetes_operator:
     stage: test
     dependencies:
         - build_server
