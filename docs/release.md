@@ -108,6 +108,36 @@ triggered, it moves the symlinks from the root of `get.dotmesh.io/...`
 to point to `get.dotmesh.io/VERSION/...`, thereby making the published
 URLs now point to this version.
 
+## How to Make a Release
+
+### Decide if it's a point release (keeping the first two parts of the version the same) or not
+
+If we update the first two parts of the version, we need a new release
+branch. Point releases are just a new commit on the same branch.
+
+#### Major release X.Y.0
+
+Create a branch called `test-X.Y` from `master`.
+
+#### Minor release X.Y.Z
+
+Create a branch called `test-X.Y` from `release-X.Y`, and run `git merge origin/master`.
+
+### Test
+
+Smoke test your `test-X.Y` locally, and if it passes, push the branch
+to github so that CI has a go at it.
+
+### Release it
+
+If it works, it's time to make it official.
+
+For a major release, create a new `release-X.Y` branch from `test-X.Y`.
+
+For a minor release, fast-forward `release-X.Y` up to `test-X.Y`.
+
+Push `release-X.Y` and delete `test-X.Y`.
+
 ### Updating the releases on Github
 
 We direct people here to see the release history:
