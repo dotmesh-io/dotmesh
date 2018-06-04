@@ -1190,10 +1190,13 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 	// ZFS will barf on them. Putting the k8s root dir in
 	// /dotmesh-test-pools means the paths are consistent across all
 	// containers, as we keep the same filesystem mounted there
-	// throughput.
+	// throughout.
 	for j := 0; j < c.DesiredNodeCount; j++ {
 		node := nodeName(now, i, j)
 		path := fmt.Sprintf("/dotmesh-test-pools/k8s-%s", node)
+		AddFuncToCleanups(func() {
+			System("rm", "-rf", path)
+		})
 		cmd := fmt.Sprintf("sed -i 's!hyperkube kubelet !hyperkube kubelet --root-dir %s !' /lib/systemd/system/kubelet.service && mkdir -p %s && systemctl restart kubelet", path, path)
 		_, err := docker(
 			node,
