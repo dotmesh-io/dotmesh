@@ -501,35 +501,39 @@ func writeResponseErr(err error, w http.ResponseWriter) {
 
 func (state *InMemoryState) cleanupDockerFilesystemState() error {
 	err := filepath.Walk(CONTAINER_MOUNT_PREFIX, func(symlinkPath string, info os.FileInfo, err error) error {
-		if !info.IsDir() {
-			target, err := os.Readlink(symlinkPath)
-			log.Printf("[cleanupDockerFilesystemState] Found %s -> %s", symlinkPath, target)
-			if err != nil {
-				if os.IsNotExist(err) {
-					// It's already gone, nothing to clean up.
-				} else {
-					// Some other error happened, that's not good.
-					return err
-				}
-			} else {
-				fsid, err := unmnt(target)
-				log.Printf("[cleanupDockerFilesystemState] Found %s -> %s extracted fsid %s", symlinkPath, target, fsid)
+		if info == nil {
+			log.Printf("[cleanupDockerFilesystemState] found something with no fileinfo: %s", symlinkPath)
+		} else {
+			if !info.IsDir() {
+				target, err := os.Readlink(symlinkPath)
+				log.Printf("[cleanupDockerFilesystemState] Found %s -> %s", symlinkPath, target)
 				if err != nil {
-					return err
-				}
-
-				deleted, err := isFilesystemDeletedInEtcd(fsid)
-				if err != nil {
-					return err
-				}
-
-				if deleted {
-					log.Printf("[cleanupDockerFilesystemState] %s -> %s -> %s - deleting", symlinkPath, target, fsid)
-					if err := os.Remove(symlinkPath); err != nil {
+					if os.IsNotExist(err) {
+						// It's already gone, nothing to clean up.
+					} else {
+						// Some other error happened, that's not good.
 						return err
 					}
 				} else {
-					// Do nothing; the symlink has been taken over by another filesystem, and points to a new non-deleted fs.
+					fsid, err := unmnt(target)
+					log.Printf("[cleanupDockerFilesystemState] Found %s -> %s extracted fsid %s", symlinkPath, target, fsid)
+					if err != nil {
+						return err
+					}
+
+					deleted, err := isFilesystemDeletedInEtcd(fsid)
+					if err != nil {
+						return err
+					}
+
+					if deleted {
+						log.Printf("[cleanupDockerFilesystemState] %s -> %s -> %s - deleting", symlinkPath, target, fsid)
+						if err := os.Remove(symlinkPath); err != nil {
+							return err
+						}
+					} else {
+						// Do nothing; the symlink has been taken over by another filesystem, and points to a new non-deleted fs.
+					}
 				}
 			}
 		}
