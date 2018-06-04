@@ -32,8 +32,6 @@ before_script:
     - git checkout master && git pull --ff-only origin master
     - git checkout $CI_COMMIT_REF_NAME && git reset --hard $CI_COMMIT_SHA
     - while [ -f /dotmesh-test-cleanup.lock ]; do echo "waiting for test cleanup..."; sleep 1; done
-    - docker login -u $QUAY_USER -p $QUAY_PASSWORD quay.io
-    - docker login -u $OVH_REGISTRY_USERNAME -p $OVH_REGISTRY_PASSWORD registry.containers.ovh.net
 
 build_client_linux:
     stage: build
@@ -78,6 +76,7 @@ build_server:
         - fast
     script:
         # push to the OVH registry.
+        - docker login -u $OVH_REGISTRY_USERNAME -p $OVH_REGISTRY_PASSWORD registry.containers.ovh.net
         - (cd cmd/dotmesh-server && ./rebuild.sh) # also pushes
         - echo "pushed $CI_DOCKER_SERVER_IMAGE"
         - echo "pushed $CI_DOCKER_PROVISIONER_IMAGE"
@@ -86,6 +85,7 @@ build_server:
         # push to quay.io, by overriding various variables (although notably
         # not CI_DOCKER_DIND_PROVISIONER_IMAGE because that's test-only
         # tooling).
+        - docker login -u $QUAY_USER -p $QUAY_PASSWORD quay.io
         - (cd cmd/dotmesh-server && export CI_DOCKER_SERVER_IMAGE=$RELEASE_DOCKER_REGISTRY/dotmesh-server:$CI_COMMIT_SHA; export CI_DOCKER_PROVISIONER_IMAGE=$RELEASE_DOCKER_REGISTRY/dotmesh-dynamic-provisioner:$CI_COMMIT_SHA; export CI_DOCKER_OPERATOR_IMAGE=$RELEASE_DOCKER_REGISTRY/dotmesh-operator:$CI_COMMIT_SHA; ./rebuild.sh; echo "pushed $CI_DOCKER_SERVER_IMAGE"; echo "pushed $CI_DOCKER_PROVISIONER_IMAGE"; echo "pushed $CI_DOCKER_OPERATOR_IMAGE")
     artifacts:
         paths:
