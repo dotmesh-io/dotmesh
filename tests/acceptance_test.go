@@ -202,6 +202,16 @@ func TestRecoverFromUnmountedDotOnMaster(t *testing.T) {
 		// request, and observe that rather than going into an infinite loop,
 		// it self-corrects, checks mastersCache and goes back into active (and
 		// remounts the filesystem)
+		_, err := citools.DoSetDebugFlag(
+			f[0].GetNode(0).IP,
+			"admin",
+			f[0].GetNode(0).ApiKey,
+			"ForceStateMachineToDiscovering",
+			fsId,
+		)
+		if err != nil {
+			t.Error(err)
+		}
 
 		// assert that dotmesh has re-mounted the filesystem
 		assertMountState(t, fsId, true)

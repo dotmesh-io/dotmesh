@@ -219,6 +219,23 @@ linux_single_node:
     except:
         - schedules
 
+linux_recover_from_unmounted_dot_on_master:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - ./test.sh -run TestRecoverFromUnmountedDotOnMaster
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
+    except:
+        - schedules
+
 linux_two_nodes_same_cluster:
     stage: test
     dependencies:

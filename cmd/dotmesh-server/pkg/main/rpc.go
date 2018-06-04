@@ -1702,6 +1702,18 @@ func (d *DotmeshRPC) SetDebugFlag(
 	switch args.FlagName {
 	case "PartialFailCreateFilesystem":
 		handleBooleanFlag(&d.state.debugPartialFailCreateFilesystem, args.FlagValue, result)
+	case "ForceStateMachineToDiscovering":
+		filesystemId := args.FlagValue
+		responseChan, err := d.state.globalFsRequest(
+			filesystemId,
+			&Event{Name: "deliberately-unhandled-event-for-test-purposes"},
+		)
+		if err != nil {
+			return err
+		}
+		e := <-responseChan
+		log.Printf("[SetDebugFlag] deliberately unhandled event replied with %#v", e)
+		*result = ""
 	default:
 		*result = ""
 		return fmt.Errorf("Unknown debug flag %s", args.FlagName)
