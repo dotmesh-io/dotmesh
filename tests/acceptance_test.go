@@ -81,6 +81,144 @@ func TestDefaultDot(t *testing.T) {
 	})
 }
 
+func TestRecoverFromUnmountedDotOnMaster(t *testing.T) {
+	// single node tests
+	citools.TeardownFinishedTestRuns()
+
+	f := citools.Federation{citools.NewCluster(1)}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
+
+	citools.StartTiming()
+	err := f.Start(t)
+	if err != nil {
+		t.Error(err)
+	}
+	node1 := f[0].GetNode(0).Container
+
+	t.Run("FilesystemRemountedOnRestart", func(t *testing.T) {
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm init "+fsname)
+		resp := citools.OutputFromRunOnNode(t, node1, "dm list")
+		if !strings.Contains(resp, fsname) {
+			t.Error("unable to find volume name in ouput")
+		}
+
+		fsId := strings.TrimSpace(
+			citools.OutputFromRunOnNode(t, node1, "dm dot show -H | grep masterBranchId | cut -f 2"),
+		)
+		//zfsPath := strings.Replace(node1, "cluster", "testpool", -1) + "/dmfs/" + fsId
+
+		assertMountState := func(t *testing.T, fsId string, desiredMountState bool) {
+			err := citools.TryUntilSucceeds(func() error {
+				st := citools.OutputFromRunOnNode(t, node1, "docker exec -t dotmesh-server-inner mount")
+				if desiredMountState == true {
+					if !strings.Contains(st, fsId) {
+						return fmt.Errorf("%s not mounted", fsId)
+					} else {
+						fmt.Printf("%s is mounted!!! yay\n", fsId)
+					}
+				} else {
+					if strings.Contains(st, fsId) {
+						return fmt.Errorf("%s mounted", fsId)
+					} else {
+						fmt.Printf("%s is not mounted!!! yay\n", fsId)
+					}
+				}
+				return nil
+			}, fmt.Sprintf("checking for %s to be mounted", fsId))
+			if err != nil {
+				t.Error(err)
+			}
+		}
+
+		// wait for filesystem to be mounted (assert that it becomes mounted)
+		assertMountState(t, fsId, true)
+
+		// unmount the filesystem and assert that it's no longer mounted
+		citools.RunOnNode(t, node1,
+			"docker exec -t dotmesh-server-inner umount /var/lib/dotmesh/mnt/dmfs/"+fsId,
+		)
+		assertMountState(t, fsId, false)
+
+		// restart dotmesh, and wait for it to come back
+		stopContainers(t, node1)
+		startContainers(t, node1)
+
+		// assert that dotmesh has re-mounted the filesystem
+		assertMountState(t, fsId, true)
+
+	})
+
+	t.Run("RecoverFromUnmountedDotOnMaster", func(t *testing.T) {
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm init "+fsname)
+		resp := citools.OutputFromRunOnNode(t, node1, "dm list")
+		if !strings.Contains(resp, fsname) {
+			t.Error("unable to find volume name in ouput")
+		}
+
+		fsId := strings.TrimSpace(
+			citools.OutputFromRunOnNode(t, node1, "dm dot show -H | grep masterBranchId | cut -f 2"),
+		)
+		//zfsPath := strings.Replace(node1, "cluster", "testpool", -1) + "/dmfs/" + fsId
+
+		assertMountState := func(t *testing.T, fsId string, desiredMountState bool) {
+			err := citools.TryUntilSucceeds(func() error {
+				st := citools.OutputFromRunOnNode(t, node1, "docker exec -t dotmesh-server-inner mount")
+				if desiredMountState == true {
+					if !strings.Contains(st, fsId) {
+						return fmt.Errorf("%s not mounted", fsId)
+					} else {
+						fmt.Printf("%s is mounted!!! yay\n", fsId)
+					}
+				} else {
+					if strings.Contains(st, fsId) {
+						return fmt.Errorf("%s mounted", fsId)
+					} else {
+						fmt.Printf("%s is not mounted!!! yay\n", fsId)
+					}
+				}
+				return nil
+			}, fmt.Sprintf("checking for %s to be mounted", fsId))
+			if err != nil {
+				t.Error(err)
+			}
+		}
+
+		// wait for filesystem to be mounted (assert that it becomes mounted)
+		assertMountState(t, fsId, true)
+
+		// unmount the filesystem and assert that it's no longer mounted
+		citools.RunOnNode(t, node1,
+			"docker exec -t dotmesh-server-inner umount /var/lib/dotmesh/mnt/dmfs/"+fsId,
+		)
+		assertMountState(t, fsId, false)
+
+		// TODO: inject a fault into dotmesh which causes it to go back into
+		// discoveringState for this fsMachine and get wedged in inactiveState
+		// even though mastersCache says it should be active. send it a 'move'
+		// request, and observe that rather than going into an infinite loop,
+		// it self-corrects, checks mastersCache and goes back into active (and
+		// remounts the filesystem)
+		_, err := citools.DoSetDebugFlag(
+			f[0].GetNode(0).IP,
+			"admin",
+			f[0].GetNode(0).ApiKey,
+			"ForceStateMachineToDiscovering",
+			fsId,
+		)
+		if err != nil {
+			t.Error(err)
+		}
+
+		// assert that dotmesh has re-mounted the filesystem
+		assertMountState(t, fsId, true)
+
+	})
+
+}
+
 func TestSingleNode(t *testing.T) {
 	// single node tests
 	citools.TeardownFinishedTestRuns()
