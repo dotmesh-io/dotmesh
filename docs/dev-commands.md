@@ -161,7 +161,7 @@ EOF
 
 First - install vagrant. e.g `brew install vagrant`. If you haven't already, you likely need a linux VM driver of some sort, e.g `brew install virtualbox`.
 
-Then:
+Then, from wherever you cloned `dotmesh`:
 
 ```bash
 vagrant up 
