@@ -1315,6 +1315,7 @@ func discoveringState(f *fsMachine) stateFn {
 			log.Printf(
 				"[discoveringState:%s] error trying to align mount state with masters: %v",
 				f.filesystemId,
+				err,
 			)
 			return backoffState
 		}
