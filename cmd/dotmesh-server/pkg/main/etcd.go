@@ -1329,6 +1329,9 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 				s.etcdWaitTimestamp = time.Now().UnixNano()
 				s.etcdWaitState = fmt.Sprintf("watcher error %+v", err)
 			}()
+
+			// TODO: add some logging in this case
+			// we want to see if we have been too slow to process the etcd initial get
 			if strings.Contains(fmt.Sprintf("%v", err), "the requested history has been cleared") {
 				// Too much stuff changed in etcd since we processed all of it.
 				// Try to recover from this case. Just make a watcher from the
@@ -1389,6 +1392,12 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 
 		variant := getVariant(node.Node)
 		if variant == "filesystems/masters" {
+
+			/*
+
+				TODO: PUT SOME LOGGING HERE!
+
+			*/
 			modified := updateMine(node.Node)
 			if modified {
 				if err = s.handleOneFilesystemMaster(node.Node); err != nil {
