@@ -20,6 +20,7 @@ stages:
     - test
     - deploy
     - manual_deploy
+    - notify
 
 before_script:
     - mkdir -p gopath
@@ -507,4 +508,12 @@ mark_release_as_stable:
     - /^release-.*$/
   when: manual
   except:
+    - schedules
+
+notify_smoke_test_failure:
+  stage: notify
+  script:
+    - "curl -X POST -H 'Content-type: application/json' --data '{\"text\":\"ALERT, Smoke tests failed!\"}' https://hooks.slack.com/services/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"
+  when: on_failure
+  only:
     - schedules
