@@ -159,28 +159,29 @@ EOF
 
 ## Setup - vagrant
 
-First - install vagrant.
+First - install vagrant. e.g `brew install vagrant`. If you haven't already, you likely need a linux VM driver of some sort, e.g `brew install virtualbox`.
 
-Then:
+Then, from wherever you cloned `dotmesh`:
 
 ```bash
-vagrant up
+vagrant up 
 vagrant ssh
 ssh-keygen
 # yes to all options
 cat ~/.ssh/id_rsa.pub
 ```
 
-Now paste this key into your github account.
+Now paste this key into your github account. (Your profile pic -> settings -> SSH & GPG keys -> add new)
 
 Now we login and run the `ubuntu` prepare script:
 
 ```bash
 vagrant ssh
-bash /vagrant/scripts/prepare_vagrant.sh
+bash /vagrant/scripts/prepare_vagrant.sh 
 exit
 vagrant ssh
 ```
+On first run `vagrant up` will probably take 5-10 minutes, `prepare_vagrant.sh` will probably take 10-15 minutes.
 
 NOTE: you must exit and re-ssh to get the GOPATH to work
 
@@ -196,21 +197,20 @@ bash /vagrant/scripts/reset_vagrant.sh
 ```
 
 #### symlink code
-
-It is possible to mount your local codebase into the vagrant VM so you can re-run the test suite without having to git commit & push.
+**Optional**: If you would like to work on code from your local machine (i.e not inside a VM), follow this section. Alternatively, you can just change code inside the vagrant VM and commit/push from inside it.
 
 There can be issues with Vagrant shared folders hence this being a manual step.
 
 ```bash
 vagrant ssh
 cd $GOPATH/src/github.com/dotmesh-io
-# might as well keep this
+# might as well keep this - backs up the version vagrant checked out for you
 mv dotmesh dotmesh2
 ln -s /vagrant dotmesh
 # now $GOPATH/src/github.com/dotmesh-io/dotmesh -> /vagrant -> this repo on your host
 ```
 
-NOTE: using the symlink can drastically slow down docker builds.
+**NOTE:** using the symlink can drastically slow down docker builds.
 
 You can use this script which copies the latest git hash from your host:
 
@@ -326,6 +326,10 @@ Edit  /etc/gitlab-runner/config.toml to set the concurrency to 4 (it's obvious h
 
 Put the following (sorry) in root's crontab (by e.g. running sudo crontab -e):
 ```
-@hourly bash -c '(set -x; echo "starting cleanup!"; while ! (set -o noclobber;>/dotmesh-test-cleanup.lock); do echo "waiting to acquire test-cleanup lock to stop other containers starting..."; sleep 1; done; while [ ! -z "`for C in $(docker ps --format "{{.Names}}" | grep cluster- || true); do docker exec -i $C bash -c "if test -f /CLEAN_ME_UP; then echo CLEAN; else echo DIRTY; fi"; done|grep DIRTY`" ]; do echo "waiting for tests to complete..."; sleep 1; done; for X in $(mount|cut -d " " -f 3 |grep kubeadm-dind-cluster); do umount $X; done; systemctl restart docker; for X in `sudo zpool list|grep testpool|cut -f 1 -d " "`; do sudo zpool destroy -f $X; done; rm /dotmesh-test-cleanup.lock; echo "finished cleanup!") &>/var/log/cron-cleanup.log'
+# Disabled as it was too rough
+# @hourly bash -c '(set -x; echo "starting cleanup!"; while ! (set -o noclobber;>/dotmesh-test-cleanup.lock); do echo "waiting to acquire test-cleanup lock to stop other containers starting..."; sleep 1; done; while [ ! -z "`for C in $(docker ps --format "{{.Names}}" | grep cluster- || true); do docker exec -i $C bash -c "if test -f /CLEAN_ME_UP; then echo CLEAN; else echo DIRTY; fi"; done|grep DIRTY`" ]; do echo "waiting for tests to complete..."; sleep 1; done; for X in $(mount|cut -d " " -f 3 |grep kubeadm-dind-cluster); do umount $X; done; systemctl restart docker; for X in `sudo zpool list|grep testpool|cut -f 1 -d " "`; do sudo zpool destroy -f $X; done; rm /dotmesh-test-cleanup.lock; echo "finished cleanup!") &>/var/log/cron-cleanup.log'
+
+@daily bash -c 'echo y | docker image prune ; find /dotmesh-test-pools -ctime +1 -delete'
+
 @reboot rm /dotmesh-test-cleanup.lock
 ```
