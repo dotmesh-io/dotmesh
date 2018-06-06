@@ -125,9 +125,15 @@ func (d *FlexVolumeDriver) mount(targetMountDir, jsonOptions string) (map[string
 func (d *FlexVolumeDriver) unmount(targetMountDir string) (map[string]interface{}, error) {
 	err := System("umount", targetMountDir)
 	if err != nil {
-		logger.Printf("MOUNT: unmount err for %s: %v", targetMountDir, err)
+		logger.Printf("UNMOUNT: unmount err for %s: %v", targetMountDir, err)
 		return nil, err
 	}
+	err = os.Remove(targetMountDir)
+	if err != nil {
+		logger.Printf("UNMOUNT: remove mountpoint err for %s: %v", targetMountDir, err)
+		return nil, err
+	}
+
 	return nil, nil
 }
 

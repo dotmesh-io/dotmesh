@@ -278,7 +278,7 @@ linux_kubernetes_volumes:
     except:
         - schedules
 
-linux_kubernetes_operator:
+linux_kubernetes_operator_dynamic_provisioning:
     stage: test
     dependencies:
         - build_server
@@ -288,7 +288,25 @@ linux_kubernetes_operator:
         - fast
     script:
         - pwd
-        - ./test.sh -run TestKubernetesOperator
+        - ./test.sh -run TestKubernetesOperator/DynamicProvisioning
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
+    except:
+        - schedules
+
+linux_kubernetes_operator_PVC:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - pwd
+        - ./test.sh -run TestKubernetesOperator/PVC*
     artifacts:
         paths:
         - extracted_logs

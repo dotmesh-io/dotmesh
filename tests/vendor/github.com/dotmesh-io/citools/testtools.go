@@ -61,6 +61,10 @@ var lastTiming int64
 
 const HOST_IP_FROM_CONTAINER = "10.192.0.1"
 
+var getFieldsByNewLine = func(c rune) bool {
+	return c == '\n'
+}
+
 func Contains(arr []string, str string) bool {
 	for _, a := range arr {
 		if strings.Contains(a, str) {
@@ -1097,16 +1101,19 @@ func ChangeOperatorNodeSelector(masterNode, nodeSelector string) error {
 }
 
 func RestartOperator(t *testing.T, masterNode string) {
-	podName := strings.TrimSpace(OutputFromRunOnNode(t, masterNode, "kubectl get pods -n dotmesh | grep dotmesh-operator | cut -f 1 -d ' '"))
+	output := OutputFromRunOnNode(t, masterNode, "kubectl get pods -n dotmesh | grep dotmesh-operator | grep Running | cut -f 1 -d ' '")
+	podNames := strings.FieldsFunc(output, getFieldsByNewLine)
+
+	if len(podNames) != 1 {
+		t.Errorf("RunningOperatorPods = %v. Operator not running or more than one running operator instance detected.", podNames)
+	}
+	podName := podNames[0]
 	RunOnNode(t, masterNode, "kubectl delete pod -n dotmesh "+podName)
 	fmt.Printf("Counting operator pods:\n")
 	for tries := 1; tries < 10; tries++ {
-		podsExceptOld := strings.Split(
-			OutputFromRunOnNode(t, masterNode, "kubectl get pods -n dotmesh | grep dotmesh-operator | grep -v "+podName),
-			"\n",
-		)
-		// We subtract 1 as strings.Split gives us an empty final element due to the trailing \n
-		running := len(podsExceptOld) - 1
+		output := OutputFromRunOnNode(t, masterNode, "kubectl get pods -n dotmesh | grep dotmesh-operator | grep -v "+podName)
+		podsExceptOld := strings.FieldsFunc(output, getFieldsByNewLine)
+		running := len(podsExceptOld)
 		if running == 1 {
 			break
 		}

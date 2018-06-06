@@ -171,34 +171,26 @@ func mnt(fs string) string {
 	// from filesystem id to the path it would be mounted at if it were mounted
 	mountPrefix := os.Getenv("MOUNT_PREFIX")
 	if mountPrefix == "" {
-		mountPrefix = "/var"
-		return mountPrefix + "/" + fq(fs)
-	} else {
-		// carefully make this match...
-		// MOUNT_PREFIX will be like /dotmesh-test-pools/pool_123_1/mnt
-		// and we want to return
-		// /dotmesh-test-pools/pool_123_1/mnt/dmfs/:filesystemId
-		// fq(fs) gives pool_123_1/dmfs/:filesystemId
-		// so don't use it, construct it ourselves:
-		return fmt.Sprintf("%s/%s/%s", mountPrefix, ROOT_FS, fs)
+		panic(fmt.Sprintf("Environment variable MOUNT_PREFIX must be set\n"))
 	}
+	// carefully make this match...
+	// MOUNT_PREFIX will be like /dotmesh-test-pools/pool_123_1/mnt
+	// and we want to return
+	// /dotmesh-test-pools/pool_123_1/mnt/dmfs/:filesystemId
+	// fq(fs) gives pool_123_1/dmfs/:filesystemId
+	// so don't use it, construct it ourselves:
+	return fmt.Sprintf("%s/%s/%s", mountPrefix, ROOT_FS, fs)
 }
 func unmnt(p string) (string, error) {
 	// From mount path to filesystem id
 	mountPrefix := os.Getenv("MOUNT_PREFIX")
 	if mountPrefix == "" {
-		mountPrefix = "/var"
-		if strings.HasPrefix(p, mountPrefix+"/") {
-			return unfq(strings.TrimPrefix(p, mountPrefix+"/")), nil
-		} else {
-			return "", fmt.Errorf("Mount path %s does not start with %s/", p, mountPrefix)
-		}
+		return "", fmt.Errorf("Environment variable MOUNT_PREFIX must be set\n")
+	}
+	if strings.HasPrefix(p, mountPrefix+"/"+ROOT_FS+"/") {
+		return strings.TrimPrefix(p, mountPrefix+"/"+ROOT_FS+"/"), nil
 	} else {
-		if strings.HasPrefix(p, mountPrefix+"/"+ROOT_FS+"/") {
-			return strings.TrimPrefix(p, mountPrefix+"/"+ROOT_FS+"/"), nil
-		} else {
-			return "", fmt.Errorf("Mount path %s does not start with %s/%s", p, mountPrefix, ROOT_FS)
-		}
+		return "", fmt.Errorf("Mount path %s does not start with %s/%s", p, mountPrefix, ROOT_FS)
 	}
 }
 
