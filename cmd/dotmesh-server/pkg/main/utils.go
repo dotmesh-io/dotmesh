@@ -194,6 +194,7 @@ func unmnt(p string) (string, error) {
 	}
 }
 
+/*
 func isFilesystemMounted(fs string) bool {
 	out, err := exec.Command("zfs", "list").CombinedOutput()
 	if err != nil {
@@ -201,7 +202,7 @@ func isFilesystemMounted(fs string) bool {
 	}
 	return strings.Contains(string(out), fs)
 }
-
+*/
 func containerMntParent(id VolumeName) string {
 	return CONTAINER_MOUNT_PREFIX + "/" + id.Namespace
 }
