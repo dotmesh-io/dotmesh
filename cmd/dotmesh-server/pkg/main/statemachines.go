@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -527,6 +528,9 @@ func (f *fsMachine) unmount() (responseEvent *Event, nextState stateFn) {
 			Args: &EventArgs{"err": err, "combined-output": string(out)},
 		}, backoffState
 	}
+	if isFilesystemMounted(f.filesystemId) {
+		return f.unmount()
+	}
 	f.filesystem.mounted = false
 	return &Event{Name: "unmounted"}, inactiveState
 }
@@ -907,24 +911,39 @@ func pointers(snapshots []snapshot) []*snapshot {
 }
 
 func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
-	out, err := exec.Command(
-		"mkdir", "-p", mnt(f.filesystemId)).CombinedOutput()
-	if err != nil {
-		log.Printf("%v while trying to mkdir mountpoint %s", err, fq(f.filesystemId))
-		return &Event{
-			Name: "failed-mkdir-mountpoint",
-			Args: &EventArgs{"err": err, "combined-output": string(out)},
-		}, backoffState
+
+	mountPath := mnt(f.filesystemId)
+	zfsPath := fq(f.filesystemId)
+
+	// only try to make the folder if it doesn't already exist
+	// if there is an error - it means we could not mount so don't
+	// update the filesystem with mounted = true
+	if _, err := os.Stat(mountPath); os.IsNotExist(err) {
+		out, err := exec.Command(
+			"mkdir", "-p", mountPath).CombinedOutput()
+		if err != nil {
+			log.Printf("%v while trying to mkdir mountpoint %s", err, zfsPath)
+			return &Event{
+				Name: "failed-mkdir-mountpoint",
+				Args: &EventArgs{"err": err, "combined-output": string(out)},
+			}, backoffState
+		}
 	}
-	out, err = exec.Command("mount.zfs", "-o", "noatime",
-		fq(f.filesystemId), mnt(f.filesystemId)).CombinedOutput()
-	if err != nil {
-		log.Printf("%v while trying to mount %s", err, fq(f.filesystemId))
-		return &Event{
-			Name: "failed-mount",
-			Args: &EventArgs{"err": err, "combined-output": string(out)},
-		}, backoffState
+
+	// omly try to use mount.zfs if it's not already present in the output
+	// of calling "mount"
+	if !isFilesystemMounted(f.filesystemId) {
+		out, err := exec.Command("mount.zfs", "-o", "noatime",
+			zfsPath, mountPath).CombinedOutput()
+		if err != nil {
+			log.Printf("%v while trying to mount %s", err, zfsPath)
+			return &Event{
+				Name: "failed-mount",
+				Args: &EventArgs{"err": err, "combined-output": string(out)},
+			}, backoffState
+		}
 	}
+
 	// trust that zero exit codes from mkdir && mount.zfs means
 	// that it worked and that the filesystem now exists and is
 	// mounted
