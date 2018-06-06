@@ -945,6 +945,16 @@ func (d *DotmeshRPC) registerFilesystemBecomeMaster(
 			if err != nil {
 				return err
 			}
+
+			// Immediately update the masters cache because we just wrote
+			// to etcd meaning we don't have to wait for a watch
+			// this is cconsistent with the code in createFilesystem
+			func() {
+				d.state.mastersCacheLock.Lock()
+				defer d.state.mastersCacheLock.Unlock()
+				(*d.state.mastersCache)[filesystemId] = d.state.myNodeId
+			}()
+
 		}
 	}
 

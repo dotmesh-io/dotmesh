@@ -159,28 +159,29 @@ EOF
 
 ## Setup - vagrant
 
-First - install vagrant.
+First - install vagrant. e.g `brew install vagrant`. If you haven't already, you likely need a linux VM driver of some sort, e.g `brew install virtualbox`.
 
-Then:
+Then, from wherever you cloned `dotmesh`:
 
 ```bash
-vagrant up
+vagrant up 
 vagrant ssh
 ssh-keygen
 # yes to all options
 cat ~/.ssh/id_rsa.pub
 ```
 
-Now paste this key into your github account.
+Now paste this key into your github account. (Your profile pic -> settings -> SSH & GPG keys -> add new)
 
 Now we login and run the `ubuntu` prepare script:
 
 ```bash
 vagrant ssh
-bash /vagrant/scripts/prepare_vagrant.sh
+bash /vagrant/scripts/prepare_vagrant.sh 
 exit
 vagrant ssh
 ```
+On first run `vagrant up` will probably take 5-10 minutes, `prepare_vagrant.sh` will probably take 10-15 minutes.
 
 NOTE: you must exit and re-ssh to get the GOPATH to work
 
@@ -196,21 +197,20 @@ bash /vagrant/scripts/reset_vagrant.sh
 ```
 
 #### symlink code
-
-It is possible to mount your local codebase into the vagrant VM so you can re-run the test suite without having to git commit & push.
+**Optional**: If you would like to work on code from your local machine (i.e not inside a VM), follow this section. Alternatively, you can just change code inside the vagrant VM and commit/push from inside it.
 
 There can be issues with Vagrant shared folders hence this being a manual step.
 
 ```bash
 vagrant ssh
 cd $GOPATH/src/github.com/dotmesh-io
-# might as well keep this
+# might as well keep this - backs up the version vagrant checked out for you
 mv dotmesh dotmesh2
 ln -s /vagrant dotmesh
 # now $GOPATH/src/github.com/dotmesh-io/dotmesh -> /vagrant -> this repo on your host
 ```
 
-NOTE: using the symlink can drastically slow down docker builds.
+**NOTE:** using the symlink can drastically slow down docker builds.
 
 You can use this script which copies the latest git hash from your host:
 
