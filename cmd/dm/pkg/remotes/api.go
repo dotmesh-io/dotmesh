@@ -15,7 +15,7 @@ import (
 )
 
 const DEFAULT_BRANCH string = "master"
-const RPC_TIMEOUT time.Duration = 2 * time.Minute
+const RPC_TIMEOUT time.Duration = 2 * time.Second
 
 type VersionInfo struct {
 	InstalledVersion    string `json:"installed_version"`
