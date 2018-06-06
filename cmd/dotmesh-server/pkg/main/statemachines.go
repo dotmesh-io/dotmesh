@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -914,7 +913,7 @@ func pointers(snapshots []snapshot) []*snapshot {
 
 func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
 
-	ut, err := exec.Command(
+	out, err := exec.Command(
 		"mkdir", "-p", mnt(f.filesystemId)).CombinedOutput()
 	if err != nil {
 		log.Printf("%v while trying to mkdir mountpoint %s", err, fq(f.filesystemId))
