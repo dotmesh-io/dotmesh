@@ -74,7 +74,9 @@ func (dm *DotmeshAPI) CallRemote(
 
 func (dm *DotmeshAPI) Ping() (bool, error) {
 	var response bool
-	err := dm.client.CallRemote(context.Background(), "DotmeshRPC.Ping", struct{}{}, &response)
+	ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
+	defer cancel()
+	err := dm.client.CallRemote(ctx, "DotmeshRPC.Ping", struct{}{}, &response)
 	if err != nil {
 		return false, err
 	}

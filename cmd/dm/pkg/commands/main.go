@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"os"
@@ -158,16 +157,12 @@ func NewCmdRemote(out io.Writer) *cobra.Command {
 					}
 					apiKey = string(enteredApiKey)
 				}
-				client := &remotes.JsonRpcClient{
-					User:     user,
-					Hostname: hostname,
-					ApiKey:   apiKey,
-				}
-				var result bool
-				err = client.CallRemote(context.Background(), "DotmeshRPC.Ping", nil, &result)
+
+				_, err = dm.Ping()
 				if err != nil {
 					return err
 				}
+
 				err = dm.Configuration.AddRemote(remote, user, hostname, string(apiKey))
 				if err != nil {
 					return err
