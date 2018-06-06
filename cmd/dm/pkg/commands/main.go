@@ -1,11 +1,13 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 
@@ -122,7 +124,7 @@ func NewCmdRemote(out io.Writer) *cobra.Command {
 		},
 	}
 	cmd.AddCommand(&cobra.Command{
-		Use:   "add <remote-name> <user@cluster-hostname>",
+		Use:   "add <remote-name> <user@cluster-hostname>[:<port-number>]",
 		Short: "Add a remote",
 		Long:  "Online help: https://docs.dotmesh.com/references/cli/#add-a-new-remote-dm-remote-add-name-user-hostname",
 
@@ -142,10 +144,28 @@ func NewCmdRemote(out io.Writer) *cobra.Command {
 				}
 				user := shrapnel[0]
 				hostname := shrapnel[1]
+				port := 0
+				var err error
+				if strings.Contains(hostname, ":") {
+					shrapnel = strings.SplitN(hostname, ":", 2)
+					if len(shrapnel) != 2 {
+						return fmt.Errorf(
+							"Please specify user@cluster-hostname:port, got %s", shrapnel,
+						)
+					}
+					hostname = shrapnel[0]
+					port, err = strconv.Atoi(shrapnel[1])
+					if err != nil {
+						return fmt.Errorf(
+							"Please specify a port as an integer, e.g user@cluster-hostname:port, got %s", shrapnel[1],
+						)
+					}
+				}
 				dm, err := remotes.NewDotmeshAPI(configPath)
 				if err != nil {
 					return err
 				}
+				fmt.Printf("dm client %#v\n", dm)
 				// allow this to be used be a script
 				apiKey := os.Getenv("DOTMESH_PASSWORD")
 				if apiKey == "" {
@@ -157,13 +177,20 @@ func NewCmdRemote(out io.Writer) *cobra.Command {
 					}
 					apiKey = string(enteredApiKey)
 				}
+				client := &remotes.JsonRpcClient{
+					User:     user,
+					Hostname: hostname,
+					Port:     port,
+					ApiKey:   apiKey,
+				}
+				var result bool
+				err = client.CallRemote(context.Background(), "DotmeshRPC.Ping", nil, &result)
 
-				_, err = dm.Ping()
 				if err != nil {
 					return err
 				}
 
-				err = dm.Configuration.AddRemote(remote, user, hostname, string(apiKey))
+				err = dm.Configuration.AddRemote(remote, user, hostname, port, string(apiKey))
 				if err != nil {
 					return err
 				}
