@@ -513,7 +513,7 @@ mark_release_as_stable:
 notify_smoke_test_failure:
   stage: notify
   script:
-    - "curl -X POST -H 'Content-type: application/json' --data '{\"text\":\"ALERT, Smoke tests failed!\"}' $SLACK_WEBHOOK_URL"
+    - "curl -X POST -H 'Content-type: application/json' --data '{\"text\":\"ALERT, Smoke tests failed $CI_PROJECT_URL/pipelines/$CI_PIPELINE_ID\"}' $SLACK_WEBHOOK_URL"
   when: on_failure
   only:
     - schedules
