@@ -877,7 +877,7 @@ func clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath string) err
 			return err
 		}
 	}
-	err = config.AddRemote("local", "admin", getHostFromEnv(), adminKey)
+	err = config.AddRemote("local", "admin", getHostFromEnv(), 0, adminKey)
 	if err != nil {
 		return err
 	}
