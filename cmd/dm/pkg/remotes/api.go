@@ -72,15 +72,19 @@ func (dm *DotmeshAPI) CallRemote(
 	return dm.client.CallRemote(ctx, method, args, response)
 }
 
-func (dm *DotmeshAPI) Ping() (bool, error) {
+func Ping(client *JsonRpcClient) (bool, error) {
 	var response bool
 	ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
 	defer cancel()
-	err := dm.client.CallRemote(ctx, "DotmeshRPC.Ping", struct{}{}, &response)
+	err := client.CallRemote(ctx, "DotmeshRPC.Ping", struct{}{}, &response)
 	if err != nil {
 		return false, err
 	}
 	return response, nil
+}
+
+func (dm *DotmeshAPI) PingLocal() (bool, error) {
+	return Ping(dm.client)
 }
 
 func (dm *DotmeshAPI) BackupEtcd() (string, error) {

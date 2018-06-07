@@ -158,7 +158,14 @@ func NewCmdRemote(out io.Writer) *cobra.Command {
 					apiKey = string(enteredApiKey)
 				}
 
-				_, err = dm.Ping()
+				client := &remotes.JsonRpcClient{
+					User:     user,
+					Hostname: hostname,
+					ApiKey:   apiKey,
+				}
+
+				_, err = remotes.Ping(client)
+
 				if err != nil {
 					return err
 				}
