@@ -186,6 +186,8 @@ func NewCmdRemote(out io.Writer) *cobra.Command {
 				var result bool
 				err = client.CallRemote(context.Background(), "DotmeshRPC.Ping", nil, &result)
 
+				_, err = remotes.Ping(client)
+
 				if err != nil {
 					return err
 				}

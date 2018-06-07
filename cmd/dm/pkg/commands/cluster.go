@@ -917,7 +917,7 @@ func clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath string) err
 				return false
 			}
 			var response bool
-			response, err = dm.Ping()
+			response, err = dm.PingLocal()
 			if err != nil {
 				e()
 				return false
