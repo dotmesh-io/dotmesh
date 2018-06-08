@@ -67,6 +67,7 @@ var (
 	usePoolDir         string
 	usePoolName        string
 	discoveryUrl       string
+	port               int
 )
 
 // names of environment variables we pass from the content of `dm cluster {init,join}`
@@ -249,6 +250,10 @@ func NewCmdClusterInit(out io.Writer) *cobra.Command {
 	cmd.Flags().IntVar(
 		&serverCount, "count", 1,
 		"Initial cluster size",
+	)
+	cmd.Flags().IntVar(
+		&port, "port", 0,
+		"Port to run cluster on"
 	)
 	return cmd
 }
@@ -662,6 +667,7 @@ func startDotmeshContainer(pkiPath string) error {
 		"-e", fmt.Sprintf("DOTMESH_DOCKER_IMAGE=%s", dotmeshDockerImage),
 		"-e", fmt.Sprintf("DOTMESH_UPGRADES_URL=%s", checkpointUrl),
 		"-e", fmt.Sprintf("DOTMESH_UPGRADES_INTERVAL_SECONDS=%d", checkpointInterval),
+		"-e", fmt.Sprintf("DOTMESH_SERVER_PORT=%d", port),
 	}
 
 	// inject the inherited env variables from the context of the dm binary into require_zfs.sh
