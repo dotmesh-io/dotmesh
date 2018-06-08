@@ -519,8 +519,94 @@ waitingForSlaveSnapshot:
 	return inactiveState
 }
 
+func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
+	/*
+		out, err := exec.Command(
+			"mkdir", "-p", mnt(f.filesystemId)).CombinedOutput()
+		if err != nil {
+			log.Printf("%v while trying to mkdir mountpoint %s", err, fq(f.filesystemId))
+			return &Event{
+				Name: "failed-mkdir-mountpoint",
+				Args: &EventArgs{"err": err, "combined-output": string(out)},
+			}, backoffState
+		}
+		out, err = exec.Command("mount.zfs", "-o", "noatime",
+			fq(f.filesystemId), mnt(f.filesystemId)).CombinedOutput()
+		if err != nil {
+			log.Printf("%v while trying to mount %s", err, fq(f.filesystemId))
+			return &Event{
+				Name: "failed-mount",
+				Args: &EventArgs{"err": err, "combined-output": string(out)},
+			}, backoffState
+		}
+		// trust that zero exit codes from mkdir && mount.zfs means
+		// that it worked and that the filesystem now exists and is
+		// mounted
+		f.snapshotsLock.Lock()
+		defer f.snapshotsLock.Unlock()
+		f.filesystem.exists = true // needed in create case
+		f.filesystem.mounted = true
+		return &Event{Name: "mounted", Args: &EventArgs{}}, activeState
+	*/
+
+	mountPath := mnt(f.filesystemId)
+	zfsPath := fq(f.filesystemId)
+
+	// only try to make the folder if it doesn't already exist
+	// if there is an error - it means we could not mount so don't
+	// update the filesystem with mounted = true
+	if _, err := os.Stat(mountPath); os.IsNotExist(err) {
+		out, err := exec.Command(
+			"mkdir", "-p", mountPath).CombinedOutput()
+		if err != nil {
+			log.Printf("%v while trying to mkdir mountpoint %s", err, zfsPath)
+			return &Event{
+				Name: "failed-mkdir-mountpoint",
+				Args: &EventArgs{"err": err, "combined-output": string(out)},
+			}, backoffState
+		}
+	}
+
+	// omly try to use mount.zfs if it's not already present in the output
+	// of calling "mount"
+	mounted, err := isFilesystemMounted(f.filesystemId)
+	if err != nil {
+		return &Event{
+			Name: "failed-checking-if-mounted",
+			Args: &EventArgs{"err": err},
+		}, backoffState
+	}
+	if !mounted {
+		out, err := exec.Command("mount.zfs", "-o", "noatime",
+			zfsPath, mountPath).CombinedOutput()
+		if err != nil {
+			log.Printf("%v while trying to mount %s", err, zfsPath)
+			return &Event{
+				Name: "failed-mount",
+				Args: &EventArgs{"err": err, "combined-output": string(out)},
+			}, backoffState
+		}
+	}
+
+	// trust that zero exit codes from mkdir && mount.zfs means
+	// that it worked and that the filesystem now exists and is
+	// mounted
+	f.snapshotsLock.Lock()
+	defer f.snapshotsLock.Unlock()
+	f.filesystem.exists = true // needed in create case
+	f.filesystem.mounted = true
+	return &Event{Name: "mounted", Args: &EventArgs{}}, activeState
+}
+
 func (f *fsMachine) unmount() (responseEvent *Event, nextState stateFn) {
-	if isFilesystemMounted(f.filesystemId) {
+	mounted, err := isFilesystemMounted(f.filesystemId)
+	if err != nil {
+		return &Event{
+			Name: "failed-checking-if-mounted",
+			Args: &EventArgs{"err": err},
+		}, backoffState
+	}
+	if mounted {
 		out, err := exec.Command("umount", mnt(f.filesystemId)).CombinedOutput()
 		if err != nil {
 			log.Printf("%v while trying to unmount %s", err, fq(f.filesystemId))
@@ -529,8 +615,14 @@ func (f *fsMachine) unmount() (responseEvent *Event, nextState stateFn) {
 				Args: &EventArgs{"err": err, "combined-output": string(out)},
 			}, backoffState
 		}
-
-		if isFilesystemMounted(f.filesystemId) {
+		mounted, err := isFilesystemMounted(f.filesystemId)
+		if err != nil {
+			return &Event{
+				Name: "failed-checking-if-mounted",
+				Args: &EventArgs{"err": err},
+			}, backoffState
+		}
+		if mounted {
 			return f.unmount()
 		}
 	}
@@ -912,79 +1004,6 @@ func pointers(snapshots []snapshot) []*snapshot {
 		newList = append(newList, s)
 	}
 	return newList
-}
-
-func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
-	/*
-		out, err := exec.Command(
-			"mkdir", "-p", mnt(f.filesystemId)).CombinedOutput()
-		if err != nil {
-			log.Printf("%v while trying to mkdir mountpoint %s", err, fq(f.filesystemId))
-			return &Event{
-				Name: "failed-mkdir-mountpoint",
-				Args: &EventArgs{"err": err, "combined-output": string(out)},
-			}, backoffState
-		}
-		out, err = exec.Command("mount.zfs", "-o", "noatime",
-			fq(f.filesystemId), mnt(f.filesystemId)).CombinedOutput()
-		if err != nil {
-			log.Printf("%v while trying to mount %s", err, fq(f.filesystemId))
-			return &Event{
-				Name: "failed-mount",
-				Args: &EventArgs{"err": err, "combined-output": string(out)},
-			}, backoffState
-		}
-		// trust that zero exit codes from mkdir && mount.zfs means
-		// that it worked and that the filesystem now exists and is
-		// mounted
-		f.snapshotsLock.Lock()
-		defer f.snapshotsLock.Unlock()
-		f.filesystem.exists = true // needed in create case
-		f.filesystem.mounted = true
-		return &Event{Name: "mounted", Args: &EventArgs{}}, activeState
-	*/
-
-	mountPath := mnt(f.filesystemId)
-	zfsPath := fq(f.filesystemId)
-
-	// only try to make the folder if it doesn't already exist
-	// if there is an error - it means we could not mount so don't
-	// update the filesystem with mounted = true
-	if _, err := os.Stat(mountPath); os.IsNotExist(err) {
-		out, err := exec.Command(
-			"mkdir", "-p", mountPath).CombinedOutput()
-		if err != nil {
-			log.Printf("%v while trying to mkdir mountpoint %s", err, zfsPath)
-			return &Event{
-				Name: "failed-mkdir-mountpoint",
-				Args: &EventArgs{"err": err, "combined-output": string(out)},
-			}, backoffState
-		}
-	}
-
-	// omly try to use mount.zfs if it's not already present in the output
-	// of calling "mount"
-	if !isFilesystemMounted(f.filesystemId) {
-		out, err := exec.Command("mount.zfs", "-o", "noatime",
-			zfsPath, mountPath).CombinedOutput()
-		if err != nil {
-			log.Printf("%v while trying to mount %s", err, zfsPath)
-			return &Event{
-				Name: "failed-mount",
-				Args: &EventArgs{"err": err, "combined-output": string(out)},
-			}, backoffState
-		}
-	}
-
-	// trust that zero exit codes from mkdir && mount.zfs means
-	// that it worked and that the filesystem now exists and is
-	// mounted
-	f.snapshotsLock.Lock()
-	defer f.snapshotsLock.Unlock()
-	f.filesystem.exists = true // needed in create case
-	f.filesystem.mounted = true
-	return &Event{Name: "mounted", Args: &EventArgs{}}, activeState
-
 }
 
 func inactiveState(f *fsMachine) stateFn {
