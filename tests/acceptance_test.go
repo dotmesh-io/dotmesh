@@ -1347,7 +1347,7 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 	node2 := f[1].GetNode(0).Container
 
 	t.Run("SpecifyPort", func(t *testing.T) {
-		citools.RunOnNode(t, node1, "echo FAKEAPIKEY | dm remote add funny_port_remote admin@"+f[1].GetNode(0).IP+":32607")
+		citools.RunOnNode(t, node1, "echo "+f[1].GetNode(0).ApiKey+" | dm remote add funny_port_remote admin@"+f[1].GetNode(0).IP+":32607")
 	})
 
 	t.Run("PushCommitBranchExtantBase", func(t *testing.T) {
