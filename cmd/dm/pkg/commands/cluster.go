@@ -668,7 +668,10 @@ func startDotmeshContainer(pkiPath string) error {
 		"-e", fmt.Sprintf("DOTMESH_DOCKER_IMAGE=%s", dotmeshDockerImage),
 		"-e", fmt.Sprintf("DOTMESH_UPGRADES_URL=%s", checkpointUrl),
 		"-e", fmt.Sprintf("DOTMESH_UPGRADES_INTERVAL_SECONDS=%d", checkpointInterval),
-		"-e", fmt.Sprintf("DOTMESH_SERVER_PORT=%d", port),
+	}
+	if port != 0 {
+		args = append(args, "-e")
+		args = append(args, fmt.Sprintf("DOTMESH_SERVER_PORT=%d", port))
 	}
 
 	// inject the inherited env variables from the context of the dm binary into require_zfs.sh
@@ -885,6 +888,8 @@ func clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath string) err
 		}
 	}
 	err = config.AddRemote("local", "admin", getHostFromEnv(), port, adminKey)
+	fmt.Printf("Port: %d", port)
+	fmt.Printf("Local remote: %#v", config.Remotes["local"])
 	if err != nil {
 		return err
 	}
