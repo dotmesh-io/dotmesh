@@ -1332,8 +1332,8 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 	citools.TeardownFinishedTestRuns()
 
 	f := citools.Federation{
-		citools.NewCluster(1), // cluster_0_node_0
-		citools.NewCluster(1), // cluster_1_node_0
+		citools.NewCluster(1),                                               // cluster_0_node_0
+		citools.NewClusterWithArgs(1, map[string]string{}, " --port 32609"), // cluster_1_node_0
 	}
 	defer citools.TestMarkForCleanup(f)
 	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
@@ -1347,7 +1347,7 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 	node2 := f[1].GetNode(0).Container
 
 	t.Run("SpecifyPort", func(t *testing.T) {
-		citools.RunOnNode(t, node1, "echo "+f[1].GetNode(0).ApiKey+" | dm remote add funny_port_remote admin@"+f[1].GetNode(0).IP+":32607")
+		citools.RunOnNode(t, node1, "echo "+f[1].GetNode(0).ApiKey+" | dm remote add funny_port_remote admin@"+f[1].GetNode(0).IP+":32609")
 	})
 
 	t.Run("PushCommitBranchExtantBase", func(t *testing.T) {
