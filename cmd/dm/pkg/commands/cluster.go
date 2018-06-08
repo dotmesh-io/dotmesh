@@ -252,7 +252,7 @@ func NewCmdClusterInit(out io.Writer) *cobra.Command {
 		"Initial cluster size",
 	)
 	cmd.Flags().IntVar(
-		&port, "port", 0,
+		&port, "port", 32607,
 		"Port to run cluster on"
 	)
 	return cmd
