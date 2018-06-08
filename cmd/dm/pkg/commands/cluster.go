@@ -251,8 +251,9 @@ func NewCmdClusterInit(out io.Writer) *cobra.Command {
 		&serverCount, "count", 1,
 		"Initial cluster size",
 	)
+	// TODO: need to block using 32608, and probably block anything lower than 32xx for host port reasons?
 	cmd.Flags().IntVar(
-		&port, "port", 32607,
+		&port, "port", 0,
 		"Port to run cluster on",
 	)
 	return cmd
@@ -883,7 +884,7 @@ func clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath string) err
 			return err
 		}
 	}
-	err = config.AddRemote("local", "admin", getHostFromEnv(), 0, adminKey)
+	err = config.AddRemote("local", "admin", getHostFromEnv(), port, adminKey)
 	if err != nil {
 		return err
 	}
@@ -919,16 +920,19 @@ func clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath string) err
 				time.Sleep(250 * time.Millisecond)
 			}
 			if err != nil {
+				fmt.Printf("Errored creating api")
 				e()
 				return false
 			}
 			var response bool
 			response, err = dm.PingLocal()
 			if err != nil {
+				fmt.Printf("Errored pinging, %#v", dm.Configuration.Remotes["local"])
 				e()
 				return false
 			}
 			if !response {
+				fmt.Printf("Response failure...")
 				e()
 			}
 			fmt.Printf("\n")
