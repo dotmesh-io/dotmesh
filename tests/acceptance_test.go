@@ -2203,19 +2203,20 @@ spec:
 		citools.RestartOperator(t, node1.Container)
 
 		// Check we go up to three pods and don't create a new PVC.
-		for tries := 1; tries < 10; tries++ {
+		err = citools.TryUntilSucceeds(func() error {
 			serverPods := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pods -n dotmesh | grep server- | wc -l")
 			serverPvcs := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pvc -n dotmesh | grep pvc- | wc -l")
 			fmt.Printf("DM server pods: %s, DM server PVCs: %s\n",
 				strings.TrimSpace(serverPods),
 				strings.TrimSpace(serverPvcs))
 			if serverPods == "3\n" && serverPvcs == "3\n" {
-				break
+				return nil
 			}
-			if tries == 9 {
-				t.Error("Didn't go up to three pods/pvcs")
-			}
-			time.Sleep(5 * time.Second)
+			return fmt.Errorf("Didn't go up to three pods, got pods: %v pvcs: %v", serverPods, serverPvcs)
+		}, "Trying to go up to three pods/pvcs")
+
+		if err != nil {
+			t.Error(err)
 		}
 
 		finalPvcs := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pvc -n dotmesh | cut -f 1 -d ' ' | sort")
@@ -2233,17 +2234,15 @@ spec:
 		citools.RestartOperator(t, node1.Container)
 
 		// Check we go down to two pods.
-		for tries := 1; tries < 10; tries++ {
+		err = citools.TryUntilSucceeds(func() error {
 			serverPods := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pods -n dotmesh | grep server | wc -l")
 			if serverPods == "2\n" {
-				break
-			} else {
-				fmt.Printf("Waiting for there to be two server pods, currently on %#v...\n", serverPods)
+				return nil
 			}
-			if tries == 9 {
-				t.Error("Didn't go down to two pods")
-			}
-			time.Sleep(5 * time.Second)
+			return fmt.Errorf("Didn't go down to two pods, got pods: %v", serverPods)
+		}, "Trying to go down to two pods")
+		if err != nil {
+			t.Error(err)
 		}
 
 		// Delete the abandoned PVC
@@ -2277,20 +2276,22 @@ spec:
 		citools.RestartOperator(t, node1.Container)
 
 		// Check we go up to three pods and create a new PVC.
-		for tries := 1; tries < 10; tries++ {
+		err = citools.TryUntilSucceeds(func() error {
 			serverPods := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pods -n dotmesh | grep server- | wc -l")
 			serverPvcs := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pvc -n dotmesh | grep pvc- | wc -l")
 			fmt.Printf("DM server pods: %s, DM server PVCs: %s\n",
 				strings.TrimSpace(serverPods),
 				strings.TrimSpace(serverPvcs))
 			if serverPods == "3\n" && serverPvcs == "3\n" {
-				break
+				return nil
 			}
-			if tries == 9 {
-				t.Error("Didn't go up to three pods/pvcs")
-			}
-			time.Sleep(5 * time.Second)
+			return fmt.Errorf("Didn't go up to three pods, got pods: %v pvcs: %v", serverPods, serverPvcs)
+		}, "Trying to go up to three pods/pvcs")
+
+		if err != nil {
+			t.Error(err)
 		}
+
 	})
 
 	citools.DumpTiming()
