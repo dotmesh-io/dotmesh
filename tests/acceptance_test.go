@@ -365,10 +365,14 @@ func TestSingleNode(t *testing.T) {
 		}
 		re, _ := regexp.Compile(`server.*up to date`)
 		matches := re.FindAllStringSubmatch(resp, -1)
-		masterReplicationStatus := matches[0][0]
-		branchReplicationStatus := matches[1][0]
-		if masterReplicationStatus == branchReplicationStatus {
-			t.Error("master and branch replication statusse are suspiciously similar")
+		if len(matches) < 2 {
+			t.Error("Unrecognisable result from `dm dot show`: %s, regexp matches: %#v", resp, matches)
+		} else {
+			masterReplicationStatus := matches[0][0]
+			branchReplicationStatus := matches[1][0]
+			if masterReplicationStatus == branchReplicationStatus {
+				t.Error("master and branch replication statusse are suspiciously similar")
+			}
 		}
 
 	})
