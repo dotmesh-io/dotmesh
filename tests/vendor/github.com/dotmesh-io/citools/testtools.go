@@ -641,14 +641,14 @@ func TeardownFinishedTestRuns() {
 
 func docker(node string, cmd string, env map[string]string) (string, error) {
 	envString := ""
-	var c *exec.Cmd
+	c := exec.Command("docker", "exec", "-i", node, "bash", "-c", cmd)
 	if env != nil {
 		for name, value := range env {
 			envString += name + "=" + value + " "
 		}
-		c = exec.Command("docker", "exec", "-e", envString, "-i", node, "bash", "-c", cmd)
-	} else {
-		c = exec.Command("docker", "exec", "-i", node, "bash", "-c", cmd)
+		if len(envString) != 0 {
+			c = exec.Command("docker", "exec", "-e", envString, "-i", node, "bash", "-c", cmd)
+		}
 	}
 	var b bytes.Buffer
 	var o, e io.Writer
