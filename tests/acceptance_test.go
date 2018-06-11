@@ -1332,8 +1332,8 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 	citools.TeardownFinishedTestRuns()
 
 	f := citools.Federation{
-		citools.NewCluster(1),                                               // cluster_0_node_0
-		citools.NewClusterWithArgs(1, map[string]string{}, " --port 32609"), // cluster_1_node_0
+		citools.NewCluster(1),              // cluster_0_node_0
+		citools.NewClusterOnPort(32609, 1), // cluster_1_node_0
 	}
 	defer citools.TestMarkForCleanup(f)
 	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
