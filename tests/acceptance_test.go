@@ -2234,6 +2234,8 @@ spec:
 			serverPods := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pods -n dotmesh | grep server | wc -l")
 			if serverPods == "2\n" {
 				break
+			} else {
+				fmt.Printf("Waiting for there to be two server pods, currently on %#v...\n", serverPods)
 			}
 			if tries == 9 {
 				t.Error("Didn't go down to two pods")
