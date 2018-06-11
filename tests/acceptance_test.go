@@ -96,6 +96,37 @@ func TestRecoverFromUnmountedDotOnMaster(t *testing.T) {
 	}
 	node1 := f[0].GetNode(0).Container
 
+	assertMountState := func(t *testing.T, fsId string, desiredMountState bool) string {
+		var mountpoint string
+		err := citools.TryUntilSucceeds(func() error {
+			st := citools.OutputFromRunOnNode(t, node1, "docker exec -t dotmesh-server-inner mount")
+			if desiredMountState == true {
+				if !strings.Contains(st, fsId) {
+					return fmt.Errorf("%s not mounted", fsId)
+				} else {
+					fmt.Printf("%s is mounted!!! yay\n", fsId)
+					for _, line := range strings.Split(st, "\n") {
+						if strings.Contains(line, fsId) {
+							shrapnel := strings.Split(line, " ")
+							mountpoint = shrapnel[2]
+						}
+					}
+				}
+			} else {
+				if strings.Contains(st, fsId) {
+					return fmt.Errorf("%s mounted", fsId)
+				} else {
+					fmt.Printf("%s is not mounted!!! yay\n", fsId)
+				}
+			}
+			return nil
+		}, fmt.Sprintf("checking for %s to be mounted", fsId))
+		if err != nil {
+			t.Error(err)
+		}
+		return mountpoint
+	}
+
 	t.Run("FilesystemRemountedOnRestart", func(t *testing.T) {
 		fsname := citools.UniqName()
 		citools.RunOnNode(t, node1, "dm init "+fsname)
@@ -109,35 +140,12 @@ func TestRecoverFromUnmountedDotOnMaster(t *testing.T) {
 		)
 		//zfsPath := strings.Replace(node1, "cluster", "testpool", -1) + "/dmfs/" + fsId
 
-		assertMountState := func(t *testing.T, fsId string, desiredMountState bool) {
-			err := citools.TryUntilSucceeds(func() error {
-				st := citools.OutputFromRunOnNode(t, node1, "docker exec -t dotmesh-server-inner mount")
-				if desiredMountState == true {
-					if !strings.Contains(st, fsId) {
-						return fmt.Errorf("%s not mounted", fsId)
-					} else {
-						fmt.Printf("%s is mounted!!! yay\n", fsId)
-					}
-				} else {
-					if strings.Contains(st, fsId) {
-						return fmt.Errorf("%s mounted", fsId)
-					} else {
-						fmt.Printf("%s is not mounted!!! yay\n", fsId)
-					}
-				}
-				return nil
-			}, fmt.Sprintf("checking for %s to be mounted", fsId))
-			if err != nil {
-				t.Error(err)
-			}
-		}
-
 		// wait for filesystem to be mounted (assert that it becomes mounted)
-		assertMountState(t, fsId, true)
+		mountpoint := assertMountState(t, fsId, true)
 
 		// unmount the filesystem and assert that it's no longer mounted
 		citools.RunOnNode(t, node1,
-			"docker exec -t dotmesh-server-inner umount /var/lib/dotmesh/mnt/dmfs/"+fsId,
+			"docker exec -t dotmesh-server-inner umount "+mountpoint,
 		)
 		assertMountState(t, fsId, false)
 
@@ -163,35 +171,12 @@ func TestRecoverFromUnmountedDotOnMaster(t *testing.T) {
 		)
 		//zfsPath := strings.Replace(node1, "cluster", "testpool", -1) + "/dmfs/" + fsId
 
-		assertMountState := func(t *testing.T, fsId string, desiredMountState bool) {
-			err := citools.TryUntilSucceeds(func() error {
-				st := citools.OutputFromRunOnNode(t, node1, "docker exec -t dotmesh-server-inner mount")
-				if desiredMountState == true {
-					if !strings.Contains(st, fsId) {
-						return fmt.Errorf("%s not mounted", fsId)
-					} else {
-						fmt.Printf("%s is mounted!!! yay\n", fsId)
-					}
-				} else {
-					if strings.Contains(st, fsId) {
-						return fmt.Errorf("%s mounted", fsId)
-					} else {
-						fmt.Printf("%s is not mounted!!! yay\n", fsId)
-					}
-				}
-				return nil
-			}, fmt.Sprintf("checking for %s to be mounted", fsId))
-			if err != nil {
-				t.Error(err)
-			}
-		}
-
 		// wait for filesystem to be mounted (assert that it becomes mounted)
-		assertMountState(t, fsId, true)
+		mountpoint := assertMountState(t, fsId, true)
 
 		// unmount the filesystem and assert that it's no longer mounted
 		citools.RunOnNode(t, node1,
-			"docker exec -t dotmesh-server-inner umount /var/lib/dotmesh/mnt/dmfs/"+fsId,
+			"docker exec -t dotmesh-server-inner umount "+mountpoint,
 		)
 		assertMountState(t, fsId, false)
 
@@ -380,10 +365,14 @@ func TestSingleNode(t *testing.T) {
 		}
 		re, _ := regexp.Compile(`server.*up to date`)
 		matches := re.FindAllStringSubmatch(resp, -1)
-		masterReplicationStatus := matches[0][0]
-		branchReplicationStatus := matches[1][0]
-		if masterReplicationStatus == branchReplicationStatus {
-			t.Error("master and branch replication statusse are suspiciously similar")
+		if len(matches) < 2 {
+			t.Error("Unrecognisable result from `dm dot show`: %s, regexp matches: %#v", resp, matches)
+		} else {
+			masterReplicationStatus := matches[0][0]
+			branchReplicationStatus := matches[1][0]
+			if masterReplicationStatus == branchReplicationStatus {
+				t.Error("master and branch replication statusse are suspiciously similar")
+			}
 		}
 
 	})
@@ -2195,16 +2184,15 @@ spec:
 		}
 		citools.RestartOperator(t, node1.Container)
 
-		// Check we go down to two pods.
-		for tries := 1; tries < 10; tries++ {
+		err = citools.TryUntilSucceeds(func() error {
 			serverPods := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pods -n dotmesh | grep server | wc -l")
 			if serverPods == "2\n" {
-				break
+				return nil
 			}
-			if tries == 9 {
-				t.Error("Didn't go down to two pods")
-			}
-			time.Sleep(5 * time.Second)
+			return fmt.Errorf("Didn't go down to two pods, got pods: %v", serverPods)
+		}, "Trying to go down to two pods")
+		if err != nil {
+			t.Error(err)
 		}
 
 		// Modify nodeSelector to clusterSize-3=yes in the configmap and restart operator.
@@ -2249,6 +2237,8 @@ spec:
 			serverPods := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pods -n dotmesh | grep server | wc -l")
 			if serverPods == "2\n" {
 				break
+			} else {
+				fmt.Printf("Waiting for there to be two server pods, currently on %#v...\n", serverPods)
 			}
 			if tries == 9 {
 				t.Error("Didn't go down to two pods")
