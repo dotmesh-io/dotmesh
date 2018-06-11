@@ -2184,16 +2184,15 @@ spec:
 		}
 		citools.RestartOperator(t, node1.Container)
 
-		// Check we go down to two pods.
-		for tries := 1; tries < 10; tries++ {
+		err = citools.TryUntilSucceeds(func() error {
 			serverPods := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pods -n dotmesh | grep server | wc -l")
 			if serverPods == "2\n" {
-				break
+				return nil
 			}
-			if tries == 9 {
-				t.Error("Didn't go down to two pods")
-			}
-			time.Sleep(5 * time.Second)
+			return fmt.Errorf("Didn't go down to two pods, got pods: %v", serverPods)
+		}, "Trying to go down to two pods")
+		if err != nil {
+			t.Error(err)
 		}
 
 		// Modify nodeSelector to clusterSize-3=yes in the configmap and restart operator.
