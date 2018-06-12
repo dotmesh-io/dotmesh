@@ -1166,7 +1166,7 @@ func (f *fsMachine) failedOnMaster() bool {
 	master := f.state.masterFor(f.filesystemId)
 	if master == "" {
 		log.Printf(
-			"[failedOnMaster:%s] unable to determine whether failed on master: %s has empty master",
+			"[failedOnMaster:%s] unable to determine whether failed on master: got empty master",
 			f.filesystemId,
 		)
 		return false
@@ -1177,7 +1177,7 @@ func (f *fsMachine) failedOnMaster() bool {
 	if !ok {
 		log.Printf(
 			"[failedOnMaster:%s] unable to determine whether failed on master: "+
-				"%s has no entry in globalStateCache[%s][%s]",
+				"no entry in globalStateCache[%s][%s]",
 			f.filesystemId,
 			master,
 			f.filesystemId,
