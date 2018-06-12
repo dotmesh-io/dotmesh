@@ -1330,6 +1330,12 @@ func backoffState(f *fsMachine) stateFn {
 	return discoveringState
 }
 
+func failedState(f *fsMachine) stateFn {
+	f.transitionedTo("failed", "never coming back")
+	log.Printf("entering failed state for %s", f.filesystemId)
+	select {}
+}
+
 func (f *fsMachine) discover() error {
 	// discover system state synchronously
 	filesystem, err := discoverSystem(f.filesystemId)
@@ -1384,11 +1390,12 @@ func discoveringState(f *fsMachine) stateFn {
 		err := f.state.alignMountStateWithMasters(f.filesystemId)
 		if err != nil {
 			log.Printf(
-				"[discoveringState:%s] error trying to align mount state with masters: %v",
+				"[discoveringState:%s] error trying to align mount state with masters: %v, "+
+					"going into failed state forever",
 				f.filesystemId,
 				err,
 			)
-			return backoffState
+			return failedState
 		}
 		// TODO do we need to acquire some locks here?
 		if f.filesystem.mounted {
