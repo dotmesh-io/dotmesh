@@ -277,6 +277,7 @@ linux_kubernetes_volumes:
         when: always
     except:
         - schedules
+    allow_failure: true
 
 linux_kubernetes_operator_dynamic_provisioning:
     stage: test
