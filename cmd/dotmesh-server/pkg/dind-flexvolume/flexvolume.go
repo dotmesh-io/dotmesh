@@ -23,7 +23,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"strconv"
@@ -38,7 +37,7 @@ var flexVolumeDebug = false
 const DIND_SHARED_FOLDER = "/dotmesh-test-pools/dind-flexvolume"
 
 func System(cmd string, args ...string) error {
-	log.Printf("[system] running %s %s", cmd, args)
+	logger.Printf("[system] running %s %s", cmd, args)
 	c := exec.Command(cmd, args...)
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
