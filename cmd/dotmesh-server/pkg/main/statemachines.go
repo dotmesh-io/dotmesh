@@ -1162,6 +1162,32 @@ func transferRequestify(in interface{}) (TransferRequest, error) {
 	}, nil
 }
 
+func (f *fsMachine) failedOnMaster() bool {
+	master := f.state.masterFor(f.filesystemId)
+	if master == "" {
+		log.Printf(
+			"[failedOnMaster:%s] unable to determine whether failed on master: %s has empty master",
+			f.filesystemId,
+		)
+		return false
+	}
+	f.state.globalStateCacheLock.Lock()
+	defer f.state.globalStateCacheLock.Lock()
+	state, ok := (*f.state.globalStateCache)[master][f.filesystemId]
+	if !ok {
+		log.Printf(
+			"[failedOnMaster:%s] unable to determine whether failed on master: "+
+				"%s has no entry in globalStateCache[%s][%s]",
+			f.filesystemId,
+			master,
+			f.filesystemId,
+		)
+		// Don't know, say it's not failed.
+		return false
+	}
+	return state["state"] == "failed"
+}
+
 // either missing because you're about to be locally created or because the
 // filesystem exists somewhere else in the cluster
 func missingState(f *fsMachine) stateFn {
@@ -1377,6 +1403,16 @@ func (f *fsMachine) discover() error {
 func discoveringState(f *fsMachine) stateFn {
 	f.transitionedTo("discovering", "loading")
 	log.Printf("entering discovering state for %s", f.filesystemId)
+
+	if f.failedOnMaster() {
+		// abandon hope, all ye who enter here. this fsMachine is failed until
+		// further notice...
+		f.transitionedTo(
+			"discovering",
+			"going to failed because were failed on the master",
+		)
+		return failedState
+	}
 
 	err := f.discover()
 	if err != nil {
