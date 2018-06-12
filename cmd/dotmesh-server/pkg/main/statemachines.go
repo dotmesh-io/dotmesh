@@ -1172,7 +1172,7 @@ func (f *fsMachine) failedOnMaster() bool {
 		return false
 	}
 	f.state.globalStateCacheLock.Lock()
-	defer f.state.globalStateCacheLock.Lock()
+	defer f.state.globalStateCacheLock.Unlock()
 	state, ok := (*f.state.globalStateCache)[master][f.filesystemId]
 	if !ok {
 		log.Printf(
