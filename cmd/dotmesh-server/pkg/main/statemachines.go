@@ -1465,15 +1465,14 @@ func receivingState(f *fsMachine) stateFn {
 
 	if err != nil {
 		switch err := err.(type) {
-		// TODO should the following 'discoveringState's be 'backoffState's?
 		case *ToSnapsUpToDate:
 			log.Printf("receivingState: ToSnapsUpToDate %s got %s", f.filesystemId, err)
 			// this is fine, we're up-to-date
-			return discoveringState
+			return backoffState
 		case *NoFromSnaps:
 			log.Printf("receivingState: NoFromSnaps %s got %s", f.filesystemId, err)
 			// this is fine, no snaps; can't replicate yet, but will
-			return discoveringState
+			return backoffState
 		case *ToSnapsAhead:
 			log.Printf("receivingState: ToSnapsAhead %s got %s", f.filesystemId, err)
 			// erk, slave is ahead of master
@@ -1482,7 +1481,7 @@ func receivingState(f *fsMachine) stateFn {
 				log.Printf("receivingState(%s): Unable to recover from divergence: %+v", f.filesystemId, errx)
 			}
 			// Go to discovering state, to update the world with our recent ZFS actions.
-			return discoveringState
+			return backoffState
 		case *ToSnapsDiverged:
 			log.Printf("receivingState: ToSnapsDiverged %s got %s", f.filesystemId, err)
 			errx := f.recoverFromDivergence(err.latestCommonSnapshot)
@@ -1490,16 +1489,16 @@ func receivingState(f *fsMachine) stateFn {
 				log.Printf("receivingState(%s): Unable to recover from divergence: %+v", f.filesystemId, errx)
 			}
 			// Go to discovering state, to update the world with our recent ZFS actions.
-			return discoveringState
+			return backoffState
 		case *NoCommonSnapshots:
 			log.Printf("receivingState: NoCommonSnapshots %s got %s", f.filesystemId, err)
 			// erk, no common snapshots between master and slave
 			// TODO: create a new local clone (branch), then delete the current
 			// filesystem to enable replication to continue
-			return discoveringState
+			return backoffState
 		default:
 			log.Printf("receivingState: default error handler %s got %s", f.filesystemId, err)
-			return discoveringState
+			return backoffState
 		}
 	}
 
