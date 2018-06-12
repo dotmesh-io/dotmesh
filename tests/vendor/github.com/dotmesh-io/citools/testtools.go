@@ -1605,8 +1605,11 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 
 	fmt.Printf("running dm cluster init with following command: %s\n", dmInitCommand)
 
+	env := c.Env
+	env["DEBUG_MODE"] = "1"
+
 	st, err := docker(
-		nodeName(now, i, 0), dmInitCommand, c.Env)
+		nodeName(now, i, 0), dmInitCommand, env)
 
 	if err != nil {
 		return err
@@ -1639,7 +1642,7 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 			localImageArgs()+" --use-pool-dir /dotmesh-test-pools/"+poolId(now, i, j),
 			joinUrl,
 			" --use-pool-name "+poolId(now, i, j)+c.ClusterArgs,
-		), c.Env)
+		), env)
 		if err != nil {
 			return err
 		}
