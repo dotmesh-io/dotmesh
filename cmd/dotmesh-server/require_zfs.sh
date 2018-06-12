@@ -329,7 +329,6 @@ shutdown() {
     exit 0
 }
 
-trap 'shutdown EXIT' EXIT
 trap 'shutdown SIGTERM' SIGTERM
 trap 'shutdown SIGINT' SIGINT
 trap 'shutdown SIGQUIT' SIGQUIT
