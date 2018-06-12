@@ -640,16 +640,15 @@ func TeardownFinishedTestRuns() {
 }
 
 func docker(node string, cmd string, env map[string]string) (string, error) {
-	envString := ""
-	c := exec.Command("docker", "exec", "-i", node, "bash", "-c", cmd)
+	args := []string{"exec"}
 	if env != nil {
 		for name, value := range env {
-			envString += name + "=" + value + " "
-		}
-		if len(envString) != 0 {
-			c = exec.Command("docker", "exec", "-e", envString, "-i", node, "bash", "-c", cmd)
+			args = append(args, []string{"-e", fmt.Sprintf("%s=%s", name, value)}...)
 		}
 	}
+	args = append(args, []string{"-i", node, "bash", "-c", cmd}...)
+	c := exec.Command("docker", args...)
+
 	var b bytes.Buffer
 	var o, e io.Writer
 	if _, ok := env["DEBUG_MODE"]; ok {
