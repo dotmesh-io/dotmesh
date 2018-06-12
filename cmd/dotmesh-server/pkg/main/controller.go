@@ -127,34 +127,48 @@ func (s *InMemoryState) deleteFilesystem(filesystemId string) error {
 	return nil
 }
 
-func (s *InMemoryState) maybeMountFilesystem(filesystemId string) error {
+func (s *InMemoryState) alignMountStateWithMasters(filesystemId string) error {
 	// We have been given a hint that a ZFS filesystem may now exist locally
 	// which may need to be mounted to match up with its desired mount state
 	// (as indicated by the "masters" state in etcd).
 
-	s.filesystemsLock.Lock()
-	defer s.filesystemsLock.Unlock()
+	fs, mounted, err := func() (*fsMachine, bool, error) {
+		s.filesystemsLock.Lock()
+		defer s.filesystemsLock.Unlock()
 
-	fs, ok := (*s.filesystems)[filesystemId]
-	if !ok {
+		fs, ok := (*s.filesystems)[filesystemId]
+		if !ok {
+			log.Printf(
+				"[maybeMountFilesystem] not doing anything - cannot find %v in fsMachines",
+				filesystemId,
+			)
+			return nil, false, fmt.Errorf("cannot find %v in fsMachines", filesystemId)
+		}
 		log.Printf(
-			"[maybeMountFilesystem] not doing anything - cannot find %v in fsMachines",
+			"[maybeMountFilesystem] called for %v; masterFor=%v, myNodeId=%v; mounted=%b",
 			filesystemId,
+			s.masterFor(filesystemId),
+			s.myNodeId,
+			fs.filesystem.mounted,
 		)
-		return nil
+		return fs, fs.filesystem.mounted, nil
+	}()
+	if err != nil {
+		return err
 	}
-	log.Printf(
-		"[maybeMountFilesystem] called for %v; masterFor=%v, myNodeId=%v; mounted=%b",
-		filesystemId,
-		s.masterFor(filesystemId),
-		s.myNodeId,
-		fs.filesystem.mounted,
-	)
 
-	if s.masterFor(filesystemId) == s.myNodeId && !fs.filesystem.mounted {
+	// not mounted but should be (we are the master)
+	if s.masterFor(filesystemId) == s.myNodeId && !mounted {
 		responseEvent, _ := fs.mount()
 		if responseEvent.Name != "mounted" {
 			return fmt.Errorf("Couldn't mount filesystem: %v", responseEvent)
+		}
+	}
+	// mounted but shouldn't be (we are not the master)
+	if s.masterFor(filesystemId) != s.myNodeId && mounted {
+		responseEvent, _ := fs.unmount()
+		if responseEvent.Name != "unmounted" {
+			return fmt.Errorf("Couldn't unmount filesystem: %v", responseEvent)
 		}
 	}
 	return nil

@@ -945,6 +945,16 @@ func (d *DotmeshRPC) registerFilesystemBecomeMaster(
 			if err != nil {
 				return err
 			}
+
+			// Immediately update the masters cache because we just wrote
+			// to etcd meaning we don't have to wait for a watch
+			// this is cconsistent with the code in createFilesystem
+			func() {
+				d.state.mastersCacheLock.Lock()
+				defer d.state.mastersCacheLock.Unlock()
+				(*d.state.mastersCache)[filesystemId] = d.state.myNodeId
+			}()
+
 		}
 	}
 
@@ -1702,6 +1712,18 @@ func (d *DotmeshRPC) SetDebugFlag(
 	switch args.FlagName {
 	case "PartialFailCreateFilesystem":
 		handleBooleanFlag(&d.state.debugPartialFailCreateFilesystem, args.FlagValue, result)
+	case "ForceStateMachineToDiscovering":
+		filesystemId := args.FlagValue
+		responseChan, err := d.state.globalFsRequest(
+			filesystemId,
+			&Event{Name: "deliberately-unhandled-event-for-test-purposes"},
+		)
+		if err != nil {
+			return err
+		}
+		e := <-responseChan
+		log.Printf("[SetDebugFlag] deliberately unhandled event replied with %#v", e)
+		*result = ""
 	default:
 		*result = ""
 		return fmt.Errorf("Unknown debug flag %s", args.FlagName)

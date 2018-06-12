@@ -42,19 +42,16 @@ func (a AlreadyLocked) Error() string {
 // AllRelated returns every running container that is using any dotmesh
 // filesystem, as a map from filesystem ids to lists of such containers
 func (d *DockerClient) AllRelated() (map[string][]DockerContainer, error) {
-	log.Printf("[AllRelated] starting AllRelated")
 	relatedContainers := map[string][]DockerContainer{}
 	containers, err := d.client.ListContainers(docker.ListContainersOptions{})
 	if err != nil {
 		return relatedContainers, err
 	}
-	log.Printf("[AllRelated] got containers = %+v", containers)
 	for _, c := range containers {
 		container, err := d.client.InspectContainer(c.ID)
 		if err != nil {
 			return relatedContainers, err
 		}
-		log.Printf("[AllRelated] inspect %s/%+v = %+v", c.ID, c.Names, container.Mounts)
 		if container.State.Running {
 			filesystems, err := d.relatedFilesystems(container)
 			if err != nil {
@@ -69,7 +66,6 @@ func (d *DockerClient) AllRelated() (map[string][]DockerContainer, error) {
 					relatedContainers[filesystem],
 					DockerContainer{Id: container.ID, Name: container.Name},
 				)
-				log.Printf("[AllRelated] found volume %s", filesystem)
 			}
 		}
 	}
@@ -163,29 +159,36 @@ func NewDockerClient() (*DockerClient, error) {
 
 func (d *DockerClient) Related(volumeName string) ([]DockerContainer, error) {
 	related := []DockerContainer{}
-	cs, err := d.client.ListContainers(docker.ListContainersOptions{})
-	if err != nil {
-		return related, err
-	}
-	done := map[string]bool{} // Kinda like a set.
-	for _, c := range cs {
-		container, err := d.client.InspectContainer(c.ID)
+	// default to using docker runtime, but also allow specifying.
+	if os.Getenv("CONTAINER_RUNTIME") == "" || os.Getenv("CONTAINER_RUNTIME") == "docker" {
+		cs, err := d.client.ListContainers(docker.ListContainersOptions{})
 		if err != nil {
 			return related, err
 		}
-		if container.State.Running && containerRelated(volumeName, container) {
-			// Only append if it's not already done.
-			if _, ok := done[container.ID]; !ok {
-				related = append(
-					related, DockerContainer{
-						Id: container.ID, Name: container.Name,
-					},
-				)
-				done[container.ID] = true
+		done := map[string]bool{} // Kinda like a set.
+		for _, c := range cs {
+			container, err := d.client.InspectContainer(c.ID)
+			if err != nil {
+				return related, err
+			}
+			if container.State.Running && containerRelated(volumeName, container) {
+				// Only append if it's not already done.
+				if _, ok := done[container.ID]; !ok {
+					related = append(
+						related, DockerContainer{
+							Id: container.ID, Name: container.Name,
+						},
+					)
+					done[container.ID] = true
+				}
 			}
 		}
+		log.Printf("[Related] Containers related to volume %+v: %+v", volumeName, related)
+	} else if os.Getenv("CONTAINER_RUNTIME") == "null" {
+		// do nothing
+	} else {
+		return related, fmt.Errorf("Unsupported container runtime %v", os.Getenv("CONTAINER_RUNTIME"))
 	}
-	log.Printf("[Related] Containers related to volume %+v: %+v", volumeName, related)
 	return related, nil
 }
 

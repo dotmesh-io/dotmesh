@@ -22,10 +22,14 @@ export REMOTE="smoke_test_`date +%s`"
 # Set traps before we go into the subshells, otherwise they'll never be
 # triggered!
 function finish {
-    echo "INTERNAL STATE"
-    "$DM" -c "$CONFIG" remote switch local
-    "$DM" -c "$CONFIG" debug DotmeshRPC.DumpInternalState
-    "$DM" -c "$CONFIG" remote rm "$REMOTE" || true
+    if [ SUCCESS = false ]; then
+        echo "INTERNAL STATE"
+        "$DM" -c "$CONFIG" remote switch local
+        "$DM" -c "$CONFIG" debug DotmeshRPC.DumpInternalState
+    fi
+    if [ x$SMOKE_TEST_REMOTE != x ]; then
+        "$DM" -c "$CONFIG" remote rm "$REMOTE" || true
+    fi
     rm "$CONFIG" || true
 }
 
@@ -63,8 +67,10 @@ OUT=`"$DM" -c "$CONFIG" log`
 
 if [[ $OUT == *"Test commit"* ]]; then
     echo "Commit found, yay!"
+    SUCCESS=true
 else
     echo "Commit not found, boo :("
+    SUCCESS=false
     exit 1
 fi
 

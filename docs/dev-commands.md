@@ -27,51 +27,7 @@ require internet access.
 * ~ 8G Memory
 * Currently well supported development platforms are NixOS and Ubuntu.
 
-## setting up CI runners
-
-To set up a CI runner on Linux, follow the same instructions as to set up a
-development environment for a user named `gitlab-runner` on the machine that is
-to become the runner, and then [register a GitLab runner](https://docs.gitlab.com/runner/register/index.html).
-
-Add the `gitlab-runner` user to the docker group, and tell sudo to let
-it run things as root without a password, with a line like this in your sudoers file:
-
-```
-gitlab-runner ALL=(ALL:ALL) NOPASSWD:ALL
-```
-
-MsacOS runners should similarly have a GitLab runner installed, and should
-additionally have
-[auto-upgrade-docker](https://github.com/dotmesh-io/auto-upgrade-docker)
-configured so that we can track breaking changes to Docker for Mac.
-
-When you are asked details in the registration phase, here's what I did for a Ubuntu runner:
-
-```
-Please enter the gitlab-ci tags for this runner (comma separated):
-fast,ubuntu
-Whether to run untagged builds [true/false]:
-[false]: true
-Whether to lock the Runner to current project [true/false]:
-[true]: false
-Registering runner... succeeded                     runner=WyJjQ2zg
-Please enter the executor: kubernetes, docker, parallels, shell, virtualbox, docker+machine, docker-ssh, ssh, docker-ssh+machine:
-shell
-```
-
-Add the `gitlab-runner` user's SSH public key to `authorized_hosts` on releases@get.dotmesh.io
-
-Edit  /etc/gitlab-runner/config.toml to set the concurrency to 4 (it's obvious how)
-
-## cleanup code - for CI runners and for local dev machines
-
-Put the following (sorry) in root's crontab (by e.g. running sudo crontab -e):
-```
-@hourly bash -c '(set -x; echo "starting cleanup!"; while ! (set -o noclobber;>/dotmesh-test-cleanup.lock); do echo "waiting to acquire test-cleanup lock to stop other containers starting..."; sleep 1; done; while [ ! -z "`for C in $(docker ps --format "{{.Names}}" | grep cluster- || true); do docker exec -i $C bash -c "if test -f /CLEAN_ME_UP; then echo CLEAN; else echo DIRTY; fi"; done|grep DIRTY`" ]; do echo "waiting for tests to complete..."; sleep 1; done; for X in $(mount|cut -d " " -f 3 |grep kubeadm-dind-cluster); do umount $X; done; systemctl restart docker; for X in `sudo zpool list|grep testpool|cut -f 1 -d " "`; do sudo zpool destroy -f $X; done; rm /dotmesh-test-cleanup.lock; echo "finished cleanup!") &>/var/log/cron-cleanup.log'
-@reboot rm /dotmesh-test-cleanup.lock
-```
-
-## setup - nixos
+## Setup - nixos
 
 Use a config like this:
 
@@ -116,7 +72,7 @@ Then run:
 sudo nixos-rebuild switch
 ```
 
-## setup - ubuntu
+## Setup - ubuntu
 
 [Install Docker](https://docs.docker.com/engine/installation/linux/docker-ce/ubuntu/), then put the following docker config in /etc/docker/daemon.json:
 
@@ -138,13 +94,13 @@ sysctl vm.max_map_count=262144
 
 Note on golang versions: The current ubuntu LTS is Ubuntu 16.04.3, and the default version of golang on this is go1.6.2. dotmesh requires go1.7 or above.
 ```
-apt-get install golang-1.9
+apt-get install golang-1.10
 ```
-This puts binaries in  `/usr/lib/go-1.9/bin`. So you'd need to set symlinks on your PATH to golang binaries
+This puts binaries in  `/usr/lib/go-1.10/bin`. So you'd need to set symlinks on your PATH to golang binaries
 
 ```
-ln -s  /usr/lib/go-1.9/bin/go /usr/local/bin/go
-ln -s  /usr/lib/go-1.9/bin/gofmt /usr/local/bin/gofmt
+ln -s  /usr/lib/go-1.10/bin/go /usr/local/bin/go
+ln -s  /usr/lib/go-1.10/bin/gofmt /usr/local/bin/gofmt
 ```
 
 [Install Docker Compose](https://docs.docker.com/compose/install/).
@@ -157,7 +113,7 @@ cat <<EOF >> /etc/hosts
 EOF
 ```
 
-## setup - debian
+## Setup - debian
 
 [Install Docker](https://docs.docker.com/engine/installation/linux/docker-ce/debian/), then put the following docker config in /etc/docker/daemon.json:
 
@@ -201,32 +157,31 @@ cat <<EOF >> /etc/hosts
 EOF
 ```
 
-## setup - vagrant
+## Setup - vagrant
 
-First - install vagrant.
+First - install vagrant. e.g `brew install vagrant`. If you haven't already, you likely need a linux VM driver of some sort, e.g `brew install virtualbox`.
 
-Then:
+Then, from wherever you cloned `dotmesh`:
 
 ```bash
-vagrant up
+vagrant up 
 vagrant ssh
 ssh-keygen
 # yes to all options
 cat ~/.ssh/id_rsa.pub
 ```
 
-Now paste this key into your github account.
+Now paste this key into your github account. (Your profile pic -> settings -> SSH & GPG keys -> add new)
 
 Now we login and run the `ubuntu` prepare script:
 
 ```bash
 vagrant ssh
-bash /vagrant/scripts/prepare_vagrant.sh
+bash /vagrant/scripts/prepare_vagrant.sh 
 exit
 vagrant ssh
 ```
-
-Install dep from https://golang.github.io/dep/docs/installation.html
+On first run `vagrant up` will probably take 5-10 minutes, `prepare_vagrant.sh` will probably take 10-15 minutes.
 
 NOTE: you must exit and re-ssh to get the GOPATH to work
 
@@ -242,21 +197,20 @@ bash /vagrant/scripts/reset_vagrant.sh
 ```
 
 #### symlink code
-
-It is possible to mount your local codebase into the vagrant VM so you can re-run the test suite without having to git commit & push.
+**Optional**: If you would like to work on code from your local machine (i.e not inside a VM), follow this section. Alternatively, you can just change code inside the vagrant VM and commit/push from inside it.
 
 There can be issues with Vagrant shared folders hence this being a manual step.
 
 ```bash
 vagrant ssh
 cd $GOPATH/src/github.com/dotmesh-io
-# might as well keep this
+# might as well keep this - backs up the version vagrant checked out for you
 mv dotmesh dotmesh2
 ln -s /vagrant dotmesh
 # now $GOPATH/src/github.com/dotmesh-io/dotmesh -> /vagrant -> this repo on your host
 ```
 
-NOTE: using the symlink can drastically slow down docker builds.
+**NOTE:** using the symlink can drastically slow down docker builds.
 
 You can use this script which copies the latest git hash from your host:
 
@@ -265,7 +219,7 @@ cd /vagrant
 make vagrant.sync
 ```
 
-## setup
+## generic setup instructions
 
 Assuming you have set your GOPATH (e.g. to `$HOME/gocode`):
 
@@ -287,7 +241,7 @@ cd dotmesh-instrumentation
 ./up.sh
 ```
 
-The `dotmesh-instrumentation` pack includes a local registry which is required 
+The `dotmesh-instrumentation` pack includes a local registry which is required
 for the integration tests.
 
 ```
@@ -307,8 +261,6 @@ tests will run:
 cd $GOPATH/src/github.com/dotmesh-io/dotmesh
 ./prime.sh
 ```
-
-Install dep from https://golang.github.io/dep/docs/installation.html
 
 ## running tests
 
@@ -333,3 +285,51 @@ To run just an individual set of tests, run:
 
 To run an individual test, specify `TestTwoSingleNodeClusters/TestName` for
 example.
+
+## setting up CI runners
+
+To set up a CI runner on Linux, follow the same instructions as to set up a
+development environment for a user named `gitlab-runner` on the machine that is
+to become the runner, and then [register a GitLab runner](https://docs.gitlab.com/runner/register/index.html).
+
+Add the `gitlab-runner` user to the docker group, and tell sudo to let
+it run things as root without a password, with a line like this in your sudoers file:
+
+```
+gitlab-runner ALL=(ALL:ALL) NOPASSWD:ALL
+```
+
+MsacOS runners should similarly have a GitLab runner installed, and should
+additionally have
+[auto-upgrade-docker](https://github.com/dotmesh-io/auto-upgrade-docker)
+configured so that we can track breaking changes to Docker for Mac.
+
+When you are asked details in the registration phase, here's what I did for a Ubuntu runner:
+
+```
+Please enter the gitlab-ci tags for this runner (comma separated):
+fast,ubuntu
+Whether to run untagged builds [true/false]:
+[false]: true
+Whether to lock the Runner to current project [true/false]:
+[true]: false
+Registering runner... succeeded                     runner=WyJjQ2zg
+Please enter the executor: kubernetes, docker, parallels, shell, virtualbox, docker+machine, docker-ssh, ssh, docker-ssh+machine:
+shell
+```
+
+Add the `gitlab-runner` user's SSH public key to `authorized_hosts` on releases@get.dotmesh.io
+
+Edit  /etc/gitlab-runner/config.toml to set the concurrency to 4 (it's obvious how)
+
+## cleanup code - for CI runners and for local dev machines
+
+Put the following (sorry) in root's crontab (by e.g. running sudo crontab -e):
+```
+# Disabled as it was too rough
+# @hourly bash -c '(set -x; echo "starting cleanup!"; while ! (set -o noclobber;>/dotmesh-test-cleanup.lock); do echo "waiting to acquire test-cleanup lock to stop other containers starting..."; sleep 1; done; while [ ! -z "`for C in $(docker ps --format "{{.Names}}" | grep cluster- || true); do docker exec -i $C bash -c "if test -f /CLEAN_ME_UP; then echo CLEAN; else echo DIRTY; fi"; done|grep DIRTY`" ]; do echo "waiting for tests to complete..."; sleep 1; done; for X in $(mount|cut -d " " -f 3 |grep kubeadm-dind-cluster); do umount $X; done; systemctl restart docker; for X in `sudo zpool list|grep testpool|cut -f 1 -d " "`; do sudo zpool destroy -f $X; done; rm /dotmesh-test-cleanup.lock; echo "finished cleanup!") &>/var/log/cron-cleanup.log'
+
+@daily bash -c 'echo y | docker image prune ; find /dotmesh-test-pools -ctime +1 -delete'
+
+@reboot rm /dotmesh-test-cleanup.lock
+```

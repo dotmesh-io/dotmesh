@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -80,6 +79,129 @@ func TestDefaultDot(t *testing.T) {
 		citools.RunOnNode(t, node1, "dm dot delete -f "+fsname1)
 		citools.RunOnNode(t, node1, "dm dot delete -f "+fsname2)
 	})
+}
+
+func TestRecoverFromUnmountedDotOnMaster(t *testing.T) {
+	// single node tests
+	citools.TeardownFinishedTestRuns()
+
+	f := citools.Federation{citools.NewCluster(1)}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
+
+	citools.StartTiming()
+	err := f.Start(t)
+	if err != nil {
+		t.Error(err)
+	}
+	node1 := f[0].GetNode(0).Container
+
+	assertMountState := func(t *testing.T, fsId string, desiredMountState bool) string {
+		var mountpoint string
+		err := citools.TryUntilSucceeds(func() error {
+			st := citools.OutputFromRunOnNode(t, node1, "docker exec -t dotmesh-server-inner mount")
+			if desiredMountState == true {
+				if !strings.Contains(st, fsId) {
+					return fmt.Errorf("%s not mounted", fsId)
+				} else {
+					fmt.Printf("%s is mounted!!! yay\n", fsId)
+					for _, line := range strings.Split(st, "\n") {
+						if strings.Contains(line, fsId) {
+							shrapnel := strings.Split(line, " ")
+							mountpoint = shrapnel[2]
+						}
+					}
+				}
+			} else {
+				if strings.Contains(st, fsId) {
+					return fmt.Errorf("%s mounted", fsId)
+				} else {
+					fmt.Printf("%s is not mounted!!! yay\n", fsId)
+				}
+			}
+			return nil
+		}, fmt.Sprintf("checking for %s to be mounted", fsId))
+		if err != nil {
+			t.Error(err)
+		}
+		return mountpoint
+	}
+
+	t.Run("FilesystemRemountedOnRestart", func(t *testing.T) {
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm init "+fsname)
+		resp := citools.OutputFromRunOnNode(t, node1, "dm list")
+		if !strings.Contains(resp, fsname) {
+			t.Error("unable to find volume name in ouput")
+		}
+
+		fsId := strings.TrimSpace(
+			citools.OutputFromRunOnNode(t, node1, "dm dot show -H | grep masterBranchId | cut -f 2"),
+		)
+		//zfsPath := strings.Replace(node1, "cluster", "testpool", -1) + "/dmfs/" + fsId
+
+		// wait for filesystem to be mounted (assert that it becomes mounted)
+		mountpoint := assertMountState(t, fsId, true)
+
+		// unmount the filesystem and assert that it's no longer mounted
+		citools.RunOnNode(t, node1,
+			"docker exec -t dotmesh-server-inner umount "+mountpoint,
+		)
+		assertMountState(t, fsId, false)
+
+		// restart dotmesh, and wait for it to come back
+		stopContainers(t, node1)
+		startContainers(t, node1)
+
+		// assert that dotmesh has re-mounted the filesystem
+		assertMountState(t, fsId, true)
+
+	})
+
+	t.Run("RecoverFromUnmountedDotOnMaster", func(t *testing.T) {
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm init "+fsname)
+		resp := citools.OutputFromRunOnNode(t, node1, "dm list")
+		if !strings.Contains(resp, fsname) {
+			t.Error("unable to find volume name in ouput")
+		}
+
+		fsId := strings.TrimSpace(
+			citools.OutputFromRunOnNode(t, node1, "dm dot show -H | grep masterBranchId | cut -f 2"),
+		)
+		//zfsPath := strings.Replace(node1, "cluster", "testpool", -1) + "/dmfs/" + fsId
+
+		// wait for filesystem to be mounted (assert that it becomes mounted)
+		mountpoint := assertMountState(t, fsId, true)
+
+		// unmount the filesystem and assert that it's no longer mounted
+		citools.RunOnNode(t, node1,
+			"docker exec -t dotmesh-server-inner umount "+mountpoint,
+		)
+		assertMountState(t, fsId, false)
+
+		// TODO: inject a fault into dotmesh which causes it to go back into
+		// discoveringState for this fsMachine and get wedged in inactiveState
+		// even though mastersCache says it should be active. send it a 'move'
+		// request, and observe that rather than going into an infinite loop,
+		// it self-corrects, checks mastersCache and goes back into active (and
+		// remounts the filesystem)
+		_, err := citools.DoSetDebugFlag(
+			f[0].GetNode(0).IP,
+			"admin",
+			f[0].GetNode(0).ApiKey,
+			"ForceStateMachineToDiscovering",
+			fsId,
+		)
+		if err != nil {
+			t.Error(err)
+		}
+
+		// assert that dotmesh has re-mounted the filesystem
+		assertMountState(t, fsId, true)
+
+	})
+
 }
 
 func TestSingleNode(t *testing.T) {
@@ -243,10 +365,14 @@ func TestSingleNode(t *testing.T) {
 		}
 		re, _ := regexp.Compile(`server.*up to date`)
 		matches := re.FindAllStringSubmatch(resp, -1)
-		masterReplicationStatus := matches[0][0]
-		branchReplicationStatus := matches[1][0]
-		if masterReplicationStatus == branchReplicationStatus {
-			t.Error("master and branch replication statusse are suspiciously similar")
+		if len(matches) < 2 {
+			t.Error("Unrecognisable result from `dm dot show`: %s, regexp matches: %#v", resp, matches)
+		} else {
+			masterReplicationStatus := matches[0][0]
+			branchReplicationStatus := matches[1][0]
+			if masterReplicationStatus == branchReplicationStatus {
+				t.Error("master and branch replication statusse are suspiciously similar")
+			}
 		}
 
 	})
@@ -534,8 +660,8 @@ func TestSingleNode(t *testing.T) {
 		if !strings.Contains(metrics, "dm_zpool_usage_percentage") {
 			t.Error("unable to find data on zpool capacity used on /metrics")
 		}
-		if !strings.Contains(metrics, "dm_rpc_req_total") {
-			t.Error("unable to find data on total rpc requests on /metrics")
+		if !strings.Contains(metrics, "dm_rpc_req_duration_seconds") {
+			t.Error("unable to find data on rpc request duration on /metrics")
 		}
 	})
 
@@ -1208,6 +1334,10 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 	}
 	node1 := f[0].GetNode(0).Container
 	node2 := f[1].GetNode(0).Container
+
+	t.Run("SpecifyPort", func(t *testing.T) {
+		citools.RunOnNode(t, node1, "echo "+f[1].GetNode(0).ApiKey+" | dm remote add funny_port_remote admin@"+f[1].GetNode(0).IP+":32607")
+	})
 
 	t.Run("PushCommitBranchExtantBase", func(t *testing.T) {
 		fsname := citools.UniqName()
@@ -1937,6 +2067,7 @@ func TestKubernetesOperator(t *testing.T) {
 
 	citools.LogTiming("setup")
 
+	// A quick smoke test of basic operation in this mode
 	t.Run("DynamicProvisioning", func(t *testing.T) {
 		// Ok, now we have the plumbing set up, try creating a PVC and see if it gets a PV dynamically provisioned
 		citools.KubectlApply(t, node1.Container, `
@@ -2041,6 +2172,128 @@ spec:
 
 		citools.LogTiming("DynamicProvisioning: Grapes on the vine")
 	})
+
+	t.Run("PVCReuse", func(t *testing.T) {
+		// Record the names of the PVCs we use
+		initialPvcs := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pvc -n dotmesh | cut -f 1 -d ' ' | sort")
+
+		// Modify nodeSelector to clusterSize-2=yes in the configmap and restart operator.
+		err := citools.ChangeOperatorNodeSelector(node1.Container, "clusterSize-2=yes")
+		if err != nil {
+			t.Error(err)
+		}
+		citools.RestartOperator(t, node1.Container)
+
+		err = citools.TryUntilSucceeds(func() error {
+			serverPods := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pods -n dotmesh | grep server | wc -l")
+			if serverPods == "2\n" {
+				return nil
+			}
+			return fmt.Errorf("Didn't go down to two pods, got pods: %v", serverPods)
+		}, "Trying to go down to two pods")
+		if err != nil {
+			t.Error(err)
+		}
+
+		// Modify nodeSelector to clusterSize-3=yes in the configmap and restart operator.
+		err = citools.ChangeOperatorNodeSelector(node1.Container, "clusterSize-3=yes")
+		if err != nil {
+			t.Error(err)
+		}
+		citools.RestartOperator(t, node1.Container)
+
+		// Check we go up to three pods and don't create a new PVC.
+		err = citools.TryUntilSucceeds(func() error {
+			serverPods := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pods -n dotmesh | grep server- | wc -l")
+			serverPvcs := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pvc -n dotmesh | grep pvc- | wc -l")
+			fmt.Printf("DM server pods: %s, DM server PVCs: %s\n",
+				strings.TrimSpace(serverPods),
+				strings.TrimSpace(serverPvcs))
+			if serverPods == "3\n" && serverPvcs == "3\n" {
+				return nil
+			}
+			return fmt.Errorf("Didn't go up to three pods, got pods: %v pvcs: %v", serverPods, serverPvcs)
+		}, "Trying to go up to three pods/pvcs")
+
+		if err != nil {
+			t.Error(err)
+		}
+
+		finalPvcs := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pvc -n dotmesh | cut -f 1 -d ' ' | sort")
+		if initialPvcs != finalPvcs {
+			t.Error("Didn't end up with the same PVCs as we started with. Before: %+v After: %+v", initialPvcs, finalPvcs)
+		}
+	})
+
+	t.Run("PVCMakeNew", func(t *testing.T) {
+		// Modify nodeSelector to clusterSize-2=yes in the configmap and restart operator.
+		err := citools.ChangeOperatorNodeSelector(node1.Container, "clusterSize-2=yes")
+		if err != nil {
+			t.Error(err)
+		}
+		citools.RestartOperator(t, node1.Container)
+
+		// Check we go down to two pods.
+		err = citools.TryUntilSucceeds(func() error {
+			serverPods := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pods -n dotmesh | grep server | wc -l")
+			if serverPods == "2\n" {
+				return nil
+			}
+			return fmt.Errorf("Didn't go down to two pods, got pods: %v", serverPods)
+		}, "Trying to go down to two pods")
+		if err != nil {
+			t.Error(err)
+		}
+
+		// Delete the abandoned PVC
+		pvcs := map[string]struct{}{}
+		pvcNames := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pvc -n dotmesh | grep pvc- | cut -f 1 -d ' '")
+		for _, pvcName := range strings.Split(pvcNames, "\n") {
+			if pvcName != "" {
+				pvcs[pvcName] = struct{}{}
+			}
+		}
+		serverPvcNames := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pods -n dotmesh | grep server- | sed s/^server-// | sed s/-node-.*//")
+		for _, pvcName := range strings.Split(serverPvcNames, "\n") {
+			if pvcName != "" {
+				delete(pvcs, pvcName)
+			}
+		}
+
+		if len(pvcs) != 1 {
+			t.Fatalf("Couldn't find the abandoned PVC name! Ended up with %#v", pvcs)
+		}
+
+		for pvcName, _ := range pvcs {
+			citools.RunOnNode(t, node1.Container, "kubectl delete pvc -n dotmesh "+pvcName)
+		}
+
+		// Modify nodeSelector to clusterSize-3=yes in the configmap and restart operator.
+		err = citools.ChangeOperatorNodeSelector(node1.Container, "clusterSize-3=yes")
+		if err != nil {
+			t.Error(err)
+		}
+		citools.RestartOperator(t, node1.Container)
+
+		// Check we go up to three pods and create a new PVC.
+		err = citools.TryUntilSucceeds(func() error {
+			serverPods := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pods -n dotmesh | grep server- | wc -l")
+			serverPvcs := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pvc -n dotmesh | grep pvc- | wc -l")
+			fmt.Printf("DM server pods: %s, DM server PVCs: %s\n",
+				strings.TrimSpace(serverPods),
+				strings.TrimSpace(serverPvcs))
+			if serverPods == "3\n" && serverPvcs == "3\n" {
+				return nil
+			}
+			return fmt.Errorf("Didn't go up to three pods, got pods: %v pvcs: %v", serverPods, serverPvcs)
+		}, "Trying to go up to three pods/pvcs")
+
+		if err != nil {
+			t.Error(err)
+		}
+
+	})
+
 	citools.DumpTiming()
 }
 
@@ -2339,24 +2592,30 @@ spec:
 			t.Error(err)
 		}
 
-		go func() {
-			err := citools.TryUntilSucceeds(func() error {
-				// write something into the directory (by parsing out the pvc name)
-				// e.g. /dotmesh-test-pools/dind-flexvolume/pvc-<id>
-				// keep trying because it'll only exist when the flexvolume driver kicks in
-				target, err := os.Create(fmt.Sprintf("/dotmesh-test-pools/dind-flexvolume/%s/on-the-vine", dindPvc))
-				if err != nil {
-					fmt.Printf(">>> ERROR CREATING DINDS, retrying...: %+v\n", err)
-				} else {
-					target.Write([]byte("dinds"))
-					target.Close()
-				}
-				return err
-			}, "trying to write to dind-flexvolume directory manually")
-			if err != nil {
-				fmt.Printf("gave up trying to write to dind flexvolume directory: %s\n", err)
-			}
-		}()
+		citools.KubectlApply(t, node1.Container, `
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dind-setup
+spec:
+  template:
+    metadata:
+      labels:
+        app: dind-setup
+    spec:
+      volumes:
+      - name: dind-storage
+        persistentVolumeClaim:
+         claimName: dind-pvc-test
+      restartPolicy: Never
+      containers:
+      - name: dind-setup
+        image: busybox
+        command: ['/bin/sh', '-c', 'echo dinds > /stuff/on-the-vine; ls /stuff']
+        volumeMounts:
+        - mountPath: "/stuff"
+          name: dind-storage
+`)
 
 		citools.LogTiming("DynamicProvisioning: finding dind PV")
 

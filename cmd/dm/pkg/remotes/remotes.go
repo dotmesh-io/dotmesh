@@ -43,6 +43,7 @@ import (
 type Remote struct {
 	User                 string
 	Hostname             string
+	Port                 int `json:",omitempty"`
 	ApiKey               string
 	CurrentVolume        string
 	CurrentBranches      map[string]string
@@ -283,7 +284,7 @@ func (c *Configuration) RemoteExists(remote string) bool {
 	return ok
 }
 
-func (c *Configuration) AddRemote(remote, user, hostname, apiKey string) error {
+func (c *Configuration) AddRemote(remote, user, hostname string, port int, apiKey string) error {
 	_, ok := c.Remotes[remote]
 	if ok {
 		return fmt.Errorf("Remote exists '%s'", remote)
@@ -291,6 +292,7 @@ func (c *Configuration) AddRemote(remote, user, hostname, apiKey string) error {
 	c.Remotes[remote] = &Remote{
 		User:     user,
 		Hostname: hostname,
+		Port:     port,
 		ApiKey:   apiKey,
 	}
 	return c.save()
@@ -318,6 +320,7 @@ func (c *Configuration) ClusterFromRemote(remote string) (*JsonRpcClient, error)
 	return &JsonRpcClient{
 		User:     remoteCreds.User,
 		Hostname: remoteCreds.Hostname,
+		Port:     remoteCreds.Port,
 		ApiKey:   remoteCreds.ApiKey,
 	}, nil
 }
@@ -329,6 +332,7 @@ func (c *Configuration) ClusterFromCurrentRemote() (*JsonRpcClient, error) {
 type JsonRpcClient struct {
 	User     string
 	Hostname string
+	Port     int
 	ApiKey   string
 }
 
@@ -378,22 +382,25 @@ func (j *JsonRpcClient) CallRemote(
 				"add'. Try 'dm cluster init' if you don't have a cluster yet.",
 		)
 	}
-
+	addressToUse := Address{}
 	addressesToTry := []Address{}
-
-	if j.Hostname == "saas.dotmesh.io" || j.Hostname == "dothub.com" {
-		scheme := "https"
-		port := 443
-		addressesToTry = append(addressesToTry, Address{scheme, j.Hostname, port})
+	var err error
+	if j.Port == 0 {
+		if j.Hostname == "saas.dotmesh.io" || j.Hostname == "dothub.com" {
+			scheme := "https"
+			port := 443
+			addressesToTry = append(addressesToTry, Address{scheme, j.Hostname, port})
+		} else {
+			scheme := "http"
+			addressesToTry = append(addressesToTry, Address{scheme, j.Hostname, 32607})
+			addressesToTry = append(addressesToTry, Address{scheme, j.Hostname, 6969})
+		}
+		addressToUse, err = j.tryAddresses(ctx, addressesToTry)
+		if err != nil {
+			return err
+		}
 	} else {
-		scheme := "http"
-		addressesToTry = append(addressesToTry, Address{scheme, j.Hostname, 32607})
-		addressesToTry = append(addressesToTry, Address{scheme, j.Hostname, 6969})
-	}
-
-	addressToUse, err := j.tryAddresses(ctx, addressesToTry)
-	if err != nil {
-		return err
+		addressToUse = Address{"http", j.Hostname, j.Port}
 	}
 
 	return j.reallyCallRemote(ctx, method, args, result, addressToUse)

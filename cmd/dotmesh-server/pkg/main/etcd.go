@@ -485,9 +485,11 @@ func (s *InMemoryState) handleOneFilesystemMaster(node *client.Node) error {
 
 		deleted, err = isFilesystemDeletedInEtcd(fs)
 		if err != nil {
+			log.Printf("[handleOneFilesystemMaster] error determining if file system is deleted: fs: %s, etcd nodeValue: %s, error: %+v", fs, node.Value, err)
 			return err
 		}
 		if deleted {
+			log.Printf("[handleOneFilesystemMaster] filesystem is deleted so no need to mount/unmount fs: %s, etcd nodeValue: %s", fs, node.Value)
 			// Filesystem is being deleted, so ignore it.
 			return nil
 		}
@@ -1118,6 +1120,20 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		s.etcdWaitTimestampLock.Lock()
 		defer s.etcdWaitTimestampLock.Unlock()
 		s.etcdWaitTimestamp = time.Now().UnixNano()
+		s.etcdWaitState = "insert initial admin password if not exists"
+	}()
+
+	// Do this every time, even if it fails.  This is to handle the case where
+	// etcd gets wiped underneath us.
+	err = s.insertInitialAdminPassword()
+	if err != nil {
+		log.Printf("[insertInitialAdminPassword] err: %v", err)
+	}
+
+	func() {
+		s.etcdWaitTimestampLock.Lock()
+		defer s.etcdWaitTimestampLock.Unlock()
+		s.etcdWaitTimestamp = time.Now().UnixNano()
 		s.etcdWaitState = "initial get"
 	}()
 
@@ -1291,13 +1307,6 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		go s.runPlugin()
 	})
 
-	// Do this every time, even if it fails.  This is to handle the case where
-	// etcd gets wiped underneath us.
-	err = s.insertInitialAdminPassword()
-	if err != nil {
-		log.Printf("[insertInitialAdminPassword] err: %v", err)
-	}
-
 	// now watch for changes, and pipe them into the state machines
 	watcher := kapi.Watcher(
 		fmt.Sprintf(ETCD_PREFIX),
@@ -1320,6 +1329,9 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 				s.etcdWaitTimestamp = time.Now().UnixNano()
 				s.etcdWaitState = fmt.Sprintf("watcher error %+v", err)
 			}()
+
+			// TODO: add some logging in this case
+			// we want to see if we have been too slow to process the etcd initial get
 			if strings.Contains(fmt.Sprintf("%v", err), "the requested history has been cleared") {
 				// Too much stuff changed in etcd since we processed all of it.
 				// Try to recover from this case. Just make a watcher from the
@@ -1380,6 +1392,12 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 
 		variant := getVariant(node.Node)
 		if variant == "filesystems/masters" {
+
+			/*
+
+				TODO: PUT SOME LOGGING HERE!
+
+			*/
 			modified := updateMine(node.Node)
 			if modified {
 				if err = s.handleOneFilesystemMaster(node.Node); err != nil {

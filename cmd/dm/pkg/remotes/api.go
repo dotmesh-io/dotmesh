@@ -15,7 +15,7 @@ import (
 )
 
 const DEFAULT_BRANCH string = "master"
-const RPC_TIMEOUT time.Duration = 2 * time.Minute
+const RPC_TIMEOUT time.Duration = 2 * time.Second
 
 type VersionInfo struct {
 	InstalledVersion    string `json:"installed_version"`
@@ -72,13 +72,19 @@ func (dm *DotmeshAPI) CallRemote(
 	return dm.client.CallRemote(ctx, method, args, response)
 }
 
-func (dm *DotmeshAPI) Ping() (bool, error) {
+func Ping(client *JsonRpcClient) (bool, error) {
 	var response bool
-	err := dm.client.CallRemote(context.Background(), "DotmeshRPC.Ping", struct{}{}, &response)
+	ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
+	defer cancel()
+	err := client.CallRemote(ctx, "DotmeshRPC.Ping", struct{}{}, &response)
 	if err != nil {
 		return false, err
 	}
 	return response, nil
+}
+
+func (dm *DotmeshAPI) PingLocal() (bool, error) {
+	return Ping(dm.client)
 }
 
 func (dm *DotmeshAPI) BackupEtcd() (string, error) {

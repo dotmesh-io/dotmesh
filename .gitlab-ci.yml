@@ -20,6 +20,7 @@ stages:
     - test
     - deploy
     - manual_deploy
+    - notify
 
 before_script:
     - mkdir -p gopath
@@ -32,8 +33,6 @@ before_script:
     - git checkout master && git pull --ff-only origin master
     - git checkout $CI_COMMIT_REF_NAME && git reset --hard $CI_COMMIT_SHA
     - while [ -f /dotmesh-test-cleanup.lock ]; do echo "waiting for test cleanup..."; sleep 1; done
-    - docker login -u $QUAY_USER -p $QUAY_PASSWORD quay.io
-    - docker login -u $OVH_REGISTRY_USERNAME -p $OVH_REGISTRY_PASSWORD registry.containers.ovh.net
 
 build_client_linux:
     stage: build
@@ -78,6 +77,7 @@ build_server:
         - fast
     script:
         # push to the OVH registry.
+        - docker login -u $OVH_REGISTRY_USERNAME -p $OVH_REGISTRY_PASSWORD registry.containers.ovh.net
         - (cd cmd/dotmesh-server && ./rebuild.sh) # also pushes
         - echo "pushed $CI_DOCKER_SERVER_IMAGE"
         - echo "pushed $CI_DOCKER_PROVISIONER_IMAGE"
@@ -86,6 +86,7 @@ build_server:
         # push to quay.io, by overriding various variables (although notably
         # not CI_DOCKER_DIND_PROVISIONER_IMAGE because that's test-only
         # tooling).
+        - docker login -u $QUAY_USER -p $QUAY_PASSWORD quay.io
         - (cd cmd/dotmesh-server && export CI_DOCKER_SERVER_IMAGE=$RELEASE_DOCKER_REGISTRY/dotmesh-server:$CI_COMMIT_SHA; export CI_DOCKER_PROVISIONER_IMAGE=$RELEASE_DOCKER_REGISTRY/dotmesh-dynamic-provisioner:$CI_COMMIT_SHA; export CI_DOCKER_OPERATOR_IMAGE=$RELEASE_DOCKER_REGISTRY/dotmesh-operator:$CI_COMMIT_SHA; ./rebuild.sh; echo "pushed $CI_DOCKER_SERVER_IMAGE"; echo "pushed $CI_DOCKER_PROVISIONER_IMAGE"; echo "pushed $CI_DOCKER_OPERATOR_IMAGE")
     artifacts:
         paths:
@@ -136,6 +137,8 @@ macos_docker_stable:
         - docker version
         - which docker
         - docker container prune -f
+    only:
+        - schedules
 
 macos_docker_edge:
     stage: test
@@ -155,6 +158,8 @@ macos_docker_edge:
         - docker version
         - which docker
         - docker container prune -f
+    only:
+        - schedules
 
 linux_smoke:
     stage: test
@@ -173,6 +178,8 @@ linux_smoke:
         - echo "DOCKER VERSION"
         - docker version
         - which docker
+    only:
+        - schedules
 
 versioner_unit_tests:
     stage: test
@@ -219,6 +226,23 @@ linux_single_node:
     except:
         - schedules
 
+linux_recover_from_unmounted_dot_on_master:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - ./test.sh -run TestRecoverFromUnmountedDotOnMaster
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
+    except:
+        - schedules
+
 linux_two_nodes_same_cluster:
     stage: test
     dependencies:
@@ -253,8 +277,9 @@ linux_kubernetes_volumes:
         when: always
     except:
         - schedules
+    allow_failure: true
 
-linux_kubernetes_operator:
+linux_kubernetes_operator_dynamic_provisioning:
     stage: test
     dependencies:
         - build_server
@@ -264,7 +289,25 @@ linux_kubernetes_operator:
         - fast
     script:
         - pwd
-        - ./test.sh -run TestKubernetesOperator
+        - ./test.sh -run TestKubernetesOperator/DynamicProvisioning
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
+    except:
+        - schedules
+
+linux_kubernetes_operator_PVC:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - pwd
+        - ./test.sh -run TestKubernetesOperator/PVC*
     artifacts:
         paths:
         - extracted_logs
@@ -484,4 +527,12 @@ mark_release_as_stable:
     - /^release-.*$/
   when: manual
   except:
+    - schedules
+
+notify_smoke_test_failure:
+  stage: notify
+  script:
+    - "curl -X POST -H 'Content-type: application/json' --data \"{\\\"text\\\":\\\"ALERT, Smoke tests failed $CI_PROJECT_URL/pipelines/$CI_PIPELINE_ID\\\"}\" $SLACK_WEBHOOK_URL"
+  when: on_failure
+  only:
     - schedules

@@ -21,8 +21,18 @@ import (
 	"github.com/dotmesh-io/rpc/v2/json2"
 )
 
+var DEBUG_ENV = map[string]string{"DEBUG_MODE": "1"}
+
 // props to https://github.com/kubernetes/kubernetes/issues/49387
 var KUBE_DEBUG_CMD = `(
+echo 'SEARCHABLE HEADER: KUBE DEBUG'
+echo ' _  ___   _ ____  _____   ____  _____ ____  _   _  ____ '
+echo '| |/ / | | | __ )| ____| |  _ \| ____| __ )| | | |/ ___|'
+echo "| ' /| | | |  _ \|  _|   | | | |  _| |  _ \| | | | |  _ "
+echo '| . \| |_| | |_) | |___  | |_| | |___| |_) | |_| | |_| |'
+echo '|_|\_\\___/|____/|_____| |____/|_____|____/ \___/ \____|'
+echo '                                                        '
+
 for INTERESTING_POD in $(kubectl get pods --all-namespaces --no-headers \
 		|grep -v Running | tr -s ' ' |cut -d ' ' -f 1,2,4 |tr ' ' '/'); do
 	NS=$(echo $INTERESTING_POD |cut -d "/" -f 1)
@@ -39,12 +49,23 @@ for INTERESTING_POD in $(kubectl get pods --all-namespaces --no-headers \
 	fi
 done
 kubectl get pods --all-namespaces
+echo '    ___  ___   _ ____  _____   ____  _____ ____  _   _  ____ '
+echo '   / / |/ / | | | __ )| ____| |  _ \| ____| __ )| | | |/ ___|'
+echo "  / /| ' /| | | |  _ \|  _|   | | | |  _| |  _ \| | | | |  _ "
+echo ' / / | . \| |_| | |_) | |___  | |_| | |___| |_) | |_| | |_| |'
+echo '/_/  |_|\_\\___/|____/|_____| |____/|_____|____/ \___/ \____|'
+echo '                                                             '
+
 exit 0)` // never let the debug command failing cause us to fail the tests!
 
 var timings map[string]float64
 var lastTiming int64
 
 const HOST_IP_FROM_CONTAINER = "10.192.0.1"
+
+var getFieldsByNewLine = func(c rune) bool {
+	return c == '\n'
+}
 
 func Contains(arr []string, str string) bool {
 	for _, a := range arr {
@@ -56,7 +77,6 @@ func Contains(arr []string, str string) bool {
 }
 
 func AddFuncToCleanups(f func()) {
-	log.Printf("ADDING CLEANUP FUNC %+v", f)
 	globalCleanupFuncs = append(globalCleanupFuncs, f)
 }
 
@@ -115,7 +135,14 @@ func TryUntilSucceeds(f func() error, desc string) error {
 }
 
 func TestMarkForCleanup(f Federation) {
-	log.Printf("Entering TestMarkForCleanup")
+	log.Printf(`Entering TestMarkForCleanup:
+  ____ _     _____    _    _   _ ___ _   _  ____   _   _ ____  
+ / ___| |   | ____|  / \  | \ | |_ _| \ | |/ ___| | | | |  _ \ 
+| |   | |   |  _|   / _ \ |  \| || ||  \| | |  _  | | | | |_) |
+| |___| |___| |___ / ___ \| |\  || || |\  | |_| | | |_| |  __/ 
+ \____|_____|_____/_/   \_\_| \_|___|_| \_|\____|  \___/|_|    
+                                                               
+`)
 	for _, c := range f {
 		for _, n := range c.GetNodes() {
 			node := n.Container
@@ -176,7 +203,16 @@ func testSetup(t *testing.T, f Federation, stamp int64) error {
 		return err
 	}
 
-	dindClusterScriptName := fmt.Sprintf("./dind-cluster-%d.sh", os.Getpid())
+	cwd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	dindClusterScriptName := fmt.Sprintf("%s/dind-cluster-%d.sh", cwd, os.Getpid())
+
+	runScriptDir := os.Getenv("DIND_RUN_FROM_PATH")
+	if runScriptDir == "" {
+		runScriptDir = cwd
+	}
 
 	// we write the dind-script.sh file out from go because we need to distribute
 	// that .sh script as a go package using dep
@@ -206,7 +242,7 @@ NUM_NODES=${NUM_NODES:-2}
 # KUBEADM_DIND_LOCAL=
 
 # Use prebuilt DIND image
-DIND_IMAGE="${DIND_IMAGE:-mirantis/kubeadm-dind-cluster:v1.10}"
+DIND_IMAGE="${DIND_IMAGE:-quay.io/dotmesh/kubeadm-dind-cluster:v1.10}"
 
 # Set to non-empty string to enable building kubeadm
 # BUILD_KUBEADM=y
@@ -249,7 +285,7 @@ CNI_PLUGIN="${CNI_PLUGIN:-bridge}"
 # possible values are kube-dns (default) and coredns
 DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 `
-	err = ioutil.WriteFile("./config.sh", []byte(dindConfig), 0644)
+	err = ioutil.WriteFile(fmt.Sprintf("%s/config.sh", runScriptDir), []byte(dindConfig), 0644)
 	if err != nil {
 		return err
 	}
@@ -288,9 +324,9 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 				mount --bind $MOUNTPOINT $MOUNTPOINT && \
 				mount --make-shared $MOUNTPOINT;
 			fi
-			EXTRA_DOCKER_ARGS="-v /dotmesh-test-pools:/dotmesh-test-pools:rshared -v /var/run/docker.sock:/hostdocker.sock %s " \
-			CNI_PLUGIN=weave \
-				%s bare $NODE %s
+			(cd %s
+				EXTRA_DOCKER_ARGS="-v /dotmesh-test-pools:/dotmesh-test-pools:rshared -v /var/run/docker.sock:/hostdocker.sock %s " \
+				CNI_PLUGIN=weave %s bare $NODE %s)
 			sleep 1
 			echo "About to run docker exec on $NODE"
 			docker exec -t $NODE bash -c '
@@ -321,7 +357,7 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 					systemctl restart docker
 				'
 			fi
-			`, node, mountDockerAuth, dindClusterScriptName, c.RunArgs(i, j), HOST_IP_FROM_CONTAINER, HOST_IP_FROM_CONTAINER))
+			`, node, runScriptDir, mountDockerAuth, dindClusterScriptName, c.RunArgs(i, j), HOST_IP_FROM_CONTAINER, HOST_IP_FROM_CONTAINER))
 			if err != nil {
 				return err
 			}
@@ -392,14 +428,11 @@ func TeardownFinishedTestRuns() {
 		signal.Notify(c, syscall.SIGPIPE)
 
 		// Block until a signal is received.
-		log.Printf("WAITING FOR THE SIGNAL")
 		s := <-c
 		log.Printf("Got signal:", s)
 		for _, f := range globalCleanupFuncs {
-			log.Printf("RUNNING CLEANUP FUNC")
 			f()
 		}
-		log.Printf("DONE CLEANUP")
 		os.Exit(131)
 
 	}()
@@ -607,19 +640,25 @@ func TeardownFinishedTestRuns() {
 }
 
 func docker(node string, cmd string, env map[string]string) (string, error) {
-	envString := ""
+	args := []string{"exec"}
 	if env != nil {
 		for name, value := range env {
-			envString += name + "=" + value + " "
+			args = append(args, []string{"-e", fmt.Sprintf("%s=%s", name, value)}...)
 		}
 	}
-
-	c := exec.Command("docker", "exec", "-i", node, "bash", "-c", envString+cmd)
+	args = append(args, []string{"-i", node, "bash", "-c", cmd}...)
+	c := exec.Command("docker", args...)
 
 	var b bytes.Buffer
+	var o, e io.Writer
+	if _, ok := env["DEBUG_MODE"]; ok {
+		o = io.MultiWriter(&b, os.Stdout)
+		e = io.MultiWriter(&b, os.Stderr)
 
-	o := io.MultiWriter(&b, os.Stdout)
-	e := io.MultiWriter(&b, os.Stderr)
+	} else {
+		o = io.MultiWriter(&b)
+		e = io.MultiWriter(&b)
+	}
 
 	c.Stdout = o
 	c.Stderr = e
@@ -638,8 +677,16 @@ func dockerSystem(node string, cmd string) error {
 
 func RunOnNode(t *testing.T, node string, cmd string) {
 	fmt.Printf("RUNNING on %s: %s\n", node, cmd)
-	debugEnv := map[string]string{"DEBUG_MODE": "1"}
+	debugEnv := map[string]string{}
 	s, err := docker(node, cmd, debugEnv)
+	if err != nil {
+		t.Error(fmt.Errorf("%s while running %s on %s: %s", err, cmd, node, s))
+	}
+}
+
+func RunOnNodeDebug(t *testing.T, node string, cmd string) {
+	fmt.Printf("RUNNING on %s: %s\n", node, cmd)
+	s, err := docker(node, cmd, DEBUG_ENV)
 	if err != nil {
 		t.Error(fmt.Errorf("%s while running %s on %s: %s", err, cmd, node, s))
 	}
@@ -908,6 +955,22 @@ func NodeFromNodeName(t *testing.T, now int64, i, j int, clusterName string) Nod
 }
 
 func (f Federation) Start(t *testing.T) error {
+	fmt.Printf(`
+SEARCHABLE HEADER: STARTING CLUSTER
+ ____ _____  _    ____ _____ ___ _   _  ____ 
+/ ___|_   _|/ \  |  _ \_   _|_ _| \ | |/ ___|
+\___ \ | | / _ \ | |_) || |  | ||  \| | |  _ 
+ ___) || |/ ___ \|  _ < | |  | || |\  | |_| |
+|____/ |_/_/   \_\_| \_\|_| |___|_| \_|\____|
+                                             
+  ____ _    _   _ ____ _____ _____ ____  
+ / ___| |  | | | / ___|_   _| ____|  _ \ 
+| |   | |  | | | \___ \ | | |  _| | |_) |
+| |___| |__| |_| |___) || | | |___|  _ < 
+ \____|_____\___/|____/ |_| |_____|_| \_\
+                                         
+`)
+
 	now := time.Now().UnixNano()
 	err := testSetup(t, f, now)
 	if err != nil {
@@ -982,6 +1045,15 @@ func (f Federation) Start(t *testing.T) error {
 			RunOnNode(t, pair.From.Container, "dm remote switch local")
 		}
 	}
+	fmt.Printf(`
+SEARCHABLE HEADER: STARTING TESTS
+ ____ _____  _    ____ _____ ___ _   _  ____   _____ _____ ____ _____ ____  
+/ ___|_   _|/ \  |  _ \_   _|_ _| \ | |/ ___| |_   _| ____/ ___|_   _/ ___| 
+\___ \ | | / _ \ | |_) || |  | ||  \| | |  _    | | |  _| \___ \ | | \___ \ 
+ ___) || |/ ___ \|  _ < | |  | || |\  | |_| |   | | | |___ ___) || |  ___) |
+|____/ |_/_/   \_\_| \_\|_| |___|_| \_|\____|   |_| |_____|____/ |_| |____/ 
+                                                                            
+`)
 	return nil
 }
 
@@ -1045,15 +1117,29 @@ func ChangeOperatorNodeSelector(masterNode, nodeSelector string) error {
 }
 
 func RestartOperator(t *testing.T, masterNode string) {
-	podName := strings.TrimSpace(OutputFromRunOnNode(t, masterNode, "kubectl get pods -n dotmesh | grep dotmesh-operator | cut -f 1 -d ' '"))
+	output := OutputFromRunOnNode(t, masterNode, "kubectl get pods -n dotmesh | grep dotmesh-operator | grep Running | cut -f 1 -d ' '")
+	podNames := strings.FieldsFunc(output, getFieldsByNewLine)
+
+	if len(podNames) != 1 {
+		t.Errorf("RunningOperatorPods = %v. Operator not running or more than one running operator instance detected.", podNames)
+	}
+	podName := podNames[0]
 	RunOnNode(t, masterNode, "kubectl delete pod -n dotmesh "+podName)
 	fmt.Printf("Counting operator pods:\n")
 	for tries := 1; tries < 10; tries++ {
-		podsExceptOld := OutputFromRunOnNode(t, masterNode, "kubectl get pods -n dotmesh | grep dotmesh-operator | grep -v "+podName+" | wc -l")
-		if podsExceptOld == "1\n" {
+		output := OutputFromRunOnNode(t, masterNode, "kubectl get pods -n dotmesh | grep dotmesh-operator | grep -v "+podName)
+		podsExceptOld := strings.FieldsFunc(output, getFieldsByNewLine)
+		running := len(podsExceptOld)
+		if running == 1 {
 			break
 		}
-		time.Sleep(5 * time.Second)
+
+		if tries == 9 {
+			t.Error("Couldn't seem to get back to a single operator pod running after restart :-(")
+		} else {
+			fmt.Printf("%d operator pods running: %#v\n", running, podsExceptOld)
+			time.Sleep(5 * time.Second)
+		}
 	}
 }
 
@@ -1127,10 +1213,13 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 	// ZFS will barf on them. Putting the k8s root dir in
 	// /dotmesh-test-pools means the paths are consistent across all
 	// containers, as we keep the same filesystem mounted there
-	// throughput.
+	// throughout.
 	for j := 0; j < c.DesiredNodeCount; j++ {
 		node := nodeName(now, i, j)
 		path := fmt.Sprintf("/dotmesh-test-pools/k8s-%s", node)
+		AddFuncToCleanups(func() {
+			System("rm", "-rf", path)
+		})
 		cmd := fmt.Sprintf("sed -i 's!hyperkube kubelet !hyperkube kubelet --root-dir %s !' /lib/systemd/system/kubelet.service && mkdir -p %s && systemctl restart kubelet", path, path)
 		_, err := docker(
 			node,
@@ -1310,7 +1399,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			"while ! kubectl apply -f /dotmesh-kube-yaml/dotmesh-etcd-cluster.yaml; do sleep 2; "+KUBE_DEBUG_CMD+"; done && "+
 			"echo '#### STARTING DOTMESH' && "+
 			"kubectl apply -f /dotmesh-kube-yaml/dotmesh.yaml",
-		nil,
+		DEBUG_ENV,
 	)
 	if err != nil {
 		return err
@@ -1413,7 +1502,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 				st, debugErr := docker(
 					nodeName(now, i, 0),
 					KUBE_DEBUG_CMD,
-					nil,
+					DEBUG_ENV,
 				)
 				if debugErr != nil {
 					log.Printf("Error debugging kubctl status:  %v, %s", debugErr, st)
@@ -1515,8 +1604,11 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 
 	fmt.Printf("running dm cluster init with following command: %s\n", dmInitCommand)
 
+	env := c.Env
+	env["DEBUG_MODE"] = "1"
+
 	st, err := docker(
-		nodeName(now, i, 0), dmInitCommand, c.Env)
+		nodeName(now, i, 0), dmInitCommand, env)
 
 	if err != nil {
 		return err
@@ -1549,7 +1641,7 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 			localImageArgs()+" --use-pool-dir /dotmesh-test-pools/"+poolId(now, i, j),
 			joinUrl,
 			" --use-pool-name "+poolId(now, i, j)+c.ClusterArgs,
-		), c.Env)
+		), env)
 		if err != nil {
 			return err
 		}

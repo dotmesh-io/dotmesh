@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -158,9 +159,12 @@ func (f *fsMachine) run() {
 		}
 		log.Printf("[run:%s] got resp: %s", f.filesystemId, resp)
 		log.Printf("[run:%s] writing to external responses", f.filesystemId)
-		f.responsesLock.Lock()
-		respChan, ok := f.responses[(*req.Args)["RequestId"].(string)]
-		f.responsesLock.Unlock()
+		respChan, ok := func() (chan *Event, bool) {
+			f.responsesLock.Lock()
+			defer f.responsesLock.Unlock()
+			respChan, ok := f.responses[(*req.Args)["RequestId"].(string)]
+			return respChan, ok
+		}()
 		if ok {
 			respChan <- resp
 		} else {
@@ -227,8 +231,8 @@ func (f *fsMachine) latestSnapshot() string {
 
 func (f *fsMachine) getResponseChan(reqId string, e *Event) (chan *Event, error) {
 	f.responsesLock.Lock()
+	defer f.responsesLock.Unlock()
 	respChan, ok := f.responses[reqId]
-	f.responsesLock.Unlock()
 	if !ok {
 		return nil, fmt.Errorf("No such request id response channel %s", reqId)
 	}
@@ -425,9 +429,12 @@ waitingForSlaveSnapshot:
 		// information about our new snapshot probably hasn't roundtripped
 		// through etcd yet, so use our definitive knowledge about our local
 		// state...
-		f.snapshotsLock.Lock()
-		snaps := f.filesystem.snapshots
-		f.snapshotsLock.Unlock()
+
+		snaps := func() []*snapshot {
+			f.snapshotsLock.Lock()
+			defer f.snapshotsLock.Unlock()
+			return f.filesystem.snapshots
+		}()
 
 		f.transitionedTo(
 			"handoff",
@@ -512,15 +519,114 @@ waitingForSlaveSnapshot:
 	return inactiveState
 }
 
-func (f *fsMachine) unmount() (responseEvent *Event, nextState stateFn) {
-	out, err := exec.Command("umount", mnt(f.filesystemId)).CombinedOutput()
+func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
+	/*
+		out, err := exec.Command(
+			"mkdir", "-p", mnt(f.filesystemId)).CombinedOutput()
+		if err != nil {
+			log.Printf("%v while trying to mkdir mountpoint %s", err, fq(f.filesystemId))
+			return &Event{
+				Name: "failed-mkdir-mountpoint",
+				Args: &EventArgs{"err": err, "combined-output": string(out)},
+			}, backoffState
+		}
+		out, err = exec.Command("mount.zfs", "-o", "noatime",
+			fq(f.filesystemId), mnt(f.filesystemId)).CombinedOutput()
+		if err != nil {
+			log.Printf("%v while trying to mount %s", err, fq(f.filesystemId))
+			return &Event{
+				Name: "failed-mount",
+				Args: &EventArgs{"err": err, "combined-output": string(out)},
+			}, backoffState
+		}
+		// trust that zero exit codes from mkdir && mount.zfs means
+		// that it worked and that the filesystem now exists and is
+		// mounted
+		f.snapshotsLock.Lock()
+		defer f.snapshotsLock.Unlock()
+		f.filesystem.exists = true // needed in create case
+		f.filesystem.mounted = true
+		return &Event{Name: "mounted", Args: &EventArgs{}}, activeState
+	*/
+
+	mountPath := mnt(f.filesystemId)
+	zfsPath := fq(f.filesystemId)
+
+	// only try to make the folder if it doesn't already exist
+	// if there is an error - it means we could not mount so don't
+	// update the filesystem with mounted = true
+	if _, err := os.Stat(mountPath); os.IsNotExist(err) {
+		out, err := exec.Command(
+			"mkdir", "-p", mountPath).CombinedOutput()
+		if err != nil {
+			log.Printf("%v while trying to mkdir mountpoint %s", err, zfsPath)
+			return &Event{
+				Name: "failed-mkdir-mountpoint",
+				Args: &EventArgs{"err": err, "combined-output": string(out)},
+			}, backoffState
+		}
+	}
+
+	// omly try to use mount.zfs if it's not already present in the output
+	// of calling "mount"
+	mounted, err := isFilesystemMounted(f.filesystemId)
 	if err != nil {
-		log.Printf("%v while trying to unmount %s", err, fq(f.filesystemId))
 		return &Event{
-			Name: "failed-unmount",
-			Args: &EventArgs{"err": err, "combined-output": string(out)},
+			Name: "failed-checking-if-mounted",
+			Args: &EventArgs{"err": err},
 		}, backoffState
 	}
+	if !mounted {
+		out, err := exec.Command("mount.zfs", "-o", "noatime",
+			zfsPath, mountPath).CombinedOutput()
+		if err != nil {
+			log.Printf("%v while trying to mount %s", err, zfsPath)
+			return &Event{
+				Name: "failed-mount",
+				Args: &EventArgs{"err": err, "combined-output": string(out)},
+			}, backoffState
+		}
+	}
+
+	// trust that zero exit codes from mkdir && mount.zfs means
+	// that it worked and that the filesystem now exists and is
+	// mounted
+	f.snapshotsLock.Lock()
+	defer f.snapshotsLock.Unlock()
+	f.filesystem.exists = true // needed in create case
+	f.filesystem.mounted = true
+	return &Event{Name: "mounted", Args: &EventArgs{}}, activeState
+}
+
+func (f *fsMachine) unmount() (responseEvent *Event, nextState stateFn) {
+	mounted, err := isFilesystemMounted(f.filesystemId)
+	if err != nil {
+		return &Event{
+			Name: "failed-checking-if-mounted",
+			Args: &EventArgs{"err": err},
+		}, backoffState
+	}
+	if mounted {
+		out, err := exec.Command("umount", mnt(f.filesystemId)).CombinedOutput()
+		if err != nil {
+			log.Printf("%v while trying to unmount %s", err, fq(f.filesystemId))
+			return &Event{
+				Name: "failed-unmount",
+				Args: &EventArgs{"err": err, "combined-output": string(out)},
+			}, backoffState
+		}
+		mounted, err := isFilesystemMounted(f.filesystemId)
+		if err != nil {
+			return &Event{
+				Name: "failed-checking-if-mounted",
+				Args: &EventArgs{"err": err},
+			}, backoffState
+		}
+		if mounted {
+			return f.unmount()
+		}
+	}
+
 	f.filesystem.mounted = false
 	return &Event{Name: "unmounted"}, inactiveState
 }
@@ -568,11 +674,15 @@ func (f *fsMachine) snapshot(e *Event) (responseEvent *Event, nextState stateFn)
 
 	}
 	log.Printf("[snapshot] listed snapshot: '%q'", strconv.Quote(string(list)))
-	f.snapshotsLock.Lock()
-	log.Printf("[snapshot] Succeeded snapshotting (out: '%s'), saving: %s", out, &snapshot{Id: snapshotId, Metadata: &meta})
-	f.filesystem.snapshots = append(f.filesystem.snapshots,
-		&snapshot{Id: snapshotId, Metadata: &meta})
-	f.snapshotsLock.Unlock()
+	func() {
+		f.snapshotsLock.Lock()
+		defer f.snapshotsLock.Unlock()
+		log.Printf("[snapshot] Succeeded snapshotting (out: '%s'), saving: %s", out, &snapshot{
+			Id: snapshotId, Metadata: &meta,
+		})
+		f.filesystem.snapshots = append(f.filesystem.snapshots,
+			&snapshot{Id: snapshotId, Metadata: &meta})
+	}()
 	f.snapshotsModified <- true
 	return &Event{Name: "snapshotted", Args: &EventArgs{"SnapshotId": snapshotId}}, activeState
 }
@@ -702,7 +812,7 @@ func activeState(f *fsMachine) stateFn {
 				return backoffState
 			}
 			if len(containers) > 0 {
-				log.Printf("[activeState:%s] Can't move filesystem when ontainers are using it. %s", f.filesystemId)
+				log.Printf("[activeState:%s] Can't move filesystem when containers are using it. %s", f.filesystemId)
 				f.innerResponses <- &Event{
 					Name: "cannot-move-while-containers-running",
 					Args: &EventArgs{"containers": containers},
@@ -762,9 +872,11 @@ func activeState(f *fsMachine) stateFn {
 			if sliceIndex > 0 {
 				log.Printf("found index %d", sliceIndex)
 				log.Printf("snapshots before %s", f.filesystem.snapshots)
-				f.snapshotsLock.Lock()
-				f.filesystem.snapshots = f.filesystem.snapshots[:sliceIndex]
-				f.snapshotsLock.Unlock()
+				func() {
+					f.snapshotsLock.Lock()
+					defer f.snapshotsLock.Unlock()
+					f.filesystem.snapshots = f.filesystem.snapshots[:sliceIndex]
+				}()
 				f.snapshotsModified <- true
 				log.Printf("snapshots after %s", f.filesystem.snapshots)
 			} else {
@@ -894,35 +1006,6 @@ func pointers(snapshots []snapshot) []*snapshot {
 	return newList
 }
 
-func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
-	out, err := exec.Command(
-		"mkdir", "-p", mnt(f.filesystemId)).CombinedOutput()
-	if err != nil {
-		log.Printf("%v while trying to mkdir mountpoint %s", err, fq(f.filesystemId))
-		return &Event{
-			Name: "failed-mkdir-mountpoint",
-			Args: &EventArgs{"err": err, "combined-output": string(out)},
-		}, backoffState
-	}
-	out, err = exec.Command("mount.zfs", "-o", "noatime",
-		fq(f.filesystemId), mnt(f.filesystemId)).CombinedOutput()
-	if err != nil {
-		log.Printf("%v while trying to mount %s", err, fq(f.filesystemId))
-		return &Event{
-			Name: "failed-mount",
-			Args: &EventArgs{"err": err, "combined-output": string(out)},
-		}, backoffState
-	}
-	// trust that zero exit codes from mkdir && mount.zfs means
-	// that it worked and that the filesystem now exists and is
-	// mounted
-	f.snapshotsLock.Lock()
-	f.filesystem.exists = true // needed in create case
-	f.filesystem.mounted = true
-	f.snapshotsLock.Unlock()
-	return &Event{Name: "mounted", Args: &EventArgs{}}, activeState
-}
-
 func inactiveState(f *fsMachine) stateFn {
 	f.transitionedTo("inactive", "waiting")
 	log.Printf("entering inactive state for %s", f.filesystemId)
@@ -1014,8 +1097,8 @@ func (f *fsMachine) plausibleSnapRange() (*snapshotRange, error) {
 	}
 
 	f.snapshotsLock.Lock()
+	defer f.snapshotsLock.Unlock()
 	snapRange, err := canApply(pointers(snapshots), f.filesystem.snapshots)
-	f.snapshotsLock.Unlock()
 
 	return snapRange, err
 }
@@ -1253,9 +1336,11 @@ func (f *fsMachine) discover() error {
 	if err != nil {
 		return err
 	}
-	f.snapshotsLock.Lock()
-	f.filesystem = filesystem
-	f.snapshotsLock.Unlock()
+	func() {
+		f.snapshotsLock.Lock()
+		defer f.snapshotsLock.Unlock()
+		f.filesystem = filesystem
+	}()
 
 	// quite probably we just learned about some snapshots we didn't know about
 	// before
@@ -1265,9 +1350,12 @@ func (f *fsMachine) discover() error {
 	// any observers in the process.
 	// XXX this _might_ break the fact that handoff doesn't check what snapshot
 	// it's notified about.
-	f.snapshotsLock.Lock()
-	snaps := filesystem.snapshots
-	f.snapshotsLock.Unlock()
+	var snaps []*snapshot
+	func() {
+		f.snapshotsLock.Lock()
+		defer f.snapshotsLock.Unlock()
+		snaps = filesystem.snapshots
+	}()
 
 	// []*snapshot => []snapshot, gah
 	snapsAlternate := []snapshot{}
@@ -1293,6 +1381,16 @@ func discoveringState(f *fsMachine) stateFn {
 	if !f.filesystem.exists {
 		return missingState
 	} else {
+		err := f.state.alignMountStateWithMasters(f.filesystemId)
+		if err != nil {
+			log.Printf(
+				"[discoveringState:%s] error trying to align mount state with masters: %v",
+				f.filesystemId,
+				err,
+			)
+			return backoffState
+		}
+		// TODO do we need to acquire some locks here?
 		if f.filesystem.mounted {
 			return activeState
 		} else {
@@ -1744,9 +1842,12 @@ func (f *fsMachine) retryPush(
 					Args: &EventArgs{"err": err, "filesystemId": toFilesystemId},
 				}, backoffState
 			}
-			fsMachine.snapshotsLock.Lock()
-			snaps := fsMachine.filesystem.snapshots
-			fsMachine.snapshotsLock.Unlock()
+			var snaps []*snapshot
+			func() {
+				fsMachine.snapshotsLock.Lock()
+				defer fsMachine.snapshotsLock.Unlock()
+				snaps = fsMachine.filesystem.snapshots
+			}()
 			// if we're given a target snapshot, restrict f.filesystem.snapshots to
 			// that snapshot
 			localSnaps, err := restrictSnapshots(snaps, toSnapshotId)
@@ -2658,9 +2759,12 @@ func pushPeerState(f *fsMachine) stateFn {
 					"[pushPeerState] %s matches target snapshot %s!",
 					sn.Id, targetSnapshot,
 				)
-				f.snapshotsLock.Lock()
-				mounted := f.filesystem.mounted
-				f.snapshotsLock.Unlock()
+				var mounted bool
+				func() {
+					f.snapshotsLock.Lock()
+					defer f.snapshotsLock.Unlock()
+					mounted = f.filesystem.mounted
+				}()
 				if mounted {
 					log.Printf(
 						"[pushPeerState:%s] mounted case, returning activeState on snap %s",
@@ -2826,9 +2930,11 @@ func (f *fsMachine) retryPull(
 			Args: &EventArgs{"err": err, "filesystemId": toFilesystemId},
 		}, backoffState
 	}
-	fsMachine.snapshotsLock.Lock()
-	localSnaps := fsMachine.filesystem.snapshots
-	fsMachine.snapshotsLock.Unlock()
+	localSnaps := func() []*snapshot {
+		fsMachine.snapshotsLock.Lock()
+		defer fsMachine.snapshotsLock.Unlock()
+		return fsMachine.filesystem.snapshots
+	}()
 	// if we're given a target snapshot, restrict f.filesystem.snapshots to
 	// that snapshot
 	remoteSnaps, err = restrictSnapshots(remoteSnaps, toSnapshotId)
@@ -3057,7 +3163,7 @@ func (f *fsMachine) applyPath(
 			},
 		}, backoffState
 	}
-	err := f.state.maybeMountFilesystem(path.TopLevelFilesystemId)
+	err := f.state.alignMountStateWithMasters(path.TopLevelFilesystemId)
 	if err != nil {
 		return &Event{
 			Name: "error-maybe-mounting-filesystem",
@@ -3105,7 +3211,7 @@ func (f *fsMachine) applyPath(
 				},
 				backoffState
 		}
-		err := f.state.maybeMountFilesystem(clone.Clone.FilesystemId)
+		err := f.state.alignMountStateWithMasters(clone.Clone.FilesystemId)
 		if err != nil {
 			return &Event{
 				Name: "error-maybe-mounting-filesystem",

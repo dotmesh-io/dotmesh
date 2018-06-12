@@ -25,6 +25,11 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
+
+	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"net/http"
 )
 
 // Log verbosities:
@@ -129,6 +134,14 @@ type dotmeshController struct {
 	updatesNeededLock *sync.Mutex
 
 	config *v1.ConfigMap
+
+	nodesGauge           *prometheus.GaugeVec
+	dottedNodesGauge     *prometheus.GaugeVec
+	undottedNodesGauge   *prometheus.GaugeVec
+	runningPodsGauge     *prometheus.GaugeVec
+	dotmeshesToKillGauge *prometheus.GaugeVec
+	suspendedNodesGauge  *prometheus.GaugeVec
+	targetMinPodsGauge   *prometheus.GaugeVec
 }
 
 func provideDefault(m *map[string]string, key string, deflt string) {
@@ -146,6 +159,36 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 		client:            client,
 		updatesNeeded:     false,
 		updatesNeededLock: &sync.Mutex{},
+
+		nodesGauge: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "dm_operator_nodes",
+			Help: "Number of eligible nodes in the cluster",
+		}, []string{}),
+		dottedNodesGauge: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "dm_operator_nodes_running_dotmesh",
+			Help: "Number of nodes running Dotmesh",
+		}, []string{}),
+		undottedNodesGauge: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "dm_operator_nodes_not_running_dotmesh",
+			Help: "Number of nodes not running Dotmesh",
+		}, []string{}),
+		suspendedNodesGauge: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "dm_operator_nodes_on_hold",
+			Help: "Number of nodes not ready to run a new Dotmesh yet",
+		}, []string{}),
+
+		runningPodsGauge: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "dm_operator_pods",
+			Help: "Number of Dotmesh pods in the cluster",
+		}, []string{}),
+		dotmeshesToKillGauge: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "dm_operator_pods_to_kill",
+			Help: "Number of Dotmesh pods marked for termination",
+		}, []string{}),
+		targetMinPodsGauge: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "dm_operator_pods_low_water_mark",
+			Help: "Number of Dotmesh pods we won't go below if we can help it",
+		}, []string{}),
 	}
 
 	config, err := client.Core().ConfigMaps(DOTMESH_NAMESPACE).Get(DOTMESH_CONFIG_MAP, meta_v1.GetOptions{})
@@ -345,6 +388,24 @@ func (c *dotmeshController) Run(stopCh chan struct{}) {
 		return
 	}
 
+	// Set up the monitoring HTTP server
+
+	router := mux.NewRouter()
+	router.Handle("/metrics", promhttp.Handler())
+	prometheus.MustRegister(c.nodesGauge)
+	prometheus.MustRegister(c.dottedNodesGauge)
+	prometheus.MustRegister(c.undottedNodesGauge)
+	prometheus.MustRegister(c.runningPodsGauge)
+	prometheus.MustRegister(c.dotmeshesToKillGauge)
+	prometheus.MustRegister(c.suspendedNodesGauge)
+	prometheus.MustRegister(c.targetMinPodsGauge)
+	go func() {
+		err := http.ListenAndServe(":32608", router)
+		glog.Fatal(err)
+	}()
+
+	// Start the polling loop
+
 	go wait.Until(c.runWorker, time.Second, stopCh)
 
 	<-stopCh
@@ -540,8 +601,9 @@ func (c *dotmeshController) process() error {
 
 		if status == v1.PodFailed {
 			// We're deleting the pod, so the user can't "kubectl describe" it, so let's log lots of stuff
-			glog.Infof("Observing pod %s - FAILED (Message: %s) (Reason: %s)",
+			glog.Infof("Observing pod %s - status %s: FAILED (Message: %s) (Reason: %s)",
 				podName,
+				status,
 				dotmesh.Status.Message,
 				dotmesh.Status.Reason,
 			)
@@ -563,21 +625,19 @@ func (c *dotmeshController) process() error {
 		// At this point, we believe this is a valid running Dotmesh pod.
 		// That node has a dotmesh, so isn't undotted.
 
-		// IDEA: We could try and health-check the pod if we find its IP
-		// and send it a Dotmesh RPC call, but we need to be careful NOT
-		// to consider pods still in the throes of startup broken and
-		// mark them for death. Perhaps we need to compare their age
-		// against a timeout value, and allow health-check failures for
-		// pods younger than a certain age. But how to set that age? On
-		// a busy cluster with a flakey Internet connection, could image
-		// fetching take an age? Perhaps we only eliminate "Running"
-		// pods that don't respond to a health-check over a certain age?
-		// Where do we draw the line?
 		glog.V(2).Infof("Observing pod %s running %s on %s (status: %s)", podName, image, boundNode, dotmesh.Status.Phase)
 		delete(undottedNodes, boundNode)
 	}
 
 	dottedNodeCount := len(validNodes) - len(undottedNodes)
+
+	c.nodesGauge.WithLabelValues().Set(float64(len(validNodes)))
+	c.dottedNodesGauge.WithLabelValues().Set(float64(dottedNodeCount))
+	c.undottedNodesGauge.WithLabelValues().Set(float64(len(undottedNodes)))
+	c.runningPodsGauge.WithLabelValues().Set(float64(runningPodCount))
+	c.dotmeshesToKillGauge.WithLabelValues().Set(float64(len(dotmeshesToKill)))
+	c.suspendedNodesGauge.WithLabelValues().Set(float64(len(suspendedNodes)))
+
 	glog.V(1).Infof("%d healthy-looking dotmeshes exist to run on %d nodes; %d of them seem to be actually running; %d dotmeshes need deleting, and %d out of %d undotted nodes are temporarily suspended",
 		dottedNodeCount, len(validNodes),
 		runningPodCount,
@@ -604,11 +664,18 @@ func (c *dotmeshController) process() error {
 	// spring up in their wake...
 
 	clusterMinimumPopulation := int(CLUSTER_MINIMUM_RATIO * float32(len(validNodes)))
+
+	// TODO: Rather than the runningPodCount, instead take a count of
+	// pods that are "Ready" according to k8s (now that we have a
+	// ReadinessProbe configured that checks the API server is
+	// available), and consider *that* the population.
 	clusterPopulation := runningPodCount
 
 	glog.V(1).Infof("%d/%d nodes might just be running or getting there, minimum target is %d",
 		clusterPopulation, len(validNodes),
 		clusterMinimumPopulation)
+
+	c.targetMinPodsGauge.WithLabelValues().Set(float64(clusterMinimumPopulation))
 
 	for dotmeshName, _ := range dotmeshesToKill {
 		if glog.V(4) {
@@ -668,6 +735,7 @@ nodeLoop:
 			{Name: "dotmesh-kernel-modules", MountPath: "/bundled-lib"},
 			{Name: "dotmesh-secret", MountPath: "/secret"},
 			{Name: "test-pools-dir", MountPath: "/dotmesh-test-pools"},
+			{Name: "pool-dir", MountPath: c.config.Data[CONFIG_LOCAL_POOL_LOCATION]},
 		}
 
 		volumes := []v1.Volume{
@@ -678,6 +746,7 @@ nodeLoop:
 			{Name: "system-lib", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/lib"}}},
 			{Name: "dotmesh-kernel-modules", VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{}}},
 			{Name: "dotmesh-secret", VolumeSource: v1.VolumeSource{Secret: &v1.SecretVolumeSource{SecretName: "dotmesh"}}},
+			{Name: "pool-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: c.config.Data[CONFIG_LOCAL_POOL_LOCATION]}}},
 		}
 
 		env := []v1.EnvVar{
@@ -875,14 +944,35 @@ nodeLoop:
 								ContainerPort: int32(32607),
 								Protocol:      v1.ProtocolTCP,
 							},
+							{
+								Name:          "dotmesh-live",
+								ContainerPort: int32(32608),
+								Protocol:      v1.ProtocolTCP,
+							},
 						},
-						VolumeMounts:    volumeMounts,
+						VolumeMounts: volumeMounts,
+						Lifecycle: &v1.Lifecycle{
+							PreStop: &v1.Handler{
+								Exec: &v1.ExecAction{
+									Command: []string{"docker", "rm", "-f", "dotmesh-server-inner"},
+								},
+							},
+						},
 						Env:             env,
 						ImagePullPolicy: v1.PullAlways,
 						LivenessProbe: &v1.Probe{
 							Handler: v1.Handler{
 								HTTPGet: &v1.HTTPGetAction{
-									Path: "/status",
+									Path: "/check",
+									Port: intstr.FromInt(32608),
+								},
+							},
+							InitialDelaySeconds: int32(30),
+						},
+						ReadinessProbe: &v1.Probe{
+							Handler: v1.Handler{
+								HTTPGet: &v1.HTTPGetAction{
+									Path: "/check",
 									Port: intstr.FromInt(32607),
 								},
 							},
