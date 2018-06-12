@@ -139,13 +139,13 @@ func (s *InMemoryState) alignMountStateWithMasters(filesystemId string) error {
 		fs, ok := (*s.filesystems)[filesystemId]
 		if !ok {
 			log.Printf(
-				"[maybeMountFilesystem] not doing anything - cannot find %v in fsMachines",
+				"[alignMountStateWithMasters] not doing anything - cannot find %v in fsMachines",
 				filesystemId,
 			)
 			return nil, false, fmt.Errorf("cannot find %v in fsMachines", filesystemId)
 		}
 		log.Printf(
-			"[maybeMountFilesystem] called for %v; masterFor=%v, myNodeId=%v; mounted=%b",
+			"[alignMountStateWithMasters] called for %v; masterFor=%v, myNodeId=%v; mounted=%b",
 			filesystemId,
 			s.masterFor(filesystemId),
 			s.myNodeId,

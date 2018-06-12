@@ -520,46 +520,15 @@ waitingForSlaveSnapshot:
 }
 
 func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
-	/*
-		out, err := exec.Command(
-			"mkdir", "-p", mnt(f.filesystemId)).CombinedOutput()
-		if err != nil {
-			log.Printf("%v while trying to mkdir mountpoint %s", err, fq(f.filesystemId))
-			return &Event{
-				Name: "failed-mkdir-mountpoint",
-				Args: &EventArgs{"err": err, "combined-output": string(out)},
-			}, backoffState
-		}
-		out, err = exec.Command("mount.zfs", "-o", "noatime",
-			fq(f.filesystemId), mnt(f.filesystemId)).CombinedOutput()
-		if err != nil {
-			log.Printf("%v while trying to mount %s", err, fq(f.filesystemId))
-			return &Event{
-				Name: "failed-mount",
-				Args: &EventArgs{"err": err, "combined-output": string(out)},
-			}, backoffState
-		}
-		// trust that zero exit codes from mkdir && mount.zfs means
-		// that it worked and that the filesystem now exists and is
-		// mounted
-		f.snapshotsLock.Lock()
-		defer f.snapshotsLock.Unlock()
-		f.filesystem.exists = true // needed in create case
-		f.filesystem.mounted = true
-		return &Event{Name: "mounted", Args: &EventArgs{}}, activeState
-	*/
-
 	mountPath := mnt(f.filesystemId)
 	zfsPath := fq(f.filesystemId)
 
-	// only try to make the folder if it doesn't already exist
-	// if there is an error - it means we could not mount so don't
-	// update the filesystem with mounted = true
+	// only try to make the directory if it doesn't already exist
 	if _, err := os.Stat(mountPath); os.IsNotExist(err) {
 		out, err := exec.Command(
 			"mkdir", "-p", mountPath).CombinedOutput()
 		if err != nil {
-			log.Printf("%v while trying to mkdir mountpoint %s", err, zfsPath)
+			log.Printf("[mount:%s] %v while trying to mkdir mountpoint %s", f.filesystemId, err, zfsPath)
 			return &Event{
 				Name: "failed-mkdir-mountpoint",
 				Args: &EventArgs{"err": err, "combined-output": string(out)},
@@ -567,7 +536,7 @@ func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
 		}
 	}
 
-	// omly try to use mount.zfs if it's not already present in the output
+	// only try to use mount.zfs if it's not already present in the output
 	// of calling "mount"
 	mounted, err := isFilesystemMounted(f.filesystemId)
 	if err != nil {
@@ -579,7 +548,31 @@ func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
 	if !mounted {
 		out, err := exec.Command("mount.zfs", "-o", "noatime",
 			zfsPath, mountPath).CombinedOutput()
+		// if there is an error - it means we could not mount so don't
+		// update the filesystem with mounted = true
 		if err != nil {
+			log.Printf("[mount:%s] %v while trying to mount %s", f.filesystemId, err, zfsPath)
+			if strings.Contains(string(out), "already mounted") {
+				// This can happen when the filesystem is mounted in another
+				// namespace. Try unmounting it from the root...
+				log.Printf(
+					"[mount:%s] attempting recovery-unmount in ns 1 after %v/%v",
+					f.filesystemId, err, string(out),
+				)
+				rout, rerr := exec.Command(
+					"nsenter", "-t", "1", "-m", "-u", "-n", "-i",
+					"umount", mountPath,
+				).CombinedOutput()
+				if rerr != nil {
+					return &Event{
+						Name: "failed-recovery-unmount",
+						Args: &EventArgs{"err": rerr, "combined-output": string(rout)},
+					}, backoffState
+				}
+				// recurse
+				// TODO limit recursion depth
+				return f.mount()
+			}
 			log.Printf("%v while trying to mount %s", err, zfsPath)
 			return &Event{
 				Name: "failed-mount",
