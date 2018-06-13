@@ -281,20 +281,6 @@ done
 # a pod but a container run from /var/run/docker.sock
 (while true; do docker logs -f dotmesh-server-inner || true; sleep 1; done) &
 
-# In order of the -v options below:
-
-# 1. Mount the docker socket so that we can stop and start containers around
-#    e.g. dm reset.
-
-# 2. Be able to install the docker plugin.
-
-# 3. Be able to mount zfs filesystems from inside the container in
-#    such a way that they propogate up to the host, and be able to
-#    create some symlinks that we hand to the docker volume plugin.
-
-# 4. Be able to install a Kubernetes FlexVolume driver (we make symlinks
-#    where it tells us to).
-
 TERMINATING=no
 
 cleanup() {
@@ -341,6 +327,25 @@ trap 'shutdown SIGHUP' SIGHUP
 trap 'shutdown SIGKILL' SIGKILL
 
 set +e
+
+# In order of the -v options below:
+
+# 1. Mount the docker socket so that we can stop and start containers around
+#    e.g. dm reset.
+
+# 2. Be able to install the docker plugin.
+
+# 3. Be able to mount zfs filesystems from inside the container in
+#    such a way that they propogate up to the host, and be able to
+#    create some symlinks that we hand to the docker volume plugin.
+
+# 4. Be able to install a Kubernetes FlexVolume driver (we make symlinks
+#    where it tells us to).
+
+# NOTE: The *source* path in the -v flags IS AS SEEN BY THE HOST,
+# *not* as seen by this container running require_zfs.sh, because
+# we're talking to the host docker. That's why we must map
+# $OUTER_DIR:$OUTER_DIR and not $DIR:$OUTER_DIR...
 
 docker run -i $rm_opt --pid=host --privileged --name=$DOTMESH_INNER_SERVER_NAME \
     -v /var/run/docker.sock:/var/run/docker.sock \
