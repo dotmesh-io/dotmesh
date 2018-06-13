@@ -337,7 +337,7 @@ trap 'shutdown SIGKILL' SIGKILL
 
 set +e
 
-docker run -i $rm_opt --privileged --name=$DOTMESH_INNER_SERVER_NAME \
+docker run -i $rm_opt --pid=host --privileged --name=$DOTMESH_INNER_SERVER_NAME \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v /run/docker/plugins:/run/docker/plugins \
     -v $OUTER_DIR:$OUTER_DIR:rshared \

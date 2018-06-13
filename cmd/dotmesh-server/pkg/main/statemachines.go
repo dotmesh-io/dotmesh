@@ -566,7 +566,10 @@ func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
 				if rerr != nil {
 					return &Event{
 						Name: "failed-recovery-unmount",
-						Args: &EventArgs{"err": rerr, "combined-output": string(rout)},
+						Args: &EventArgs{
+							"original-err": err, "original-combined-output": string(out),
+							"recovery-err": rerr, "recovery-combined-output": string(rout),
+						},
 					}, backoffState
 				}
 				// recurse
