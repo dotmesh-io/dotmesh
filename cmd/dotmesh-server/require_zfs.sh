@@ -309,11 +309,16 @@ cleanup() {
         return
     fi
 
-    # Release the ZFS pool
+    # Release the ZFS pool. Do so in a mount namespace which has $OUTER_DIR
+    # rshared, otherwise zpool export's unmounts can be mighty confusing.
     echo "`date`: Unmounting $MOUNTPOINT:" >> $POOL_LOGFILE
-    umount "$MOUNTPOINT" >> $POOL_LOGFILE 2>&1 || true
+    docker run -i --rm --name=require-zfs-unmounter-$$ --pid=host --privileged \
+        -v $OUTER_DIR:$OUTER_DIR:rshared $DOTMESH_DOCKER_IMAGE \
+        umount "$MOUNTPOINT" >> $POOL_LOGFILE 2>&1 || true
     echo "`date`: zpool exporting $POOL:" >> $POOL_LOGFILE
-    zpool export -f "$POOL" >> $POOL_LOGFILE 2>&1
+    docker run -i --rm --name=require-zfs-exporter-$$ --pid=host --privileged \
+        -v $OUTER_DIR:$OUTER_DIR:rshared $DOTMESH_DOCKER_IMAGE \
+        zpool export -f "$POOL" >> $POOL_LOGFILE 2>&1
 
     echo "`date`: Finished cleanup: zpool export returned $?" >> $POOL_LOGFILE
 }
