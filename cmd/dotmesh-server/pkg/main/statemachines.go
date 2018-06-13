@@ -349,6 +349,9 @@ func (f *fsMachine) transitionedTo(state string, status string) {
 	defer f.state.globalStateCacheLock.Unlock()
 	// fake an etcd version for anyone expecting a version field
 	update["version"] = "0"
+	if _, ok := (*f.state.globalStateCache)[f.state.myNodeId]; !ok {
+		(*f.state.globalStateCache)[f.state.myNodeId] = map[string]map[string]string{}
+	}
 	(*f.state.globalStateCache)[f.state.myNodeId][f.filesystemId] = update
 }
 
