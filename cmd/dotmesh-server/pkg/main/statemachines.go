@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -548,19 +549,58 @@ func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
 	if !mounted {
 		out, err := exec.Command("mount.zfs", "-o", "noatime",
 			zfsPath, mountPath).CombinedOutput()
-		// if there is an error - it means we could not mount so don't
-		// update the filesystem with mounted = true
 		if err != nil {
 			log.Printf("[mount:%s] %v while trying to mount %s", f.filesystemId, err, zfsPath)
 			if strings.Contains(string(out), "already mounted") {
-				// This can happen when the filesystem is mounted in another
-				// namespace. Try unmounting it from the root...
+				// This can happen when the filesystem is mounted in some other
+				// namespace for some reason. Try searching for it in all
+				// processes' mount namespaces, and recursively unmounting it
+				// from one namespace at a time until becomes free...
+				firstPidNSToUnmount, rerr := func() (string, error) {
+					mountTables, err := filepath.Glob("/proc/*/mounts")
+					if err != nil {
+						return "", err
+					}
+					if mountTables == nil {
+						return "", fmt.Errorf("no mount tables in /proc/*/mounts")
+					}
+					for _, mountTable := range mountTables {
+						mounts, err := ioutil.ReadFile(mountTable)
+						if err != nil {
+							// pids can disappear between globbing and reading
+							log.Printf(
+								"[mount:%s] ignoring error reading pid mount table %v: %v",
+								mountTable, err,
+							)
+							continue
+						}
+						// return the first namespace found, as we'll unmount
+						// in there and then try again (recursively)
+						for _, line := range strings.Split(string(mounts), "\n") {
+							if strings.Contains(line, f.filesystemId) {
+								shrapnel := strings.Split(mountTable, "/")
+								// e.g. (0)/(1)proc/(2)X/(3)mounts
+								return shrapnel[2], nil
+							}
+						}
+					}
+					return "", fmt.Errorf("unable to find %s in any /proc/*/mounts", f.filesystemId)
+				}()
+				if rerr != nil {
+					return &Event{
+						Name: "failed-finding-namespace-to-unmount",
+						Args: &EventArgs{
+							"original-err": err, "original-combined-output": string(out),
+							"recovery-err": rerr,
+						},
+					}, backoffState
+				}
 				log.Printf(
-					"[mount:%s] attempting recovery-unmount in ns 1 after %v/%v",
-					f.filesystemId, err, string(out),
+					"[mount:%s] attempting recovery-unmount in ns %s after %v/%v",
+					f.filesystemId, firstPidNSToUnmount, err, string(out),
 				)
 				rout, rerr := exec.Command(
-					"nsenter", "-t", "1", "-m", "-u", "-n", "-i",
+					"nsenter", "-t", firstPidNSToUnmount, "-m", "-u", "-n", "-i",
 					"umount", mountPath,
 				).CombinedOutput()
 				if rerr != nil {
@@ -572,11 +612,14 @@ func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
 						},
 					}, backoffState
 				}
-				// recurse
+				// recurse, maybe we've made enough progress to be able to
+				// mount this time?
+				//
 				// TODO limit recursion depth
 				return f.mount()
 			}
-			log.Printf("%v while trying to mount %s", err, zfsPath)
+			// if there is an error - it means we could not mount so don't
+			// update the filesystem with mounted = true
 			return &Event{
 				Name: "failed-mount",
 				Args: &EventArgs{"err": err, "combined-output": string(out)},
