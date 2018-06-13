@@ -17,8 +17,8 @@ variables:
 
 stages:
     - build
-    - deploy
     - test
+    - deploy
     - manual_deploy
     - notify
 
