@@ -344,6 +344,12 @@ func (f *fsMachine) transitionedTo(state string, status string) {
 		log.Printf("error updating etcd: %s", update, err)
 		return
 	}
+	// we don't hear our own echo, so set it locally too.
+	f.state.globalStateCacheLock.Lock()
+	defer f.state.globalStateCacheLock.Unlock()
+	// fake an etcd version for anyone expecting a version field
+	update["version"] = "0"
+	(*f.state.globalStateCache)[f.state.myNodeId][f.filesystemId] = update
 }
 
 // state functions
