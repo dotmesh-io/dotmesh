@@ -281,6 +281,53 @@ done
 # a pod but a container run from /var/run/docker.sock
 (while true; do docker logs -f dotmesh-server-inner || true; sleep 1; done) &
 
+TERMINATING=no
+
+cleanup() {
+    local REASON="$1"
+
+    if [ $TERMINATING = no ]
+    then
+        echo "`date`: Shutting down due to $REASON" >> $POOL_LOGFILE
+        TERMINATING=yes
+    else
+        echo "`date`: Ignoring $REASON as we're already shutting down" >> $POOL_LOGFILE
+        return
+    fi
+
+    # Release the ZFS pool. Do so in a mount namespace which has $OUTER_DIR
+    # rshared, otherwise zpool export's unmounts can be mighty confusing.
+    echo "`date`: Unmounting $MOUNTPOINT:" >> $POOL_LOGFILE
+    docker run -i --rm --name=require-zfs-unmounter-$$ --pid=host --privileged \
+        -v $OUTER_DIR:$OUTER_DIR:rshared $DOTMESH_DOCKER_IMAGE \
+        umount "$MOUNTPOINT" >> $POOL_LOGFILE 2>&1 || true
+    echo "`date`: zpool exporting $POOL:" >> $POOL_LOGFILE
+    docker run -i --rm --name=require-zfs-exporter-$$ --pid=host --privileged \
+        -v $OUTER_DIR:$OUTER_DIR:rshared $DOTMESH_DOCKER_IMAGE \
+        zpool export -f "$POOL" >> $POOL_LOGFILE 2>&1
+
+    echo "`date`: Finished cleanup: zpool export returned $?" >> $POOL_LOGFILE
+}
+
+shutdown() {
+    local SIGNAL="$1"
+
+    # Remove the handler now it's happened once
+    trap - $SIGNAL
+
+    cleanup "signal $SIGNAL"
+
+    exit 0
+}
+
+trap 'shutdown SIGTERM' SIGTERM
+trap 'shutdown SIGINT' SIGINT
+trap 'shutdown SIGQUIT' SIGQUIT
+trap 'shutdown SIGHUP' SIGHUP
+trap 'shutdown SIGKILL' SIGKILL
+
+set +e
+
 # In order of the -v options below:
 
 # 1. Mount the docker socket so that we can stop and start containers around
@@ -295,46 +342,12 @@ done
 # 4. Be able to install a Kubernetes FlexVolume driver (we make symlinks
 #    where it tells us to).
 
-TERMINATING=no
+# NOTE: The *source* path in the -v flags IS AS SEEN BY THE HOST,
+# *not* as seen by this container running require_zfs.sh, because
+# we're talking to the host docker. That's why we must map
+# $OUTER_DIR:$OUTER_DIR and not $DIR:$OUTER_DIR...
 
-shutdown() {
-    local SIGNAL=$1
-
-    # Remove the handler now it's happened once
-    trap - $SIGNAL
-
-    if [ $TERMINATING = no ]
-    then
-        echo "`date`: Shutting down due to $SIGNAL" >> $POOL_LOGFILE
-        TERMINATING=yes
-    else
-        echo "`date`: Ignoring $SIGNAL as we're already shutting down" >> $POOL_LOGFILE
-        return
-    fi
-
-    # Release the ZFS pool
-    echo "`date`: DEBUG: Mount table:" >> $POOL_LOGFILE
-    mount >> $POOL_LOGFILE || true
-    echo "`date`: Unmounting $MOUNTPOINT:" >> $POOL_LOGFILE
-    umount "$MOUNTPOINT" >> $POOL_LOGFILE 2>&1 || true
-    echo "`date`: zpool exporting $POOL:" >> $POOL_LOGFILE
-    zpool export -f "$POOL" >> $POOL_LOGFILE 2>&1
-
-    echo "`date`: DONE from $SIGNAL: zpool export returned $?" >> $POOL_LOGFILE
-
-    exit 0
-}
-
-trap 'shutdown EXIT' EXIT
-trap 'shutdown SIGTERM' SIGTERM
-trap 'shutdown SIGINT' SIGINT
-trap 'shutdown SIGQUIT' SIGQUIT
-trap 'shutdown SIGHUP' SIGHUP
-trap 'shutdown SIGKILL' SIGKILL
-
-set +e
-
-docker run -i $rm_opt --privileged --name=$DOTMESH_INNER_SERVER_NAME \
+docker run -i $rm_opt --pid=host --privileged --name=$DOTMESH_INNER_SERVER_NAME \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v /run/docker/plugins:/run/docker/plugins \
     -v $OUTER_DIR:$OUTER_DIR:rshared \
@@ -359,7 +372,7 @@ docker run -i $rm_opt --privileged --name=$DOTMESH_INNER_SERVER_NAME \
 
 RETVAL=$?
 
-shutdown "inner container terminating with retval=$RETVAL"
+cleanup "inner container terminating with retval=$RETVAL"
 
 docker logs $DOTMESH_INNER_SERVER_NAME > $DIR/dotmesh_server_inner_log
 

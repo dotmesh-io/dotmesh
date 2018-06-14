@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -343,6 +344,15 @@ func (f *fsMachine) transitionedTo(state string, status string) {
 		log.Printf("error updating etcd: %s", update, err)
 		return
 	}
+	// we don't hear our own echo, so set it locally too.
+	f.state.globalStateCacheLock.Lock()
+	defer f.state.globalStateCacheLock.Unlock()
+	// fake an etcd version for anyone expecting a version field
+	update["version"] = "0"
+	if _, ok := (*f.state.globalStateCache)[f.state.myNodeId]; !ok {
+		(*f.state.globalStateCache)[f.state.myNodeId] = map[string]map[string]string{}
+	}
+	(*f.state.globalStateCache)[f.state.myNodeId][f.filesystemId] = update
 }
 
 // state functions
@@ -520,46 +530,15 @@ waitingForSlaveSnapshot:
 }
 
 func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
-	/*
-		out, err := exec.Command(
-			"mkdir", "-p", mnt(f.filesystemId)).CombinedOutput()
-		if err != nil {
-			log.Printf("%v while trying to mkdir mountpoint %s", err, fq(f.filesystemId))
-			return &Event{
-				Name: "failed-mkdir-mountpoint",
-				Args: &EventArgs{"err": err, "combined-output": string(out)},
-			}, backoffState
-		}
-		out, err = exec.Command("mount.zfs", "-o", "noatime",
-			fq(f.filesystemId), mnt(f.filesystemId)).CombinedOutput()
-		if err != nil {
-			log.Printf("%v while trying to mount %s", err, fq(f.filesystemId))
-			return &Event{
-				Name: "failed-mount",
-				Args: &EventArgs{"err": err, "combined-output": string(out)},
-			}, backoffState
-		}
-		// trust that zero exit codes from mkdir && mount.zfs means
-		// that it worked and that the filesystem now exists and is
-		// mounted
-		f.snapshotsLock.Lock()
-		defer f.snapshotsLock.Unlock()
-		f.filesystem.exists = true // needed in create case
-		f.filesystem.mounted = true
-		return &Event{Name: "mounted", Args: &EventArgs{}}, activeState
-	*/
-
 	mountPath := mnt(f.filesystemId)
 	zfsPath := fq(f.filesystemId)
 
-	// only try to make the folder if it doesn't already exist
-	// if there is an error - it means we could not mount so don't
-	// update the filesystem with mounted = true
+	// only try to make the directory if it doesn't already exist
 	if _, err := os.Stat(mountPath); os.IsNotExist(err) {
 		out, err := exec.Command(
 			"mkdir", "-p", mountPath).CombinedOutput()
 		if err != nil {
-			log.Printf("%v while trying to mkdir mountpoint %s", err, zfsPath)
+			log.Printf("[mount:%s] %v while trying to mkdir mountpoint %s", f.filesystemId, err, zfsPath)
 			return &Event{
 				Name: "failed-mkdir-mountpoint",
 				Args: &EventArgs{"err": err, "combined-output": string(out)},
@@ -567,7 +546,7 @@ func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
 		}
 	}
 
-	// omly try to use mount.zfs if it's not already present in the output
+	// only try to use mount.zfs if it's not already present in the output
 	// of calling "mount"
 	mounted, err := isFilesystemMounted(f.filesystemId)
 	if err != nil {
@@ -580,7 +559,76 @@ func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
 		out, err := exec.Command("mount.zfs", "-o", "noatime",
 			zfsPath, mountPath).CombinedOutput()
 		if err != nil {
-			log.Printf("%v while trying to mount %s", err, zfsPath)
+			log.Printf("[mount:%s] %v while trying to mount %s", f.filesystemId, err, zfsPath)
+			if strings.Contains(string(out), "already mounted") {
+				// This can happen when the filesystem is mounted in some other
+				// namespace for some reason. Try searching for it in all
+				// processes' mount namespaces, and recursively unmounting it
+				// from one namespace at a time until becomes free...
+				firstPidNSToUnmount, rerr := func() (string, error) {
+					mountTables, err := filepath.Glob("/proc/*/mounts")
+					if err != nil {
+						return "", err
+					}
+					if mountTables == nil {
+						return "", fmt.Errorf("no mount tables in /proc/*/mounts")
+					}
+					for _, mountTable := range mountTables {
+						mounts, err := ioutil.ReadFile(mountTable)
+						if err != nil {
+							// pids can disappear between globbing and reading
+							log.Printf(
+								"[mount:%s] ignoring error reading pid mount table %v: %v",
+								mountTable, err,
+							)
+							continue
+						}
+						// return the first namespace found, as we'll unmount
+						// in there and then try again (recursively)
+						for _, line := range strings.Split(string(mounts), "\n") {
+							if strings.Contains(line, f.filesystemId) {
+								shrapnel := strings.Split(mountTable, "/")
+								// e.g. (0)/(1)proc/(2)X/(3)mounts
+								return shrapnel[2], nil
+							}
+						}
+					}
+					return "", fmt.Errorf("unable to find %s in any /proc/*/mounts", f.filesystemId)
+				}()
+				if rerr != nil {
+					return &Event{
+						Name: "failed-finding-namespace-to-unmount",
+						Args: &EventArgs{
+							"original-err": err, "original-combined-output": string(out),
+							"recovery-err": rerr,
+						},
+					}, backoffState
+				}
+				log.Printf(
+					"[mount:%s] attempting recovery-unmount in ns %s after %v/%v",
+					f.filesystemId, firstPidNSToUnmount, err, string(out),
+				)
+				rout, rerr := exec.Command(
+					"nsenter", "-t", firstPidNSToUnmount, "-m", "-u", "-n", "-i",
+					"umount", mountPath,
+				).CombinedOutput()
+				if rerr != nil {
+					return &Event{
+						Name: "failed-recovery-unmount",
+						Args: &EventArgs{
+							"original-err": err, "original-combined-output": string(out),
+							"recovery-err": rerr, "recovery-combined-output": string(rout),
+						},
+					}, backoffState
+				}
+				// recurse, maybe we've made enough progress to be able to
+				// mount this time?
+				//
+				// TODO limit recursion depth
+				return f.mount()
+			}
+			// if there is an error - it means we could not mount so don't
+			// update the filesystem with mounted = true
 			return &Event{
 				Name: "failed-mount",
 				Args: &EventArgs{"err": err, "combined-output": string(out)},
@@ -1343,6 +1391,12 @@ func backoffState(f *fsMachine) stateFn {
 	return discoveringState
 }
 
+func failedState(f *fsMachine) stateFn {
+	f.transitionedTo("failed", "never coming back")
+	log.Printf("entering failed state for %s", f.filesystemId)
+	select {}
+}
+
 func (f *fsMachine) discover() error {
 	// discover system state synchronously
 	filesystem, err := discoverSystem(f.filesystemId)
@@ -1397,11 +1451,12 @@ func discoveringState(f *fsMachine) stateFn {
 		err := f.state.alignMountStateWithMasters(f.filesystemId)
 		if err != nil {
 			log.Printf(
-				"[discoveringState:%s] error trying to align mount state with masters: %v",
+				"[discoveringState:%s] error trying to align mount state with masters: %v, "+
+					"going into failed state forever",
 				f.filesystemId,
 				err,
 			)
-			return backoffState
+			return failedState
 		}
 		// TODO do we need to acquire some locks here?
 		if f.filesystem.mounted {
@@ -1471,15 +1526,14 @@ func receivingState(f *fsMachine) stateFn {
 
 	if err != nil {
 		switch err := err.(type) {
-		// TODO should the following 'discoveringState's be 'backoffState's?
 		case *ToSnapsUpToDate:
 			log.Printf("receivingState: ToSnapsUpToDate %s got %s", f.filesystemId, err)
 			// this is fine, we're up-to-date
-			return discoveringState
+			return backoffState
 		case *NoFromSnaps:
 			log.Printf("receivingState: NoFromSnaps %s got %s", f.filesystemId, err)
 			// this is fine, no snaps; can't replicate yet, but will
-			return discoveringState
+			return backoffState
 		case *ToSnapsAhead:
 			log.Printf("receivingState: ToSnapsAhead %s got %s", f.filesystemId, err)
 			// erk, slave is ahead of master
@@ -1488,7 +1542,7 @@ func receivingState(f *fsMachine) stateFn {
 				log.Printf("receivingState(%s): Unable to recover from divergence: %+v", f.filesystemId, errx)
 			}
 			// Go to discovering state, to update the world with our recent ZFS actions.
-			return discoveringState
+			return backoffState
 		case *ToSnapsDiverged:
 			log.Printf("receivingState: ToSnapsDiverged %s got %s", f.filesystemId, err)
 			errx := f.recoverFromDivergence(err.latestCommonSnapshot)
@@ -1496,16 +1550,16 @@ func receivingState(f *fsMachine) stateFn {
 				log.Printf("receivingState(%s): Unable to recover from divergence: %+v", f.filesystemId, errx)
 			}
 			// Go to discovering state, to update the world with our recent ZFS actions.
-			return discoveringState
+			return backoffState
 		case *NoCommonSnapshots:
 			log.Printf("receivingState: NoCommonSnapshots %s got %s", f.filesystemId, err)
 			// erk, no common snapshots between master and slave
 			// TODO: create a new local clone (branch), then delete the current
 			// filesystem to enable replication to continue
-			return discoveringState
+			return backoffState
 		default:
 			log.Printf("receivingState: default error handler %s got %s", f.filesystemId, err)
-			return discoveringState
+			return backoffState
 		}
 	}
 
