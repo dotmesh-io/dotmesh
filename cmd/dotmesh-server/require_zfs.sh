@@ -84,7 +84,7 @@ if [ -n "$CONTAINER_POOL_MNT" ]; then
         # Make paths involving $OUTER_DIR work in OUR namespace, by binding $DIR to $OUTER_DIR
         mkdir -p $OUTER_DIR
         mount --make-rshared /
-        mount --bind $DIR $OUTER_DIR
+        mount --rbind $DIR $OUTER_DIR
         mount --make-rshared $OUTER_DIR
         echo "Here's the contents of $OUTER_DIR in the require_zfs.sh container:"
         ls -l $OUTER_DIR
@@ -135,25 +135,34 @@ fi
 
 POOL_LOGFILE=$DIR/dotmesh_pool.log
 
+run_in_zfs_container() {
+    NAME=$1
+    shift
+    docker run -i --rm --pid=host --privileged --name=dotmesh-$NAME-$$ \
+           -v $OUTER_DIR:$OUTER_DIR:rshared \
+           $DOTMESH_DOCKER_IMAGE \
+           "$@"
+}
+
 set -ex
 
 if [ ! -e /dev/zfs ]; then
     mknod -m 660 /dev/zfs c $(cat /sys/class/misc/zfs/dev |sed 's/:/ /g')
 fi
-if ! zpool status $POOL; then
+if ! run_in_zfs_container zpool-status zpool status $POOL; then
 
     # TODO: make case where truncate previously succeeded but zpool create
     # failed or never run recoverable.
     if [ ! -f $FILE ]; then
         truncate -s $POOL_SIZE $FILE
-        zpool create -m $MOUNTPOINT $POOL "$OUTER_DIR/dotmesh_data"
+        run_in_zfs_container zpool-create zpool create -m $MOUNTPOINT $POOL "$OUTER_DIR/dotmesh_data"
         echo "This directory contains dotmesh data files, please leave them alone unless you know what you're doing. See github.com/dotmesh-io/dotmesh for more information." > $DIR/README
-        zpool get -H guid $POOL |cut -f 3 > $DIR/dotmesh_pool_id
+        run_in_zfs_container zpool-get zpool get -H guid $POOL |cut -f 3 > $DIR/dotmesh_pool_id
         if [ -n "$CONTAINER_POOL_PVC_NAME" ]; then
             echo "$CONTAINER_POOL_PVC_NAME" > $DIR/dotmesh_pvc_name
         fi
     else
-        zpool import -f -d $OUTER_DIR $POOL
+        run_in_zfs_container zpool-import zpool import -f -d $OUTER_DIR $POOL
     fi
     echo "`date`: Pool '$POOL' mounted from host mountpoint '$OUTER_DIR', zfs mountpoint '$MOUNTPOINT'" >> $POOL_LOGFILE
 else
@@ -281,6 +290,8 @@ done
 # a pod but a container run from /var/run/docker.sock
 (while true; do docker logs -f dotmesh-server-inner || true; sleep 1; done) &
 
+# Prepare cleanup logic
+
 TERMINATING=no
 
 cleanup() {
@@ -295,16 +306,35 @@ cleanup() {
         return
     fi
 
+    if false
+    then
+        # Log mounts
+
+        # '| egrep "$DIR|$OUTER_DIR"' might make this less verbose, but
+        # also might miss out useful information about parent
+        # mountpoints. For instaince, in dind mode in the test suite, the
+        # relevent mountpoint in the host is `/dotmesh-test-pools` rather
+        # than the full $OUTER_DIR.
+
+        echo "`date`: DEBUG mounts on host:" >> $POOL_LOGFILE
+        nsenter -t 1 -m -u -n -i cat /proc/self/mountinfo | sed 's/^/HOST: /' >> $POOL_LOGFILE || true
+        echo "`date`: DEBUG mounts in require_zfs.sh container:" >> $POOL_LOGFILE
+        cat /proc/self/mountinfo | sed 's/^/OUTER: /' >> $POOL_LOGFILE || true
+        echo "`date`: DEBUG mounts in an inner container:" >> $POOL_LOGFILE
+        run_in_zfs_container inspect-namespace /bin/cat /proc/self/mountinfo | sed 's/^/INNER: /' >> $POOL_LOGFILE || true
+        echo "`date`: End of mount tables." >> $POOL_LOGFILE
+    fi
+
     # Release the ZFS pool. Do so in a mount namespace which has $OUTER_DIR
     # rshared, otherwise zpool export's unmounts can be mighty confusing.
+
+    # Step 1: Unmount the ZFS mountpoint, and any dots still inside
     echo "`date`: Unmounting $MOUNTPOINT:" >> $POOL_LOGFILE
-    docker run -i --rm --name=require-zfs-unmounter-$$ --pid=host --privileged \
-        -v $OUTER_DIR:$OUTER_DIR:rshared $DOTMESH_DOCKER_IMAGE \
-        umount "$MOUNTPOINT" >> $POOL_LOGFILE 2>&1 || true
+    run_in_zfs_container zpool-unmount umount --force --recursive "$MOUNTPOINT" >> $POOL_LOGFILE 2>&1 || true
+
+    # Step 2: Shut down the pool.
     echo "`date`: zpool exporting $POOL:" >> $POOL_LOGFILE
-    docker run -i --rm --name=require-zfs-exporter-$$ --pid=host --privileged \
-        -v $OUTER_DIR:$OUTER_DIR:rshared $DOTMESH_DOCKER_IMAGE \
-        zpool export -f "$POOL" >> $POOL_LOGFILE 2>&1
+    run_in_zfs_container zpool-export zpool export -f "$POOL" >> $POOL_LOGFILE 2>&1
 
     echo "`date`: Finished cleanup: zpool export returned $?" >> $POOL_LOGFILE
 }
