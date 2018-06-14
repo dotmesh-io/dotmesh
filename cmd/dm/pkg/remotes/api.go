@@ -2,8 +2,6 @@ package remotes
 
 import (
 	"fmt"
-	"golang.org/x/net/context"
-	"gopkg.in/cheggaaa/pb.v1"
 	"io"
 	"log"
 	"os"
@@ -12,6 +10,9 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"golang.org/x/net/context"
+	"gopkg.in/cheggaaa/pb.v1"
 )
 
 const DEFAULT_BRANCH string = "master"
@@ -843,6 +844,7 @@ push
 type TransferRequest struct {
 	Peer             string
 	User             string
+	Port             int
 	ApiKey           string
 	Direction        string
 	LocalNamespace   string
@@ -986,6 +988,7 @@ func (dm *DotmeshAPI) RequestTransfer(
 		"DotmeshRPC.Transfer", TransferRequest{
 			Peer:             remote.Hostname,
 			User:             remote.User,
+			Port:             remote.Port,
 			ApiKey:           remote.ApiKey,
 			Direction:        direction,
 			LocalNamespace:   localNamespace,
