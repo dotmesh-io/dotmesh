@@ -43,7 +43,7 @@ func deduceUrl(ctx context.Context, hostnames []string, mode, user, apiKey strin
 		for _, urlToTry := range urlsToTry {
 			// hostname (2nd arg) doesn't matter because we're just calling
 			// reallyCallRemote which doesn't use it.
-			j := NewJsonRpcClient(user, "", apiKey)
+			j := NewJsonRpcClient(user, "", apiKey, 0)
 			var result bool
 			err := j.reallyCallRemote(ctx, "DotmeshRPC.Ping", nil, &result, urlToTry+"/rpc")
 			if err == nil {
