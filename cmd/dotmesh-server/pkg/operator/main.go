@@ -905,6 +905,7 @@ nodeLoop:
 
 		// Create a dotmesh pod (with local storage for now) assigned to this node
 		privileged := true
+		terminationGracePeriodSeconds := int64(500)
 
 		newDotmesh := v1.Pod{
 			ObjectMeta: meta_v1.ObjectMeta{
@@ -986,7 +987,7 @@ nodeLoop:
 					},
 				},
 				RestartPolicy:                 v1.RestartPolicyNever,
-				TerminationGracePeriodSeconds: int64(500),
+				TerminationGracePeriodSeconds: &terminationGracePeriodSeconds,
 				ServiceAccountName:            "dotmesh",
 				Volumes:                       volumes,
 			},
