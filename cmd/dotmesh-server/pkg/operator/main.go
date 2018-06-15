@@ -985,9 +985,10 @@ nodeLoop:
 						},
 					},
 				},
-				RestartPolicy:      v1.RestartPolicyNever,
-				ServiceAccountName: "dotmesh",
-				Volumes:            volumes,
+				RestartPolicy:                 v1.RestartPolicyNever,
+				TerminationGracePeriodSeconds: int64(500),
+				ServiceAccountName:            "dotmesh",
+				Volumes:                       volumes,
 			},
 		}
 
