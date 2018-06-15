@@ -852,10 +852,12 @@ type Node struct {
 	IP          string
 	ApiKey      string
 	Password    string
+	Port        int
 }
 
 type Cluster struct {
 	DesiredNodeCount int
+	Port             int
 	Env              map[string]string
 	ClusterArgs      string
 	Nodes            []Node
@@ -874,19 +876,24 @@ type Pair struct {
 	RemoteName string
 }
 
+func NewClusterOnPort(port, desiredNodeCount int) *Cluster {
+	emptyEnv := make(map[string]string)
+	return NewClusterWithArgs(desiredNodeCount, port, emptyEnv, "")
+}
+
 func NewCluster(desiredNodeCount int) *Cluster {
 	emptyEnv := make(map[string]string)
-	return NewClusterWithArgs(desiredNodeCount, emptyEnv, "")
+	return NewClusterWithArgs(desiredNodeCount, 0, emptyEnv, "")
 }
 
 func NewClusterWithEnv(desiredNodeCount int, env map[string]string) *Cluster {
-	return NewClusterWithArgs(desiredNodeCount, env, "")
+	return NewClusterWithArgs(desiredNodeCount, 0, env, "")
 }
 
 // custom arguments that are passed through to `dm cluster {init,join}`
-func NewClusterWithArgs(desiredNodeCount int, env map[string]string, args string) *Cluster {
+func NewClusterWithArgs(desiredNodeCount, port int, env map[string]string, args string) *Cluster {
 	env["DOTMESH_UPGRADES_URL"] = "" //set default test env vars
-	return &Cluster{DesiredNodeCount: desiredNodeCount, Env: env, ClusterArgs: args}
+	return &Cluster{DesiredNodeCount: desiredNodeCount, Port: port, Env: env, ClusterArgs: args}
 }
 
 func NewKubernetes(desiredNodeCount int, storageMode string, dindStorage bool) *Kubernetes {
@@ -922,15 +929,22 @@ func NodeFromNodeName(t *testing.T, now int64, i, j int, clusterName string) Nod
 		nil,
 	)
 	var apiKey string
+	var port int
 	if err != nil {
 		fmt.Printf("no dm config found, proceeding without recording apiKey\n")
 	} else {
 		fmt.Printf("dm config on %s: %s\n", nodeName(now, i, j), dotmeshConfig)
 		m := struct {
-			Remotes struct{ Local struct{ ApiKey string } }
+			Remotes struct {
+				Local struct {
+					ApiKey string
+					Port   int
+				}
+			}
 		}{}
 		json.Unmarshal([]byte(dotmeshConfig), &m)
 		apiKey = m.Remotes.Local.ApiKey
+		port = m.Remotes.Local.Port
 	}
 
 	// /root/.dotmesh/admin-password.txt is created on docker
@@ -951,6 +965,7 @@ func NodeFromNodeName(t *testing.T, now int64, i, j int, clusterName string) Nod
 		IP:          nodeIP,
 		ApiKey:      apiKey,
 		Password:    password,
+		Port:        port,
 	}
 }
 
@@ -1024,10 +1039,11 @@ SEARCHABLE HEADER: STARTING CLUSTER
 					_, err := docker(
 						pair.From.Container,
 						fmt.Sprintf(
-							"echo %s |dm remote add %s admin@%s",
+							"echo %s |dm remote add %s admin@%s:%d",
 							pair.To.ApiKey,
 							pair.RemoteName,
 							pair.To.IP,
+							pair.To.Port,
 						),
 						nil,
 					)
@@ -1600,6 +1616,7 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 		" --use-pool-dir /dotmesh-test-pools/" + poolId(now, i, 0) +
 		" --use-pool-name " + poolId(now, i, 0) +
 		" --dotmesh-upgrades-url ''" +
+		" --port " + strconv.Itoa(c.Port) +
 		c.ClusterArgs
 
 	fmt.Printf("running dm cluster init with following command: %s\n", dmInitCommand)

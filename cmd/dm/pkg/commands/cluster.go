@@ -67,6 +67,7 @@ var (
 	usePoolDir         string
 	usePoolName        string
 	discoveryUrl       string
+	port               int
 )
 
 // names of environment variables we pass from the content of `dm cluster {init,join}`
@@ -249,6 +250,11 @@ func NewCmdClusterInit(out io.Writer) *cobra.Command {
 	cmd.Flags().IntVar(
 		&serverCount, "count", 1,
 		"Initial cluster size",
+	)
+	// TODO: need to block using 32608, and probably block anything lower than 32xx for host port reasons?
+	cmd.Flags().IntVar(
+		&port, "port", 0,
+		"Port to run cluster on",
 	)
 	return cmd
 }
@@ -663,6 +669,10 @@ func startDotmeshContainer(pkiPath string) error {
 		"-e", fmt.Sprintf("DOTMESH_UPGRADES_URL=%s", checkpointUrl),
 		"-e", fmt.Sprintf("DOTMESH_UPGRADES_INTERVAL_SECONDS=%d", checkpointInterval),
 	}
+	if port != 0 {
+		args = append(args, "-e")
+		args = append(args, fmt.Sprintf("DOTMESH_SERVER_PORT=%d", port))
+	}
 
 	// inject the inherited env variables from the context of the dm binary into require_zfs.sh
 	for _, envName := range inheritedEnvironment {
@@ -877,7 +887,9 @@ func clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath string) err
 			return err
 		}
 	}
-	err = config.AddRemote("local", "admin", getHostFromEnv(), 0, adminKey)
+	err = config.AddRemote("local", "admin", getHostFromEnv(), port, adminKey)
+	fmt.Printf("Port: %d", port)
+	fmt.Printf("Local remote: %#v", config.Remotes["local"])
 	if err != nil {
 		return err
 	}
@@ -913,16 +925,19 @@ func clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath string) err
 				time.Sleep(250 * time.Millisecond)
 			}
 			if err != nil {
+				fmt.Printf("Errored creating api")
 				e()
 				return false
 			}
 			var response bool
 			response, err = dm.PingLocal()
 			if err != nil {
+				fmt.Printf("Errored pinging, %#v", dm.Configuration.Remotes["local"])
 				e()
 				return false
 			}
 			if !response {
+				fmt.Printf("Response failure...")
 				e()
 			}
 			fmt.Printf("\n")
