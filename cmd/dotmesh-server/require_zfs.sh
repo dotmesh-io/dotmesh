@@ -346,8 +346,6 @@ shutdown() {
     trap - $SIGNAL
 
     cleanup "signal $SIGNAL"
-
-    exit 0
 }
 
 trap 'shutdown SIGTERM' SIGTERM
