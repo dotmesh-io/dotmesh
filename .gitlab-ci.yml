@@ -314,6 +314,7 @@ linux_kubernetes_operator_PVC:
         when: always
     except:
         - schedules
+    allow_failure: true
 
 linux_deletion_simple:
     stage: test
