@@ -1106,7 +1106,7 @@ func (d *DotmeshRPC) Transfer(
 	args *TransferRequest,
 	result *string,
 ) error {
-	client := NewJsonRpcClient(args.User, args.Peer, args.ApiKey)
+	client := NewJsonRpcClient(args.User, args.Peer, args.ApiKey, args.Port)
 
 	log.Printf("[Transfer] starting with %+v", safeArgs(*args))
 

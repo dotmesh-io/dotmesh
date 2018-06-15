@@ -1195,10 +1195,17 @@ func transferRequestify(in interface{}) (TransferRequest, error) {
 			"Unable to cast %s to map[string]interface{}", in,
 		)
 	}
+	var port int
+	if typed["Port"] == nil {
+		port = 0
+	} else {
+		port = int(typed["Port"].(float64))
+	}
 	return TransferRequest{
 		Peer:             typed["Peer"].(string),
 		User:             typed["User"].(string),
 		ApiKey:           typed["ApiKey"].(string),
+		Port:             port,
 		Direction:        typed["Direction"].(string),
 		LocalNamespace:   typed["LocalNamespace"].(string),
 		LocalName:        typed["LocalName"].(string),
@@ -1353,6 +1360,12 @@ func missingState(f *fsMachine) stateFn {
 				f.innerResponses <- responseEvent
 				return nextState
 			}
+		} else if e.Name == "mount" {
+			f.innerResponses <- &Event{
+				Name: "nothing-to-mount",
+				Args: &EventArgs{},
+			}
+			return missingState
 		} else {
 			f.innerResponses <- &Event{
 				Name: "unhandled",
@@ -1802,6 +1815,7 @@ func pushInitiatorState(f *fsMachine) stateFn {
 		transferRequest.User,
 		transferRequest.Peer,
 		transferRequest.ApiKey,
+		transferRequest.Port,
 	)
 
 	// TODO should we wait for the remote to ack that it's gone into the right state?
@@ -2101,20 +2115,25 @@ func (f *fsMachine) pull(
 
 	// 2. Perform GET, as receivingState does. Update as we go, similar to how
 	// push does it.
-	url, err := deduceUrl(
-		context.Background(),
-		[]string{transferRequest.Peer},
-		// pulls are between clusters, so use external address where
-		// appropriate
-		"external",
-		transferRequest.User,
-		transferRequest.ApiKey,
-	)
-	if err != nil {
-		return &Event{
-			Name: "push-initiator-cant-deduce-url",
-			Args: &EventArgs{"err": err},
-		}, backoffState
+	var url string
+	if transferRequest.Port == 0 {
+		url, err = deduceUrl(
+			context.Background(),
+			[]string{transferRequest.Peer},
+			// pulls are between clusters, so use external address where
+			// appropriate
+			"external",
+			transferRequest.User,
+			transferRequest.ApiKey,
+		)
+		if err != nil {
+			return &Event{
+				Name: "push-initiator-cant-deduce-url",
+				Args: &EventArgs{"err": err},
+			}, backoffState
+		}
+	} else {
+		url = fmt.Sprintf("http://%s:%d", transferRequest.Peer, transferRequest.Port)
 	}
 
 	url = fmt.Sprintf(
@@ -2375,22 +2394,26 @@ func (f *fsMachine) push(
 	defer postWriter.Close()
 	defer postReader.Close()
 
-	url, err := deduceUrl(
-		ctx,
-		[]string{transferRequest.Peer},
-		// pushes are between clusters, so use external address where
-		// appropriate
-		"external",
-		transferRequest.User,
-		transferRequest.ApiKey,
-	)
-	if err != nil {
-		return &Event{
-			Name: "push-initiator-cant-deduce-url",
-			Args: &EventArgs{"err": err},
-		}, backoffState
+	var url string
+	if transferRequest.Port == 0 {
+		url, err = deduceUrl(
+			ctx,
+			[]string{transferRequest.Peer},
+			// pushes are between clusters, so use external address where
+			// appropriate
+			"external",
+			transferRequest.User,
+			transferRequest.ApiKey,
+		)
+		if err != nil {
+			return &Event{
+				Name: "push-initiator-cant-deduce-url",
+				Args: &EventArgs{"err": err},
+			}, backoffState
+		}
+	} else {
+		url = fmt.Sprintf("http://%s:%d", transferRequest.Peer, transferRequest.Port)
 	}
-
 	url = fmt.Sprintf(
 		"%s/filesystems/%s/%s/%s",
 		url,
@@ -2887,6 +2910,7 @@ func pullInitiatorState(f *fsMachine) stateFn {
 		transferRequest.User,
 		transferRequest.Peer,
 		transferRequest.ApiKey,
+		transferRequest.Port,
 	)
 
 	var path PathToTopLevelFilesystem
