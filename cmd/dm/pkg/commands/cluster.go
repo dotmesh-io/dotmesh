@@ -932,12 +932,10 @@ func clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath string) err
 			var response bool
 			response, err = dm.PingLocal()
 			if err != nil {
-				fmt.Printf("Errored pinging, %#v", dm.Configuration.Remotes["local"])
 				e()
 				return false
 			}
 			if !response {
-				fmt.Printf("Response failure...")
 				e()
 			}
 			fmt.Printf("\n")
