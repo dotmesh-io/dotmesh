@@ -328,7 +328,9 @@ cleanup() {
     # Release the ZFS pool. Do so in a mount namespace which has $OUTER_DIR
     # rshared, otherwise zpool export's unmounts can be mighty confusing.
 
-    # Step 1: Unmount the ZFS mountpoint, and any dots still inside
+    # Step 1: Unmount any dots and the ZFS mountpoint (if it's there)
+    echo "Unmount dots in $MOUNTPOINT/mnt/dmfs:"
+    run_in_zfs_container zpool-unmount-dots sh -c "cd \"$MOUNTPOINT/mnt/dmfs\"; for i in *; do umount --force $i; done" || true
     echo "Unmounting $MOUNTPOINT:"
     run_in_zfs_container zpool-unmount umount --force --recursive "$MOUNTPOINT"|| true
 
