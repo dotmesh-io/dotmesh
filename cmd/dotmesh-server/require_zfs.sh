@@ -86,7 +86,25 @@ fi
 MOUNTPOINT=${MOUNTPOINT:-$OUTER_DIR/mnt}
 CONTAINER_MOUNT_PREFIX=${CONTAINER_MOUNT_PREFIX:-$OUTER_DIR/container_mnt}
 
-# Set up mounts that are needed
+# Set the shared flag on the working directory on the host. This is
+# essential; it, combined with the presence of the shared flag on the
+# bind-mount of this into the container namespace when we run the
+# dotmesh server container, means that mounts created by the dotmesh
+# server will be propogated back up to the host.
+
+# The bind mount of the outer dir onto itself is a trick to make sure
+# it's actually a mount - if it's just a directory on the host (eg,
+# /var/lib/dotmesh), then we can't set the shared flag on it as it's
+# part of some larger mount. Creating a bind mount means we have a
+# distinct mount point at the local. However, it's not necessary if it
+# really IS a mountpoint already (eg, a k8s pv).
+
+# Confused? Here's some further reading, in order:
+
+# https://lwn.net/Articles/689856/
+# https://lwn.net/Articles/690679/
+# https://www.kernel.org/doc/Documentation/filesystems/sharedsubtree.txt
+
 nsenter -t 1 -m -u -n -i /bin/sh -c \
     "set -xe
     $EXTRA_HOST_COMMANDS
