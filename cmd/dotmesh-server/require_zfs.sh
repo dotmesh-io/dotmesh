@@ -119,7 +119,7 @@ else
     fi
 fi
 
-POOL_LOGFILE=$DIR/dotmesh_pool.log
+POOL_LOGFILE=$DIR/dotmesh_pool_log
 
 run_in_zfs_container() {
     NAME=$1
@@ -150,9 +150,9 @@ if ! run_in_zfs_container zpool-status zpool status $POOL; then
     else
         run_in_zfs_container zpool-import zpool import -f -d $OUTER_DIR $POOL
     fi
-    echo "`date`: Pool '$POOL' mounted from host mountpoint '$OUTER_DIR', zfs mountpoint '$MOUNTPOINT'" >> $POOL_LOGFILE
+    echo "`date`: Pool '$POOL' mounted from host mountpoint '$OUTER_DIR', zfs mountpoint '$MOUNTPOINT' on `hostname`" >> $POOL_LOGFILE
 else
-    echo "`date`: Pool '$POOL' already exists, adopted by new dotmesh server" >> $POOL_LOGFILE
+    echo "`date`: Pool '$POOL' already exists, adopted by new dotmesh server on `hostname`" >> $POOL_LOGFILE
 fi
 
 # Clear away stale socket if existing
