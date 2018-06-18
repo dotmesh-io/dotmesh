@@ -299,14 +299,14 @@ cleanup() {
 
     if [ $TERMINATING = no ]
     then
-        echo "`date`: Shutting down due to $REASON" >> $POOL_LOGFILE
+        echo "Shutting down due to $REASON"
         TERMINATING=yes
     else
-        echo "`date`: Ignoring $REASON as we're already shutting down" >> $POOL_LOGFILE
+        echo "Ignoring $REASON as we're already shutting down"
         return
     fi
 
-    if false
+    if true
     then
         # Log mounts
 
@@ -316,27 +316,32 @@ cleanup() {
         # relevent mountpoint in the host is `/dotmesh-test-pools` rather
         # than the full $OUTER_DIR.
 
-        echo "`date`: DEBUG mounts on host:" >> $POOL_LOGFILE
-        nsenter -t 1 -m -u -n -i cat /proc/self/mountinfo | sed 's/^/HOST: /' >> $POOL_LOGFILE || true
-        echo "`date`: DEBUG mounts in require_zfs.sh container:" >> $POOL_LOGFILE
-        cat /proc/self/mountinfo | sed 's/^/OUTER: /' >> $POOL_LOGFILE || true
-        echo "`date`: DEBUG mounts in an inner container:" >> $POOL_LOGFILE
-        run_in_zfs_container inspect-namespace /bin/cat /proc/self/mountinfo | sed 's/^/INNER: /' >> $POOL_LOGFILE || true
-        echo "`date`: End of mount tables." >> $POOL_LOGFILE
+        echo "DEBUG mounts on host:"
+        nsenter -t 1 -m -u -n -i cat /proc/self/mountinfo | sed 's/^/HOST: /' || true
+        echo "DEBUG mounts in require_zfs.sh container:"
+        cat /proc/self/mountinfo | sed 's/^/OUTER: /' || true
+        echo "DEBUG mounts in an inner container:"
+        run_in_zfs_container inspect-namespace /bin/cat /proc/self/mountinfo | sed 's/^/INNER: /' || true
+        echo "DEBUG End of mount tables."
     fi
 
     # Release the ZFS pool. Do so in a mount namespace which has $OUTER_DIR
     # rshared, otherwise zpool export's unmounts can be mighty confusing.
 
     # Step 1: Unmount the ZFS mountpoint, and any dots still inside
-    echo "`date`: Unmounting $MOUNTPOINT:" >> $POOL_LOGFILE
-    run_in_zfs_container zpool-unmount umount --force --recursive "$MOUNTPOINT" >> $POOL_LOGFILE 2>&1 || true
+    echo "Unmounting $MOUNTPOINT:"
+    run_in_zfs_container zpool-unmount umount --force --recursive "$MOUNTPOINT"|| true
 
     # Step 2: Shut down the pool.
-    echo "`date`: zpool exporting $POOL:" >> $POOL_LOGFILE
-    run_in_zfs_container zpool-export zpool export -f "$POOL" >> $POOL_LOGFILE 2>&1
-
-    echo "`date`: Finished cleanup: zpool export returned $?" >> $POOL_LOGFILE
+    echo "zpool exporting $POOL:"
+    if run_in_zfs_container zpool-export zpool export -f "$POOL"
+    then
+        echo "`date`: Exported pool OK" >> $POOL_LOGFILE
+        echo "Exported pool OK."
+    else
+        echo "`date`: ERROR: Failed exporting pool!" >> $POOL_LOGFILE
+        echo "ERROR: Failed exporting pool!."
+    fi
 }
 
 shutdown() {
