@@ -78,20 +78,6 @@ if [ -n "$CONTAINER_POOL_MNT" ]; then
     echo "$DIR seems to be mounted from $BLOCK_DEVICE"
     OUTER_DIR=`nsenter -t 1 -m -u -n -i /bin/sh -c 'mount' | grep $BLOCK_DEVICE | cut -f 3 -d ' ' | head -n 1`
     echo "$BLOCK_DEVICE seems to be mounted on $OUTER_DIR in the host"
-
-    if [ $OUTER_DIR != $DIR ]
-    then
-        # Make paths involving $OUTER_DIR work in OUR namespace, by binding $DIR to $OUTER_DIR
-        mkdir -p $OUTER_DIR
-        mount --make-rshared /
-        mount --rbind $DIR $OUTER_DIR
-        mount --make-rshared $OUTER_DIR
-        echo "Here's the contents of $OUTER_DIR in the require_zfs.sh container:"
-        ls -l $OUTER_DIR
-        echo "Here's the contents of $DIR in the require_zfs.sh container:"
-        ls -l $DIR
-        echo "They should be the same!"
-    fi
 else
     OUTER_DIR="$DIR"
 fi
