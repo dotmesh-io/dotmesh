@@ -888,8 +888,6 @@ func clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath string) err
 		}
 	}
 	err = config.AddRemote("local", "admin", getHostFromEnv(), port, adminKey)
-	fmt.Printf("Port: %d", port)
-	fmt.Printf("Local remote: %#v", config.Remotes["local"])
 	if err != nil {
 		return err
 	}
