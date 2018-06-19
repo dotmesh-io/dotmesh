@@ -154,6 +154,9 @@ set -ex
 if [ ! -e /dev/zfs ]; then
     mknod -m 660 /dev/zfs c $(cat /sys/class/misc/zfs/dev |sed 's/:/ /g')
 fi
+
+echo "`date`: Working directory on host '`hostname`' = '$OUTER_DIR', device = '$BLOCK_DEVICE', zfs mountpoint = '$MOUNTPOINT', pool = '$POOL'"
+
 if ! run_in_zfs_container zpool-status zpool status $POOL; then
 
     # TODO: make case where truncate previously succeeded but zpool create
@@ -166,12 +169,13 @@ if ! run_in_zfs_container zpool-status zpool status $POOL; then
         if [ -n "$CONTAINER_POOL_PVC_NAME" ]; then
             echo "$CONTAINER_POOL_PVC_NAME" > $DIR/dotmesh_pvc_name
         fi
+        echo "`date`: Pool created" >> $POOL_LOGFILE
     else
         run_in_zfs_container zpool-import zpool import -f -d $OUTER_DIR $POOL
+        echo "`date`: Pool imported" >> $POOL_LOGFILE
     fi
-    echo "`date`: Pool '$POOL' mounted from host mountpoint '$OUTER_DIR' from device '$BLOCK_DEVICE', zfs mountpoint '$MOUNTPOINT' on `hostname`" >> $POOL_LOGFILE
 else
-    echo "`date`: Pool '$POOL' already exists, adopted by new dotmesh server on `hostname`" >> $POOL_LOGFILE
+    echo "`date`: Pool already exists" >> $POOL_LOGFILE
 fi
 
 # Clear away stale socket if existing
