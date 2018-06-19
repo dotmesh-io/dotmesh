@@ -158,7 +158,7 @@ if [ ! -e /dev/zfs ]; then
     mknod -m 660 /dev/zfs c $(cat /sys/class/misc/zfs/dev |sed 's/:/ /g')
 fi
 
-echo "`date`: On host '$HOSTNAME', working directory = '$OUTER_DIR', device = '$BLOCK_DEVICE', zfs mountpoint = '$MOUNTPOINT', pool = '$POOL'"
+echo "`date`: On host '$HOSTNAME', working directory = '$OUTER_DIR', device = '$BLOCK_DEVICE', zfs mountpoint = '$MOUNTPOINT', pool = '$POOL', Dotmesh image = '$DOTMESH_DOCKER_IMAGE'"
 
 if ! run_in_zfs_container zpool-status zpool status $POOL; then
 
