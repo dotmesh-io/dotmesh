@@ -34,14 +34,17 @@ function fetch_zfs {
     echo "Successfully loaded downloaded ZFS for $KERN :)"
 }
 
+# Find the hostname from the actual host, rather than the container.
+HOSTNAME="`nsenter -t 1 -m -u -n -i hostname`"
+
 # Put the data file inside /var/lib so that we end up on the big
 # partition if we're in a LinuxKit env.
 POOL_SIZE=${POOL_SIZE:-10G}
 DIR=${USE_POOL_DIR:-/var/lib/dotmesh}
-DIR=$(echo $DIR |sed s/\#HOSTNAME\#/$(hostname)/)
+DIR=$(echo $DIR |sed s/\#HOSTNAME\#/$HOSTNAME/)
 FILE=${DIR}/dotmesh_data
 POOL=${USE_POOL_NAME:-pool}
-POOL=$(echo $POOL |sed s/\#HOSTNAME\#/$(hostname)/)
+POOL=$(echo $POOL |sed s/\#HOSTNAME\#/$HOSTNAME/)
 DOTMESH_INNER_SERVER_NAME=${DOTMESH_INNER_SERVER_NAME:-dotmesh-server-inner}
 FLEXVOLUME_DRIVER_DIR=${FLEXVOLUME_DRIVER_DIR:-/usr/libexec/kubernetes/kubelet-plugins/volume/exec}
 INHERIT_ENVIRONMENT_NAMES=( "FILESYSTEM_METADATA_TIMEOUT" "DOTMESH_UPGRADES_URL" "DOTMESH_UPGRADES_INTERVAL_SECONDS")
@@ -155,7 +158,7 @@ if [ ! -e /dev/zfs ]; then
     mknod -m 660 /dev/zfs c $(cat /sys/class/misc/zfs/dev |sed 's/:/ /g')
 fi
 
-echo "`date`: Working directory on host '`hostname`' = '$OUTER_DIR', device = '$BLOCK_DEVICE', zfs mountpoint = '$MOUNTPOINT', pool = '$POOL'"
+echo "`date`: On host '$HOSTNAME', working directory = '$OUTER_DIR', device = '$BLOCK_DEVICE', zfs mountpoint = '$MOUNTPOINT', pool = '$POOL'"
 
 if ! run_in_zfs_container zpool-status zpool status $POOL; then
 
