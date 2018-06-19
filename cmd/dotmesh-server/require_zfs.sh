@@ -79,6 +79,7 @@ if [ -n "$CONTAINER_POOL_MNT" ]; then
     OUTER_DIR=`nsenter -t 1 -m -u -n -i /bin/sh -c 'mount' | grep $BLOCK_DEVICE | cut -f 3 -d ' ' | head -n 1`
     echo "$BLOCK_DEVICE seems to be mounted on $OUTER_DIR in the host"
 else
+    BLOCK_DEVICE="n/a"
     OUTER_DIR="$DIR"
 fi
 
@@ -168,7 +169,7 @@ if ! run_in_zfs_container zpool-status zpool status $POOL; then
     else
         run_in_zfs_container zpool-import zpool import -f -d $OUTER_DIR $POOL
     fi
-    echo "`date`: Pool '$POOL' mounted from host mountpoint '$OUTER_DIR', zfs mountpoint '$MOUNTPOINT' on `hostname`" >> $POOL_LOGFILE
+    echo "`date`: Pool '$POOL' mounted from host mountpoint '$OUTER_DIR' from device '$BLOCK_DEVICE', zfs mountpoint '$MOUNTPOINT' on `hostname`" >> $POOL_LOGFILE
 else
     echo "`date`: Pool '$POOL' already exists, adopted by new dotmesh server on `hostname`" >> $POOL_LOGFILE
 fi
