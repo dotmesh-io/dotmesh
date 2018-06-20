@@ -89,26 +89,28 @@ func NewCmdS3(out io.Writer) *cobra.Command {
 		Long:  "Online help: https://docs.dotmesh.com/references/cli/#list-remotes-dm-remote-v",
 	}
 	cmd.AddCommand(&cobra.Command{
-		Use:   "add <remote-name> <key-id:secret-key>",
+		Use:   "remote add <remote-name> <key-id:secret-key>",
 		Short: "Add an S3 remote",
 		Long:  "Online help: https://docs.dotmesh.com/references/cli/#add-a-new-remote-dm-remote-add-name-user-hostname",
 
 		Run: func(cmd *cobra.Command, args []string) {
 			runHandlingError(func() error {
-				if len(args) != 2 {
+				if len(args) != 3 {
 					return fmt.Errorf(
 						"Please specify <remote-name> <key-id:secret-key>",
 					)
 				}
-				// remote := args[0]
-				awsCredentials := strings.SplitN(args[1], ":", 2)
+				remote := args[1]
+				awsCredentials := strings.SplitN(args[2], ":", 2)
 				if len(awsCredentials) != 2 {
 					return fmt.Errorf(
 						"Please specify key-id:secret-key, got %s", awsCredentials,
 					)
 				}
+				keyID := awsCredentials[0]
+				secretKey := awsCredentials[1]
 				sess := session.Must(session.NewSession(&aws.Config{
-					Credentials: credentials.NewStaticCredentials(awsCredentials[0], awsCredentials[1], ""),
+					Credentials: credentials.NewStaticCredentials(keyID, secretKey, ""),
 				}))
 				// I don't think region actually matters, but if none is supplied the client complains
 				svc := s3.New(sess, aws.NewConfig().WithRegion("us-east-1"))
@@ -116,9 +118,19 @@ func NewCmdS3(out io.Writer) *cobra.Command {
 				if err != nil {
 					return err
 				}
+				// TODO: should we error here? I just wanted to add something that would check we could talk to S3/AWS using the keys supplied
 				if len(data.Buckets) == 0 {
 					return fmt.Errorf("supplied credentials do not have any buckets available")
 				}
+				dm, err := remotes.NewDotmeshAPI(configPath)
+				if err != nil {
+					return err
+				}
+				err = dm.Configuration.AddS3Remote(remote, keyID, secretKey)
+				if err != nil {
+					return err
+				}
+				fmt.Fprintln(out, "s3 remote added.")
 				return nil
 			})
 		},
