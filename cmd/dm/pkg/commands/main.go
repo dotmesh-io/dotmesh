@@ -11,6 +11,10 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/dotmesh-io/dotmesh/cmd/dm/pkg/remotes"
 	"github.com/howeyc/gopass"
 	"github.com/mitchellh/go-homedir"
@@ -54,6 +58,7 @@ func Initialise() {
 
 	MainCmd.AddCommand(NewCmdCluster(os.Stdout))
 	MainCmd.AddCommand(NewCmdRemote(os.Stdout))
+	MainCmd.AddCommand(NewCmdS3(os.Stdout))
 	MainCmd.AddCommand(NewCmdList(os.Stdout))
 	MainCmd.AddCommand(NewCmdInit(os.Stdout))
 	MainCmd.AddCommand(NewCmdSwitch(os.Stdout))
@@ -75,6 +80,50 @@ func Initialise() {
 		"~/.dotmesh/config",
 		"Config file to use",
 	)
+}
+
+func NewCmdS3(out io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "s3",
+		Short: "Commands that handle S3 connections",
+		Long:  "Online help: https://docs.dotmesh.com/references/cli/#list-remotes-dm-remote-v",
+	}
+	cmd.AddCommand(&cobra.Command{
+		Use:   "add <remote-name> <key-id:secret-key>",
+		Short: "Add an S3 remote",
+		Long:  "Online help: https://docs.dotmesh.com/references/cli/#add-a-new-remote-dm-remote-add-name-user-hostname",
+
+		Run: func(cmd *cobra.Command, args []string) {
+			runHandlingError(func() error {
+				if len(args) != 2 {
+					return fmt.Errorf(
+						"Please specify <remote-name> <key-id:secret-key>",
+					)
+				}
+				// remote := args[0]
+				awsCredentials := strings.SplitN(args[1], ":", 2)
+				if len(awsCredentials) != 2 {
+					return fmt.Errorf(
+						"Please specify key-id:secret-key, got %s", awsCredentials,
+					)
+				}
+				sess := session.Must(session.NewSession(&aws.Config{
+					Credentials: credentials.NewStaticCredentials(awsCredentials[0], awsCredentials[1], ""),
+				}))
+				// I don't think region actually matters, but if none is supplied the client complains
+				svc := s3.New(sess, aws.NewConfig().WithRegion("us-east-1"))
+				data, err := svc.ListBuckets(nil)
+				if err != nil {
+					return err
+				}
+				if len(data.Buckets) == 0 {
+					return fmt.Errorf("supplied credentials do not have any buckets available")
+				}
+				return nil
+			})
+		},
+	})
+	return cmd
 }
 
 func NewCmdRemote(out io.Writer) *cobra.Command {
