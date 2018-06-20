@@ -140,6 +140,12 @@ func (c *Configuration) GetRemotes() map[string]*DMRemote {
 	return c.DMRemotes
 }
 
+func (c *Configuration) GetS3Remotes() map[string]*S3Remote {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	return c.S3Remotes
+}
+
 func (c *Configuration) GetCurrentRemote() string {
 	c.lock.Lock()
 	defer c.lock.Unlock()

@@ -154,9 +154,13 @@ func NewCmdRemote(out io.Writer) *cobra.Command {
 					return err
 				}
 				remotes := dm.Configuration.GetRemotes()
+				s3Remotes := dm.Configuration.GetS3Remotes()
 				keys := []string{}
 				// sort the keys so we can iterate over in human friendly order
 				for k, _ := range remotes {
+					keys = append(keys, k)
+				}
+				for k, _ := range s3Remotes {
 					keys = append(keys, k)
 				}
 				sort.Strings(keys)
@@ -169,10 +173,18 @@ func NewCmdRemote(out io.Writer) *cobra.Command {
 						} else {
 							current = "  "
 						}
-						fmt.Fprintf(
-							out, "%s%s\t%s@%s\n",
-							current, k, remotes[k].User, remotes[k].Hostname,
-						)
+						remote, ok := remotes[k]
+						if ok {
+							fmt.Fprintf(
+								out, "%s%s\t%s@%s\n",
+								current, k, remote.User, remote.Hostname,
+							)
+						} else {
+							fmt.Fprintf(
+								out, "%s\t%s\n",
+								k, s3Remotes[k].KeyID,
+							)
+						}
 					}
 				} else {
 					for _, k := range keys {
