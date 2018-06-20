@@ -38,11 +38,11 @@ func newFilesystemMachine(filesystemId string, s *InMemoryState) *fsMachine {
 		snapshotsModified:       make(chan bool),
 		state:                   s,
 		snapshotsLock:           &sync.Mutex{},
-		newSnapsOnServers:       NewObserver(),
+		newSnapsOnServers:       NewObserver(fmt.Sprintf("newSnapsOnServers:%s", filesystemId)),
 		currentState:            "discovering",
 		status:                  "",
 		lastTransitionTimestamp: time.Now().UnixNano(),
-		transitionObserver:      NewObserver(),
+		transitionObserver:      NewObserver(fmt.Sprintf("transitionObserver:%s", filesystemId)),
 		lastTransferRequest:     TransferRequest{},
 		// In the case where we're receiving a push (pushPeerState), it's the
 		// POST handler on our http server which handles the receiving of the

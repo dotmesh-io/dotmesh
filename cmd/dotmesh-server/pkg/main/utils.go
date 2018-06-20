@@ -281,7 +281,7 @@ func runForever(f func() error, label string, errorBackoff, successBackoff time.
 	}
 }
 
-var deathObserver *Observer = NewObserver()
+var deathObserver *Observer = NewObserver("deathObserver")
 
 // run while filesystem lives
 func runWhileFilesystemLives(f func() error, label string, filesystemId string, errorBackoff, successBackoff time.Duration) {
