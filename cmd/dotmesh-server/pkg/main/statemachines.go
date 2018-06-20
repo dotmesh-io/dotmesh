@@ -283,9 +283,13 @@ func (f *fsMachine) updateEtcdAboutSnapshots() error {
 	)
 
 	// wait until the state machine notifies us that it's changed the
-	// snapshots
-	_ = <-f.snapshotsModified
-	log.Printf("[updateEtcdAboutSnapshots] going 'round the loop")
+	// snapshots, but have a timeout in case this filesystem is deleted so we don't block forever
+	select {
+	case _ = <-f.snapshotsModified:
+		log.Printf("[updateEtcdAboutSnapshots] going 'round the loop")
+	case <-time.After(60 * time.Second):
+	}
+
 	return nil
 }
 
