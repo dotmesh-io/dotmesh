@@ -34,14 +34,17 @@ function fetch_zfs {
     echo "Successfully loaded downloaded ZFS for $KERN :)"
 }
 
+# Find the hostname from the actual host, rather than the container.
+HOSTNAME="`nsenter -t 1 -m -u -n -i hostname`"
+
 # Put the data file inside /var/lib so that we end up on the big
 # partition if we're in a LinuxKit env.
 POOL_SIZE=${POOL_SIZE:-10G}
 DIR=${USE_POOL_DIR:-/var/lib/dotmesh}
-DIR=$(echo $DIR |sed s/\#HOSTNAME\#/$(hostname)/)
+DIR=$(echo $DIR |sed s/\#HOSTNAME\#/$HOSTNAME/)
 FILE=${DIR}/dotmesh_data
 POOL=${USE_POOL_NAME:-pool}
-POOL=$(echo $POOL |sed s/\#HOSTNAME\#/$(hostname)/)
+POOL=$(echo $POOL |sed s/\#HOSTNAME\#/$HOSTNAME/)
 DOTMESH_INNER_SERVER_NAME=${DOTMESH_INNER_SERVER_NAME:-dotmesh-server-inner}
 FLEXVOLUME_DRIVER_DIR=${FLEXVOLUME_DRIVER_DIR:-/usr/libexec/kubernetes/kubelet-plugins/volume/exec}
 INHERIT_ENVIRONMENT_NAMES=( "FILESYSTEM_METADATA_TIMEOUT" "DOTMESH_UPGRADES_URL" "DOTMESH_UPGRADES_INTERVAL_SECONDS")
@@ -78,21 +81,8 @@ if [ -n "$CONTAINER_POOL_MNT" ]; then
     echo "$DIR seems to be mounted from $BLOCK_DEVICE"
     OUTER_DIR=`nsenter -t 1 -m -u -n -i /bin/sh -c 'mount' | grep $BLOCK_DEVICE | cut -f 3 -d ' ' | head -n 1`
     echo "$BLOCK_DEVICE seems to be mounted on $OUTER_DIR in the host"
-
-    if [ $OUTER_DIR != $DIR ]
-    then
-        # Make paths involving $OUTER_DIR work in OUR namespace, by binding $DIR to $OUTER_DIR
-        mkdir -p $OUTER_DIR
-        mount --make-rshared /
-        mount --bind $DIR $OUTER_DIR
-        mount --make-rshared $OUTER_DIR
-        echo "Here's the contents of $OUTER_DIR in the require_zfs.sh container:"
-        ls -l $OUTER_DIR
-        echo "Here's the contents of $DIR in the require_zfs.sh container:"
-        ls -l $DIR
-        echo "They should be the same!"
-    fi
 else
+    BLOCK_DEVICE="n/a"
     OUTER_DIR="$DIR"
 fi
 
@@ -100,7 +90,25 @@ fi
 MOUNTPOINT=${MOUNTPOINT:-$OUTER_DIR/mnt}
 CONTAINER_MOUNT_PREFIX=${CONTAINER_MOUNT_PREFIX:-$OUTER_DIR/container_mnt}
 
-# Set up mounts that are needed
+# Set the shared flag on the working directory on the host. This is
+# essential; it, combined with the presence of the shared flag on the
+# bind-mount of this into the container namespace when we run the
+# dotmesh server container, means that mounts created by the dotmesh
+# server will be propogated back up to the host.
+
+# The bind mount of the outer dir onto itself is a trick to make sure
+# it's actually a mount - if it's just a directory on the host (eg,
+# /var/lib/dotmesh), then we can't set the shared flag on it as it's
+# part of some larger mount. Creating a bind mount means we have a
+# distinct mount point at the local. However, it's not necessary if it
+# really IS a mountpoint already (eg, a k8s pv).
+
+# Confused? Here's some further reading, in order:
+
+# https://lwn.net/Articles/689856/
+# https://lwn.net/Articles/690679/
+# https://www.kernel.org/doc/Documentation/filesystems/sharedsubtree.txt
+
 nsenter -t 1 -m -u -n -i /bin/sh -c \
     "set -xe
     $EXTRA_HOST_COMMANDS
@@ -133,31 +141,44 @@ else
     fi
 fi
 
-POOL_LOGFILE=$DIR/dotmesh_pool.log
+POOL_LOGFILE=$DIR/dotmesh_pool_log
+
+run_in_zfs_container() {
+    NAME=$1
+    shift
+    docker run -i --rm --pid=host --privileged --name=dotmesh-$NAME-$$ \
+           -v $OUTER_DIR:$OUTER_DIR:rshared \
+           $DOTMESH_DOCKER_IMAGE \
+           "$@"
+}
 
 set -ex
 
 if [ ! -e /dev/zfs ]; then
     mknod -m 660 /dev/zfs c $(cat /sys/class/misc/zfs/dev |sed 's/:/ /g')
 fi
-if ! zpool status $POOL; then
+
+echo "`date`: On host '$HOSTNAME', working directory = '$OUTER_DIR', device = '$BLOCK_DEVICE', zfs mountpoint = '$MOUNTPOINT', pool = '$POOL', Dotmesh image = '$DOTMESH_DOCKER_IMAGE'"
+
+if ! run_in_zfs_container zpool-status zpool status $POOL; then
 
     # TODO: make case where truncate previously succeeded but zpool create
     # failed or never run recoverable.
     if [ ! -f $FILE ]; then
         truncate -s $POOL_SIZE $FILE
-        zpool create -m $MOUNTPOINT $POOL "$OUTER_DIR/dotmesh_data"
+        run_in_zfs_container zpool-create zpool create -m $MOUNTPOINT $POOL "$OUTER_DIR/dotmesh_data"
         echo "This directory contains dotmesh data files, please leave them alone unless you know what you're doing. See github.com/dotmesh-io/dotmesh for more information." > $DIR/README
-        zpool get -H guid $POOL |cut -f 3 > $DIR/dotmesh_pool_id
+        run_in_zfs_container zpool-get zpool get -H guid $POOL |cut -f 3 > $DIR/dotmesh_pool_id
         if [ -n "$CONTAINER_POOL_PVC_NAME" ]; then
             echo "$CONTAINER_POOL_PVC_NAME" > $DIR/dotmesh_pvc_name
         fi
+        echo "`date`: Pool created" >> $POOL_LOGFILE
     else
-        zpool import -f -d $OUTER_DIR $POOL
+        run_in_zfs_container zpool-import zpool import -f -d $OUTER_DIR $POOL
+        echo "`date`: Pool imported" >> $POOL_LOGFILE
     fi
-    echo "`date`: Pool '$POOL' mounted from host mountpoint '$OUTER_DIR', zfs mountpoint '$MOUNTPOINT'" >> $POOL_LOGFILE
 else
-    echo "`date`: Pool '$POOL' already exists, adopted by new dotmesh server" >> $POOL_LOGFILE
+    echo "`date`: Pool already exists" >> $POOL_LOGFILE
 fi
 
 # Clear away stale socket if existing
@@ -281,6 +302,8 @@ done
 # a pod but a container run from /var/run/docker.sock
 (while true; do docker logs -f dotmesh-server-inner || true; sleep 1; done) &
 
+# Prepare cleanup logic
+
 TERMINATING=no
 
 cleanup() {
@@ -288,25 +311,51 @@ cleanup() {
 
     if [ $TERMINATING = no ]
     then
-        echo "`date`: Shutting down due to $REASON" >> $POOL_LOGFILE
+        echo "Shutting down due to $REASON"
         TERMINATING=yes
     else
-        echo "`date`: Ignoring $REASON as we're already shutting down" >> $POOL_LOGFILE
+        echo "Ignoring $REASON as we're already shutting down"
         return
+    fi
+
+    if true
+    then
+        # Log mounts
+
+        # '| egrep "$DIR|$OUTER_DIR"' might make this less verbose, but
+        # also might miss out useful information about parent
+        # mountpoints. For instaince, in dind mode in the test suite, the
+        # relevent mountpoint in the host is `/dotmesh-test-pools` rather
+        # than the full $OUTER_DIR.
+
+        echo "DEBUG mounts on host:"
+        nsenter -t 1 -m -u -n -i cat /proc/self/mountinfo | sed 's/^/HOST: /' || true
+        echo "DEBUG mounts in require_zfs.sh container:"
+        cat /proc/self/mountinfo | sed 's/^/OUTER: /' || true
+        echo "DEBUG mounts in an inner container:"
+        run_in_zfs_container inspect-namespace /bin/cat /proc/self/mountinfo | sed 's/^/INNER: /' || true
+        echo "DEBUG End of mount tables."
     fi
 
     # Release the ZFS pool. Do so in a mount namespace which has $OUTER_DIR
     # rshared, otherwise zpool export's unmounts can be mighty confusing.
-    echo "`date`: Unmounting $MOUNTPOINT:" >> $POOL_LOGFILE
-    docker run -i --rm --name=require-zfs-unmounter-$$ --pid=host --privileged \
-        -v $OUTER_DIR:$OUTER_DIR:rshared $DOTMESH_DOCKER_IMAGE \
-        umount "$MOUNTPOINT" >> $POOL_LOGFILE 2>&1 || true
-    echo "`date`: zpool exporting $POOL:" >> $POOL_LOGFILE
-    docker run -i --rm --name=require-zfs-exporter-$$ --pid=host --privileged \
-        -v $OUTER_DIR:$OUTER_DIR:rshared $DOTMESH_DOCKER_IMAGE \
-        zpool export -f "$POOL" >> $POOL_LOGFILE 2>&1
 
-    echo "`date`: Finished cleanup: zpool export returned $?" >> $POOL_LOGFILE
+    # Step 1: Unmount any dots and the ZFS mountpoint (if it's there)
+    echo "Unmount dots in $MOUNTPOINT/mnt/dmfs:"
+    run_in_zfs_container zpool-unmount-dots sh -c "cd \"$MOUNTPOINT/mnt/dmfs\"; for i in *; do umount --force $i; done" || true
+    echo "Unmounting $MOUNTPOINT:"
+    run_in_zfs_container zpool-unmount umount --force --recursive "$MOUNTPOINT"|| true
+
+    # Step 2: Shut down the pool.
+    echo "zpool exporting $POOL:"
+    if run_in_zfs_container zpool-export zpool export -f "$POOL"
+    then
+        echo "`date`: Exported pool OK" >> $POOL_LOGFILE
+        echo "Exported pool OK."
+    else
+        echo "`date`: ERROR: Failed exporting pool!" >> $POOL_LOGFILE
+        echo "ERROR: Failed exporting pool!."
+    fi
 }
 
 shutdown() {
@@ -316,8 +365,6 @@ shutdown() {
     trap - $SIGNAL
 
     cleanup "signal $SIGNAL"
-
-    exit 0
 }
 
 trap 'shutdown SIGTERM' SIGTERM
