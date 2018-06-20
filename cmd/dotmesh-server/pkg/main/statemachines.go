@@ -2587,6 +2587,10 @@ func (f *fsMachine) push(
 	resp, err := postClient.Do(req)
 	if err != nil {
 		log.Printf("[actualPush:%s] error in postClient.Do: %s", filesystemId, err)
+
+		go func() {
+			_ = <-errch
+		}()
 		_ = <-finished
 		return &Event{
 			Name: "error-from-post-when-pushing",
@@ -2603,6 +2607,10 @@ func (f *fsMachine) push(
 			filesystemId,
 			string(responseBody), err,
 		)
+
+		go func() {
+			_ = <-errch
+		}()
 		_ = <-finished
 		return &Event{
 			Name: "error-reading-push-response-body",
@@ -2614,6 +2622,10 @@ func (f *fsMachine) push(
 
 	if resp.StatusCode != 200 {
 		log.Printf("ABS TEST: Aborting!")
+
+		go func() {
+			_ = <-errch
+		}()
 		_ = <-finished
 		return &Event{
 			Name: "error-pushing-posting",
