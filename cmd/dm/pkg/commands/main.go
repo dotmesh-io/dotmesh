@@ -109,18 +109,17 @@ func NewCmdS3(out io.Writer) *cobra.Command {
 				}
 				keyID := awsCredentials[0]
 				secretKey := awsCredentials[1]
-				sess := session.Must(session.NewSession(&aws.Config{
+				sess, err := session.NewSession(&aws.Config{
 					Credentials: credentials.NewStaticCredentials(keyID, secretKey, ""),
-				}))
+				})
+				if err != nil {
+					return fmt.Errorf("Could not establish connection with AWS using supplied credentials")
+				}
 				// I don't think region actually matters, but if none is supplied the client complains
 				svc := s3.New(sess, aws.NewConfig().WithRegion("us-east-1"))
-				data, err := svc.ListBuckets(nil)
+				_, err = svc.ListBuckets(nil)
 				if err != nil {
-					return err
-				}
-				// TODO: should we error here? I just wanted to add something that would check we could talk to S3/AWS using the keys supplied
-				if len(data.Buckets) == 0 {
-					return fmt.Errorf("supplied credentials do not have any buckets available")
+					return fmt.Errorf("Could not list accessible buckets using supplied credentials")
 				}
 				dm, err := remotes.NewDotmeshAPI(configPath)
 				if err != nil {
