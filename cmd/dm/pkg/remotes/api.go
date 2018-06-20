@@ -3,7 +3,6 @@ package remotes
 import (
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"reflect"
 	"regexp"
@@ -762,9 +761,6 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 			}
 		}
 
-		if debugMode {
-			log.Printf("\nGot DotmeshRPC.GetTransfer response:  %+v", result)
-		}
 		if !started {
 			bar = pb.New64(result.Size)
 			bar.ShowFinalTime = false
@@ -772,6 +768,10 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 			bar.SetUnits(pb.U_BYTES)
 			bar.Start()
 			started = true
+		}
+
+		if result.Size != 0 {
+			bar.Total = result.Size
 		}
 		// Numbers reported by data transferred thru dotmesh versus size
 		// of stream reported by 'zfs send -nP' are off by a few kilobytes,
