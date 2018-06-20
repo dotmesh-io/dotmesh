@@ -41,6 +41,7 @@ import (
 )
 
 type Remote interface {
+	DefaultNamespace() string
 }
 
 type S3Remote struct {
@@ -56,6 +57,14 @@ type DMRemote struct {
 	CurrentVolume        string
 	CurrentBranches      map[string]string
 	DefaultRemoteVolumes map[string]map[string]VolumeName
+}
+
+func (remote DMRemote) DefaultNamespace() string {
+	return remote.User
+}
+
+func (remote S3Remote) DefaultNamespace() string {
+	return ""
 }
 
 func (remote DMRemote) String() string {
@@ -124,12 +133,17 @@ func (c *Configuration) save() error {
 	return nil
 }
 
-func (c *Configuration) GetRemote(name string) (*DMRemote, error) {
+func (c *Configuration) GetRemote(name string) (Remote, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	r, ok := c.DMRemotes[name]
+	var r Remote
+	var ok bool
+	r, ok = c.DMRemotes[name]
 	if !ok {
-		return nil, fmt.Errorf("Unable to find remote '%s'", name)
+		r, ok = c.S3Remotes[name]
+		if !ok {
+			return nil, fmt.Errorf("Unable to find remote '%s'", name)
+		}
 	}
 	return r, nil
 }

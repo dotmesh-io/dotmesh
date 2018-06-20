@@ -856,6 +856,16 @@ type TransferRequest struct {
 	TargetCommit     string
 }
 
+type S3TransferRequest struct {
+	KeyID           string
+	SecretKey       string
+	Direction       string
+	LocalNamespace  string
+	LocalName       string
+	LocalBranchName string
+	RemoteName      string
+}
+
 // attempt to get the latest commits in filesystemId (which may be a branch)
 // from fromRemote to toRemote as a one-off.
 //
@@ -922,7 +932,6 @@ func (dm *DotmeshAPI) RequestTransfer(
 
 	// Guess defaults for the remote filesystem
 	var remoteNamespace, remoteVolume string
-
 	if remoteFilesystemName == "" {
 		// No remote specified. Do we already have a default configured?
 		defaultRemoteNamespace, defaultRemoteVolume, ok := dm.Configuration.DefaultRemoteVolumeFor(peer, localNamespace, localVolume)
@@ -934,12 +943,12 @@ func (dm *DotmeshAPI) RequestTransfer(
 			// If not, default to the un-namespaced local filesystem name.
 			// This causes it to default into the user's own namespace
 			// when we parse the name, too.
-			remoteNamespace = remote.User
+			remoteNamespace = remote.DefaultNamespace()
 			remoteVolume = localVolume
 		}
 	} else {
 		// Default namespace for remote volume is the username on this remote
-		remoteNamespace, remoteVolume, err = ParseNamespacedVolumeWithDefault(remoteFilesystemName, remote.User)
+		remoteNamespace, remoteVolume, err = ParseNamespacedVolumeWithDefault(remoteFilesystemName, remote.DefaultNamespace())
 		if err != nil {
 			return "", err
 		}
@@ -984,26 +993,49 @@ func (dm *DotmeshAPI) RequestTransfer(
 	var transferId string
 	// TODO make ApiKey time- and domain- (filesystem?) limited
 	// cryptographically somehow
-	err = client.CallRemote(context.Background(),
-		"DotmeshRPC.Transfer", TransferRequest{
-			Peer:             remote.Hostname,
-			User:             remote.User,
-			Port:             remote.Port,
-			ApiKey:           remote.ApiKey,
-			Direction:        direction,
-			LocalNamespace:   localNamespace,
-			LocalName:        localVolume,
-			LocalBranchName:  deMasterify(localBranchName),
-			RemoteNamespace:  remoteNamespace,
-			RemoteName:       remoteVolume,
-			RemoteBranchName: deMasterify(remoteBranchName),
-			// TODO add TargetSnapshot here, to support specifying "push to a given
-			// snapshot" rather than just "push all snapshots up to the latest"
-		}, &transferId)
-	if err != nil {
-		return "", err
+	dmRemote, ok := remote.(DMRemote)
+	if ok {
+		err = client.CallRemote(context.Background(),
+			"DotmeshRPC.Transfer", TransferRequest{
+				Peer:             dmRemote.Hostname,
+				User:             dmRemote.User,
+				Port:             dmRemote.Port,
+				ApiKey:           dmRemote.ApiKey,
+				Direction:        direction,
+				LocalNamespace:   localNamespace,
+				LocalName:        localVolume,
+				LocalBranchName:  deMasterify(localBranchName),
+				RemoteNamespace:  remoteNamespace,
+				RemoteName:       remoteVolume,
+				RemoteBranchName: deMasterify(remoteBranchName),
+				// TODO add TargetSnapshot here, to support specifying "push to a given
+				// snapshot" rather than just "push all snapshots up to the latest"
+			}, &transferId)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		s3Remote, ok := remote.(S3Remote)
+		if ok {
+			err = client.CallRemote(context.Background(),
+				"DotmeshRPC.s3Transfer", S3TransferRequest{
+					KeyID:           s3Remote.KeyID,
+					SecretKey:       s3Remote.SecretKey,
+					Direction:       direction,
+					LocalNamespace:  localNamespace,
+					LocalName:       localVolume,
+					LocalBranchName: deMasterify(localBranchName),
+					RemoteName:      remoteVolume,
+					// TODO add TargetSnapshot here, to support specifying "push to a given
+					// snapshot" rather than just "push all snapshots up to the latest"
+				}, &transferId)
+			if err != nil {
+				return "", err
+			}
+		}
 	}
 	return transferId, nil
+
 }
 
 // FIXME: Put this in a shared library, as it duplicates the copy in

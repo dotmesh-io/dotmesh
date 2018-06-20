@@ -146,8 +146,7 @@ func dotSetUpstream(cmd *cobra.Command, args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-
-	remoteNamespace, remoteDot, err := remotes.ParseNamespacedVolumeWithDefault(remoteDot, remote.User)
+	remoteNamespace, remoteDot, err := remotes.ParseNamespacedVolumeWithDefault(remoteDot, remote.DefaultNamespace())
 	if err != nil {
 		return err
 	}
