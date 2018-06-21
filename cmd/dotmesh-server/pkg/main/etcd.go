@@ -778,28 +778,26 @@ func (s *InMemoryState) updateSnapshotsFromKnownState(
 		filesystem, s.masterFor(filesystem), server,
 	)
 	if s.masterFor(filesystem) == server {
-		// notify any interested parties that there are some new snapshots on
-		// the master
-		var latest snapshot
 		if len(*snapshots) > 0 {
-			latest = (*snapshots)[len(*snapshots)-1]
-		} else {
-			latest = snapshot{}
+			// notify any interested parties that there are some new snapshots on
+			// the master
+
+			latest := (*snapshots)[len(*snapshots)-1]
+			log.Printf(
+				"[updateSnapshots] publishing latest snapshot %s on %s",
+				latest, filesystem,
+			)
+			go func() {
+				err := s.newSnapsOnMaster.Publish(filesystem, latest)
+				if err != nil {
+					log.Printf(
+						"[updateSnapshotsFromKnownState] "+
+							"error publishing to newSnapsOnMaster: %s",
+						err,
+					)
+				}
+			}()
 		}
-		log.Printf(
-			"[updateSnapshots] publishing latest snapshot %s on %s",
-			latest, filesystem,
-		)
-		go func() {
-			err := s.newSnapsOnMaster.Publish(filesystem, latest)
-			if err != nil {
-				log.Printf(
-					"[updateSnapshotsFromKnownState] "+
-						"error publishing to newSnapsOnMaster: %s",
-					err,
-				)
-			}
-		}()
 	}
 	// also slice it filesystem-wise, and publish to any observers
 	// listening on a per-filesystem observer parameterized on server
