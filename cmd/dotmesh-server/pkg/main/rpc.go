@@ -424,6 +424,65 @@ func (d *DotmeshRPC) List(
 	return nil
 }
 
+// List all filesystems in the cluster.
+func (d *DotmeshRPC) ListWithContainers(
+	r *http.Request, args *struct{}, result *map[string]map[string]DotmeshVolumeAndContainers) error {
+	log.Printf("[List] starting!")
+
+	d.state.mastersCacheLock.Lock()
+	filesystems := []string{}
+	for fs, _ := range *d.state.mastersCache {
+		filesystems = append(filesystems, fs)
+	}
+	d.state.mastersCacheLock.Unlock()
+
+	d.state.globalContainerCacheLock.Lock()
+	defer d.state.globalContainerCacheLock.Unlock()
+
+	gather := map[string]map[string]DotmeshVolumeAndContainers{}
+	for _, fs := range filesystems {
+		one, err := d.state.getOne(r.Context(), fs)
+		// Just skip this in the result list if the context (eg authenticated
+		// user) doesn't have permission to read it.
+		if err != nil {
+			switch err := err.(type) {
+			case PermissionDenied:
+				log.Printf("[List] permission denied reading %v", fs)
+				continue
+			default:
+				log.Printf("[List] err: %v", err)
+				// If we got an error looking something up, it might just be
+				// because the fsMachine list or the registry is temporarily
+				// inconsistent wrt the mastersCache. Proceed, at the risk of
+				// lying slightly...
+				continue
+			}
+		}
+
+		var containers []DockerContainer
+		containerInfo, ok := (*d.state.globalContainerCache)[one.Id]
+		if ok {
+			containers = containerInfo.Containers
+		} else {
+			containers = []DockerContainer{}
+		}
+
+		submap, ok := gather[one.Name.Namespace]
+		if !ok {
+			submap = map[string]DotmeshVolumeAndContainers{}
+			gather[one.Name.Namespace] = submap
+		}
+
+		submap[one.Name.Name] = DotmeshVolumeAndContainers{
+			Volume:     one,
+			Containers: containers,
+		}
+	}
+	log.Printf("[List] gather = %+v", gather)
+	*result = gather
+	return nil
+}
+
 func (d *DotmeshRPC) Create(
 	r *http.Request, filesystemName *VolumeName, result *bool) error {
 

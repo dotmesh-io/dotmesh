@@ -117,6 +117,11 @@ type DotmeshVolume struct {
 	ServerStatuses map[string]string // serverId => status
 }
 
+type DotmeshVolumeAndContainers struct {
+	Volume     DotmeshVolume
+	Containers []DockerContainer
+}
+
 type TransferPollResult struct {
 	TransferRequestId string
 	Peer              string // hostname
