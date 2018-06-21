@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -669,5 +670,18 @@ func (v VolumeName) StringWithoutAdmin() string {
 func quietLogger(logMessage string) {
 	if os.Getenv("PRINT_QUIET_LOGS") != "" {
 		log.Printf(logMessage)
+	}
+}
+
+func getMyStack() string {
+	len := 1024
+	for {
+		buf := make([]byte, len)
+		used := runtime.Stack(buf, false)
+		if used < len {
+			return string(buf[:used])
+		} else {
+			len = len * 2
+		}
 	}
 }
