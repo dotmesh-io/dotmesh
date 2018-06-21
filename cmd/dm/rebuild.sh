@@ -32,7 +32,6 @@ docker build -t dotmesh-cli-builder:$CI_DOCKER_TAG -f Dockerfile.build .
 docker run -i \
   --name "${ARTEFACT_CONTAINER}" \
   -v "${DIR}:/go/src/github.com/dotmesh-io/dotmesh/cmd/dm" \
-  -v "${GOPATH}/src/github.com/aws:/go/src/github.com/aws" \
   -v "${OUTPUT_DIR}:/target" \
   -e GOOS \
   -e CGO_ENABLED=0 \
