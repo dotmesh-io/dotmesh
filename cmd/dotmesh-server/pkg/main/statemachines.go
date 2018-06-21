@@ -1559,7 +1559,7 @@ func receivingState(f *fsMachine) stateFn {
 				return backoffStateWithReason(fmt.Sprintf("receivingState(%s): Unable to recover from divergence: %+v", f.filesystemId, errx))
 			}
 			// Go to discovering state, to update the world with our recent ZFS actions.
-			return backoffState
+			return discoveringState
 		case *ToSnapsDiverged:
 			log.Printf("receivingState: ToSnapsDiverged %s got %s", f.filesystemId, err)
 			errx := f.recoverFromDivergence(err.latestCommonSnapshot)
@@ -1567,7 +1567,7 @@ func receivingState(f *fsMachine) stateFn {
 				return backoffStateWithReason(fmt.Sprintf("receivingState(%s): Unable to recover from divergence: %+v", f.filesystemId, errx))
 			}
 			// Go to discovering state, to update the world with our recent ZFS actions.
-			return backoffState
+			return discoveringState
 		case *NoCommonSnapshots:
 			// erk, no common snapshots between master and slave
 			// TODO: create a new local clone (branch), then delete the current
