@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/aws/aws-sdk-go"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -11,6 +10,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/coreos/etcd/client"
 	"golang.org/x/net/context"
 )
@@ -1042,6 +1045,97 @@ func (d *DotmeshRPC) GetTransfer(
 	return nil
 }
 
+func (d *DotmeshRPC) S3Transfer(
+	r *http.Request,
+	args *S3TransferRequest,
+	result *string,
+) error {
+	switch args.Direction {
+	case "push":
+		// TODO do we need this check, should it be different? Suspect s3 just requires there's no `.` etc but that's something the user will need to do on AWS anyway, unless we're allowing create-if-not-exists for pushes
+		err := requireValidVolumeName(VolumeName{args.RemoteNamespace, args.RemoteName})
+		if err != nil {
+			return err
+		}
+	case "pull":
+		err := requireValidVolumeName(VolumeName{args.LocalNamespace, args.LocalName})
+		if err != nil {
+			return err
+		}
+	}
+	// set up the s3 session and client
+	sess, err := session.NewSession(&aws.Config{
+		Credentials: credentials.NewStaticCredentials(args.KeyID, args.SecretKey, ""),
+	})
+	if err != nil {
+		return fmt.Errorf("Could not establish connection with AWS using supplied credentials")
+	}
+	// I don't think region actually matters, but if none is supplied the client complains
+	svc := s3.New(sess, aws.NewConfig().WithRegion("us-east-1"))
+	var output HeadBucketOutput
+	// Check the bucket exists, and that we can access it
+	output, err = svc.HeadBucket(HeadBucketInput{args.RemoteName})
+	if err != nil {
+		fmt.Printf("[S3Transfer] %#v", output)
+		return err
+	}
+	log.Printf("[S3Transfer] starting with %+v", safeArgs(*args))
+
+	localFilesystemId := d.state.registry.Exists(
+		VolumeName{args.LocalNamespace, args.LocalName}, args.LocalBranchName,
+	)
+	localExists := localFilesystemId != ""
+
+	// note; was a bunch of logic checks for whether remote/local ends exist here - I don't think we need them because we'd have returned an error already if remote didn't exist
+
+	var localPath, remotePath PathToTopLevelFilesystem
+
+	var filesystemId string
+	if args.Direction == "pull" && !localExists {
+		// pre-create the local registry entry and pick a master for it to land
+		// on locally (me!)
+		err = d.registerFilesystemBecomeMaster(
+			r.Context(),
+			args.LocalNamespace,
+			args.LocalName,
+			args.LocalBranchName,
+			remoteFilesystemId,
+			localPath,
+		)
+		if err != nil {
+			return err
+		}
+		filesystemId = remoteFilesystemId
+	}
+	// TODO: look at the logic for filesystem combinations, there was a bunch of logic for pulling/pushing fsystems that were in sync or had dirty changes. Not sure we need or can use those
+
+	// Now run globalFsRequest, returning the request id, to make the master of
+	// a (possibly nonexisting) filesystem start pulling or pushing it, and
+	// make it update status as it goes in a new pollable "transfers" object in
+	// etcd.
+
+	responseChan, requestId, err := d.state.globalFsRequestId(
+		filesystemId,
+		&Event{Name: "transfer",
+			Args: &EventArgs{
+				"Transfer": args,
+			},
+		},
+	)
+	if err != nil {
+		return err
+	}
+	go func() {
+		// asynchronously throw away the response, transfers can be polled via
+		// their own entries in etcd
+		e := <-responseChan
+		log.Printf("finished transfer of %+v, %+v", args, e)
+	}()
+
+	*result = requestId
+	return nil
+}
+
 // Register a transfer from an initiator (the cluster where the user initially
 // connected) to a peer (the cluster which will be the target of a push/pull).
 func (d *DotmeshRPC) RegisterTransfer(
@@ -1099,98 +1193,6 @@ func (d *DotmeshRPC) RegisterTransfer(
 	return nil
 }
 
-func (d *DotmeshRPC) S3Transfer(
-	r *http.Request,
-	args *S3TransferRequest,
-	result *string,
-) error
-{
-	switch args.Direction {
-	case "push":
-		// TODO do we need this check, should it be different? Suspect s3 just requires there's no `.` etc but that's something the user will need to do on AWS anyway, unless we're allowing create-if-not-exists for pushes
-		err := requireValidVolumeName(VolumeName{args.RemoteNamespace, args.RemoteName})
-		if err != nil {
-			return err
-		}
-	case "pull":
-		err := requireValidVolumeName(VolumeName{args.LocalNamespace, args.LocalName})
-		if err != nil {
-			return err
-		}
-	}
-	// set up the s3 session and client
-	sess, err := session.NewSession(&aws.Config{
-		Credentials: credentials.NewStaticCredentials(args.KeyID, args.SecretKey, ""),
-	})
-	if err != nil {
-		return fmt.Errorf("Could not establish connection with AWS using supplied credentials")
-	}
-	// I don't think region actually matters, but if none is supplied the client complains
-	svc := s3.New(sess, aws.NewConfig().WithRegion("us-east-1"))
-	var output HeadBucketOutput
-	// Check the bucket exists, and that we can access it
-	output, err = svc.HeadBucket(HeadBucketInput{args.RemoteName})
-	if err != nil {
-		fmt.Printf("[S3Transfer] %#v", output)
-		return err
-	}
-	log.Printf("[S3Transfer] starting with %+v", safeArgs(*args))
-
-	localFilesystemId := d.state.registry.Exists(
-		VolumeName{args.LocalNamespace, args.LocalName}, args.LocalBranchName,
-	)
-	localExists := localFilesystemId != ""
-
-	// note; was a bunch of logic checks for whether remote/local ends exist here - I don't think we need them because we'd have returned an error already if remote didn't exist
-
-	var localPath, remotePath PathToTopLevelFilesystem
-
-	var filesystemId string
-	if args.Direction == "pull" && !localExists {
-		// pre-create the local registry entry and pick a master for it to land
-		// on locally (me!)
-		err = d.registerFilesystemBecomeMaster(
-			r.Context(),
-			args.LocalNamespace,
-			args.LocalName,
-			args.LocalBranchName,
-			remoteFilesystemId,
-			localPath,
-		)
-		if err != nil {
-			return err
-		}
-		filesystemId = remoteFilesystemId
-	} 
-	// TODO: look at the logic for filesystem combinations, there was a bunch of logic for pulling/pushing fsystems that were in sync or had dirty changes. Not sure we need or can use those
-
-	
-	// Now run globalFsRequest, returning the request id, to make the master of
-	// a (possibly nonexisting) filesystem start pulling or pushing it, and
-	// make it update status as it goes in a new pollable "transfers" object in
-	// etcd.
-
-	responseChan, requestId, err := d.state.globalFsRequestId(
-		filesystemId,
-		&Event{Name: "transfer",
-			Args: &EventArgs{
-				"Transfer": args,
-			},
-		},
-	)
-	if err != nil {
-		return err
-	}
-	go func() {
-		// asynchronously throw away the response, transfers can be polled via
-		// their own entries in etcd
-		e := <-responseChan
-		log.Printf("finished transfer of %+v, %+v", args, e)
-	}()
-
-	*result = requestId
-	return nil
-}
 // Need both push and pull because one cluster will often be behind NAT.
 // Transfer will immediately return a transferId which can be queried until
 // completion
