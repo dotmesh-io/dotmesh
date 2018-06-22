@@ -35,18 +35,21 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/dotmesh-io/rpc/v2/json2"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	opentracinglog "github.com/opentracing/opentracing-go/log"
 	"github.com/openzipkin/zipkin-go-opentracing/examples/middleware"
 )
 
 type Remote interface {
 	DefaultNamespace() string
+	DefaultRemoteVolumeFor(string, string) (VolumeName, bool)
+	SetDefaultRemoteVolumeFor(string, string, string, string)
 }
 
 type S3Remote struct {
-	KeyID     string
-	SecretKey string
+	KeyID                string
+	SecretKey            string
+	DefaultRemoteVolumes map[string]map[string]VolumeName
 }
 
 type DMRemote struct {
@@ -65,6 +68,49 @@ func (remote DMRemote) DefaultNamespace() string {
 
 func (remote S3Remote) DefaultNamespace() string {
 	return ""
+}
+
+// TODO is there a less hacky way of doing this? hate the duplication, but otherwise you need to cast all over the place
+func (remote DMRemote) SetDefaultRemoteVolumeFor(localNamespace, localVolume, remoteNamespace, remoteVolume string) {
+	if remote.DefaultRemoteVolumes == nil {
+		remote.DefaultRemoteVolumes = make(map[string]map[string]VolumeName)
+	}
+	if remote.DefaultRemoteVolumes[localNamespace] == nil {
+		remote.DefaultRemoteVolumes[localNamespace] = make(map[string]VolumeName)
+	}
+	remote.DefaultRemoteVolumes[localNamespace][localVolume] = VolumeName{remoteNamespace, remoteVolume}
+}
+
+func (remote DMRemote) DefaultRemoteVolumeFor(localNamespace, localVolume string) (VolumeName, bool) {
+	if remote.DefaultRemoteVolumes == nil {
+		remote.DefaultRemoteVolumes = make(map[string]map[string]VolumeName)
+	}
+	if remote.DefaultRemoteVolumes[localNamespace] == nil {
+		remote.DefaultRemoteVolumes[localNamespace] = make(map[string]VolumeName)
+	}
+	volName, ok := remote.DefaultRemoteVolumes[localNamespace][localVolume]
+	return volName, ok
+}
+
+func (remote S3Remote) SetDefaultRemoteVolumeFor(localNamespace, localVolume, remoteNamespace, remoteVolume string) {
+	if remote.DefaultRemoteVolumes == nil {
+		remote.DefaultRemoteVolumes = make(map[string]map[string]VolumeName)
+	}
+	if remote.DefaultRemoteVolumes[localNamespace] == nil {
+		remote.DefaultRemoteVolumes[localNamespace] = make(map[string]VolumeName)
+	}
+	remote.DefaultRemoteVolumes[localNamespace][localVolume] = VolumeName{remoteNamespace, remoteVolume}
+}
+
+func (remote S3Remote) DefaultRemoteVolumeFor(localNamespace, localVolume string) (VolumeName, bool) {
+	if remote.DefaultRemoteVolumes == nil {
+		remote.DefaultRemoteVolumes = make(map[string]map[string]VolumeName)
+	}
+	if remote.DefaultRemoteVolumes[localNamespace] == nil {
+		remote.DefaultRemoteVolumes[localNamespace] = make(map[string]VolumeName)
+	}
+	volName, ok := remote.DefaultRemoteVolumes[localNamespace][localVolume]
+	return volName, ok
 }
 
 func (remote DMRemote) String() string {
@@ -148,6 +194,7 @@ func (c *Configuration) GetRemote(name string) (Remote, error) {
 	return r, nil
 }
 
+// todo this should probably return interfaces and just make a map of all of them
 func (c *Configuration) GetRemotes() map[string]*DMRemote {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -215,30 +262,30 @@ func (c *Configuration) SetCurrentVolume(volume string) error {
 func (c *Configuration) DefaultRemoteVolumeFor(peer, namespace, volume string) (string, string, bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	defaultRemoteVolume, ok := c.DMRemotes[peer].DefaultRemoteVolumes[namespace][volume]
-	if !ok {
+	remote, err := c.GetRemote(peer)
+	if err != nil {
+		// TODO should we return an error instead of bool? this is getting messy
 		return "", "", false
 	}
-	return defaultRemoteVolume.Namespace, defaultRemoteVolume.Name, true
+	defaultRemoteVolume, ok := remote.DefaultRemoteVolumeFor(namespace, volume)
+	if ok {
+		return defaultRemoteVolume.Namespace, defaultRemoteVolume.Name, true
+	}
+	return "", "", false
+
 }
 
 func (c *Configuration) SetDefaultRemoteVolumeFor(peer, namespace, volume, remoteNamespace, remoteVolume string) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	remote, ok := c.DMRemotes[peer]
-	if !ok {
+	remote, err := c.GetRemote(peer)
+	if err != nil {
 		return fmt.Errorf(
 			"Unable to find remote '%s'",
 			peer,
 		)
 	}
-	if remote.DefaultRemoteVolumes == nil {
-		remote.DefaultRemoteVolumes = map[string]map[string]VolumeName{}
-	}
-	if remote.DefaultRemoteVolumes[namespace] == nil {
-		remote.DefaultRemoteVolumes[namespace] = map[string]VolumeName{}
-	}
-	remote.DefaultRemoteVolumes[namespace][volume] = VolumeName{remoteNamespace, remoteVolume}
+	remote.SetDefaultRemoteVolumeFor(namespace, volume, remoteNamespace, remoteVolume)
 	return c.save()
 }
 
