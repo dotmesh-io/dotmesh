@@ -73,20 +73,20 @@ func (remote S3Remote) DefaultNamespace() string {
 // TODO is there a less hacky way of doing this? hate the duplication, but otherwise you need to cast all over the place
 func (remote DMRemote) SetDefaultRemoteVolumeFor(localNamespace, localVolume, remoteNamespace, remoteVolume string) {
 	if remote.DefaultRemoteVolumes == nil {
-		remote.DefaultRemoteVolumes = make(map[string]map[string]VolumeName)
+		remote.DefaultRemoteVolumes = map[string]map[string]VolumeName{}
 	}
 	if remote.DefaultRemoteVolumes[localNamespace] == nil {
-		remote.DefaultRemoteVolumes[localNamespace] = make(map[string]VolumeName)
+		remote.DefaultRemoteVolumes[localNamespace] = map[string]VolumeName{}
 	}
 	remote.DefaultRemoteVolumes[localNamespace][localVolume] = VolumeName{remoteNamespace, remoteVolume}
 }
 
 func (remote DMRemote) DefaultRemoteVolumeFor(localNamespace, localVolume string) (VolumeName, bool) {
 	if remote.DefaultRemoteVolumes == nil {
-		remote.DefaultRemoteVolumes = make(map[string]map[string]VolumeName)
+		remote.DefaultRemoteVolumes = map[string]map[string]VolumeName{}
 	}
 	if remote.DefaultRemoteVolumes[localNamespace] == nil {
-		remote.DefaultRemoteVolumes[localNamespace] = make(map[string]VolumeName)
+		remote.DefaultRemoteVolumes[localNamespace] = map[string]VolumeName{}
 	}
 	volName, ok := remote.DefaultRemoteVolumes[localNamespace][localVolume]
 	return volName, ok
@@ -94,20 +94,20 @@ func (remote DMRemote) DefaultRemoteVolumeFor(localNamespace, localVolume string
 
 func (remote S3Remote) SetDefaultRemoteVolumeFor(localNamespace, localVolume, remoteNamespace, remoteVolume string) {
 	if remote.DefaultRemoteVolumes == nil {
-		remote.DefaultRemoteVolumes = make(map[string]map[string]VolumeName)
+		remote.DefaultRemoteVolumes = map[string]map[string]VolumeName{}
 	}
 	if remote.DefaultRemoteVolumes[localNamespace] == nil {
-		remote.DefaultRemoteVolumes[localNamespace] = make(map[string]VolumeName)
+		remote.DefaultRemoteVolumes[localNamespace] = map[string]VolumeName{}
 	}
 	remote.DefaultRemoteVolumes[localNamespace][localVolume] = VolumeName{remoteNamespace, remoteVolume}
 }
 
 func (remote S3Remote) DefaultRemoteVolumeFor(localNamespace, localVolume string) (VolumeName, bool) {
 	if remote.DefaultRemoteVolumes == nil {
-		remote.DefaultRemoteVolumes = make(map[string]map[string]VolumeName)
+		remote.DefaultRemoteVolumes = map[string]map[string]VolumeName{}
 	}
 	if remote.DefaultRemoteVolumes[localNamespace] == nil {
-		remote.DefaultRemoteVolumes[localNamespace] = make(map[string]VolumeName)
+		remote.DefaultRemoteVolumes[localNamespace] = map[string]VolumeName{}
 	}
 	volName, ok := remote.DefaultRemoteVolumes[localNamespace][localVolume]
 	return volName, ok
@@ -179,19 +179,25 @@ func (c *Configuration) save() error {
 	return nil
 }
 
-func (c *Configuration) GetRemote(name string) (Remote, error) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
+func (c *Configuration) getRemote(name string) (Remote, error) {
 	var r Remote
 	var ok bool
+	fmt.Printf("Inside get remote")
 	r, ok = c.DMRemotes[name]
 	if !ok {
 		r, ok = c.S3Remotes[name]
+		fmt.Printf("%#v", r)
 		if !ok {
 			return nil, fmt.Errorf("Unable to find remote '%s'", name)
 		}
 	}
 	return r, nil
+}
+
+func (c *Configuration) GetRemote(name string) (Remote, error) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	return c.getRemote(name)
 }
 
 // todo this should probably return interfaces and just make a map of all of them
@@ -262,7 +268,7 @@ func (c *Configuration) SetCurrentVolume(volume string) error {
 func (c *Configuration) DefaultRemoteVolumeFor(peer, namespace, volume string) (string, string, bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	remote, err := c.GetRemote(peer)
+	remote, err := c.getRemote(peer)
 	if err != nil {
 		// TODO should we return an error instead of bool? this is getting messy
 		return "", "", false
