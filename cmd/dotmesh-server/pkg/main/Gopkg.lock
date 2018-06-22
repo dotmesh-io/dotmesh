@@ -12,6 +12,11 @@
   revision = "84d6af4cf903571319e0ebddd7beb12bc93fb752"
 
 [[projects]]
+  name = "github.com/aws/aws-sdk-go"
+  packages = ["."]
+  revision = "3fa93d5352209f4d0923db9f29ba1644b7182e45"
+
+[[projects]]
   branch = "master"
   name = "github.com/beorn7/perks"
   packages = ["quantile"]
@@ -248,6 +253,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "c2df6ba865d3ddb498ff49c2eb4b2a674feb793e7a67595f6c6c5e7a5949072f"
+  inputs-digest = "57abdbcde2845cc58a9414b17345b90e78d7789afa3a16a7ce551afd9052a3fa"
   solver-name = "gps-cdcl"
   solver-version = 1
