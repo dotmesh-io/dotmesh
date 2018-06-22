@@ -129,7 +129,7 @@ func (remote DMRemote) String() string {
 
 type Configuration struct {
 	CurrentRemote string
-	DMRemotes     map[string]*DMRemote
+	DMRemotes     map[string]*DMRemote `json:"Remotes"`
 	S3Remotes     map[string]*S3Remote
 	lock          sync.Mutex
 	configPath    string
