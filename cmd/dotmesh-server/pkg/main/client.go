@@ -19,13 +19,15 @@ type JsonRpcClient struct {
 	User     string
 	Hostname string
 	ApiKey   string
+	Port     int
 }
 
-func NewJsonRpcClient(user, hostname, apiKey string) *JsonRpcClient {
+func NewJsonRpcClient(user, hostname, apiKey string, port int) *JsonRpcClient {
 	return &JsonRpcClient{
 		User:     user,
 		Hostname: hostname,
 		ApiKey:   apiKey,
+		Port:     port,
 	}
 }
 
@@ -35,9 +37,15 @@ func (j *JsonRpcClient) CallRemote(
 	ctx context.Context, method string, args interface{}, result interface{},
 ) error {
 	// RPCs are always between clusters, so "external"
-	url, err := deduceUrl(ctx, []string{j.Hostname}, "external", j.User, j.ApiKey)
-	if err != nil {
-		return err
+	var url string
+	var err error
+	if j.Port == 0 {
+		url, err = deduceUrl(ctx, []string{j.Hostname}, "external", j.User, j.ApiKey)
+		if err != nil {
+			return err
+		}
+	} else {
+		url = fmt.Sprintf("http://%s:%d", j.Hostname, j.Port)
 	}
 	url = fmt.Sprintf("%s/rpc", url)
 	return j.reallyCallRemote(ctx, method, args, result, url)

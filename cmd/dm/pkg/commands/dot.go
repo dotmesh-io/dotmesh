@@ -238,17 +238,17 @@ func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
 		return err
 	}
 
-	var localDot string
+	var qualifiedDotName string
 	if len(args) == 1 {
-		localDot = args[0]
+		qualifiedDotName = args[0]
 	} else {
-		localDot, err = dm.CurrentVolume()
+		qualifiedDotName, err = dm.CurrentVolume()
 		if err != nil {
 			return err
 		}
 	}
 
-	namespace, dot, err := remotes.ParseNamespacedVolume(localDot)
+	namespace, dot, err := remotes.ParseNamespacedVolume(qualifiedDotName)
 	if err != nil {
 		return err
 	}
@@ -307,12 +307,12 @@ func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
 		}
 	}
 
-	currentBranch, err := dm.CurrentBranch(localDot)
+	currentBranch, err := dm.CurrentBranch(qualifiedDotName)
 	if err != nil {
 		return err
 	}
 
-	bs, err := dm.AllBranches(localDot)
+	bs, err := dm.AllBranches(qualifiedDotName)
 	if err != nil {
 		return err
 	}
@@ -329,7 +329,7 @@ func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
 		if branch == "master" {
 			branchDot = masterDot
 		} else {
-			branchDot, err = dm.BranchInfo(namespace, localDot, branch)
+			branchDot, err = dm.BranchInfo(namespace, dot, branch)
 			if err != nil {
 				return err
 			}
@@ -371,7 +371,7 @@ func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
 			branchInternalName = ""
 		}
 
-		latency, err := dm.GetReplicationLatencyForBranch(localDot, branchInternalName)
+		latency, err := dm.GetReplicationLatencyForBranch(qualifiedDotName, branchInternalName)
 		if err != nil {
 			fmt.Fprintf(out, "unable to fetch replication status (%s), proceeding...\n", err)
 		} else {

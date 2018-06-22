@@ -599,7 +599,7 @@ func (c *dotmeshController) process() error {
 			continue
 		}
 
-		if status == v1.PodFailed {
+		if status == v1.PodFailed || status == v1.PodSucceeded {
 			// We're deleting the pod, so the user can't "kubectl describe" it, so let's log lots of stuff
 			glog.Infof("Observing pod %s - status %s: FAILED (Message: %s) (Reason: %s)",
 				podName,
@@ -905,6 +905,7 @@ nodeLoop:
 
 		// Create a dotmesh pod (with local storage for now) assigned to this node
 		privileged := true
+		terminationGracePeriodSeconds := int64(500)
 
 		newDotmesh := v1.Pod{
 			ObjectMeta: meta_v1.ObjectMeta{
@@ -985,9 +986,10 @@ nodeLoop:
 						},
 					},
 				},
-				RestartPolicy:      v1.RestartPolicyNever,
-				ServiceAccountName: "dotmesh",
-				Volumes:            volumes,
+				RestartPolicy:                 v1.RestartPolicyNever,
+				TerminationGracePeriodSeconds: &terminationGracePeriodSeconds,
+				ServiceAccountName:            "dotmesh",
+				Volumes:                       volumes,
 			},
 		}
 

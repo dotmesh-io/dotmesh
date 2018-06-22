@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -37,11 +38,11 @@ func newFilesystemMachine(filesystemId string, s *InMemoryState) *fsMachine {
 		snapshotsModified:       make(chan bool),
 		state:                   s,
 		snapshotsLock:           &sync.Mutex{},
-		newSnapsOnServers:       NewObserver(),
+		newSnapsOnServers:       NewObserver(fmt.Sprintf("newSnapsOnServers:%s", filesystemId)),
 		currentState:            "discovering",
 		status:                  "",
 		lastTransitionTimestamp: time.Now().UnixNano(),
-		transitionObserver:      NewObserver(),
+		transitionObserver:      NewObserver(fmt.Sprintf("transitionObserver:%s", filesystemId)),
 		lastTransferRequest:     TransferRequest{},
 		// In the case where we're receiving a push (pushPeerState), it's the
 		// POST handler on our http server which handles the receiving of the
@@ -249,6 +250,7 @@ func (f *fsMachine) updateEtcdAboutSnapshots() error {
 	if err != nil {
 		return err
 	}
+
 	// as soon as we're connected, eagerly: if we know about some
 	// snapshots, **or the absence of them**, set this in etcd.
 	serialized, err := func() ([]byte, error) {
@@ -282,9 +284,13 @@ func (f *fsMachine) updateEtcdAboutSnapshots() error {
 	)
 
 	// wait until the state machine notifies us that it's changed the
-	// snapshots
-	_ = <-f.snapshotsModified
-	log.Printf("[updateEtcdAboutSnapshots] going 'round the loop")
+	// snapshots, but have a timeout in case this filesystem is deleted so we don't block forever
+	select {
+	case _ = <-f.snapshotsModified:
+		log.Printf("[updateEtcdAboutSnapshots] going 'round the loop")
+	case <-time.After(60 * time.Second):
+	}
+
 	return nil
 }
 
@@ -343,6 +349,15 @@ func (f *fsMachine) transitionedTo(state string, status string) {
 		log.Printf("error updating etcd: %s", update, err)
 		return
 	}
+	// we don't hear our own echo, so set it locally too.
+	f.state.globalStateCacheLock.Lock()
+	defer f.state.globalStateCacheLock.Unlock()
+	// fake an etcd version for anyone expecting a version field
+	update["version"] = "0"
+	if _, ok := (*f.state.globalStateCache)[f.state.myNodeId]; !ok {
+		(*f.state.globalStateCache)[f.state.myNodeId] = map[string]map[string]string{}
+	}
+	(*f.state.globalStateCache)[f.state.myNodeId][f.filesystemId] = update
 }
 
 // state functions
@@ -520,46 +535,15 @@ waitingForSlaveSnapshot:
 }
 
 func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
-	/*
-		out, err := exec.Command(
-			"mkdir", "-p", mnt(f.filesystemId)).CombinedOutput()
-		if err != nil {
-			log.Printf("%v while trying to mkdir mountpoint %s", err, fq(f.filesystemId))
-			return &Event{
-				Name: "failed-mkdir-mountpoint",
-				Args: &EventArgs{"err": err, "combined-output": string(out)},
-			}, backoffState
-		}
-		out, err = exec.Command("mount.zfs", "-o", "noatime",
-			fq(f.filesystemId), mnt(f.filesystemId)).CombinedOutput()
-		if err != nil {
-			log.Printf("%v while trying to mount %s", err, fq(f.filesystemId))
-			return &Event{
-				Name: "failed-mount",
-				Args: &EventArgs{"err": err, "combined-output": string(out)},
-			}, backoffState
-		}
-		// trust that zero exit codes from mkdir && mount.zfs means
-		// that it worked and that the filesystem now exists and is
-		// mounted
-		f.snapshotsLock.Lock()
-		defer f.snapshotsLock.Unlock()
-		f.filesystem.exists = true // needed in create case
-		f.filesystem.mounted = true
-		return &Event{Name: "mounted", Args: &EventArgs{}}, activeState
-	*/
-
 	mountPath := mnt(f.filesystemId)
 	zfsPath := fq(f.filesystemId)
 
-	// only try to make the folder if it doesn't already exist
-	// if there is an error - it means we could not mount so don't
-	// update the filesystem with mounted = true
+	// only try to make the directory if it doesn't already exist
 	if _, err := os.Stat(mountPath); os.IsNotExist(err) {
 		out, err := exec.Command(
 			"mkdir", "-p", mountPath).CombinedOutput()
 		if err != nil {
-			log.Printf("%v while trying to mkdir mountpoint %s", err, zfsPath)
+			log.Printf("[mount:%s] %v while trying to mkdir mountpoint %s", f.filesystemId, err, zfsPath)
 			return &Event{
 				Name: "failed-mkdir-mountpoint",
 				Args: &EventArgs{"err": err, "combined-output": string(out)},
@@ -567,7 +551,7 @@ func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
 		}
 	}
 
-	// omly try to use mount.zfs if it's not already present in the output
+	// only try to use mount.zfs if it's not already present in the output
 	// of calling "mount"
 	mounted, err := isFilesystemMounted(f.filesystemId)
 	if err != nil {
@@ -580,7 +564,76 @@ func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
 		out, err := exec.Command("mount.zfs", "-o", "noatime",
 			zfsPath, mountPath).CombinedOutput()
 		if err != nil {
-			log.Printf("%v while trying to mount %s", err, zfsPath)
+			log.Printf("[mount:%s] %v while trying to mount %s", f.filesystemId, err, zfsPath)
+			if strings.Contains(string(out), "already mounted") {
+				// This can happen when the filesystem is mounted in some other
+				// namespace for some reason. Try searching for it in all
+				// processes' mount namespaces, and recursively unmounting it
+				// from one namespace at a time until becomes free...
+				firstPidNSToUnmount, rerr := func() (string, error) {
+					mountTables, err := filepath.Glob("/proc/*/mounts")
+					if err != nil {
+						return "", err
+					}
+					if mountTables == nil {
+						return "", fmt.Errorf("no mount tables in /proc/*/mounts")
+					}
+					for _, mountTable := range mountTables {
+						mounts, err := ioutil.ReadFile(mountTable)
+						if err != nil {
+							// pids can disappear between globbing and reading
+							log.Printf(
+								"[mount:%s] ignoring error reading pid mount table %v: %v",
+								mountTable, err,
+							)
+							continue
+						}
+						// return the first namespace found, as we'll unmount
+						// in there and then try again (recursively)
+						for _, line := range strings.Split(string(mounts), "\n") {
+							if strings.Contains(line, f.filesystemId) {
+								shrapnel := strings.Split(mountTable, "/")
+								// e.g. (0)/(1)proc/(2)X/(3)mounts
+								return shrapnel[2], nil
+							}
+						}
+					}
+					return "", fmt.Errorf("unable to find %s in any /proc/*/mounts", f.filesystemId)
+				}()
+				if rerr != nil {
+					return &Event{
+						Name: "failed-finding-namespace-to-unmount",
+						Args: &EventArgs{
+							"original-err": err, "original-combined-output": string(out),
+							"recovery-err": rerr,
+						},
+					}, backoffState
+				}
+				log.Printf(
+					"[mount:%s] attempting recovery-unmount in ns %s after %v/%v",
+					f.filesystemId, firstPidNSToUnmount, err, string(out),
+				)
+				rout, rerr := exec.Command(
+					"nsenter", "-t", firstPidNSToUnmount, "-m", "-u", "-n", "-i",
+					"umount", mountPath,
+				).CombinedOutput()
+				if rerr != nil {
+					return &Event{
+						Name: "failed-recovery-unmount",
+						Args: &EventArgs{
+							"original-err": err, "original-combined-output": string(out),
+							"recovery-err": rerr, "recovery-combined-output": string(rout),
+						},
+					}, backoffState
+				}
+				// recurse, maybe we've made enough progress to be able to
+				// mount this time?
+				//
+				// TODO limit recursion depth
+				return f.mount()
+			}
+			// if there is an error - it means we could not mount so don't
+			// update the filesystem with mounted = true
 			return &Event{
 				Name: "failed-mount",
 				Args: &EventArgs{"err": err, "combined-output": string(out)},
@@ -1147,10 +1200,17 @@ func transferRequestify(in interface{}) (TransferRequest, error) {
 			"Unable to cast %s to map[string]interface{}", in,
 		)
 	}
+	var port int
+	if typed["Port"] == nil {
+		port = 0
+	} else {
+		port = int(typed["Port"].(float64))
+	}
 	return TransferRequest{
 		Peer:             typed["Peer"].(string),
 		User:             typed["User"].(string),
 		ApiKey:           typed["ApiKey"].(string),
+		Port:             port,
 		Direction:        typed["Direction"].(string),
 		LocalNamespace:   typed["LocalNamespace"].(string),
 		LocalName:        typed["LocalName"].(string),
@@ -1195,6 +1255,7 @@ func missingState(f *fsMachine) stateFn {
 	f.transitionedTo("missing", "waiting for snapshots or requests")
 	select {
 	case _ = <-newSnapsOnMaster:
+		f.transitionedTo("missing", "new snapshots found on master")
 		return receivingState
 	case e := <-f.innerRequests:
 		f.transitionedTo("missing", fmt.Sprintf("handling %s", e.Name))
@@ -1305,6 +1366,12 @@ func missingState(f *fsMachine) stateFn {
 				f.innerResponses <- responseEvent
 				return nextState
 			}
+		} else if e.Name == "mount" {
+			f.innerResponses <- &Event{
+				Name: "nothing-to-mount",
+				Args: &EventArgs{},
+			}
+			return missingState
 		} else {
 			f.innerResponses <- &Event{
 				Name: "unhandled",
@@ -1319,6 +1386,19 @@ func missingState(f *fsMachine) stateFn {
 	return backoffState
 }
 
+func backoffStateWithReason(reason string) func(f *fsMachine) stateFn {
+	return func(f *fsMachine) stateFn {
+		f.transitionedTo("backoff", fmt.Sprintf("pausing due to %s", reason))
+		log.Printf("entering backoff state for %s", f.filesystemId)
+		// TODO if we know that we're supposed to be mounted or unmounted, based on
+		// etcd state, actually put us back into the required state rather than
+		// just passively going back into discovering... or maybe, do that in
+		// discoveringState?
+		time.Sleep(time.Second)
+		return discoveringState
+	}
+}
+
 func backoffState(f *fsMachine) stateFn {
 	f.transitionedTo("backoff", "pausing")
 	log.Printf("entering backoff state for %s", f.filesystemId)
@@ -1328,6 +1408,12 @@ func backoffState(f *fsMachine) stateFn {
 	// discoveringState?
 	time.Sleep(time.Second)
 	return discoveringState
+}
+
+func failedState(f *fsMachine) stateFn {
+	f.transitionedTo("failed", "never coming back")
+	log.Printf("entering failed state for %s", f.filesystemId)
+	select {}
 }
 
 func (f *fsMachine) discover() error {
@@ -1384,11 +1470,12 @@ func discoveringState(f *fsMachine) stateFn {
 		err := f.state.alignMountStateWithMasters(f.filesystemId)
 		if err != nil {
 			log.Printf(
-				"[discoveringState:%s] error trying to align mount state with masters: %v",
+				"[discoveringState:%s] error trying to align mount state with masters: %v, "+
+					"going into failed state forever",
 				f.filesystemId,
 				err,
 			)
-			return backoffState
+			return failedState
 		}
 		// TODO do we need to acquire some locks here?
 		if f.filesystem.mounted {
@@ -1458,21 +1545,18 @@ func receivingState(f *fsMachine) stateFn {
 
 	if err != nil {
 		switch err := err.(type) {
-		// TODO should the following 'discoveringState's be 'backoffState's?
 		case *ToSnapsUpToDate:
-			log.Printf("receivingState: ToSnapsUpToDate %s got %s", f.filesystemId, err)
 			// this is fine, we're up-to-date
-			return discoveringState
+			return backoffStateWithReason(fmt.Sprintf("receivingState: ToSnapsUpToDate %s got %s", f.filesystemId, err))
 		case *NoFromSnaps:
-			log.Printf("receivingState: NoFromSnaps %s got %s", f.filesystemId, err)
 			// this is fine, no snaps; can't replicate yet, but will
-			return discoveringState
+			return backoffStateWithReason(fmt.Sprintf("receivingState: NoFromSnaps %s got %s", f.filesystemId, err))
 		case *ToSnapsAhead:
 			log.Printf("receivingState: ToSnapsAhead %s got %s", f.filesystemId, err)
 			// erk, slave is ahead of master
 			errx := f.recoverFromDivergence(err.latestCommonSnapshot)
 			if errx != nil {
-				log.Printf("receivingState(%s): Unable to recover from divergence: %+v", f.filesystemId, errx)
+				return backoffStateWithReason(fmt.Sprintf("receivingState(%s): Unable to recover from divergence: %+v", f.filesystemId, errx))
 			}
 			// Go to discovering state, to update the world with our recent ZFS actions.
 			return discoveringState
@@ -1480,19 +1564,17 @@ func receivingState(f *fsMachine) stateFn {
 			log.Printf("receivingState: ToSnapsDiverged %s got %s", f.filesystemId, err)
 			errx := f.recoverFromDivergence(err.latestCommonSnapshot)
 			if errx != nil {
-				log.Printf("receivingState(%s): Unable to recover from divergence: %+v", f.filesystemId, errx)
+				return backoffStateWithReason(fmt.Sprintf("receivingState(%s): Unable to recover from divergence: %+v", f.filesystemId, errx))
 			}
 			// Go to discovering state, to update the world with our recent ZFS actions.
 			return discoveringState
 		case *NoCommonSnapshots:
-			log.Printf("receivingState: NoCommonSnapshots %s got %s", f.filesystemId, err)
 			// erk, no common snapshots between master and slave
 			// TODO: create a new local clone (branch), then delete the current
 			// filesystem to enable replication to continue
-			return discoveringState
+			return backoffStateWithReason(fmt.Sprintf("receivingState: NoCommonSnapshots %s got %+v", f.filesystemId, err))
 		default:
-			log.Printf("receivingState: default error handler %s got %s", f.filesystemId, err)
-			return discoveringState
+			return backoffStateWithReason(fmt.Sprintf("receivingState: default error handler %s got %s", f.filesystemId, err))
 		}
 	}
 
@@ -1509,8 +1591,7 @@ func receivingState(f *fsMachine) stateFn {
 			case NoSuchClone:
 				// Normal case for non-clone filesystems, continue.
 			default:
-				log.Printf("Error trying to lookup clone by id: %s", err)
-				return backoffState
+				return backoffStateWithReason(fmt.Sprintf("receivingState: Error trying to lookup clone by id: %+v", err))
 			}
 		} else {
 			// Found a clone, let's base our pull on it
@@ -1526,19 +1607,16 @@ func receivingState(f *fsMachine) stateFn {
 		f.state.masterFor(f.filesystemId),
 	)
 	if len(addresses) == 0 {
-		log.Printf("No known address for current master of %s", f.filesystemId)
-		return backoffState
+		return backoffStateWithReason(fmt.Sprintf("receivingState: No known address for current master of %s", f.filesystemId))
 	}
 	_, _, apiKey, err := getPasswords("admin")
 	if err != nil {
-		log.Printf("Attempting to pull %s got %s", f.filesystemId, err)
-		return backoffState
+		return backoffStateWithReason(fmt.Sprintf("receivingState: Attempting to pull %s got %+v", f.filesystemId, err))
 	}
 
 	url, err := deduceUrl(context.Background(), addresses, "internal", "admin", apiKey)
 	if err != nil {
-		log.Printf("%s", err)
-		return backoffState
+		return backoffStateWithReason(fmt.Sprintf("receivingState: deduceUrl failed with %+v", err))
 	}
 
 	req, err := http.NewRequest(
@@ -1552,15 +1630,13 @@ func receivingState(f *fsMachine) stateFn {
 		nil,
 	)
 	if err != nil {
-		log.Printf("Attempting to pull %s got %s", f.filesystemId, err)
-		return backoffState
+		return backoffStateWithReason(fmt.Sprintf("receivingState: Attempting to pull %s got %+v", f.filesystemId, err))
 	}
 	req.SetBasicAuth("admin", apiKey)
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("Attempting to pull %s got %s", f.filesystemId, err)
-		return backoffState
+		return backoffStateWithReason(fmt.Sprintf("receivingState: Attempting to pull %s got %+v", f.filesystemId, err))
 	}
 	log.Printf(
 		"Debug: curl -u admin:[pw] %s/filesystems/%s/%s/%s",
@@ -1605,7 +1681,7 @@ func receivingState(f *fsMachine) stateFn {
 	prelude, err := consumePrelude(pipeReader)
 	if err != nil {
 		_ = <-finished
-		return backoffState
+		return backoffStateWithReason(fmt.Sprintf("receivingState: error consuming prelude: %+v", err))
 	}
 	log.Printf("[pull] Got prelude %v", prelude)
 
@@ -1617,18 +1693,16 @@ func receivingState(f *fsMachine) stateFn {
 	f.transitionedTo("receiving", "finished pipe")
 
 	if err != nil {
-		log.Printf(
-			"Got error %s when running zfs recv for %s, check zfs-recv-stderr.log",
+		return backoffStateWithReason(fmt.Sprintf("receivingState: Got error %+v when running zfs recv for %s, check zfs-recv-stderr.log",
 			err, f.filesystemId,
-		)
-		return backoffState
+		))
 	} else {
 		log.Printf("Successfully received %s => %s for %s", fromSnap, snapRange.toSnap.Id)
 	}
 	log.Printf("[pull] about to start applying prelude on %v", pipeReader)
 	err = applyPrelude(prelude, fq(f.filesystemId))
 	if err != nil {
-		return backoffState
+		return backoffStateWithReason(fmt.Sprintf("receivingState: Error applying prelude: %+v", err))
 	}
 	return discoveringState
 }
@@ -1748,6 +1822,7 @@ func pushInitiatorState(f *fsMachine) stateFn {
 		transferRequest.User,
 		transferRequest.Peer,
 		transferRequest.ApiKey,
+		transferRequest.Port,
 	)
 
 	// TODO should we wait for the remote to ack that it's gone into the right state?
@@ -2047,20 +2122,25 @@ func (f *fsMachine) pull(
 
 	// 2. Perform GET, as receivingState does. Update as we go, similar to how
 	// push does it.
-	url, err := deduceUrl(
-		context.Background(),
-		[]string{transferRequest.Peer},
-		// pulls are between clusters, so use external address where
-		// appropriate
-		"external",
-		transferRequest.User,
-		transferRequest.ApiKey,
-	)
-	if err != nil {
-		return &Event{
-			Name: "push-initiator-cant-deduce-url",
-			Args: &EventArgs{"err": err},
-		}, backoffState
+	var url string
+	if transferRequest.Port == 0 {
+		url, err = deduceUrl(
+			context.Background(),
+			[]string{transferRequest.Peer},
+			// pulls are between clusters, so use external address where
+			// appropriate
+			"external",
+			transferRequest.User,
+			transferRequest.ApiKey,
+		)
+		if err != nil {
+			return &Event{
+				Name: "push-initiator-cant-deduce-url",
+				Args: &EventArgs{"err": err},
+			}, backoffState
+		}
+	} else {
+		url = fmt.Sprintf("http://%s:%d", transferRequest.Peer, transferRequest.Port)
 	}
 
 	url = fmt.Sprintf(
@@ -2321,22 +2401,26 @@ func (f *fsMachine) push(
 	defer postWriter.Close()
 	defer postReader.Close()
 
-	url, err := deduceUrl(
-		ctx,
-		[]string{transferRequest.Peer},
-		// pushes are between clusters, so use external address where
-		// appropriate
-		"external",
-		transferRequest.User,
-		transferRequest.ApiKey,
-	)
-	if err != nil {
-		return &Event{
-			Name: "push-initiator-cant-deduce-url",
-			Args: &EventArgs{"err": err},
-		}, backoffState
+	var url string
+	if transferRequest.Port == 0 {
+		url, err = deduceUrl(
+			ctx,
+			[]string{transferRequest.Peer},
+			// pushes are between clusters, so use external address where
+			// appropriate
+			"external",
+			transferRequest.User,
+			transferRequest.ApiKey,
+		)
+		if err != nil {
+			return &Event{
+				Name: "push-initiator-cant-deduce-url",
+				Args: &EventArgs{"err": err},
+			}, backoffState
+		}
+	} else {
+		url = fmt.Sprintf("http://%s:%d", transferRequest.Peer, transferRequest.Port)
 	}
-
 	url = fmt.Sprintf(
 		"%s/filesystems/%s/%s/%s",
 		url,
@@ -2510,6 +2594,10 @@ func (f *fsMachine) push(
 	resp, err := postClient.Do(req)
 	if err != nil {
 		log.Printf("[actualPush:%s] error in postClient.Do: %s", filesystemId, err)
+
+		go func() {
+			_ = <-errch
+		}()
 		_ = <-finished
 		return &Event{
 			Name: "error-from-post-when-pushing",
@@ -2526,6 +2614,10 @@ func (f *fsMachine) push(
 			filesystemId,
 			string(responseBody), err,
 		)
+
+		go func() {
+			_ = <-errch
+		}()
 		_ = <-finished
 		return &Event{
 			Name: "error-reading-push-response-body",
@@ -2536,7 +2628,9 @@ func (f *fsMachine) push(
 	log.Printf("[actualPush:%s] Got response body while pushing: status %d, body %s", filesystemId, resp.StatusCode, string(responseBody))
 
 	if resp.StatusCode != 200 {
-		log.Printf("ABS TEST: Aborting!")
+		go func() {
+			_ = <-errch
+		}()
 		_ = <-finished
 		return &Event{
 			Name: "error-pushing-posting",
@@ -2833,6 +2927,7 @@ func pullInitiatorState(f *fsMachine) stateFn {
 		transferRequest.User,
 		transferRequest.Peer,
 		transferRequest.ApiKey,
+		transferRequest.Port,
 	)
 
 	var path PathToTopLevelFilesystem

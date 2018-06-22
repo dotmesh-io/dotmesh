@@ -332,12 +332,12 @@ func rpcAfterFunc(reqInfo *rpc.RequestInfo) {
 			return
 		}
 		rpcTracker.mutex.Lock()
+		defer rpcTracker.mutex.Unlock()
 		startedAt, found := rpcTracker.rpcDuration[reqUUID]
 		if !found {
 			fmt.Printf("Error: Unable to find requestUUID in requestTracker: %s", reqUUID)
 			return
 		}
-		rpcTracker.mutex.Unlock()
 		duration := time.Since(startedAt)
 		url := fmt.Sprintf("%s", reqInfo.Request.URL)
 		statusCode := fmt.Sprintf("%v", reqInfo.StatusCode)

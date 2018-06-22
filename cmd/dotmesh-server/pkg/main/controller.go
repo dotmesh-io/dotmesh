@@ -50,8 +50,8 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 		// a sort of global event bus for filesystems getting new snapshots on
 		// their masters, keyed on filesystem name, which interested parties
 		// such as slaves for that filesystem may subscribe to
-		newSnapsOnMaster:     NewObserver(),
-		localReceiveProgress: NewObserver(),
+		newSnapsOnMaster:     NewObserver("newSnapsOnMaster"),
+		localReceiveProgress: NewObserver("localReceiveProgress"),
 		// containers that are running with dotmesh volumes by filesystem id
 		containers:     d,
 		containersLock: &sync.Mutex{},
@@ -139,13 +139,13 @@ func (s *InMemoryState) alignMountStateWithMasters(filesystemId string) error {
 		fs, ok := (*s.filesystems)[filesystemId]
 		if !ok {
 			log.Printf(
-				"[maybeMountFilesystem] not doing anything - cannot find %v in fsMachines",
+				"[alignMountStateWithMasters] not doing anything - cannot find %v in fsMachines",
 				filesystemId,
 			)
 			return nil, false, fmt.Errorf("cannot find %v in fsMachines", filesystemId)
 		}
 		log.Printf(
-			"[maybeMountFilesystem] called for %v; masterFor=%v, myNodeId=%v; mounted=%b",
+			"[alignMountStateWithMasters] called for %v; masterFor=%v, myNodeId=%v; mounted=%b",
 			filesystemId,
 			s.masterFor(filesystemId),
 			s.myNodeId,

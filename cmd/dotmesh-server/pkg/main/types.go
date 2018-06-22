@@ -251,6 +251,7 @@ type fsMachine struct {
 type TransferRequest struct {
 	Peer             string // hostname
 	User             string
+	Port             int
 	ApiKey           string //protected value in toString
 	Direction        string // "push" or "pull"
 	LocalNamespace   string

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -43,7 +44,7 @@ func deduceUrl(ctx context.Context, hostnames []string, mode, user, apiKey strin
 		for _, urlToTry := range urlsToTry {
 			// hostname (2nd arg) doesn't matter because we're just calling
 			// reallyCallRemote which doesn't use it.
-			j := NewJsonRpcClient(user, "", apiKey)
+			j := NewJsonRpcClient(user, "", apiKey, 0)
 			var result bool
 			err := j.reallyCallRemote(ctx, "DotmeshRPC.Ping", nil, &result, urlToTry+"/rpc")
 			if err == nil {
@@ -281,7 +282,7 @@ func runForever(f func() error, label string, errorBackoff, successBackoff time.
 	}
 }
 
-var deathObserver *Observer = NewObserver()
+var deathObserver *Observer = NewObserver("deathObserver")
 
 // run while filesystem lives
 func runWhileFilesystemLives(f func() error, label string, filesystemId string, errorBackoff, successBackoff time.Duration) {
@@ -669,5 +670,18 @@ func (v VolumeName) StringWithoutAdmin() string {
 func quietLogger(logMessage string) {
 	if os.Getenv("PRINT_QUIET_LOGS") != "" {
 		log.Printf(logMessage)
+	}
+}
+
+func getMyStack() string {
+	len := 1024
+	for {
+		buf := make([]byte, len)
+		used := runtime.Stack(buf, false)
+		if used < len {
+			return string(buf[:used])
+		} else {
+			len = len * 2
+		}
 	}
 }

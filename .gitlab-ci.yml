@@ -314,6 +314,7 @@ linux_kubernetes_operator_PVC:
         when: always
     except:
         - schedules
+    allow_failure: true
 
 linux_deletion_simple:
     stage: test
@@ -479,8 +480,9 @@ trigger_e2e_test:
     script:
         - echo - curl -X POST -F "token=$E2E_TRIGGER_TOKEN" -F "ref=master" -F "variables[DOTMESH_CI_COMMIT_SHA]=$CI_COMMIT_SHA" -F "variables[DOTMESH_CI_BUILD_REF_NAME]=$CI_BUILD_REF_NAME" http://gitlab.dotmesh.io:9999/api/v4/projects/31/trigger/pipeline
         - curl -X POST -F "token=$E2E_TRIGGER_TOKEN" -F "ref=master" -F "variables[DOTMESH_CI_COMMIT_SHA]=$CI_COMMIT_SHA" -F "variables[DOTMESH_CI_BUILD_REF_NAME]=$CI_BUILD_REF_NAME" http://gitlab.dotmesh.io:9999/api/v4/projects/31/trigger/pipeline
+    only:
+        - master
     except:
-        - /^release-.*$/
         - schedules
 
 deploy_unstable_build:

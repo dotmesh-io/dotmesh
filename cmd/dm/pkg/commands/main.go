@@ -165,7 +165,6 @@ func NewCmdRemote(out io.Writer) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				fmt.Printf("dm client %#v\n", dm)
 				// allow this to be used be a script
 				apiKey := os.Getenv("DOTMESH_PASSWORD")
 				if apiKey == "" {

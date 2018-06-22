@@ -196,28 +196,13 @@ vagrant ssh
 bash /vagrant/scripts/reset_vagrant.sh
 ```
 
-#### symlink code
+#### Working from your host
 **Optional**: If you would like to work on code from your local machine (i.e not inside a VM), follow this section. Alternatively, you can just change code inside the vagrant VM and commit/push from inside it.
-
-There can be issues with Vagrant shared folders hence this being a manual step.
-
-```bash
-vagrant ssh
-cd $GOPATH/src/github.com/dotmesh-io
-# might as well keep this - backs up the version vagrant checked out for you
-mv dotmesh dotmesh2
-ln -s /vagrant dotmesh
-# now $GOPATH/src/github.com/dotmesh-io/dotmesh -> /vagrant -> this repo on your host
 ```
-
-**NOTE:** using the symlink can drastically slow down docker builds.
-
-You can use this script which copies the latest git hash from your host:
-
-```bash
-cd /vagrant
-make vagrant.sync
+open smb://admin:password@172.17.1.178/vagrantshare
 ```
+This should open a shared network drive which allows you to edit files in the dotmesh-io folder of your vagrant machine go path from your host machine.
+
 
 ## generic setup instructions
 

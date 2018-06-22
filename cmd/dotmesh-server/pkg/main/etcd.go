@@ -21,48 +21,11 @@ import (
 
 // etcd related pieces, including the parts of InMemoryState which interact with etcd
 
+var etcdKeysAPI client.KeysAPI
+var etcdConnectionOnce Once
+
 func getEtcdKeysApi() (client.KeysAPI, error) {
-	c, err := getEtcd()
-	if err != nil {
-		return nil, err
-	}
-	return client.NewKeysAPI(c), nil
-}
-
-var etcdClient client.Client
-var once Once
-var onceAgain Once
-
-func transportFromTLS(certFile, keyFile, caFile string) (*http.Transport, error) {
-	// Load client cert
-	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-	if err != nil {
-		return nil, err
-	}
-
-	// Load CA cert
-	caCert, err := ioutil.ReadFile(caFile)
-	if err != nil {
-		return nil, err
-	}
-	caCertPool := x509.NewCertPool()
-	caCertPool.AppendCertsFromPEM(caCert)
-
-	// Setup HTTPS client
-	tlsConfig := &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		RootCAs:      caCertPool,
-	}
-	tlsConfig.BuildNameToCertificate()
-	transport := &http.Transport{
-		TLSClientConfig: tlsConfig,
-	}
-	return transport, nil
-}
-
-// TODO maybe connection pooling
-func getEtcd() (client.Client, error) {
-	once.Do(func() {
+	etcdConnectionOnce.Do(func() {
 		var err error
 		endpoint := os.Getenv("DOTMESH_ETCD_ENDPOINT")
 		if endpoint == "" {
@@ -92,14 +55,43 @@ func getEtcd() (client.Client, error) {
 			// unavailable
 			HeaderTimeoutPerRequest: time.Second * 10,
 		}
-		etcdClient, err = client.New(cfg)
+		etcdClient, err := client.New(cfg)
 		if err != nil {
 			// maybe retry, instead of ending it all
 			panic(err)
 		}
+		etcdKeysAPI = client.NewKeysAPI(etcdClient)
 	})
-	// TODO: change signature, never errors
-	return etcdClient, nil
+	return etcdKeysAPI, nil
+}
+
+var onceAgain Once
+
+func transportFromTLS(certFile, keyFile, caFile string) (*http.Transport, error) {
+	// Load client cert
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return nil, err
+	}
+
+	// Load CA cert
+	caCert, err := ioutil.ReadFile(caFile)
+	if err != nil {
+		return nil, err
+	}
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(caCert)
+
+	// Setup HTTPS client
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      caCertPool,
+	}
+	tlsConfig.BuildNameToCertificate()
+	transport := &http.Transport{
+		TLSClientConfig: tlsConfig,
+	}
+	return transport, nil
 }
 
 func guessIPv4Addresses() ([]string, error) {
@@ -786,28 +778,26 @@ func (s *InMemoryState) updateSnapshotsFromKnownState(
 		filesystem, s.masterFor(filesystem), server,
 	)
 	if s.masterFor(filesystem) == server {
-		// notify any interested parties that there are some new snapshots on
-		// the master
-		var latest snapshot
 		if len(*snapshots) > 0 {
-			latest = (*snapshots)[len(*snapshots)-1]
-		} else {
-			latest = snapshot{}
+			// notify any interested parties that there are some new snapshots on
+			// the master
+
+			latest := (*snapshots)[len(*snapshots)-1]
+			log.Printf(
+				"[updateSnapshots] publishing latest snapshot %s on %s",
+				latest, filesystem,
+			)
+			go func() {
+				err := s.newSnapsOnMaster.Publish(filesystem, latest)
+				if err != nil {
+					log.Printf(
+						"[updateSnapshotsFromKnownState] "+
+							"error publishing to newSnapsOnMaster: %s",
+						err,
+					)
+				}
+			}()
 		}
-		log.Printf(
-			"[updateSnapshots] publishing latest snapshot %s on %s",
-			latest, filesystem,
-		)
-		go func() {
-			err := s.newSnapsOnMaster.Publish(filesystem, latest)
-			if err != nil {
-				log.Printf(
-					"[updateSnapshotsFromKnownState] "+
-						"error publishing to newSnapsOnMaster: %s",
-					err,
-				)
-			}
-		}()
 	}
 	// also slice it filesystem-wise, and publish to any observers
 	// listening on a per-filesystem observer parameterized on server

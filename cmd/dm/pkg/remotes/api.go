@@ -2,16 +2,16 @@ package remotes
 
 import (
 	"fmt"
-	"golang.org/x/net/context"
-	"gopkg.in/cheggaaa/pb.v1"
 	"io"
-	"log"
 	"os"
 	"reflect"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
+
+	"golang.org/x/net/context"
+	"gopkg.in/cheggaaa/pb.v1"
 )
 
 const DEFAULT_BRANCH string = "master"
@@ -761,9 +761,6 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 			}
 		}
 
-		if debugMode {
-			log.Printf("\nGot DotmeshRPC.GetTransfer response:  %+v", result)
-		}
 		if !started {
 			bar = pb.New64(result.Size)
 			bar.ShowFinalTime = false
@@ -771,6 +768,10 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 			bar.SetUnits(pb.U_BYTES)
 			bar.Start()
 			started = true
+		}
+
+		if result.Size != 0 {
+			bar.Total = result.Size
 		}
 		// Numbers reported by data transferred thru dotmesh versus size
 		// of stream reported by 'zfs send -nP' are off by a few kilobytes,
@@ -843,6 +844,7 @@ push
 type TransferRequest struct {
 	Peer             string
 	User             string
+	Port             int
 	ApiKey           string
 	Direction        string
 	LocalNamespace   string
@@ -986,6 +988,7 @@ func (dm *DotmeshAPI) RequestTransfer(
 		"DotmeshRPC.Transfer", TransferRequest{
 			Peer:             remote.Hostname,
 			User:             remote.User,
+			Port:             remote.Port,
 			ApiKey:           remote.ApiKey,
 			Direction:        direction,
 			LocalNamespace:   localNamespace,
