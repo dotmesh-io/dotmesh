@@ -264,6 +264,16 @@ type TransferRequest struct {
 	TargetCommit string // optional, "" means "latest"
 }
 
+type S3TransferRequest struct {
+	KeyID           string
+	SecretKey       string
+	Direction       string
+	LocalNamespace  string
+	LocalName       string
+	LocalBranchName string
+	RemoteName      string
+}
+
 func (transferRequest TransferRequest) String() string {
 	v := reflect.ValueOf(transferRequest)
 	toString := ""
