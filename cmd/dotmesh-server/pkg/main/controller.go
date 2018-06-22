@@ -50,8 +50,8 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 		// a sort of global event bus for filesystems getting new snapshots on
 		// their masters, keyed on filesystem name, which interested parties
 		// such as slaves for that filesystem may subscribe to
-		newSnapsOnMaster:     NewObserver(),
-		localReceiveProgress: NewObserver(),
+		newSnapsOnMaster:     NewObserver("newSnapsOnMaster"),
+		localReceiveProgress: NewObserver("localReceiveProgress"),
 		// containers that are running with dotmesh volumes by filesystem id
 		containers:     d,
 		containersLock: &sync.Mutex{},

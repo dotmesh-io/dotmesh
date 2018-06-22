@@ -38,11 +38,11 @@ func newFilesystemMachine(filesystemId string, s *InMemoryState) *fsMachine {
 		snapshotsModified:       make(chan bool),
 		state:                   s,
 		snapshotsLock:           &sync.Mutex{},
-		newSnapsOnServers:       NewObserver(),
+		newSnapsOnServers:       NewObserver(fmt.Sprintf("newSnapsOnServers:%s", filesystemId)),
 		currentState:            "discovering",
 		status:                  "",
 		lastTransitionTimestamp: time.Now().UnixNano(),
-		transitionObserver:      NewObserver(),
+		transitionObserver:      NewObserver(fmt.Sprintf("transitionObserver:%s", filesystemId)),
 		lastTransferRequest:     TransferRequest{},
 		// In the case where we're receiving a push (pushPeerState), it's the
 		// POST handler on our http server which handles the receiving of the
@@ -250,6 +250,7 @@ func (f *fsMachine) updateEtcdAboutSnapshots() error {
 	if err != nil {
 		return err
 	}
+
 	// as soon as we're connected, eagerly: if we know about some
 	// snapshots, **or the absence of them**, set this in etcd.
 	serialized, err := func() ([]byte, error) {
@@ -283,9 +284,13 @@ func (f *fsMachine) updateEtcdAboutSnapshots() error {
 	)
 
 	// wait until the state machine notifies us that it's changed the
-	// snapshots
-	_ = <-f.snapshotsModified
-	log.Printf("[updateEtcdAboutSnapshots] going 'round the loop")
+	// snapshots, but have a timeout in case this filesystem is deleted so we don't block forever
+	select {
+	case _ = <-f.snapshotsModified:
+		log.Printf("[updateEtcdAboutSnapshots] going 'round the loop")
+	case <-time.After(60 * time.Second):
+	}
+
 	return nil
 }
 
@@ -1250,6 +1255,7 @@ func missingState(f *fsMachine) stateFn {
 	f.transitionedTo("missing", "waiting for snapshots or requests")
 	select {
 	case _ = <-newSnapsOnMaster:
+		f.transitionedTo("missing", "new snapshots found on master")
 		return receivingState
 	case e := <-f.innerRequests:
 		f.transitionedTo("missing", fmt.Sprintf("handling %s", e.Name))
@@ -1378,6 +1384,19 @@ func missingState(f *fsMachine) stateFn {
 	// short timeout to avoid busylooping
 	f.transitionedTo("missing", "backing off as we don't know what else to do")
 	return backoffState
+}
+
+func backoffStateWithReason(reason string) func(f *fsMachine) stateFn {
+	return func(f *fsMachine) stateFn {
+		f.transitionedTo("backoff", fmt.Sprintf("pausing due to %s", reason))
+		log.Printf("entering backoff state for %s", f.filesystemId)
+		// TODO if we know that we're supposed to be mounted or unmounted, based on
+		// etcd state, actually put us back into the required state rather than
+		// just passively going back into discovering... or maybe, do that in
+		// discoveringState?
+		time.Sleep(time.Second)
+		return discoveringState
+	}
 }
 
 func backoffState(f *fsMachine) stateFn {
@@ -1527,39 +1546,35 @@ func receivingState(f *fsMachine) stateFn {
 	if err != nil {
 		switch err := err.(type) {
 		case *ToSnapsUpToDate:
-			log.Printf("receivingState: ToSnapsUpToDate %s got %s", f.filesystemId, err)
 			// this is fine, we're up-to-date
-			return backoffState
+			return backoffStateWithReason(fmt.Sprintf("receivingState: ToSnapsUpToDate %s got %s", f.filesystemId, err))
 		case *NoFromSnaps:
-			log.Printf("receivingState: NoFromSnaps %s got %s", f.filesystemId, err)
 			// this is fine, no snaps; can't replicate yet, but will
-			return backoffState
+			return backoffStateWithReason(fmt.Sprintf("receivingState: NoFromSnaps %s got %s", f.filesystemId, err))
 		case *ToSnapsAhead:
 			log.Printf("receivingState: ToSnapsAhead %s got %s", f.filesystemId, err)
 			// erk, slave is ahead of master
 			errx := f.recoverFromDivergence(err.latestCommonSnapshot)
 			if errx != nil {
-				log.Printf("receivingState(%s): Unable to recover from divergence: %+v", f.filesystemId, errx)
+				return backoffStateWithReason(fmt.Sprintf("receivingState(%s): Unable to recover from divergence: %+v", f.filesystemId, errx))
 			}
 			// Go to discovering state, to update the world with our recent ZFS actions.
-			return backoffState
+			return discoveringState
 		case *ToSnapsDiverged:
 			log.Printf("receivingState: ToSnapsDiverged %s got %s", f.filesystemId, err)
 			errx := f.recoverFromDivergence(err.latestCommonSnapshot)
 			if errx != nil {
-				log.Printf("receivingState(%s): Unable to recover from divergence: %+v", f.filesystemId, errx)
+				return backoffStateWithReason(fmt.Sprintf("receivingState(%s): Unable to recover from divergence: %+v", f.filesystemId, errx))
 			}
 			// Go to discovering state, to update the world with our recent ZFS actions.
-			return backoffState
+			return discoveringState
 		case *NoCommonSnapshots:
-			log.Printf("receivingState: NoCommonSnapshots %s got %s", f.filesystemId, err)
 			// erk, no common snapshots between master and slave
 			// TODO: create a new local clone (branch), then delete the current
 			// filesystem to enable replication to continue
-			return backoffState
+			return backoffStateWithReason(fmt.Sprintf("receivingState: NoCommonSnapshots %s got %+v", f.filesystemId, err))
 		default:
-			log.Printf("receivingState: default error handler %s got %s", f.filesystemId, err)
-			return backoffState
+			return backoffStateWithReason(fmt.Sprintf("receivingState: default error handler %s got %s", f.filesystemId, err))
 		}
 	}
 
@@ -1576,8 +1591,7 @@ func receivingState(f *fsMachine) stateFn {
 			case NoSuchClone:
 				// Normal case for non-clone filesystems, continue.
 			default:
-				log.Printf("Error trying to lookup clone by id: %s", err)
-				return backoffState
+				return backoffStateWithReason(fmt.Sprintf("receivingState: Error trying to lookup clone by id: %+v", err))
 			}
 		} else {
 			// Found a clone, let's base our pull on it
@@ -1593,19 +1607,16 @@ func receivingState(f *fsMachine) stateFn {
 		f.state.masterFor(f.filesystemId),
 	)
 	if len(addresses) == 0 {
-		log.Printf("No known address for current master of %s", f.filesystemId)
-		return backoffState
+		return backoffStateWithReason(fmt.Sprintf("receivingState: No known address for current master of %s", f.filesystemId))
 	}
 	_, _, apiKey, err := getPasswords("admin")
 	if err != nil {
-		log.Printf("Attempting to pull %s got %s", f.filesystemId, err)
-		return backoffState
+		return backoffStateWithReason(fmt.Sprintf("receivingState: Attempting to pull %s got %+v", f.filesystemId, err))
 	}
 
 	url, err := deduceUrl(context.Background(), addresses, "internal", "admin", apiKey)
 	if err != nil {
-		log.Printf("%s", err)
-		return backoffState
+		return backoffStateWithReason(fmt.Sprintf("receivingState: deduceUrl failed with %+v", err))
 	}
 
 	req, err := http.NewRequest(
@@ -1619,15 +1630,13 @@ func receivingState(f *fsMachine) stateFn {
 		nil,
 	)
 	if err != nil {
-		log.Printf("Attempting to pull %s got %s", f.filesystemId, err)
-		return backoffState
+		return backoffStateWithReason(fmt.Sprintf("receivingState: Attempting to pull %s got %+v", f.filesystemId, err))
 	}
 	req.SetBasicAuth("admin", apiKey)
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("Attempting to pull %s got %s", f.filesystemId, err)
-		return backoffState
+		return backoffStateWithReason(fmt.Sprintf("receivingState: Attempting to pull %s got %+v", f.filesystemId, err))
 	}
 	log.Printf(
 		"Debug: curl -u admin:[pw] %s/filesystems/%s/%s/%s",
@@ -1672,7 +1681,7 @@ func receivingState(f *fsMachine) stateFn {
 	prelude, err := consumePrelude(pipeReader)
 	if err != nil {
 		_ = <-finished
-		return backoffState
+		return backoffStateWithReason(fmt.Sprintf("receivingState: error consuming prelude: %+v", err))
 	}
 	log.Printf("[pull] Got prelude %v", prelude)
 
@@ -1684,18 +1693,16 @@ func receivingState(f *fsMachine) stateFn {
 	f.transitionedTo("receiving", "finished pipe")
 
 	if err != nil {
-		log.Printf(
-			"Got error %s when running zfs recv for %s, check zfs-recv-stderr.log",
+		return backoffStateWithReason(fmt.Sprintf("receivingState: Got error %+v when running zfs recv for %s, check zfs-recv-stderr.log",
 			err, f.filesystemId,
-		)
-		return backoffState
+		))
 	} else {
 		log.Printf("Successfully received %s => %s for %s", fromSnap, snapRange.toSnap.Id)
 	}
 	log.Printf("[pull] about to start applying prelude on %v", pipeReader)
 	err = applyPrelude(prelude, fq(f.filesystemId))
 	if err != nil {
-		return backoffState
+		return backoffStateWithReason(fmt.Sprintf("receivingState: Error applying prelude: %+v", err))
 	}
 	return discoveringState
 }
@@ -2587,6 +2594,10 @@ func (f *fsMachine) push(
 	resp, err := postClient.Do(req)
 	if err != nil {
 		log.Printf("[actualPush:%s] error in postClient.Do: %s", filesystemId, err)
+
+		go func() {
+			_ = <-errch
+		}()
 		_ = <-finished
 		return &Event{
 			Name: "error-from-post-when-pushing",
@@ -2603,6 +2614,10 @@ func (f *fsMachine) push(
 			filesystemId,
 			string(responseBody), err,
 		)
+
+		go func() {
+			_ = <-errch
+		}()
 		_ = <-finished
 		return &Event{
 			Name: "error-reading-push-response-body",
@@ -2613,7 +2628,9 @@ func (f *fsMachine) push(
 	log.Printf("[actualPush:%s] Got response body while pushing: status %d, body %s", filesystemId, resp.StatusCode, string(responseBody))
 
 	if resp.StatusCode != 200 {
-		log.Printf("ABS TEST: Aborting!")
+		go func() {
+			_ = <-errch
+		}()
 		_ = <-finished
 		return &Event{
 			Name: "error-pushing-posting",

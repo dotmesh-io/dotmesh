@@ -5,18 +5,21 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
 )
 
 type Observer struct {
+	name    string
 	events  map[string][]chan interface{}
 	rwMutex sync.RWMutex
 }
 
-func NewObserver() *Observer {
+func NewObserver(name string) *Observer {
 	return &Observer{
+		name:    name,
 		rwMutex: sync.RWMutex{},
 		events:  map[string][]chan interface{}{},
 	}
@@ -118,7 +121,17 @@ func (o *Observer) Publish(event string, data interface{}) error {
 					return
 				}
 			}()
-			outputChan <- data
+
+			select {
+			case outputChan <- data:
+				// Sent OK without timing out
+				break
+			case <-time.After(600 * time.Second):
+				// Took more than 10 minutes
+				log.Printf("[Observer.Publish] LONG WAIT to send %#v on %s:%s", data, o.name, event)
+				outputChan <- data
+				log.Printf("[Observer.Publish] Finally sent %#v on %s:%s after a long wait", data, o.name, event)
+			}
 		}(outputChan)
 	}
 
