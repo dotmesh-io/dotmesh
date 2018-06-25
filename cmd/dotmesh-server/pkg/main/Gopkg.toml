@@ -24,7 +24,6 @@
 #   go-tests = true
 #   unused-packages = true
 
-
 [[constraint]]
   branch = "master"
   name = "github.com/nu7hatch/gouuid"
@@ -43,4 +42,4 @@
 
 [[constraint]]
   name = "github.com/aws/aws-sdk-go"
-  revision = "3fa93d5352209f4d0923db9f29ba1644b7182e45"
+  branch = "master"

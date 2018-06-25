@@ -1053,7 +1053,7 @@ func (d *DotmeshRPC) S3Transfer(
 	switch args.Direction {
 	case "push":
 		// TODO do we need this check, should it be different? Suspect s3 just requires there's no `.` etc but that's something the user will need to do on AWS anyway, unless we're allowing create-if-not-exists for pushes
-		err := requireValidVolumeName(VolumeName{args.RemoteNamespace, args.RemoteName})
+		err := requireValidVolumeName(VolumeName{"", args.RemoteName})
 		if err != nil {
 			return err
 		}
@@ -1072,9 +1072,9 @@ func (d *DotmeshRPC) S3Transfer(
 	}
 	// I don't think region actually matters, but if none is supplied the client complains
 	svc := s3.New(sess, aws.NewConfig().WithRegion("us-east-1"))
-	var output HeadBucketOutput
+	var output *s3.HeadBucketOutput
 	// Check the bucket exists, and that we can access it
-	output, err = svc.HeadBucket(HeadBucketInput{args.RemoteName})
+	output, err = svc.HeadBucket(&s3.HeadBucketInput{Bucket: &args.RemoteName})
 	if err != nil {
 		fmt.Printf("[S3Transfer] %#v", output)
 		return err

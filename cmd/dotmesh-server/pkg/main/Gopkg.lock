@@ -12,9 +12,41 @@
   revision = "84d6af4cf903571319e0ebddd7beb12bc93fb752"
 
 [[projects]]
+  branch = "master"
   name = "github.com/aws/aws-sdk-go"
-  packages = ["."]
-  revision = "3fa93d5352209f4d0923db9f29ba1644b7182e45"
+  packages = [
+    "aws",
+    "aws/awserr",
+    "aws/awsutil",
+    "aws/client",
+    "aws/client/metadata",
+    "aws/corehandlers",
+    "aws/credentials",
+    "aws/credentials/ec2rolecreds",
+    "aws/credentials/endpointcreds",
+    "aws/credentials/stscreds",
+    "aws/csm",
+    "aws/defaults",
+    "aws/ec2metadata",
+    "aws/endpoints",
+    "aws/request",
+    "aws/session",
+    "aws/signer/v4",
+    "internal/sdkio",
+    "internal/sdkrand",
+    "internal/shareddefaults",
+    "private/protocol",
+    "private/protocol/eventstream",
+    "private/protocol/eventstream/eventstreamapi",
+    "private/protocol/query",
+    "private/protocol/query/queryutil",
+    "private/protocol/rest",
+    "private/protocol/restxml",
+    "private/protocol/xml/xmlutil",
+    "service/s3",
+    "service/sts"
+  ]
+  revision = "912c6e5c014481c67811e4da911845a8e93c498d"
 
 [[projects]]
   branch = "master"
@@ -93,6 +125,12 @@
   revision = "b87634a9d98e8671b847597fb264953a3e0d02b5"
 
 [[projects]]
+  name = "github.com/go-ini/ini"
+  packages = ["."]
+  revision = "06f5f3d67269ccec1fe5fe4134ba6e982984f7f5"
+  version = "v1.37.0"
+
+[[projects]]
   name = "github.com/gogo/protobuf"
   packages = ["proto"]
   revision = "8d70fb3182befc465c4a1eac8ad4d38ff49778e2"
@@ -129,6 +167,11 @@
   name = "github.com/hashicorp/go-cleanhttp"
   packages = ["."]
   revision = "d5fe4b57a186c716b0e00b8c301cbd9b4182694d"
+
+[[projects]]
+  name = "github.com/jmespath/go-jmespath"
+  packages = ["."]
+  revision = "0b12d6b5"
 
 [[projects]]
   name = "github.com/klauspost/crc32"
@@ -253,6 +296,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "57abdbcde2845cc58a9414b17345b90e78d7789afa3a16a7ce551afd9052a3fa"
+  inputs-digest = "4cdc25188b9944bb44ede8f149354253328d30f9c84a2717beb7d48c5f310d47"
   solver-name = "gps-cdcl"
   solver-version = 1
