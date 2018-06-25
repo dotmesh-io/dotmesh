@@ -20,8 +20,8 @@ $ (cd cmd/versioner/; go run versioner.go)
 release-0.1.1
 ```
 
-To do a new version release, just create a branch called
-`release-X.Y`; to do a patch release, just merge into that branch,
+To do a new version release, create a branch called
+`release-X.Y` (`git checkout -b release-X.Y`) where X and Y are major and minor versions for your release; to do a patch release, you would merge into the version branch,
 like so:
 
 ```
@@ -30,7 +30,10 @@ $ git pull origin release-x.y
 $ git merge --no-ff master
 $ (cd cmd/versioner/; go run versioner.go)
 release-x.y.z
+$ git push origin release-x.y
 ```
+
+e.g patching version 0.1 would be `git checkout release-0.1` etc.
 
 ## The build artefacts
 
