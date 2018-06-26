@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -18,6 +19,13 @@ import (
 Take a look at docs/dev-commands.md to see how to run these tests.
 
 */
+
+func TestMain(m *testing.M) {
+	citools.InitialCleanup()
+	retCode := m.Run()
+	citools.FinalCleanup()
+	os.Exit(retCode)
+}
 
 func TestDefaultDot(t *testing.T) {
 	// Test default dot select on a totally fresh cluster
