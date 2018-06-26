@@ -274,6 +274,20 @@ type S3TransferRequest struct {
 	RemoteName      string
 }
 
+func (transferRequest S3TransferRequest) String() string {
+	v := reflect.ValueOf(transferRequest)
+	toString := ""
+	for i := 0; i < v.NumField(); i++ {
+		fieldName := v.Type().Field(i).Name
+		if fieldName == "SecretKey" {
+			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, "****")
+		} else {
+			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, v.Field(i).Interface())
+		}
+	}
+	return toString
+}
+
 func (transferRequest TransferRequest) String() string {
 	v := reflect.ValueOf(transferRequest)
 	toString := ""
