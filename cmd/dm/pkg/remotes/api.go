@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"golang.org/x/net/context"
-	"gopkg.in/cheggaaa/pb.v1"
+	pb "gopkg.in/cheggaaa/pb.v1"
 )
 
 const DEFAULT_BRANCH string = "master"
@@ -998,7 +998,7 @@ func (dm *DotmeshAPI) RequestTransfer(
 	dmRemote, ok := remote.(*DMRemote)
 
 	if ok {
-		tr := TransferRequest{
+		transferRequest := TransferRequest{
 			Peer:             dmRemote.Hostname,
 			User:             dmRemote.User,
 			Port:             dmRemote.Port,
@@ -1015,11 +1015,11 @@ func (dm *DotmeshAPI) RequestTransfer(
 		}
 
 		if debugMode {
-			fmt.Printf("[DEBUG] TransferRequest: %#v\n", tr)
+			fmt.Printf("[DEBUG] TransferRequest: %#v\n", transferRequest)
 		}
 
 		err = client.CallRemote(context.Background(),
-			"DotmeshRPC.Transfer", tr, &transferId)
+			"DotmeshRPC.Transfer", transferRequest, &transferId)
 		if err != nil {
 			return "", err
 		}
@@ -1027,7 +1027,7 @@ func (dm *DotmeshAPI) RequestTransfer(
 		s3Remote, ok := remote.(*S3Remote)
 		if ok {
 
-			tr := S3TransferRequest{
+			transferRequest := S3TransferRequest{
 				KeyID:           s3Remote.KeyID,
 				SecretKey:       s3Remote.SecretKey,
 				Direction:       direction,
@@ -1040,11 +1040,11 @@ func (dm *DotmeshAPI) RequestTransfer(
 			}
 
 			if debugMode {
-				fmt.Printf("[DEBUG] S3TransferRequest: %#v\n", tr)
+				fmt.Printf("[DEBUG] S3TransferRequest: %#v\n", transferRequest)
 			}
 
 			err = client.CallRemote(context.Background(),
-				"DotmeshRPC.s3Transfer", tr, &transferId)
+				"DotmeshRPC.S3Transfer", transferRequest, &transferId)
 			if err != nil {
 				return "", err
 			}
