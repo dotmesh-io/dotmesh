@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/coreos/etcd/client"
 	"golang.org/x/net/context"
 )
@@ -1070,8 +1071,9 @@ func (d *DotmeshRPC) S3Transfer(
 	if err != nil {
 		return fmt.Errorf("Could not establish connection with AWS using supplied credentials")
 	}
+	region, err := s3manager.GetBucketRegion(r.Context(), sess, args.RemoteName, "us-west-1")
 	// I don't think region actually matters, but if none is supplied the client complains
-	svc := s3.New(sess, aws.NewConfig().WithRegion("us-east-1"))
+	svc := s3.New(sess, aws.NewConfig().WithRegion(region))
 	var output *s3.HeadBucketOutput
 	// Check the bucket exists, and that we can access it
 	output, err = svc.HeadBucket(&s3.HeadBucketInput{Bucket: &args.RemoteName})
@@ -1092,22 +1094,7 @@ func (d *DotmeshRPC) S3Transfer(
 
 	var filesystemId string
 	if args.Direction == "pull" && !localExists {
-		localFilesystem, _, err := d.state.CreateFilesystem(context.Background(), &VolumeName{args.LocalNamespace, args.LocalName})
-		if err != nil {
-			return err
-		}
-		// pre-create the local registry entry and pick a master for it to land
-		// on locally (me!)
-
-		// TODO what do we give as the file system ID? Remote won't give us one for S3
-		err = d.registerFilesystemBecomeMaster(
-			r.Context(),
-			args.LocalNamespace,
-			args.LocalName,
-			args.LocalBranchName,
-			localFilesystem.filesystemId,
-			localPath,
-		)
+		localFilesystem, _, err := d.state.CreateFilesystem(r.Context(), &VolumeName{args.LocalNamespace, args.LocalName})
 		if err != nil {
 			return err
 		}
