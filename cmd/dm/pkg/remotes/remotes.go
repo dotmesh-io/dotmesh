@@ -182,11 +182,9 @@ func (c *Configuration) save() error {
 func (c *Configuration) getRemote(name string) (Remote, error) {
 	var r Remote
 	var ok bool
-	fmt.Printf("Inside get remote")
 	r, ok = c.DMRemotes[name]
 	if !ok {
 		r, ok = c.S3Remotes[name]
-		fmt.Printf("%#v", r)
 		if !ok {
 			return nil, fmt.Errorf("Unable to find remote '%s'", name)
 		}
