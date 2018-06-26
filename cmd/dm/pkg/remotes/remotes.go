@@ -284,7 +284,7 @@ func (c *Configuration) DefaultRemoteVolumeFor(peer, namespace, volume string) (
 func (c *Configuration) SetDefaultRemoteVolumeFor(peer, namespace, volume, remoteNamespace, remoteVolume string) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	remote, err := c.GetRemote(peer)
+	remote, err := c.getRemote(peer)
 	if err != nil {
 		return fmt.Errorf(
 			"Unable to find remote '%s'",
