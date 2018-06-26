@@ -1090,8 +1090,6 @@ func (d *DotmeshRPC) S3Transfer(
 
 	// note; was a bunch of logic checks for whether remote/local ends exist here - I don't think we need them because we'd have returned an error already if remote didn't exist
 
-	var localPath PathToTopLevelFilesystem
-
 	var filesystemId string
 	if args.Direction == "pull" && !localExists {
 		localFilesystem, _, err := d.state.CreateFilesystem(r.Context(), &VolumeName{args.LocalNamespace, args.LocalName})
