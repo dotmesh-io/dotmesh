@@ -1079,7 +1079,7 @@ func (d *DotmeshRPC) S3Transfer(
 		fmt.Printf("[S3Transfer] %#v", output)
 		return err
 	}
-	log.Printf("[S3Transfer] starting with %+v", safeArgs(*args))
+	log.Printf("[S3Transfer] starting with %+v", safeS3(*args))
 
 	localFilesystemId := d.state.registry.Exists(
 		VolumeName{args.LocalNamespace, args.LocalName}, args.LocalBranchName,
@@ -1088,24 +1088,30 @@ func (d *DotmeshRPC) S3Transfer(
 
 	// note; was a bunch of logic checks for whether remote/local ends exist here - I don't think we need them because we'd have returned an error already if remote didn't exist
 
-	var localPath, remotePath PathToTopLevelFilesystem
+	var localPath PathToTopLevelFilesystem
 
 	var filesystemId string
 	if args.Direction == "pull" && !localExists {
+		localFilesystem, _, err := d.state.CreateFilesystem(context.Background(), &VolumeName{args.LocalNamespace, args.LocalName})
+		if err != nil {
+			return err
+		}
 		// pre-create the local registry entry and pick a master for it to land
 		// on locally (me!)
+
+		// TODO what do we give as the file system ID? Remote won't give us one for S3
 		err = d.registerFilesystemBecomeMaster(
 			r.Context(),
 			args.LocalNamespace,
 			args.LocalName,
 			args.LocalBranchName,
-			remoteFilesystemId,
+			localFilesystem.filesystemId,
 			localPath,
 		)
 		if err != nil {
 			return err
 		}
-		filesystemId = remoteFilesystemId
+		filesystemId = localFilesystem.filesystemId
 	}
 	// TODO: look at the logic for filesystem combinations, there was a bunch of logic for pulling/pushing fsystems that were in sync or had dirty changes. Not sure we need or can use those
 
@@ -1435,6 +1441,11 @@ func (d *DotmeshRPC) Transfer(
 
 func safeArgs(t TransferRequest) TransferRequest {
 	t.ApiKey = "<redacted>"
+	return t
+}
+
+func safeS3(t S3TransferRequest) S3TransferRequest {
+	t.SecretKey = "<redacted>"
 	return t
 }
 
