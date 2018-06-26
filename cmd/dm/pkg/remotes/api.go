@@ -878,12 +878,14 @@ func (dm *DotmeshAPI) RequestTransfer(
 ) (string, error) {
 	connectionInitiator := dm.Configuration.CurrentRemote
 
-	/*
+	debugMode := os.Getenv("DEBUG_MODE") != ""
+
+	if debugMode {
 		fmt.Printf("[DEBUG RequestTransfer] dir=%s peer=%s lfs=%s lb=%s rfs=%s rb=%s\n",
 			direction, peer,
 			localFilesystemName, localBranchName,
 			remoteFilesystemName, remoteBranchName)
-	*/
+	}
 
 	var err error
 
@@ -993,45 +995,61 @@ func (dm *DotmeshAPI) RequestTransfer(
 	var transferId string
 	// TODO make ApiKey time- and domain- (filesystem?) limited
 	// cryptographically somehow
-	dmRemote, ok := remote.(DMRemote)
+	dmRemote, ok := remote.(*DMRemote)
+
 	if ok {
+		tr := TransferRequest{
+			Peer:             dmRemote.Hostname,
+			User:             dmRemote.User,
+			Port:             dmRemote.Port,
+			ApiKey:           dmRemote.ApiKey,
+			Direction:        direction,
+			LocalNamespace:   localNamespace,
+			LocalName:        localVolume,
+			LocalBranchName:  deMasterify(localBranchName),
+			RemoteNamespace:  remoteNamespace,
+			RemoteName:       remoteVolume,
+			RemoteBranchName: deMasterify(remoteBranchName),
+			// TODO add TargetSnapshot here, to support specifying "push to a given
+			// snapshot" rather than just "push all snapshots up to the latest"
+		}
+
+		if debugMode {
+			fmt.Printf("[DEBUG] TransferRequest: %#v\n", tr)
+		}
+
 		err = client.CallRemote(context.Background(),
-			"DotmeshRPC.Transfer", TransferRequest{
-				Peer:             dmRemote.Hostname,
-				User:             dmRemote.User,
-				Port:             dmRemote.Port,
-				ApiKey:           dmRemote.ApiKey,
-				Direction:        direction,
-				LocalNamespace:   localNamespace,
-				LocalName:        localVolume,
-				LocalBranchName:  deMasterify(localBranchName),
-				RemoteNamespace:  remoteNamespace,
-				RemoteName:       remoteVolume,
-				RemoteBranchName: deMasterify(remoteBranchName),
-				// TODO add TargetSnapshot here, to support specifying "push to a given
-				// snapshot" rather than just "push all snapshots up to the latest"
-			}, &transferId)
+			"DotmeshRPC.Transfer", tr, &transferId)
 		if err != nil {
 			return "", err
 		}
 	} else {
-		s3Remote, ok := remote.(S3Remote)
+		s3Remote, ok := remote.(*S3Remote)
 		if ok {
+
+			tr := S3TransferRequest{
+				KeyID:           s3Remote.KeyID,
+				SecretKey:       s3Remote.SecretKey,
+				Direction:       direction,
+				LocalNamespace:  localNamespace,
+				LocalName:       localVolume,
+				LocalBranchName: deMasterify(localBranchName),
+				RemoteName:      remoteVolume,
+				// TODO add TargetSnapshot here, to support specifying "push to a given
+				// snapshot" rather than just "push all snapshots up to the latest"
+			}
+
+			if debugMode {
+				fmt.Printf("[DEBUG] S3TransferRequest: %#v\n", tr)
+			}
+
 			err = client.CallRemote(context.Background(),
-				"DotmeshRPC.s3Transfer", S3TransferRequest{
-					KeyID:           s3Remote.KeyID,
-					SecretKey:       s3Remote.SecretKey,
-					Direction:       direction,
-					LocalNamespace:  localNamespace,
-					LocalName:       localVolume,
-					LocalBranchName: deMasterify(localBranchName),
-					RemoteName:      remoteVolume,
-					// TODO add TargetSnapshot here, to support specifying "push to a given
-					// snapshot" rather than just "push all snapshots up to the latest"
-				}, &transferId)
+				"DotmeshRPC.s3Transfer", tr, &transferId)
 			if err != nil {
 				return "", err
 			}
+		} else {
+			return "", fmt.Errorf("Unknown remote type %#v\n", remote)
 		}
 	}
 	return transferId, nil
