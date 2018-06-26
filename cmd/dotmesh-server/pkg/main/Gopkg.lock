@@ -44,9 +44,11 @@
     "private/protocol/restxml",
     "private/protocol/xml/xmlutil",
     "service/s3",
+    "service/s3/s3iface",
+    "service/s3/s3manager",
     "service/sts"
   ]
-  revision = "912c6e5c014481c67811e4da911845a8e93c498d"
+  revision = "39d9e516f4473b5da954da470d7ce4d3ee05b05e"
 
 [[projects]]
   branch = "master"
@@ -296,6 +298,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "4cdc25188b9944bb44ede8f149354253328d30f9c84a2717beb7d48c5f310d47"
+  inputs-digest = "13598f61800749d6525461b3436418c94cee27f9c592b442fe9857d2e0f460db"
   solver-name = "gps-cdcl"
   solver-version = 1
