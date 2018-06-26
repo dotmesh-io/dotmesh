@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -31,6 +33,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"net/http"
 )
+
+// k8s API docs:
+
+// Core() below refers to https://godoc.org/k8s.io/client-go/kubernetes/typed/core/v1#CoreV1Interface from which
+// many other useful interfaces spring.
+
+// Types like v1.Pod etc can be found at https://godoc.org/k8s.io/api/core/v1
 
 // Log verbosities:
 
@@ -607,12 +616,43 @@ func (c *dotmeshController) process() error {
 				dotmesh.Status.Message,
 				dotmesh.Status.Reason,
 			)
-			for _, cond := range dotmesh.Status.Conditions {
-				glog.Infof("Failed pod %s - condition %#v", podName, cond)
+			for idx, cond := range dotmesh.Status.Conditions {
+				glog.Infof("Failed pod %s - condition %d: %#v", podName, idx, cond)
 			}
-			for _, cont := range dotmesh.Status.ContainerStatuses {
-				glog.Infof("Failed pod %s - container %#v", podName, cont)
+			for idx, cont := range dotmesh.Status.ContainerStatuses {
+				glog.Infof("Failed pod %s - container %d: %#v", podName, idx, cont)
 			}
+
+			// Get logs
+			logReq := c.client.Core().Pods(dotmesh.ObjectMeta.Namespace).
+				GetLogs(podName,
+					&v1.PodLogOptions{},
+				)
+
+			func() {
+				readCloser, err := logReq.Stream()
+				if err != nil {
+					glog.Errorf("Failed pod %s - error getting logs - %#v", podName, err)
+					return // Only from inner func
+				}
+				defer readCloser.Close()
+				scanner := bufio.NewReader(readCloser)
+				for {
+					line, err := scanner.ReadString('\n')
+					if line != "" {
+						glog.Infof("Failed pod %s log: %s", podName, line)
+					}
+					if err != nil {
+						if err == io.EOF {
+							glog.Infof("Failed pod %s log ends", podName, line)
+							return // Only from inner func
+						} else {
+							glog.Errorf("Failed pod %s - error reading logs - %#v", podName, err)
+							return // Only from inner func
+						}
+					}
+				}
+			}()
 
 			// Broken, mark it for death
 			dotmeshesToKill[podName] = struct{}{}
