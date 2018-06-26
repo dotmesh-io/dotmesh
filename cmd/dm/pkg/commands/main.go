@@ -327,12 +327,14 @@ func NewCmdList(out io.Writer) *cobra.Command {
 					)
 				}
 
-				vs, err := dm.AllVolumes()
+				vcs, err := dm.AllVolumesWithContainers()
 				if err != nil {
 					return err
 				}
 
-				for _, v := range vs {
+				for _, vc := range vcs {
+					v := vc.Volume
+					containerInfo := vc.Containers
 					activeQualified, err := dm.CurrentVolume()
 					if err != nil {
 						return err
@@ -355,10 +357,6 @@ func NewCmdList(out io.Writer) *cobra.Command {
 
 					// TODO maybe show all branches
 					b, err := dm.CurrentBranch(v.Name.String())
-					if err != nil {
-						return err
-					}
-					containerInfo, err := dm.RelatedContainers(v.Name, b)
 					if err != nil {
 						return err
 					}

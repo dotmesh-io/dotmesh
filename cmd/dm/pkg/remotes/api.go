@@ -632,6 +632,43 @@ type Container struct {
 	Name string
 }
 
+type DotmeshVolumeAndContainers struct {
+	Volume     DotmeshVolume
+	Containers []Container
+}
+
+func (dm *DotmeshAPI) AllVolumesWithContainers() ([]DotmeshVolumeAndContainers, error) {
+	filesystems := map[string]map[string]DotmeshVolumeAndContainers{}
+	result := []DotmeshVolumeAndContainers{}
+	interim := map[string]DotmeshVolumeAndContainers{}
+	err := dm.client.CallRemote(
+		context.Background(), "DotmeshRPC.ListWithContainers", nil, &filesystems,
+	)
+	if err != nil {
+		return result, err
+	}
+	names := []string{}
+	for namespace, volumesInNamespace := range filesystems {
+		var prefix string
+		if namespace == "admin" {
+			prefix = ""
+		} else {
+			prefix = namespace + "/"
+		}
+
+		for filesystem, v := range volumesInNamespace {
+			name := prefix + filesystem
+			interim[name] = v
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		result = append(result, interim[name])
+	}
+	return result, nil
+}
+
 func (dm *DotmeshAPI) RelatedContainers(volumeName VolumeName, branch string) ([]Container, error) {
 	result := []Container{}
 	err := dm.client.CallRemote(
