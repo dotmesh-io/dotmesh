@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/client"
-	"github.com/nu7hatch/gouuid"
+	uuid "github.com/nu7hatch/gouuid"
 	"golang.org/x/net/context"
 )
 
