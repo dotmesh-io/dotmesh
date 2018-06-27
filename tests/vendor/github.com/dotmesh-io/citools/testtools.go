@@ -527,8 +527,25 @@ func TeardownFinishedTestRuns() {
 	}
 	// if path doesn't exist, create it and clean it up on return
 	if _, err := os.Stat(lockfile); os.IsNotExist(err) {
-		os.OpenFile(lockfile, os.O_RDONLY|os.O_CREATE, 0666)
-		defer os.Remove(lockfile)
+		f, err := os.Create(lockfile)
+		if err != nil {
+			return
+		}
+		if os.Getenv("CI_DOCKER_TAG") != "" {
+			// GitLab runner sets this env variable
+			_, err = f.WriteString(fmt.Sprintf("Time: %s  Commit: %s\n", time.Now().String(), os.Getenv("CI_DOCKER_TAG")))
+			if err != nil {
+				log.Printf("Error writing timestamp and commit into the lockfile: %s", err)
+			}
+		} else {
+			// local run
+			_, err = f.WriteString(fmt.Sprintf("Time: %s", time.Now().String()))
+			if err != nil {
+				log.Printf("Error writing timestamp into the lockfile: %s\n", err)
+			}
+		}
+		f.Close()
+		defer os.RemoveAll(lockfile)
 	}
 
 	// Containers that weren't marked as CLEAN_ME_UP but which are older than
