@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -924,13 +925,18 @@ func TestDeletionSimple(t *testing.T) {
 	t.Run("DeleteInUseFails", func(t *testing.T) {
 		fsname := citools.UniqName()
 
+		wg := &sync.WaitGroup{}
+
 		go func() {
+			wg.Add(1)
 			citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO; tail -f /dev/null'")
 		}()
 
 		for !strings.Contains(citools.OutputFromRunOnNode(t, node1, "docker ps"), "busybox") {
 			time.Sleep(1)
 		}
+
+		wg.Wait()
 
 		// Delete, while the container is running! Which should fail!
 		st := citools.OutputFromRunOnNode(t, node1, "if dm dot delete -f "+fsname+"; then false; else true; fi")
