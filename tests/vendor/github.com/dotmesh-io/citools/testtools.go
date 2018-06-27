@@ -2,6 +2,7 @@ package citools
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -515,8 +516,8 @@ func TeardownFinishedTestRuns() {
 	if _, err := os.Stat(lockfile); err == nil {
 		for {
 			log.Printf(
-				"Waiting for /dotmesh-test-cleanup.lock to be deleted " +
-					"by some other cleanup process finishing...",
+				"Waiting for %s to be deleted "+
+					"by some other cleanup process finishing...", lockfile,
 			)
 			time.Sleep(1 * time.Second)
 			if _, err := os.Stat(lockfile); os.IsNotExist(err) {
@@ -727,6 +728,34 @@ func docker(node string, cmd string, env map[string]string) (string, error) {
 
 }
 
+func dockerContext(ctx context.Context, node string, cmd string, env map[string]string) (string, error) {
+	args := []string{"exec"}
+	if env != nil {
+		for name, value := range env {
+			args = append(args, []string{"-e", fmt.Sprintf("%s=%s", name, value)}...)
+		}
+	}
+	args = append(args, []string{"-i", node, "bash", "-c", cmd}...)
+	c := exec.CommandContext(ctx, "docker", args...)
+
+	var b bytes.Buffer
+	var o, e io.Writer
+	if _, ok := env["DEBUG_MODE"]; ok {
+		o = io.MultiWriter(&b, os.Stdout)
+		e = io.MultiWriter(&b, os.Stderr)
+
+	} else {
+		o = io.MultiWriter(&b)
+		e = io.MultiWriter(&b)
+	}
+
+	c.Stdout = o
+	c.Stderr = e
+	err := c.Run()
+	return string(b.Bytes()), err
+
+}
+
 func RunOnNodeErr(node string, cmd string) (string, error) {
 	return docker(node, cmd, nil)
 }
@@ -741,6 +770,21 @@ func RunOnNode(t *testing.T, node string, cmd string) {
 	s, err := docker(node, cmd, debugEnv)
 	if err != nil {
 		t.Error(fmt.Errorf("%s while running %s on %s: %s", err, cmd, node, s))
+	}
+}
+
+func RunOnNodeContext(ctx context.Context, t *testing.T, node string, cmd string) {
+	fmt.Printf("RUNNING on %s: %s\n", node, cmd)
+	debugEnv := map[string]string{}
+	s, err := dockerContext(ctx, node, cmd, debugEnv)
+	if err != nil {
+		select {
+		case <-ctx.Done():
+			// nothing to do, ctx was cancelled
+			return
+		default:
+			t.Error(fmt.Errorf("%s while running %s on %s: %s", err, cmd, node, s))
+		}
 	}
 }
 
