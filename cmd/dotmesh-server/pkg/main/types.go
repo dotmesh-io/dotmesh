@@ -268,6 +268,7 @@ type TransferRequest struct {
 type S3TransferRequest struct {
 	KeyID           string
 	SecretKey       string
+	Endpoint        string
 	Direction       string
 	LocalNamespace  string
 	LocalName       string

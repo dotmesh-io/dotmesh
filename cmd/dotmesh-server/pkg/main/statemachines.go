@@ -1208,6 +1208,7 @@ func s3TransferRequestify(in interface{}) (S3TransferRequest, error) {
 	return S3TransferRequest{
 		KeyID:           typed["KeyID"].(string),
 		SecretKey:       typed["SecretKey"].(string),
+		Endpoint:        typed["Endpoint"].(string),
 		Direction:       typed["Direction"].(string),
 		LocalNamespace:  typed["LocalNamespace"].(string),
 		LocalName:       typed["LocalName"].(string),
@@ -3025,9 +3026,13 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 
 	// connect to S3 and get all the objects
 	// TODO: pull this out into dotmesh library, I've used it in the client and the rpc server
-	sess, err := session.NewSession(&aws.Config{
-		Credentials: credentials.NewStaticCredentials(transferRequest.KeyID, transferRequest.SecretKey, ""),
-	})
+
+	config := &aws.Config{Credentials: credentials.NewStaticCredentials(transferRequest.KeyID, transferRequest.SecretKey, "")}
+	// TESTING HACK
+	if transferRequest.Endpoint != "" {
+		config.Endpoint = transferRequest.Endpoint
+	}
+	sess, err := session.NewSession(config)
 	if err != nil {
 		// todo log and put on channel
 		return backoffState
