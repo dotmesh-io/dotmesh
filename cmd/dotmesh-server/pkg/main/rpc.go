@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/coreos/etcd/client"
+	uuid "github.com/nu7hatch/gouuid"
 	"golang.org/x/net/context"
 )
 
@@ -1051,6 +1052,7 @@ func (d *DotmeshRPC) S3Transfer(
 	args *S3TransferRequest,
 	result *string,
 ) error {
+	localVolumeName := VolumeName{args.LocalNamespace, args.LocalName}
 	switch args.Direction {
 	case "push":
 		// TODO do we need this check, should it be different? Suspect s3 just requires there's no `.` etc but that's something the user will need to do on AWS anyway, unless we're allowing create-if-not-exists for pushes
@@ -1059,7 +1061,7 @@ func (d *DotmeshRPC) S3Transfer(
 			return err
 		}
 	case "pull":
-		err := requireValidVolumeName(VolumeName{args.LocalNamespace, args.LocalName})
+		err := requireValidVolumeName(localVolumeName)
 		if err != nil {
 			return err
 		}
@@ -1088,7 +1090,7 @@ func (d *DotmeshRPC) S3Transfer(
 	log.Printf("[S3Transfer] starting with %+v", safeS3(*args))
 
 	localFilesystemId := d.state.registry.Exists(
-		VolumeName{args.LocalNamespace, args.LocalName}, args.LocalBranchName,
+		localVolumeName, args.LocalBranchName,
 	)
 	localExists := localFilesystemId != ""
 
@@ -1096,11 +1098,26 @@ func (d *DotmeshRPC) S3Transfer(
 
 	var filesystemId string
 	if args.Direction == "pull" && !localExists {
-		localFilesystem, _, err := d.state.CreateFilesystem(r.Context(), &VolumeName{args.LocalNamespace, args.LocalName})
+		id, err := uuid.NewV4()
 		if err != nil {
 			return err
 		}
-		filesystemId = localFilesystem.filesystemId
+		filesystemId = id.String()
+		err = d.registerFilesystemBecomeMaster(
+			r.Context(),
+			args.LocalNamespace,
+			args.LocalName,
+			args.LocalBranchName,
+			filesystemId,
+			PathToTopLevelFilesystem{
+				TopLevelFilesystemId:   filesystemId,
+				TopLevelFilesystemName: localVolumeName,
+				Clones:                 ClonesList{},
+			},
+		)
+		if err != nil {
+			return err
+		}
 	}
 	// TODO: look at the logic for filesystem combinations, there was a bunch of logic for pulling/pushing fsystems that were in sync or had dirty changes. Not sure we need or can use those
 
@@ -1111,7 +1128,7 @@ func (d *DotmeshRPC) S3Transfer(
 
 	responseChan, requestId, err := d.state.globalFsRequestId(
 		filesystemId,
-		&Event{Name: "transfer",
+		&Event{Name: "s3-transfer",
 			Args: &EventArgs{
 				"Transfer": args,
 			},
