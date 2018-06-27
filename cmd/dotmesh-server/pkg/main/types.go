@@ -240,6 +240,7 @@ type fsMachine struct {
 	status                  string
 	lastTransitionTimestamp int64
 	transitionObserver      *Observer
+	lastS3TransferRequest   S3TransferRequest
 	lastTransferRequest     TransferRequest
 	lastTransferRequestId   string
 	pushCompleted           chan bool
