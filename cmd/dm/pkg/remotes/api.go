@@ -859,6 +859,7 @@ type TransferRequest struct {
 type S3TransferRequest struct {
 	KeyID           string
 	SecretKey       string
+	Endpoint        string
 	Direction       string
 	LocalNamespace  string
 	LocalName       string
@@ -1030,6 +1031,7 @@ func (dm *DotmeshAPI) RequestTransfer(
 			transferRequest := S3TransferRequest{
 				KeyID:           s3Remote.KeyID,
 				SecretKey:       s3Remote.SecretKey,
+				Endpoint:        s3Remote.Endpoint,
 				Direction:       direction,
 				LocalNamespace:  localNamespace,
 				LocalName:       localVolume,

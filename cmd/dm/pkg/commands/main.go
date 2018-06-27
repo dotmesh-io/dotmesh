@@ -17,7 +17,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/dotmesh-io/dotmesh/cmd/dm/pkg/remotes"
 	"github.com/howeyc/gopass"
-	"github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 )
 
@@ -89,7 +88,7 @@ func NewCmdS3(out io.Writer) *cobra.Command {
 		Long:  "Online help: https://docs.dotmesh.com/references/cli/#list-remotes-dm-remote-v",
 	}
 	cmd.AddCommand(&cobra.Command{
-		Use:   "remote add <remote-name> <key-id:secret-key>",
+		Use:   "remote add <remote-name> <key-id:secret-key>[@endpoint]",
 		Short: "Add an S3 remote",
 		Long:  "Online help: https://docs.dotmesh.com/references/cli/#add-a-new-remote-dm-remote-add-name-user-hostname",
 
@@ -101,7 +100,15 @@ func NewCmdS3(out io.Writer) *cobra.Command {
 					)
 				}
 				remote := args[1]
-				awsCredentials := strings.SplitN(args[2], ":", 2)
+				var endpoint string
+				var awsCredentials []string
+				pieces := strings.SplitN(args[2], "@", 2)
+				if len(pieces) > 1 {
+					awsCredentials = strings.SplitN(pieces[0], ":", 2)
+					endpoint = pieces[1]
+				} else {
+					awsCredentials := strings.SplitN(args[2], ":", 2)
+				}
 				if len(awsCredentials) != 2 {
 					return fmt.Errorf(
 						"Please specify key-id:secret-key, got %s", awsCredentials,
@@ -109,9 +116,11 @@ func NewCmdS3(out io.Writer) *cobra.Command {
 				}
 				keyID := awsCredentials[0]
 				secretKey := awsCredentials[1]
-				sess, err := session.NewSession(&aws.Config{
-					Credentials: credentials.NewStaticCredentials(keyID, secretKey, ""),
-				})
+				config := &aws.Config{Credentials: credentials.NewStaticCredentials(keyID, secretKey, "")}
+				if endpoint != "" {
+					config.Endpoint = endpoint
+				}
+				sess, err := session.NewSession(config)
 				if err != nil {
 					return fmt.Errorf("Could not establish connection with AWS using supplied credentials")
 				}
@@ -125,7 +134,7 @@ func NewCmdS3(out io.Writer) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				err = dm.Configuration.AddS3Remote(remote, keyID, secretKey)
+				err = dm.Configuration.AddS3Remote(remote, keyID, secretKey, endpoint)
 				if err != nil {
 					return err
 				}

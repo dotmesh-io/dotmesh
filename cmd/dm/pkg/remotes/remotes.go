@@ -49,6 +49,7 @@ type Remote interface {
 type S3Remote struct {
 	KeyID                string
 	SecretKey            string
+	Endpoint             string
 	DefaultRemoteVolumes map[string]map[string]VolumeName
 }
 
@@ -372,7 +373,7 @@ func (c *Configuration) RemoteExists(remote string) bool {
 	return ok
 }
 
-func (c *Configuration) AddS3Remote(remote, keyID, secretKey string) error {
+func (c *Configuration) AddS3Remote(remote, keyID, secretKey, endpoint string) error {
 	ok := c.RemoteExists(remote)
 	if ok {
 		return fmt.Errorf("Remote exists '%s'", remote)
@@ -380,6 +381,7 @@ func (c *Configuration) AddS3Remote(remote, keyID, secretKey string) error {
 	c.S3Remotes[remote] = &S3Remote{
 		KeyID:     keyID,
 		SecretKey: secretKey,
+		Endpoint:  endpoint,
 	}
 	return c.save()
 }
