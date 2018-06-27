@@ -15,6 +15,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/coreos/etcd/client"
 	uuid "github.com/nu7hatch/gouuid"
 	"golang.org/x/net/context"
@@ -2990,8 +2995,11 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 		}
 		return backoffState
 	}
-	// transferRequest := f.lastS3TransferRequest
-	// transferRequestId := f.lastTransferRequestId
+	transferRequest := f.lastS3TransferRequest
+	//transferRequestId := f.lastTransferRequestId
+	// TODO pull this out somewhere as I've duplicated this in rpc.go
+
+	// create the default paths
 	destPath := fmt.Sprintf("%s/__default__", mnt(f.filesystemId))
 	// TODO: take the contents of the bucket
 	// dump it in destpath
@@ -3014,9 +3022,37 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 			return backoffState
 		}
 	}
-	log.Printf("CRG TEST PATH %s/hello-world", fmt.Sprintf("%s/hello-world", destPath))
-	ioutil.WriteFile(fmt.Sprintf("%s/hello-world", destPath), []byte("hello, world, s3"), 0644)
 
+	// connect to S3 and get all the objects
+	// TODO: pull this out into dotmesh library, I've used it in the client and the rpc server
+	sess, err := session.NewSession(&aws.Config{
+		Credentials: credentials.NewStaticCredentials(transferRequest.KeyID, transferRequest.SecretKey, ""),
+	})
+	if err != nil {
+		// todo log and put on channel
+		return backoffState
+	}
+	region, err := s3manager.GetBucketRegion(context.Background(), sess, transferRequest.RemoteName, "us-west-1")
+	if err != nil {
+		fmt.Printf("[s3PullInitiatorState] Got err from S3: %#v", err)
+		// TODO put something on the channel
+		return backoffState
+	}
+	svc := s3.New(sess, aws.NewConfig().WithRegion(region))
+	params := &s3.ListObjectsV2Input{
+		Bucket: aws.String(transferRequest.RemoteName),
+	}
+	var objects []*s3.Object
+	var bucketSize int64
+	err = svc.ListObjectsV2Pages(params,
+		func(page *s3.ListObjectsV2Output, lastPage bool) bool {
+			objects = append(objects, page.Contents...)
+			for _, item := range page.Contents {
+				bucketSize += *item.Size
+			}
+			return !lastPage
+		})
+	log.Printf("bucket size: %d, objects: %#v", bucketSize, objects)
 	// commit it
 	response, _ := f.snapshot(&Event{Name: "snapshot",
 		Args: &EventArgs{"metadata": metadata{"message": "pull from s3"}}})
