@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dotmesh-io/rpc/v2/json2"
+	"github.com/gorilla/rpc/v2/json2"
 )
 
 var DEBUG_ENV = map[string]string{"DEBUG_MODE": "1"}
