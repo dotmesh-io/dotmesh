@@ -31,13 +31,10 @@ func TestS3Remote(t *testing.T) {
 	})
 
 	t.Run("remote switch", func(t *testing.T) {
-		output, err := citools.RunOnNodeErr(node1, "dm remote switch test-s3")
+		_, err := citools.RunOnNodeErr(node1, "dm remote switch test-s3")
+		// TODO check the error is what we expect
 		if err == nil {
 			t.Error("Command did not error")
-		} else {
-			if !strings.Contains(output, "Cannot switch to remote 'test-s3' - is S3 remote") {
-				t.Error("Unable to find s3 error in output")
-			}
 		}
 	})
 	t.Run("Clone", func(t *testing.T) {
