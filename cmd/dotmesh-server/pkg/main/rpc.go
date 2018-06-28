@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"runtime"
 	"sort"
 	"strings"
@@ -1070,7 +1069,7 @@ func (d *DotmeshRPC) S3Transfer(
 	// set up the s3 session and client
 	config := &aws.Config{Credentials: credentials.NewStaticCredentials(args.KeyID, args.SecretKey, "")}
 	if args.Endpoint != "" {
-		config.Endpoint = args.Endpoint
+		config.Endpoint = &args.Endpoint
 	}
 	sess, err := session.NewSession(config)
 	if err != nil {

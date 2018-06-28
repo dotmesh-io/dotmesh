@@ -3030,7 +3030,7 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 	config := &aws.Config{Credentials: credentials.NewStaticCredentials(transferRequest.KeyID, transferRequest.SecretKey, "")}
 	// TESTING HACK
 	if transferRequest.Endpoint != "" {
-		config.Endpoint = transferRequest.Endpoint
+		config.Endpoint = &transferRequest.Endpoint
 	}
 	sess, err := session.NewSession(config)
 	if err != nil {

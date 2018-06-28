@@ -17,6 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/dotmesh-io/dotmesh/cmd/dm/pkg/remotes"
 	"github.com/howeyc/gopass"
+	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 )
 
@@ -103,11 +104,13 @@ func NewCmdS3(out io.Writer) *cobra.Command {
 				var endpoint string
 				var awsCredentials []string
 				pieces := strings.SplitN(args[2], "@", 2)
-				if len(pieces) > 1 {
+				if len(pieces) == 2 {
 					awsCredentials = strings.SplitN(pieces[0], ":", 2)
 					endpoint = pieces[1]
+				} else if len(pieces) == 1 {
+					awsCredentials = strings.SplitN(args[2], ":", 2)
 				} else {
-					awsCredentials := strings.SplitN(args[2], ":", 2)
+					return fmt.Errorf("Please specify key-id:secret-key[@endpoint], got %s", pieces)
 				}
 				if len(awsCredentials) != 2 {
 					return fmt.Errorf(
@@ -118,7 +121,7 @@ func NewCmdS3(out io.Writer) *cobra.Command {
 				secretKey := awsCredentials[1]
 				config := &aws.Config{Credentials: credentials.NewStaticCredentials(keyID, secretKey, "")}
 				if endpoint != "" {
-					config.Endpoint = endpoint
+					config.Endpoint = &endpoint
 				}
 				sess, err := session.NewSession(config)
 				if err != nil {
@@ -128,6 +131,7 @@ func NewCmdS3(out io.Writer) *cobra.Command {
 				svc := s3.New(sess, aws.NewConfig().WithRegion("us-east-1"))
 				_, err = svc.ListBuckets(nil)
 				if err != nil {
+					fmt.Printf("Error: %#v", err)
 					return fmt.Errorf("Could not list accessible buckets using supplied credentials")
 				}
 				dm, err := remotes.NewDotmeshAPI(configPath)
