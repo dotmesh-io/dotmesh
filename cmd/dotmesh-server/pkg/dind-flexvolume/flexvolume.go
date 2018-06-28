@@ -26,6 +26,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -83,7 +84,8 @@ func (d *FlexVolumeDriver) mount(targetMountDir, jsonOptions string) (map[string
 		logger.Printf("MOUNT: Invalid size %s: %v", opts["size"].(string), err)
 		return nil, err
 	}
-	sourceFile := fmt.Sprintf("%s/%s", DIND_SHARED_FOLDER, pvId)
+
+	sourceFile := filepath.Join(DIND_SHARED_FOLDER, pvId)
 
 	// make sure the shared folder exists on the host
 	// we keep our PV folders one level down (dind-flexvolume)
