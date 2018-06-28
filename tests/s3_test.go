@@ -1,9 +1,8 @@
 package main
 
 import (
-	"testing"
-
 	"github.com/dotmesh-io/citools"
+	"testing"
 )
 
 func TestS3Remote(t *testing.T) {
@@ -19,9 +18,9 @@ func TestS3Remote(t *testing.T) {
 		t.Error(err)
 	}
 	node1 := f[0].GetNode(0).Container
-	citools.RunOnNode(t, node1, "export TESTING=1")
-	citools.RunOnNode(t, node1, "docker run -d --publish 9000:80 --env S3PROXY_AUTHORIZATION=none andrewgaul/s3proxy")
-	citools.RunOnNode(t, node1, "dm s3 remote add s3 KEY:SECRET@127.0.0.1:9000")
+	// TODO not sure the s3 mock used here actually cares for authentication so this may not be enough. Also probably doesn't support versioning...
+	citools.RunOnNode(t, node1, "docker run --name my_s3 -p 4569:4569 -d lphoward/fake-s3")
+	citools.RunOnNode(t, node1, "dm s3 remote add s3 FAKEKEY:FAKESECRET@http://127.0.0.1:4569")
 
 	// t.Run("Clone", func(t *testing.T) {
 	// 	fsname := citools.UniqName()
