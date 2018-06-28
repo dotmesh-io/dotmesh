@@ -3058,6 +3058,11 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 			return !lastPage
 		})
 	log.Printf("bucket size: %d, objects: %#v", bucketSize, objects)
+	for _, elem := range objects {
+		output = svc.GetObject(&s3.GetObjectInput{Bucket: aws.String(transferRequest.RemoteName),
+			Key: elem.Key,
+		})
+	}
 	// commit it
 	response, _ := f.snapshot(&Event{Name: "snapshot",
 		Args: &EventArgs{"metadata": metadata{"message": "pull from s3"}}})
