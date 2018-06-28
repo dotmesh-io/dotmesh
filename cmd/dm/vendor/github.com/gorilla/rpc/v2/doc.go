@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file.
 
 /*
-Package dotmesh-io/rpc is a foundation for RPC over HTTP services, providing
+Package gorilla/rpc is a foundation for RPC over HTTP services, providing
 access to the exported methods of an object through HTTP requests.
 
 This package derives from the standard net/rpc package but uses a single HTTP
@@ -20,8 +20,8 @@ Let's setup a server and register a codec and service:
 
 	import (
 		"http"
-		"github.com/dotmesh-io/rpc/v2"
-		"github.com/dotmesh-io/rpc/v2/json"
+		"github.com/gorilla/rpc/v2"
+		"github.com/gorilla/rpc/v2/json"
 	)
 
 	func init() {

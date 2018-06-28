@@ -34,7 +34,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/dotmesh-io/rpc/v2/json2"
+	"github.com/gorilla/rpc/v2/json2"
 	"github.com/opentracing/opentracing-go"
 	opentracinglog "github.com/opentracing/opentracing-go/log"
 	"github.com/openzipkin/zipkin-go-opentracing/examples/middleware"

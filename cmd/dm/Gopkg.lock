@@ -33,15 +33,6 @@
   version = "v1.1.0"
 
 [[projects]]
-  branch = "master"
-  name = "github.com/dotmesh-io/rpc"
-  packages = [
-    "v2",
-    "v2/json2"
-  ]
-  revision = "a4d307ba3406b4c16a55897a1f1f494cd61d4cdd"
-
-[[projects]]
   name = "github.com/eapache/go-resiliency"
   packages = ["breaker"]
   revision = "b86b1ec0dd4209a588dc1285cdd471e73525c0b3"
@@ -67,6 +58,15 @@
   name = "github.com/golang/snappy"
   packages = ["."]
   revision = "d9eb7a3d35ec988b8585d4a0068e462c27d28380"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/gorilla/rpc"
+  packages = [
+    "v2",
+    "v2/json2"
+  ]
+  revision = "5c1378103183095acc1b9289ac1475e3bc1e818e"
 
 [[projects]]
   name = "github.com/howeyc/gopass"
@@ -180,6 +180,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "f8da7c68324b4547bbaa3b415023b6482517ac215e08fa920c2b6781cde9975d"
+  inputs-digest = "9b327f78852e389d53dbcbbe7b61fc3d26b3234a9845d77773707345e3205cd0"
   solver-name = "gps-cdcl"
   solver-version = 1
