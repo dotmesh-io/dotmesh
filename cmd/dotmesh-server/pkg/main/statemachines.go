@@ -2965,6 +2965,7 @@ func pushPeerState(f *fsMachine) stateFn {
 	}
 }
 
+// todo pull this out into the dotmesh client library, we probably need parts of this on the client end too.
 func getS3Client(transferRequest S3TransferRequest) (*s3.S3, error) {
 	config := &aws.Config{Credentials: credentials.NewStaticCredentials(transferRequest.KeyID, transferRequest.SecretKey, "")}
 	if transferRequest.Endpoint != "" {
@@ -2982,7 +2983,7 @@ func getS3Client(transferRequest S3TransferRequest) (*s3.S3, error) {
 	return svc, nil
 }
 
-func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string, pollResult TransferPollResult) error {
+func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string, pollResult *TransferPollResult) error {
 	// TODO refactor this a lil so we can get the folder structure easily
 
 	params := &s3.ListObjectsV2Input{
@@ -3000,12 +3001,12 @@ func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string
 				pollResult.Total = totalObjects
 				pollResult.Size = *item.Size
 				pollResult.Status = "Pulling"
-				updatePollResult(transferRequestId, pollResult)
+				updatePollResult(transferRequestId, *pollResult)
 				fileError = downloadS3Object(downloader, *item.Key, bucketName, destPath)
 				if fileError == nil {
 					pollResult.Sent = *item.Size
 					pollResult.Status = "Pulled file successfully"
-					updatePollResult(transferRequestId, pollResult)
+					updatePollResult(transferRequestId, *pollResult)
 				}
 			}
 			totalIterated += len(page.Contents)
@@ -3104,7 +3105,7 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 		}
 		return backoffState
 	}
-	err = downloadS3Bucket(svc, transferRequest.RemoteName, destPath, transferRequestId, pollResult)
+	err = downloadS3Bucket(svc, transferRequest.RemoteName, destPath, transferRequestId, &pollResult)
 	if err != nil {
 		f.innerResponses <- &Event{
 			Name: "s3-pull-initiator-cant-pull-from-s3",
