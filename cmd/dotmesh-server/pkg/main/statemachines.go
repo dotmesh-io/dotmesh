@@ -3108,7 +3108,7 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 	if err != nil {
 		f.innerResponses <- &Event{
 			Name: "s3-pull-initiator-cant-pull-from-s3",
-			Args: &EventArgs{"err": err}
+			Args: &EventArgs{"err": err},
 		}
 		return backoffState
 	}
