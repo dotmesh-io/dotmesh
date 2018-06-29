@@ -652,17 +652,7 @@ func (dm *DotmeshAPI) RelatedContainers(volumeName VolumeName, branch string) ([
 
 type TransferPollResult struct {
 	TransferRequestId string
-	Peer              string // hostname
-	User              string
-	ApiKey            string //protected value in toString()
 	Direction         string // "push" or "pull"
-
-	// Hold onto this information, it might become useful for e.g. recursive
-	// receives of clone filesystems.
-	LocalFilesystemName  string
-	LocalCloneName       string
-	RemoteFilesystemName string
-	RemoteCloneName      string
 
 	// Same across both clusters
 	FilesystemId string

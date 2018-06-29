@@ -1832,17 +1832,7 @@ func TransferPollResultFromTransferRequest(
 ) TransferPollResult {
 	return TransferPollResult{
 		TransferRequestId: transferRequestId,
-		Peer:              transferRequest.Peer,
-		User:              transferRequest.User,
-		ApiKey:            transferRequest.ApiKey,
 		Direction:         transferRequest.Direction,
-
-		LocalNamespace:   transferRequest.LocalNamespace,
-		LocalName:        transferRequest.LocalName,
-		LocalBranchName:  transferRequest.LocalBranchName,
-		RemoteNamespace:  transferRequest.RemoteNamespace,
-		RemoteName:       transferRequest.RemoteName,
-		RemoteBranchName: transferRequest.RemoteBranchName,
 
 		// XXX filesystemId varies over the lifetime of a transferRequestId...
 		// this is certainly a hack, and may be problematic. in particular, it
@@ -2975,6 +2965,46 @@ func pushPeerState(f *fsMachine) stateFn {
 	}
 }
 
+func getListOfS3Objects(transferRequest S3TransferRequest) ([]*s3.Object, *Event, stateFn) {
+	// TODO refactor this a lil so we can get the folder structure easily
+	config := &aws.Config{Credentials: credentials.NewStaticCredentials(transferRequest.KeyID, transferRequest.SecretKey, "")}
+	if transferRequest.Endpoint != "" {
+		config.Endpoint = &transferRequest.Endpoint
+	}
+	sess, err := session.NewSession(config)
+	if err != nil {
+		return nil, &Event{
+			Name: "error-connecting-to-aws",
+			Args: &EventArgs{"err": err},
+		}, backoffState
+	}
+	region, err := s3manager.GetBucketRegion(context.Background(), sess, transferRequest.RemoteName, "us-west-1")
+	if err != nil {
+		return nil, &Event{
+			Name: "error-getting-s3-bucket-region",
+			Args: &EventArgs{"err": err},
+		}, backoffState
+	}
+	svc := s3.New(sess, aws.NewConfig().WithRegion(region))
+	params := &s3.ListObjectsV2Input{
+		Bucket: aws.String(transferRequest.RemoteName),
+	}
+	var objects []*s3.Object
+	var bucketSize int64
+	err = svc.ListObjectsV2Pages(params,
+		func(page *s3.ListObjectsV2Output, lastPage bool) bool {
+			objects = append(objects, page.Contents...)
+			for _, item := range page.Contents {
+				bucketSize += *item.Size
+			}
+			return !lastPage
+		})
+	return objects, &Event{
+		Name: "got-s3-objects-list-successfully",
+		Args: &EventArgs{},
+	}, s3PullInitiatorState
+}
+
 func s3PullInitiatorState(f *fsMachine) stateFn {
 	f.transitionedTo("s3PullInitiatorState", "requesting")
 	containers, err := f.containersRunning()
@@ -2997,7 +3027,7 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 		return backoffState
 	}
 	transferRequest := f.lastS3TransferRequest
-	//transferRequestId := f.lastTransferRequestId
+	transferRequestId := f.lastTransferRequestId
 	// TODO pull this out somewhere as I've duplicated this in rpc.go
 
 	// create the default paths
@@ -3025,43 +3055,55 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 	}
 
 	// connect to S3 and get all the objects
+	objects, event, nextState := getListOfS3Objects(transferRequest)
+	if event.Name != "got-s3-objects-list-successfully" {
+		f.innerResponses <- event
+		return nextState
+	}
 	// TODO: pull this out into dotmesh library, I've used it in the client and the rpc server
 
-	config := &aws.Config{Credentials: credentials.NewStaticCredentials(transferRequest.KeyID, transferRequest.SecretKey, "")}
-	// TESTING HACK
-	if transferRequest.Endpoint != "" {
-		config.Endpoint = &transferRequest.Endpoint
-	}
-	sess, err := session.NewSession(config)
+	pollResult := TransferPollResultFromTransferRequest(
+		transferRequestId, transferRequest, f.state.myNodeId,
+		1, 1+len(objects), "starting",
+	)
+	f.lastPollResult = &pollResult
+	err = updatePollResult(transferRequestId, pollResult)
 	if err != nil {
-		// todo log and put on channel
+		f.innerResponses <- &Event{
+			Name: "s3-pull-initiator-cant-write-to-etcd",
+			Args: &EventArgs{"err": err},
+		}
 		return backoffState
 	}
-	region, err := s3manager.GetBucketRegion(context.Background(), sess, transferRequest.RemoteName, "us-west-1")
-	if err != nil {
-		fmt.Printf("[s3PullInitiatorState] Got err from S3: %#v", err)
-		// TODO put something on the channel
-		return backoffState
-	}
-	svc := s3.New(sess, aws.NewConfig().WithRegion(region))
-	params := &s3.ListObjectsV2Input{
-		Bucket: aws.String(transferRequest.RemoteName),
-	}
-	var objects []*s3.Object
-	var bucketSize int64
-	err = svc.ListObjectsV2Pages(params,
-		func(page *s3.ListObjectsV2Output, lastPage bool) bool {
-			objects = append(objects, page.Contents...)
-			for _, item := range page.Contents {
-				bucketSize += *item.Size
-			}
-			return !lastPage
-		})
 	log.Printf("bucket size: %d, objects: %#v", bucketSize, objects)
-	for _, elem := range objects {
-		output = svc.GetObject(&s3.GetObjectInput{Bucket: aws.String(transferRequest.RemoteName),
-			Key: elem.Key,
+	//f.incrementPollResultIndex
+	downloader = s3manager.NewDownloaderWithClient(svc)
+	for index, object := range objects {
+		fpath := fmt.Sprintf("%s/%s", destPath, object.Key)
+		log.Printf("[s3PullInitiatorState] filepath: %s", fpath)
+		file, err := os.Create(fpath)
+		if err != nil {
+			f.innerResponses <- &Event{
+				Name: "s3-pull-initiator-cant-write-file",
+				Args: &EventArgs{"err": err,
+				"filepath": fpath}
+			}
+			return backoffState
+		}
+		downloader.Download(file, &s3.GetObjectInput{
+			Bucket: aws.String(transferRequest.RemoteName),
+			Key: aws.String(object.Key)
 		})
+		pollResult.Status = "pulling"
+		pollResult.Size = object.Size
+		pollResult.Index = index + 1
+		err = updatePollResult(*transferRequestId, *pollResult)
+		if err != nil {
+			return &Event{
+				Name: "s3-pull-initiator-cant-write-to-etcd",
+				Args: &EventArgs{"err": err},
+			}, backoffState
+		}
 	}
 	// commit it
 	response, _ := f.snapshot(&Event{Name: "snapshot",

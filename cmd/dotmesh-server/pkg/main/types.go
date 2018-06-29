@@ -119,19 +119,7 @@ type DotmeshVolume struct {
 
 type TransferPollResult struct {
 	TransferRequestId string
-	Peer              string // hostname
-	User              string
-	ApiKey            string
 	Direction         string // "push" or "pull"
-
-	// Hold onto this information, it might become useful for e.g. recursive
-	// receives of clone filesystems.
-	LocalNamespace   string
-	LocalName        string
-	LocalBranchName  string
-	RemoteNamespace  string
-	RemoteName       string
-	RemoteBranchName string
 
 	// Same across both clusters
 	FilesystemId string
