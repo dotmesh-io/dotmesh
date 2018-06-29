@@ -2988,7 +2988,6 @@ func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string
 	params := &s3.ListObjectsV2Input{
 		Bucket: aws.String(bucketName),
 	}
-	var objects []*s3.Object
 	var totalObjects int
 	var totalIterated int
 	downloader := s3manager.NewDownloaderWithClient(svc)
@@ -3001,8 +3000,8 @@ func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string
 				pollResult.Total = totalObjects
 				pollResult.Size = *item.Size
 				pollResult.Status = "Pulling"
-				updatePollResult(transferRequestId, pollTResult)
-				fileError = downloadS3Object(downloader, *item.Key, destPath)
+				updatePollResult(transferRequestId, pollResult)
+				fileError = downloadS3Object(downloader, *item.Key, bucketName, destPath)
 				if fileError == nil {
 					pollResult.Sent = *item.Size
 					pollResult.Status = "Pulled file successfully"
@@ -3020,16 +3019,17 @@ func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string
 	return nil
 }
 
-func downloadS3Object(downloader *s3manager.Downloader, key, destPath string) error {
-	fpath := fmt.Sprintf("%s/%s", destPath, object.Key)
+func downloadS3Object(downloader *s3manager.Downloader, key, bucket, destPath string) error {
+	fpath := fmt.Sprintf("%s/%s", destPath, key)
 	file, err := os.Create(fpath)
 	if err != nil {
 		return err
 	}
 	downloader.Download(file, &s3.GetObjectInput{
-		Bucket: &transferRequest.RemoteName,
-		Key:    object.Key,
+		Bucket: &bucket,
+		Key:    &key,
 	})
+	return nil
 }
 
 func s3PullInitiatorState(f *fsMachine) stateFn {
@@ -3093,7 +3093,6 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 		Direction:         transferRequest.Direction,
 		InitiatorNodeId:   f.state.myNodeId,
 		Index:             1,
-		Total:             len(objects),
 		Status:            "starting",
 	}
 	f.lastPollResult = &pollResult
