@@ -838,7 +838,7 @@ func activeState(f *fsMachine) stateFn {
 				}
 				return backoffState
 			}
-			f.lastTransferRequest = transferRequest
+			f.lastS3TransferRequest = transferRequest
 			transferRequestId, ok := (*e.Args)["RequestId"].(string)
 			if !ok {
 				f.innerResponses <- &Event{
@@ -847,7 +847,7 @@ func activeState(f *fsMachine) stateFn {
 				}
 				return backoffState
 			}
-			f.lastS3TransferRequestId = transferRequestId
+			f.lastTransferRequestId = transferRequestId
 
 			log.Printf("GOT TRANSFER REQUEST %+v", f.lastS3TransferRequest)
 			if f.lastS3TransferRequest.Direction == "push" {
