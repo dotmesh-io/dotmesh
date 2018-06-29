@@ -742,6 +742,14 @@ func (c *dotmeshController) process() error {
 		}
 	}
 
+	// CREATE NEW DOTMESH PODS WHERE NEEDED
+	c.createDotmeshPod(undottedNodes, suspendedNodes, unusedPVCs)
+
+	return nil
+}
+
+//priya
+func (c *dotmeshController) createDotmeshPod(undottedNodes map[string]struct{}, suspendedNodes map[string]struct{}, unusedPVCs map[string]struct{}) {
 	// FIXME: This hardcodes the name of the Deployment to be the
 	// ownerRef of created pods. It would be nicer to use an API to
 	// find the Pod containing the currently running process and then
@@ -756,8 +764,6 @@ func (c *dotmeshController) process() error {
 		glog.Warning(err)
 		operatorDeployment = nil
 	}
-
-	// CREATE NEW DOTMESH PODS WHERE NEEDED
 
 nodeLoop:
 	for node, _ := range undottedNodes {
@@ -1046,6 +1052,4 @@ nodeLoop:
 			glog.Error(err)
 		}
 	}
-
-	return nil
 }
