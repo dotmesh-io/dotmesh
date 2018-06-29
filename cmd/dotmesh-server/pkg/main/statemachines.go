@@ -2965,7 +2965,7 @@ func pushPeerState(f *fsMachine) stateFn {
 	}
 }
 
-func getS3Client(transferRequest S3TransferRequest) (*S3, *Event, nextState) {
+func getS3Client(transferRequest S3TransferRequest) (*s3.S3, *Event, stateFn) {
 	config := &aws.Config{Credentials: credentials.NewStaticCredentials(transferRequest.KeyID, transferRequest.SecretKey, "")}
 	if transferRequest.Endpoint != "" {
 		config.Endpoint = &transferRequest.Endpoint
@@ -2985,20 +2985,18 @@ func getS3Client(transferRequest S3TransferRequest) (*S3, *Event, nextState) {
 		}, backoffState
 	}
 	svc := s3.New(sess, aws.NewConfig().WithRegion(region))
-	return svc, &Event{
-		Name: "s3-connect-successful"
-	}, s3PullInitiatorState
+	return svc, &Event{Name: "s3-connect-successful"}, s3PullInitiatorState
 }
 
-func getListOfS3Objects(svc *S3) ([]*s3.Object, *Event, stateFn) {
+func getListOfS3Objects(svc *s3.S3, bucketName string) ([]*s3.Object, *Event, stateFn) {
 	// TODO refactor this a lil so we can get the folder structure easily
-	
+
 	params := &s3.ListObjectsV2Input{
-		Bucket: aws.String(transferRequest.RemoteName),
+		Bucket: aws.String(bucketName),
 	}
 	var objects []*s3.Object
 	var bucketSize int64
-	err = svc.ListObjectsV2Pages(params,
+	err := svc.ListObjectsV2Pages(params,
 		func(page *s3.ListObjectsV2Output, lastPage bool) bool {
 			objects = append(objects, page.Contents...)
 			for _, item := range page.Contents {
@@ -3006,6 +3004,15 @@ func getListOfS3Objects(svc *S3) ([]*s3.Object, *Event, stateFn) {
 			}
 			return !lastPage
 		})
+	if err != nil {
+		return nil, &Event{
+			Name: "err-listing-s3-objects",
+			Args: &EventArgs{
+				"err":        err,
+				"bucketName": bucketName,
+			},
+		}, backoffState
+	}
 	return objects, &Event{
 		Name: "got-s3-objects-list-successfully",
 		Args: &EventArgs{},
@@ -3060,23 +3067,28 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 			return backoffState
 		}
 	}
-	svc, event, nextState = getS3Client(transferRequest)
+	svc, event, nextState := getS3Client(transferRequest)
 	f.innerResponses <- event
 	if event.Name != "s3-connect-successful" {
 		return nextState
 	}
 	// connect to S3 and get all the objects
-	objects, event, nextState := getListOfS3Objects(svc)
+	var objects []*s3.Object
+	objects, event, nextState = getListOfS3Objects(svc, transferRequest.RemoteName)
 	f.innerResponses <- event
 	if event.Name != "got-s3-objects-list-successfully" {
 		return nextState
 	}
 	// TODO: pull this out into dotmesh library, I've used it in the client and the rpc server
 
-	pollResult := TransferPollResultFromTransferRequest(
-		transferRequestId, transferRequest, f.state.myNodeId,
-		1, 1+len(objects), "starting",
-	)
+	pollResult := TransferPollResult{
+		TransferRequestId: transferRequestId,
+		Direction:         transferRequest.Direction,
+		InitiatorNodeId:   f.state.myNodeId,
+		Index:             1,
+		Total:             1 + len(objects),
+		Status:            "starting",
+	}
 	f.lastPollResult = &pollResult
 	err = updatePollResult(transferRequestId, pollResult)
 	if err != nil {
@@ -3086,9 +3098,8 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 		}
 		return backoffState
 	}
-	log.Printf("bucket size: %d, objects: %#v", bucketSize, objects)
 	//f.incrementPollResultIndex
-	downloader = s3manager.NewDownloaderWithClient(svc)
+	downloader := s3manager.NewDownloaderWithClient(svc)
 	for index, object := range objects {
 		fpath := fmt.Sprintf("%s/%s", destPath, object.Key)
 		log.Printf("[s3PullInitiatorState] filepath: %s", fpath)
@@ -3096,24 +3107,27 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 		if err != nil {
 			f.innerResponses <- &Event{
 				Name: "s3-pull-initiator-cant-write-file",
-				Args: &EventArgs{"err": err,
-				"filepath": fpath}
+				Args: &EventArgs{
+					"err":      err,
+					"filepath": fpath,
+				},
 			}
 			return backoffState
 		}
 		downloader.Download(file, &s3.GetObjectInput{
-			Bucket: aws.String(transferRequest.RemoteName),
-			Key: aws.String(object.Key)
+			Bucket: &transferRequest.RemoteName,
+			Key:    object.Key,
 		})
 		pollResult.Status = "pulling"
-		pollResult.Size = object.Size
+		pollResult.Size = *object.Size
 		pollResult.Index = index + 1
-		err = updatePollResult(*transferRequestId, *pollResult)
+		err = updatePollResult(transferRequestId, pollResult)
 		if err != nil {
-			return &Event{
+			f.innerResponses <- &Event{
 				Name: "s3-pull-initiator-cant-write-to-etcd",
 				Args: &EventArgs{"err": err},
-			}, backoffState
+			}
+			return backoffState
 		}
 	}
 	// commit it
