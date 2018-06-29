@@ -3068,15 +3068,17 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 		}
 	}
 	svc, event, nextState := getS3Client(transferRequest)
-	f.innerResponses <- event
 	if event.Name != "s3-connect-successful" {
+		f.innerResponses <- event
 		return nextState
 	}
 	// connect to S3 and get all the objects
 	var objects []*s3.Object
+	// todo refactor to just return an error/objects
 	objects, event, nextState = getListOfS3Objects(svc, transferRequest.RemoteName)
-	f.innerResponses <- event
+
 	if event.Name != "got-s3-objects-list-successfully" {
+		f.innerResponses <- event
 		return nextState
 	}
 	// TODO: pull this out into dotmesh library, I've used it in the client and the rpc server
@@ -3086,7 +3088,7 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 		Direction:         transferRequest.Direction,
 		InitiatorNodeId:   f.state.myNodeId,
 		Index:             1,
-		Total:             1 + len(objects),
+		Total:             len(objects),
 		Status:            "starting",
 	}
 	f.lastPollResult = &pollResult
@@ -3136,6 +3138,16 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 	if response.Name != "snapshotted" {
 		log.Printf("Couldn't commit - response %#v", response)
 		f.innerResponses <- response
+		return backoffState
+	}
+	pollResult.Status = "finished"
+	pollResult.Index = pollResult.Total
+	err = updatePollResult(transferRequestId, pollResult)
+	if err != nil {
+		f.innerResponses <- &Event{
+			Name: "s3-pull-initiator-cant-write-to-etcd",
+			Args: &EventArgs{"err": err},
+		}
 		return backoffState
 	}
 	f.innerResponses <- &Event{
