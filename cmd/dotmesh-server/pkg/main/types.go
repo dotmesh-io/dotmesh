@@ -119,8 +119,18 @@ type DotmeshVolume struct {
 
 type TransferPollResult struct {
 	TransferRequestId string
-	Direction         string // "push" or "pull"
-
+	// TODO: the connection and branch details are in here because we use this in RegisterTransfer.
+	// ideally we'd split that out so it's just using a TransferRequest plus the filesystem and transfer request ID
+	Peer             string
+	User             string
+	ApiKey           string
+	Direction        string // "push" or "pull"
+	LocalNamespace   string
+	LocalName        string
+	LocalBranchName  string
+	RemoteNamespace  string
+	RemoteName       string
+	RemoteBranchName string
 	// Same across both clusters
 	FilesystemId string
 

@@ -1421,7 +1421,6 @@ func missingState(f *fsMachine) stateFn {
 		} else if e.Name == "peer-transfer" {
 			// A transfer has been registered. Try to go into the appropriate
 			// state.
-
 			// TODO dedupe
 			transferRequest, err := transferRequestify((*e.Args)["Transfer"])
 			if err != nil {
@@ -2084,6 +2083,7 @@ func (f *fsMachine) retryPush(
 			// tell the remote what snapshot to expect
 			var result bool
 			log.Printf("[retryPush] calling RegisterTransfer with args: %+v", pollResult)
+			log.Printf("[retryPush] transferRequest: %#v", transferRequest)
 			err = client.CallRemote(
 				ctx, "DotmeshRPC.RegisterTransfer", pollResult, &result,
 			)
