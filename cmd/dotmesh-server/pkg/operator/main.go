@@ -18,7 +18,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
@@ -743,13 +742,13 @@ func (c *dotmeshController) process() error {
 	}
 
 	// CREATE NEW DOTMESH PODS WHERE NEEDED
-	c.createDotmeshPod(undottedNodes, suspendedNodes, unusedPVCs)
+	c.createDotmeshPods(undottedNodes, suspendedNodes, unusedPVCs)
 
 	return nil
 }
 
 //priya
-func (c *dotmeshController) createDotmeshPod(undottedNodes map[string]struct{}, suspendedNodes map[string]struct{}, unusedPVCs map[string]struct{}) {
+func (c *dotmeshController) createDotmeshPods(undottedNodes map[string]struct{}, suspendedNodes map[string]struct{}, unusedPVCs map[string]struct{}) {
 	// FIXME: This hardcodes the name of the Deployment to be the
 	// ownerRef of created pods. It would be nicer to use an API to
 	// find the Pod containing the currently running process and then
@@ -757,13 +756,6 @@ func (c *dotmeshController) createDotmeshPod(undottedNodes map[string]struct{}, 
 	// other names/namespaces.
 
 	// GET /apis/extensions/v1beta1/namespaces/{namespace}/deployments/dotmesh-operator
-
-	operatorDeployment, err := c.client.AppsV1().Deployments(DOTMESH_NAMESPACE).Get("dotmesh-operator", meta_v1.GetOptions{})
-
-	if err != nil {
-		glog.Warning(err)
-		operatorDeployment = nil
-	}
 
 nodeLoop:
 	for node, _ := range undottedNodes {
@@ -1039,14 +1031,8 @@ nodeLoop:
 			},
 		}
 
-		if operatorDeployment != nil {
-			newDotmesh.ObjectMeta.OwnerReferences = []meta_v1.OwnerReference{
-				*meta_v1.NewControllerRef(operatorDeployment, schema.FromAPIVersionAndKind("apps/v1beta", "Deployment")),
-			}
-		}
-
 		glog.Infof("Creating pod %s running %s on node %s", newDotmesh.ObjectMeta.Name, DOTMESH_IMAGE, node)
-		_, err = c.client.Core().Pods(DOTMESH_NAMESPACE).Create(&newDotmesh)
+		_, err := c.client.Core().Pods(DOTMESH_NAMESPACE).Create(&newDotmesh)
 		if err != nil {
 			// Do not abort in error case, just keep pressing on
 			glog.Error(err)
