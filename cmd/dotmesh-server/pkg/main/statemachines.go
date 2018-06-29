@@ -828,6 +828,33 @@ func activeState(f *fsMachine) stateFn {
 			} else if f.lastTransferRequest.Direction == "pull" {
 				return pullInitiatorState
 			}
+		} else if e.Name == "s3-transfer" {
+			// TODO dedupe
+			transferRequest, err := s3TransferRequestify((*e.Args)["Transfer"])
+			if err != nil {
+				f.innerResponses <- &Event{
+					Name: "cant-cast-s3-transfer-request",
+					Args: &EventArgs{"err": err},
+				}
+				return backoffState
+			}
+			f.lastTransferRequest = transferRequest
+			transferRequestId, ok := (*e.Args)["RequestId"].(string)
+			if !ok {
+				f.innerResponses <- &Event{
+					Name: "cant-cast-s3-transfer-requestid",
+					Args: &EventArgs{"err": err},
+				}
+				return backoffState
+			}
+			f.lastS3TransferRequestId = transferRequestId
+
+			log.Printf("GOT TRANSFER REQUEST %+v", f.lastS3TransferRequest)
+			if f.lastS3TransferRequest.Direction == "push" {
+				return pushInitiatorState
+			} else if f.lastS3TransferRequest.Direction == "pull" {
+				return pullInitiatorState
+			}
 		} else if e.Name == "peer-transfer" {
 
 			// TODO dedupe
