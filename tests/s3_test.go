@@ -49,7 +49,7 @@ func TestS3Remote(t *testing.T) {
 			t.Error("unable to find volume name in ouput")
 		}
 		resp = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" ls /foo/")
-		if strings.Contains(resp, "hello-world.txt") {
+		if !strings.Contains(resp, "hello-world.txt") {
 			t.Error("failed to clone s3 bucket")
 		}
 	})
