@@ -2965,7 +2965,7 @@ func pushPeerState(f *fsMachine) stateFn {
 	}
 }
 
-func getS3Client(transferRequest S3TransferRequest) (*s3.S3, err) {
+func getS3Client(transferRequest S3TransferRequest) (*s3.S3, error) {
 	config := &aws.Config{Credentials: credentials.NewStaticCredentials(transferRequest.KeyID, transferRequest.SecretKey, "")}
 	if transferRequest.Endpoint != "" {
 		config.Endpoint = &transferRequest.Endpoint
@@ -2982,7 +2982,7 @@ func getS3Client(transferRequest S3TransferRequest) (*s3.S3, err) {
 	return svc, nil
 }
 
-func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string, pollTransferResult TransferPollResult) error {
+func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string, pollResult TransferPollResult) error {
 	// TODO refactor this a lil so we can get the folder structure easily
 
 	params := &s3.ListObjectsV2Input{
@@ -2997,15 +2997,15 @@ func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string
 		func(page *s3.ListObjectsV2Output, lastPage bool) bool {
 			totalObjects += len(page.Contents)
 			for index, item := range page.Contents {
-				pollTransfersResult.Index = index + 1 + totalIterated
-				pollTransferResult.Count = totalObjects
-				pollTransferResult.Size = item.Size
-				pollTransferResult.Status = "Pulling"
-				updatePollResult(transferRequestId, pollResult)
-				fileError = downloadS3Object(downloader, item.Key, destPath)
-				if err == nil {
-					pollTransferResult.Sent = item.Size
-					pollTransferResult.Status = "Pulled file successfully"
+				pollResult.Index = index + 1 + totalIterated
+				pollResult.Total = totalObjects
+				pollResult.Size = *item.Size
+				pollResult.Status = "Pulling"
+				updatePollResult(transferRequestId, pollTResult)
+				fileError = downloadS3Object(downloader, *item.Key, destPath)
+				if fileError == nil {
+					pollResult.Sent = *item.Size
+					pollResult.Status = "Pulled file successfully"
 					updatePollResult(transferRequestId, pollResult)
 				}
 			}
@@ -3017,6 +3017,7 @@ func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string
 	} else if fileError != nil {
 		return fileError
 	}
+	return nil
 }
 
 func downloadS3Object(downloader *s3manager.Downloader, key, destPath string) error {
