@@ -2965,8 +2965,7 @@ func pushPeerState(f *fsMachine) stateFn {
 	}
 }
 
-func getListOfS3Objects(transferRequest S3TransferRequest) ([]*s3.Object, *Event, stateFn) {
-	// TODO refactor this a lil so we can get the folder structure easily
+func getS3Client(transferRequest S3TransferRequest) (*S3, *Event, nextState) {
 	config := &aws.Config{Credentials: credentials.NewStaticCredentials(transferRequest.KeyID, transferRequest.SecretKey, "")}
 	if transferRequest.Endpoint != "" {
 		config.Endpoint = &transferRequest.Endpoint
@@ -2986,6 +2985,14 @@ func getListOfS3Objects(transferRequest S3TransferRequest) ([]*s3.Object, *Event
 		}, backoffState
 	}
 	svc := s3.New(sess, aws.NewConfig().WithRegion(region))
+	return svc, &Event{
+		Name: "s3-connect-successful"
+	}, s3PullInitiatorState
+}
+
+func getListOfS3Objects(svc *S3) ([]*s3.Object, *Event, stateFn) {
+	// TODO refactor this a lil so we can get the folder structure easily
+	
 	params := &s3.ListObjectsV2Input{
 		Bucket: aws.String(transferRequest.RemoteName),
 	}
@@ -3053,11 +3060,15 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 			return backoffState
 		}
 	}
-
+	svc, event, nextState = getS3Client(transferRequest)
+	f.innerResponses <- event
+	if event.Name != "s3-connect-successful" {
+		return nextState
+	}
 	// connect to S3 and get all the objects
-	objects, event, nextState := getListOfS3Objects(transferRequest)
+	objects, event, nextState := getListOfS3Objects(svc)
+	f.innerResponses <- event
 	if event.Name != "got-s3-objects-list-successfully" {
-		f.innerResponses <- event
 		return nextState
 	}
 	// TODO: pull this out into dotmesh library, I've used it in the client and the rpc server
