@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -36,7 +37,7 @@ var logger *log.Logger
 // flexVolumeDebug indicates whether flexvolume debugging should be enabled
 var flexVolumeDebug = false
 
-const DIND_SHARED_FOLDER = "/dotmesh-test-pools/dind-flexvolume"
+var dindStorageRoot = ""
 
 func System(cmd string, args ...string) error {
 	logger.Printf("[system] running %s %s", cmd, args)
@@ -53,6 +54,14 @@ func init() {
 	if fi, err := os.Stat("/dind/flexvolume_driver"); err == nil && !fi.IsDir() {
 		flexVolumeDebug = true
 	}
+
+	pathBytes, err := ioutil.ReadFile("/dind-flexvolume-prefix")
+	if err != nil {
+		logger.Printf("INIT: Can't read /dind-flexvolume-prefix: %#v", err)
+		panic("Can't read configuration")
+	}
+
+	dindStorageRoot = string(pathBytes)
 }
 
 type FlexVolumeDriver struct {
@@ -85,19 +94,7 @@ func (d *FlexVolumeDriver) mount(targetMountDir, jsonOptions string) (map[string
 		return nil, err
 	}
 
-	sourceFile := filepath.Join(DIND_SHARED_FOLDER, pvId)
-
-	// make sure the shared folder exists on the host
-	// we keep our PV folders one level down (dind-flexvolume)
-	// so we can see the PV folders apart from the dot folders
-	_, err = os.Stat(DIND_SHARED_FOLDER)
-	if os.IsNotExist(err) {
-		err = os.Mkdir(DIND_SHARED_FOLDER, 0777)
-		if err != nil {
-			logger.Printf("MOUNT: mkdir err for %s: %v", DIND_SHARED_FOLDER, err)
-			return nil, err
-		}
-	}
+	sourceFile := filepath.Join(dindStorageRoot, pvId)
 
 	// see if our target folder exists (because we are the target of a migration)
 	// if not - then make it!

@@ -1371,6 +1371,18 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		if err != nil {
 			return err
 		}
+
+		// Also: Leave the config file for the dind-flexvolume driver to make it store files for this test run
+		// in the /dotmesh-test-pools/<timestamp>/ file
+
+		_, err := docker(
+			node,
+			fmt.Sprintf("echo %s/dind-flexvolume > /dind-flexvolume-prefix && mkdir -p `cat /dind-flexvolume-prefix`", testDirName(now)),
+			nil,
+		)
+		if err != nil {
+			return err
+		}
 	}
 
 	// TODO regex the following yamels to refer to the newly pushed
