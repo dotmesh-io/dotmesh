@@ -108,6 +108,7 @@ func (m *DefaultManager) New(username, email, password string) (*User, error) {
 	u := User{
 		Id:       id.String(),
 		Name:     username,
+		Email:    email,
 		Salt:     salt,
 		Password: hashedPassword,
 		ApiKey:   apiKey,
