@@ -105,6 +105,8 @@ func (m *DefaultManager) New(username, email, password string) (*User, error) {
 
 	apiKey := base32.StdEncoding.EncodeToString(apiKeyBytes)
 
+	fmt.Println("new user created, API key: ", apiKey)
+
 	u := User{
 		Id:       id.String(),
 		Name:     username,

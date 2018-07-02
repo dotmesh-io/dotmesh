@@ -62,3 +62,31 @@ func TestAuthenticateUserByPassword(t *testing.T) {
 		t.Errorf("expected to found joe, got: %s", authenticated.Name)
 	}
 }
+
+func TestAuthenticateUserByAPIKey(t *testing.T) {
+	etcdClient, teardown, err := testutil.GetEtcdClient()
+	if err != nil {
+		t.Fatalf("failed to get etcd client: %s", err)
+	}
+	defer teardown()
+
+	kvClient := kv.New(etcdClient, "usertests")
+
+	um := New(kvClient)
+
+	stored, err := um.New("joe", "joe@joe.com", "verysecret")
+	if err != nil {
+		t.Fatalf("failed to create new user: %s", err)
+	}
+
+	t.Logf("authenticating by API key '%s'", stored.ApiKey)
+
+	authenticated, err := um.Authenticate("joe", stored.ApiKey)
+	if err != nil {
+		t.Fatalf("unexpected authentication failure: %s. API key: %s", err, stored.ApiKey)
+	}
+
+	if authenticated.Name != "joe" {
+		t.Errorf("expected to found joe, got: %s", authenticated.Name)
+	}
+}
