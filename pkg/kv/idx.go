@@ -1,10 +1,8 @@
 package kv
 
 import (
-	"context"
 	"encoding/json"
-
-	"github.com/coreos/etcd/client"
+	"fmt"
 )
 
 const (
@@ -17,14 +15,14 @@ type NameIndex struct {
 	ID     string `json:"id"`
 }
 
-func (k *KV) idxFindID(prefix, name string) (id string, err error) {
-	var i NameIndex
-	resp, err := k.client.Get(context.Background(), k.prefix+"/"+NameIndexAPIPrefix+"/"+prefix+"/"+name, &client.GetOptions{Recursive: true})
+func (k *EtcdKV) idxFindID(prefix, name string) (id string, err error) {
+	resp, err := k.get(NameIndexAPIPrefix, name)
 	if err != nil {
 		return
 	}
 
-	err = json.Unmarshal([]byte(resp.Node.Value), &i)
+	var i NameIndex
+	err = json.Unmarshal([]byte(resp.Value), &i)
 	if err != nil {
 		return
 	}
@@ -32,7 +30,7 @@ func (k *KV) idxFindID(prefix, name string) (id string, err error) {
 	return i.ID, nil
 }
 
-func (k *KV) idxAdd(prefix, name, id string) error {
+func (k *EtcdKV) idxAdd(prefix, name, id string) error {
 	val := NameIndex{
 		Prefix: prefix,
 		Name:   name,
@@ -43,12 +41,12 @@ func (k *KV) idxAdd(prefix, name, id string) error {
 	if err != nil {
 		return err
 	}
-
-	_, err = k.Put(NameIndexAPIPrefix, name, string(bts))
+	fmt.Printf("index %s added for ID %s \n", name, id)
+	_, err = k.Set(NameIndexAPIPrefix, name, string(bts))
 
 	return err
 }
 
-func (k *KV) idxDelete(prefix, name string) error {
+func (k *EtcdKV) idxDelete(prefix, name string) error {
 	return k.Delete(NameIndexAPIPrefix, name, false)
 }

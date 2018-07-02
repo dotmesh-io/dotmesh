@@ -69,10 +69,10 @@ type UserManager interface {
 }
 
 type DefaultManager struct {
-	kv *kv.KV
+	kv kv.KV
 }
 
-func New(kv *kv.KV) *DefaultManager {
+func New(kv kv.KV) *DefaultManager {
 	return &DefaultManager{
 		kv: kv,
 	}
@@ -132,7 +132,7 @@ func (m *DefaultManager) Update(user *User) (*User, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, err = m.kv.Put(UsersPrefix, user.Id, string(bts))
+	_, err = m.kv.Set(UsersPrefix, user.Id, string(bts))
 	if err != nil {
 		return nil, err
 	}
