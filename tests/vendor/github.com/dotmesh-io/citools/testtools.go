@@ -63,6 +63,8 @@ exit 0)` // never let the debug command failing cause us to fail the tests!
 var timings map[string]float64
 var lastTiming int64
 
+var stamp int64
+
 // DOTMESH_TEST_CLEANUP_ENV - cleanup policy for the tests
 var DOTMESH_TEST_CLEANUP_ENV = "DOTMESH_TEST_CLEANUP"
 
@@ -217,7 +219,7 @@ func TestMarkForCleanup(f Federation) {
 	}
 }
 
-func testSetup(t *testing.T, f Federation, stamp int64) error {
+func testSetup(t *testing.T, f Federation) error {
 	err := System("bash", "-c", fmt.Sprintf(`
 		# Create a home for the test pools to live that can have the same path
 		# both from ZFS's perspective and that of the inner container.
@@ -391,6 +393,9 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 			if err != nil {
 				return err
 			}
+
+			RegisterCleanupAction(fmt.Sprintf("docker rm -f %s", node))
+
 			// as soon as this completes, add it to c.Nodes. more detail gets
 			// filled in later (eg dotmesh secrets), but it's important that
 			// the basics are in here so that the nodes get marked for cleanup
@@ -443,8 +448,13 @@ type N struct {
 
 // InitialCleanup is called before starting tests
 func InitialCleanup() {
-	// currently we only remove previous tests
-	TeardownFinishedTestRuns()
+	// currently we only remove previous tests if we're using a cleanup strategy that leaves them lurking
+	switch getCleanupStrategy() {
+	case cleanupStrategyOnSuccess, cleanupStrategyNever, cleanupStrategyNone:
+		TeardownFinishedTestRuns()
+	case cleanupStrategyAlways:
+		// nothing to do
+	}
 }
 
 // FinalCleanup is called after running all the tests
@@ -453,15 +463,53 @@ func FinalCleanup(retcode int) {
 	// it should be set to 'always'
 	switch getCleanupStrategy() {
 	case cleanupStrategyAlways:
-		TeardownFinishedTestRuns()
+		TeardownThisTestRun()
 	case cleanupStrategyOnSuccess:
 		if retcode == 0 {
-			TeardownFinishedTestRuns()
+			TeardownThisTestRun()
 		} else {
 			fmt.Printf("[Final Cleanup] skipping cleanup as tests didn't pass, return code: %d", retcode)
 		}
 	case cleanupStrategyNever, cleanupStrategyNone:
 		// nothing to do
+	}
+}
+
+func RegisterCleanupAction(command string) {
+	err := System("mkdir",
+		"-p",
+		testDirName(stamp),
+	)
+
+	if err != nil {
+		panic(err)
+	}
+
+	f, err := os.OpenFile(fmt.Sprintf("%s/cleanup-actions", testDirName(stamp)),
+		os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0700)
+
+	if err != nil {
+		panic(err)
+	}
+
+	defer f.Close()
+
+	fmt.Fprintf(f, "%s\n", command)
+}
+
+func TeardownThisTestRun() {
+	// run cleanup actions
+	err := System("bash", "-c", fmt.Sprintf(`SCRIPT=%s/cleanup-actions; if [ -x $SCRIPT ]; then set -x; . $SCRIPT; fi`,
+		testDirName(stamp),
+	))
+	if err != nil {
+		fmt.Printf("err cleaning up test pools dirs: %s\n", err)
+	}
+
+	// removing root testing directory
+	err = System("bash", "-c", fmt.Sprintf(`rm -rf %s`, testDirName(stamp)))
+	if err != nil {
+		fmt.Printf("err cleaning up test pools dirs: %s\n", err)
 	}
 }
 
@@ -692,18 +740,6 @@ func TeardownFinishedTestRuns() {
 					fmt.Printf("err during cleanup mounts: %s\n", err)
 				}
 			}
-
-			// removing root testing directory
-			switch getCleanupStrategy() {
-			case cleanupStrategyNever, cleanupStrategyNone:
-				// nothing to do
-			case cleanupStrategyAlways, cleanupStrategyOnSuccess:
-				err = System("bash", "-c", fmt.Sprintf(`rm -rf %s`, testDirName(stamp)))
-				if err != nil {
-					fmt.Printf("err cleaning up test pools dirs: %s\n", err)
-				}
-			}
-
 		}()
 		out, err := exec.Command("docker", "volume", "prune", "-f").Output()
 		if err != nil {
@@ -1112,8 +1148,8 @@ SEARCHABLE HEADER: STARTING CLUSTER
                                          
 `)
 
-	now := time.Now().UnixNano()
-	err := testSetup(t, f, now)
+	stamp = time.Now().UnixNano()
+	err := testSetup(t, f)
 	if err != nil {
 		return err
 	}
@@ -1121,7 +1157,7 @@ SEARCHABLE HEADER: STARTING CLUSTER
 
 	for i, c := range f {
 		fmt.Printf("==== GOING FOR %d, %+v ====\n", i, c)
-		err = c.Start(t, now, i)
+		err = c.Start(t, stamp, i)
 		if err != nil {
 			return err
 		}
@@ -1359,9 +1395,6 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 	for j := 0; j < c.DesiredNodeCount; j++ {
 		node := nodeName(now, i, j)
 		path := fmt.Sprintf("%s/k8s-%s", testDirName(now), node)
-		AddFuncToCleanups(func() {
-			System("rm", "-rf", path)
-		})
 		cmd := fmt.Sprintf("sed -i 's!hyperkube kubelet !hyperkube kubelet --root-dir %s !' /lib/systemd/system/kubelet.service && mkdir -p %s && systemctl restart kubelet", path, path)
 		_, err := docker(
 			node,
@@ -1536,6 +1569,12 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		),
 		nil,
 	)
+
+	// ABS FIXME
+	RegisterCleanupAction(fmt.Sprintf(
+		"for POOL in `zpool list -H | cut -f 1 | grep %s`; do zpool destroy -f $POOL; done",
+		poolId(now, i, 0),
+	))
 
 	if err != nil {
 		return err
@@ -1757,6 +1796,13 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 		" --dotmesh-upgrades-url ''" +
 		" --port " + strconv.Itoa(c.Port) +
 		c.ClusterArgs
+
+	RegisterCleanupAction(fmt.Sprintf(
+		"MNT=%s/%s/mnt; umount -f $MNT; zpool destroy -f %s",
+		testDirName(now),
+		poolId(now, i, 0),
+		poolId(now, i, 0),
+	))
 
 	fmt.Printf("running dm cluster init with following command: %s\n", dmInitCommand)
 
