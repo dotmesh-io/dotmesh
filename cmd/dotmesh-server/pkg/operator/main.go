@@ -575,8 +575,9 @@ func (c *dotmeshController) process() error {
 		}
 
 		image := dotmesh.Spec.Containers[0].Image
+
+		//check version dotmesh-server image
 		if image != DOTMESH_IMAGE {
-			// Wrong image, mark it for death
 			glog.V(2).Infof("Observing pod %s running wrong image %s (should be %s)", podName, image, DOTMESH_IMAGE)
 			dotmeshesToKill[podName] = struct{}{}
 			// But don't try starting any new dotmesh on the node it's SUPPOSED to be on until it's gone
