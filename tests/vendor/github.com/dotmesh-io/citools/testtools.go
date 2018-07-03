@@ -498,18 +498,20 @@ func RegisterCleanupAction(command string) {
 }
 
 func TeardownThisTestRun() {
+	// Register to eradicate all lingering mounts
+	RegisterCleanupAction(fmt.Sprintf("for MNT in `grep %s /proc/self/mountinfo | cut -f 5 -d ' '`; do umount -f $MNT; done",
+		testDirName(stamp),
+	))
+
+	// Register to delete top-level directory
+	RegisterCleanupAction(fmt.Sprintf(`rm -rf %s`, testDirName(stamp)))
+
 	// run cleanup actions
 	err := System("bash", "-c", fmt.Sprintf(`SCRIPT=%s/cleanup-actions; if [ -x $SCRIPT ]; then set -x; . $SCRIPT; fi`,
 		testDirName(stamp),
 	))
 	if err != nil {
-		fmt.Printf("err cleaning up test pools dirs: %s\n", err)
-	}
-
-	// removing root testing directory
-	err = System("bash", "-c", fmt.Sprintf(`rm -rf %s`, testDirName(stamp)))
-	if err != nil {
-		fmt.Printf("err cleaning up test pools dirs: %s\n", err)
+		fmt.Printf("err cleaning up test resources: %s\n", err)
 	}
 }
 
