@@ -57,13 +57,13 @@ type Query struct {
 type UserManager interface {
 	New(name, email, password string) (*User, error)
 	Get(q *Query) (*User, error)
-	Update(user *User) error
+	Update(user *User) (*User, error)
 
 	UpdatePassword(id string, password string) (*User, error)
 	ResetAPIKey(id string) (*User, error)
 
 	Delete(id string) error
-	List() ([]*User, error)
+	List(selector string) ([]*User, error)
 
 	Authenticate(username, password string) (*User, error)
 }
@@ -185,7 +185,7 @@ func (m *DefaultManager) Authenticate(username, password string) (*User, error) 
 	// See if API key matches
 	apiKeyMatch := subtle.ConstantTimeCompare(
 		[]byte(user.ApiKey),
-		[]byte(user.Password)) == 1
+		[]byte(password)) == 1
 
 	if apiKeyMatch {
 		return user, nil
