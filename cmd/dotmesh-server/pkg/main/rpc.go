@@ -1533,6 +1533,73 @@ func (d *DotmeshRPC) AddCollaborator(
 	return nil
 }
 
+func (d *DotmeshRPC) RemoveCollaborator(
+	r *http.Request,
+	args *struct {
+		MasterBranchID string
+		Collaborator   string
+	},
+	result *bool,
+) error {
+	// check authenticated user is owner of volume.
+	crappyTlf, clone, err := d.state.registry.LookupFilesystemById(args.MasterBranchID)
+	if err != nil {
+		return err
+	}
+	if clone != "" {
+		return fmt.Errorf(
+			"Please remove collaborators from the master branch of the dot",
+		)
+	}
+	authorized, err := crappyTlf.AuthorizeOwner(r.Context())
+	if err != nil {
+		return err
+	}
+	if !authorized {
+		return fmt.Errorf(
+			"Not owner. Please ask the owner to remove the collaborator.",
+		)
+	}
+
+	authenticatedUserId := r.Context().Value("authenticated-user-id").(string)
+	authenticatedUser, err := GetUserById(authenticatedUserId)
+
+	if err != nil {
+		return err
+	}
+
+	if authenticatedUser.Name == args.Collaborator {
+		return fmt.Errorf(
+			"You cannot remove yourself as a collaborator from a dot.",
+		)
+	}
+
+	collaboratorIndex := -1
+
+	for i, collaborator := range crappyTlf.Collaborators {
+		if collaborator.Name == args.Collaborator {
+			collaboratorIndex = i
+		}
+	}
+
+	if collaboratorIndex == -1 {
+		return fmt.Errorf(
+			"%s is not a collaborator on this dot so cannot remove.",
+			args.Collaborator,
+		)
+	}
+
+	// remove collaborator in registry, re-save.
+	newCollaborators := append(crappyTlf.Collaborators[:collaboratorIndex], crappyTlf.Collaborators[collaboratorIndex+1:]...)
+
+	err = d.state.registry.UpdateCollaborators(r.Context(), crappyTlf, newCollaborators)
+	if err != nil {
+		return err
+	}
+	*result = true
+	return nil
+}
+
 func (d *DotmeshRPC) DeducePathToTopLevelFilesystem(
 	r *http.Request,
 	args *struct {
