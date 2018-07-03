@@ -309,6 +309,11 @@ TERMINATING=no
 cleanup() {
     local REASON="$1"
 
+    if [ -z "$CONTAINER_POOL_MNT" ]; then
+        echo "Skipping shutdown actions in local mode"
+        return
+    fi
+
     if [ $TERMINATING = no ]
     then
         echo "Shutting down due to $REASON"
