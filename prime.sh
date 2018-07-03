@@ -8,9 +8,11 @@ while read p; do
     cache[${items[0]}]=${items[1]}
 done < kubernetes/images.txt
 
-cd $GOPATH/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server
-./rebuild.sh
-docker build -t $(hostname).local:80/dotmesh/dotmesh-server:latest .
+# cd $GOPATH/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server
+# ./rebuild.sh
+./rebuild_server.sh
+
+docker build -f cmd/dotmesh-server/Dockerfile -t $(hostname).local:80/dotmesh/dotmesh-server:latest .
 docker push $(hostname).local:80/dotmesh/dotmesh-server:latest
 
 docker pull quay.io/dotmesh/etcd:v3.0.15
