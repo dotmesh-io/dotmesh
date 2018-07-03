@@ -72,7 +72,7 @@ func (remote S3Remote) DefaultNamespace() string {
 }
 
 // TODO is there a less hacky way of doing this? hate the duplication, but otherwise you need to cast all over the place
-func (remote DMRemote) SetDefaultRemoteVolumeFor(localNamespace, localVolume, remoteNamespace, remoteVolume string) {
+func (remote *DMRemote) SetDefaultRemoteVolumeFor(localNamespace, localVolume, remoteNamespace, remoteVolume string) {
 	if remote.DefaultRemoteVolumes == nil {
 		remote.DefaultRemoteVolumes = map[string]map[string]VolumeName{}
 	}
@@ -82,7 +82,7 @@ func (remote DMRemote) SetDefaultRemoteVolumeFor(localNamespace, localVolume, re
 	remote.DefaultRemoteVolumes[localNamespace][localVolume] = VolumeName{remoteNamespace, remoteVolume}
 }
 
-func (remote DMRemote) DefaultRemoteVolumeFor(localNamespace, localVolume string) (VolumeName, bool) {
+func (remote *DMRemote) DefaultRemoteVolumeFor(localNamespace, localVolume string) (VolumeName, bool) {
 	if remote.DefaultRemoteVolumes == nil {
 		remote.DefaultRemoteVolumes = map[string]map[string]VolumeName{}
 	}
@@ -93,7 +93,7 @@ func (remote DMRemote) DefaultRemoteVolumeFor(localNamespace, localVolume string
 	return volName, ok
 }
 
-func (remote S3Remote) SetDefaultRemoteVolumeFor(localNamespace, localVolume, remoteNamespace, remoteVolume string) {
+func (remote *S3Remote) SetDefaultRemoteVolumeFor(localNamespace, localVolume, remoteNamespace, remoteVolume string) {
 	if remote.DefaultRemoteVolumes == nil {
 		remote.DefaultRemoteVolumes = map[string]map[string]VolumeName{}
 	}
@@ -103,7 +103,7 @@ func (remote S3Remote) SetDefaultRemoteVolumeFor(localNamespace, localVolume, re
 	remote.DefaultRemoteVolumes[localNamespace][localVolume] = VolumeName{remoteNamespace, remoteVolume}
 }
 
-func (remote S3Remote) DefaultRemoteVolumeFor(localNamespace, localVolume string) (VolumeName, bool) {
+func (remote *S3Remote) DefaultRemoteVolumeFor(localNamespace, localVolume string) (VolumeName, bool) {
 	if remote.DefaultRemoteVolumes == nil {
 		remote.DefaultRemoteVolumes = map[string]map[string]VolumeName{}
 	}
@@ -291,6 +291,7 @@ func (c *Configuration) SetDefaultRemoteVolumeFor(peer, namespace, volume, remot
 		)
 	}
 	remote.SetDefaultRemoteVolumeFor(namespace, volume, remoteNamespace, remoteVolume)
+	fmt.Printf("Remote volume: %#v", remote.(*DMRemote).DefaultRemoteVolumes[namespace][volume])
 	return c.save()
 }
 
