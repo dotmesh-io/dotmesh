@@ -291,7 +291,6 @@ func (c *Configuration) SetDefaultRemoteVolumeFor(peer, namespace, volume, remot
 		)
 	}
 	remote.SetDefaultRemoteVolumeFor(namespace, volume, remoteNamespace, remoteVolume)
-	fmt.Printf("Remote volume: %#v", remote.(*DMRemote).DefaultRemoteVolumes[namespace][volume])
 	return c.save()
 }
 
