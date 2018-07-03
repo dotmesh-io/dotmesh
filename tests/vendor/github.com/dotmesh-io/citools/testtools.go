@@ -394,7 +394,7 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 				return err
 			}
 
-			RegisterCleanupAction(fmt.Sprintf("docker rm -f %s", node))
+			RegisterCleanupAction(10, fmt.Sprintf("docker rm -f %s", node))
 
 			// as soon as this completes, add it to c.Nodes. more detail gets
 			// filled in later (eg dotmesh secrets), but it's important that
@@ -475,7 +475,7 @@ func FinalCleanup(retcode int) {
 	}
 }
 
-func RegisterCleanupAction(command string) {
+func RegisterCleanupAction(phase int, command string) {
 	err := System("mkdir",
 		"-p",
 		testDirName(stamp),
@@ -485,7 +485,7 @@ func RegisterCleanupAction(command string) {
 		panic(err)
 	}
 
-	f, err := os.OpenFile(fmt.Sprintf("%s/cleanup-actions", testDirName(stamp)),
+	f, err := os.OpenFile(fmt.Sprintf("%s/cleanup-actions.%02d", testDirName(stamp), phase),
 		os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0700)
 
 	if err != nil {
@@ -498,16 +498,8 @@ func RegisterCleanupAction(command string) {
 }
 
 func TeardownThisTestRun() {
-	// Register to eradicate all lingering mounts
-	RegisterCleanupAction(fmt.Sprintf("for MNT in `grep %s /proc/self/mountinfo | cut -f 5 -d ' '`; do umount -f $MNT; done",
-		testDirName(stamp),
-	))
-
-	// Register to delete top-level directory
-	RegisterCleanupAction(fmt.Sprintf(`rm -rf %s`, testDirName(stamp)))
-
-	// run cleanup actions
-	err := System("bash", "-c", fmt.Sprintf(`SCRIPT=%s/cleanup-actions; if [ -x $SCRIPT ]; then set -x; . $SCRIPT; fi`,
+	// run cleanup actions, in order
+	err := System("bash", "-c", fmt.Sprintf(`for SCRIPT in %s/cleanup-actions.*; do set -x; . $SCRIPT; done`,
 		testDirName(stamp),
 	))
 	if err != nil {
@@ -1155,6 +1147,17 @@ SEARCHABLE HEADER: STARTING CLUSTER
 	if err != nil {
 		return err
 	}
+
+	// Register to eradicate all lingering mounts (the awk/sort/cut
+	// sorts by line lengths, longest first, to ensure we unmount /A/B
+	// before /A)
+	RegisterCleanupAction(90, fmt.Sprintf("for MNT in `grep %s /proc/self/mountinfo | cut -f 5 -d ' ' | awk '{ print length, $0 }' | sort -nr | cut -d ' ' -f2-`; do umount -f $MNT; done",
+		testDirName(stamp),
+	))
+
+	// Register to delete top-level directory, last of all
+	RegisterCleanupAction(99, fmt.Sprintf(`rm -rf %s`, testDirName(stamp)))
+
 	LogTiming("setup")
 
 	for i, c := range f {
@@ -1572,8 +1575,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		nil,
 	)
 
-	// ABS FIXME
-	RegisterCleanupAction(fmt.Sprintf(
+	RegisterCleanupAction(50, fmt.Sprintf(
 		"for POOL in `zpool list -H | cut -f 1 | grep %s`; do zpool destroy -f $POOL; done",
 		poolId(now, i, 0),
 	))
@@ -1799,7 +1801,7 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 		" --port " + strconv.Itoa(c.Port) +
 		c.ClusterArgs
 
-	RegisterCleanupAction(fmt.Sprintf(
+	RegisterCleanupAction(50, fmt.Sprintf(
 		"MNT=%s/%s/mnt; umount -f $MNT; zpool destroy -f %s",
 		testDirName(now),
 		poolId(now, i, 0),
