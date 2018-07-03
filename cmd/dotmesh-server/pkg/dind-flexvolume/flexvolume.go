@@ -61,7 +61,7 @@ func init() {
 		panic("Can't read configuration")
 	}
 
-	dindStorageRoot = string(pathBytes)
+	dindStorageRoot = strings.TrimSpace(string(pathBytes))
 }
 
 type FlexVolumeDriver struct {
