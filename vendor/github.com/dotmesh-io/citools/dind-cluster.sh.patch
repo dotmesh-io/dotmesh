@@ -1,0 +1,83 @@
+--- dind-cluster-original.sh	2018-05-30 13:45:06.000000000 +0100
++++ dind-cluster-patched.sh	2018-05-30 16:24:31.000000000 +0100
+@@ -51,7 +51,7 @@
+     using_linuxdocker=1
+ fi
+ 
+-EMBEDDED_CONFIG=y;DIND_IMAGE=mirantis/kubeadm-dind-cluster:v1.10
++EMBEDDED_CONFIG=y;DIND_IMAGE=quay.io/dotmesh/kubeadm-dind-cluster:v1.10
+ 
+ IP_MODE="${IP_MODE:-ipv4}"  # ipv4, ipv6, (future) dualstack
+ if [[ ! ${EMBEDDED_CONFIG:-} ]]; then
+@@ -242,9 +242,9 @@
+ function dind::prepare-sys-mounts {
+   if [[ ! ${using_linuxkit} ]]; then
+     sys_volume_args=()
+-    if [[ -d /boot ]]; then
+-      sys_volume_args+=(-v /boot:/boot)
+-    fi
++#    if [[ -d /boot ]]; then
++#      sys_volume_args+=(-v /boot:/boot)
++#    fi
+     if [[ -d /lib/modules ]]; then
+       sys_volume_args+=(-v /lib/modules:/lib/modules)
+     fi
+@@ -622,7 +622,7 @@
+   dind::step "Starting DIND container:" "${container_name}"
+ 
+   if [[ ! ${using_linuxkit} ]]; then
+-    opts+=(-v /boot:/boot -v /lib/modules:/lib/modules)
++    opts+=(-v /lib/modules:/lib/modules)
+   fi
+ 
+   volume_name="kubeadm-dind-${container_name}"
+@@ -645,6 +645,7 @@
+          --hostname "${container_name}" \
+          -l mirantis.kubeadm_dind_cluster \
+          -v ${volume_name}:/dind \
++	 ${EXTRA_DOCKER_ARGS:-} \
+          ${opts[@]+"${opts[@]}"} \
+          "${DIND_IMAGE}" \
+          ${args[@]+"${args[@]}"}
+@@ -664,16 +665,16 @@
+   return ${status}
+ }
+ 
+-# function dind::bare {
+-#   local container_name="${1:-}"
+-#   if [[ ! "${container_name}" ]]; then
+-#     echo >&2 "Must specify container name"
+-#     exit 1
+-#   fi
+-#   shift
+-#   run_opts=(${@+"$@"})
+-#   dind::run "${container_name}"
+-# }
++function dind::bare {
++  local container_name="${1:-}"
++  if [[ ! "${container_name}" ]]; then
++    echo >&2 "Must specify container name"
++    exit 1
++  fi
++  shift
++  run_opts=(${@+"$@"})
++  dind::run "${container_name}"
++}
+ 
+ function dind::configure-kubectl {
+   dind::step "Setting cluster config"
+@@ -1420,10 +1421,10 @@
+     dind::ensure-kubectl
+     dind::join "$(dind::create-node-container)" "$@"
+     ;;
+-  # bare)
+-  #   shift
+-  #   dind::bare "$@"
+-  #   ;;
++  bare)
++    shift
++    dind::bare "$@"
++    ;;
+   snapshot)
+     shift
+     dind::snapshot
