@@ -87,5 +87,10 @@ func TestS3Remote(t *testing.T) {
 		if !strings.Contains(resp, "\t3") {
 			t.Error("Created extra commit for no change")
 		}
+		resp = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" echo 'dirty data' > hello-world.txt")
+		_, err := citools.RunOnNodeErr(node1, "dm pull test-real-s3 "+fsname)
+		if err == nil {
+			t.Error("Pull command did not detect divergence")
+		}
 	})
 }
