@@ -78,8 +78,14 @@ func TestS3Remote(t *testing.T) {
 		}
 		citools.RunOnNode(t, node1, s3cmd+" rm s3://test.dotmesh/hello-world.txt")
 		citools.RunOnNode(t, node1, "dm pull test-real-s3 "+fsname)
+		resp = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" ls /foo/")
 		if strings.Contains(resp, "hello-world.txt") {
 			t.Error("Did not delete file")
+		}
+		citools.RunOnNode(t, node1, "dm pull test-real-s3 "+fsname)
+		citools.RunOnNode(t, node1, "dm dot show "+fsname+" -H | grep commitCount")
+		if !strings.Contains(resp, "\t3") {
+			t.Error("Created extra commit for no change")
 		}
 	})
 }
