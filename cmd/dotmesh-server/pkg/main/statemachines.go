@@ -3010,49 +3010,51 @@ func getS3Client(transferRequest S3TransferRequest) (*s3.S3, error) {
 	return svc, nil
 }
 
-func (f *fsMachine) downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string, pollResult *TransferPollResult) error {
+func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string, pollResult *TransferPollResult) (map[string]string, error) {
 	// TODO refactor this a lil so we can get the folder structure easily
 
 	params := &s3.ListObjectVersionsInput{
 		Bucket: aws.String(bucketName),
 	}
-	var totalObjects int
-	var totalIterated int
 	downloader := s3manager.NewDownloaderWithClient(svc)
-	var downloadError error
+	var innerError error
+	keyVersions := make(map[string]string)
 	err := svc.ListObjectVersionsPages(params,
 		func(page *s3.ListObjectVersionsOutput, lastPage bool) bool {
-			totalObjects += len(page.Versions)
-			for index, item := range page.Versions {
-				pollResult.Index = index + 1 + totalIterated
-				pollResult.Total = totalObjects
-				pollResult.Size = *item.Size
-				pollResult.Status = "Pulling"
-				updatePollResult(transferRequestId, *pollResult)
-				downloadError = downloadS3Object(downloader, *item.Key, *item.VersionId, bucketName, destPath)
-				if downloadError == nil {
-					pollResult.Sent = *item.Size
-					pollResult.Status = "Pulled file successfully"
+			for _, item := range page.Versions {
+				if *item.IsLatest {
+					pollResult.Index += 1
+					pollResult.Total += 1
+					pollResult.Size = *item.Size
+					pollResult.Status = "Pulling"
 					updatePollResult(transferRequestId, *pollResult)
-					response, _ := f.snapshot(&Event{Name: "snapshot",
-						Args: &EventArgs{"metadata": metadata{"message": "pull from s3",
-							"version-id": *item.VersionId}}})
-					if response.Name != "snapshotted" {
-						downloadError = fmt.Errorf("Could not take snapshot of object %s version %s", *item.Key, *item.VersionId)
-					} else {
-						fmt.Printf("Commit: %s", *item.VersionId)
+					innerError = downloadS3Object(downloader, *item.Key, *item.VersionId, bucketName, destPath)
+					if innerError == nil {
+						pollResult.Sent = *item.Size
+						pollResult.Status = "Pulled file successfully"
+						updatePollResult(transferRequestId, *pollResult)
+						keyVersions[*item.Key] = *item.VersionId
 					}
 				}
 			}
-			totalIterated += len(page.Versions)
+			for _, item := range page.DeleteMarkers {
+				if *item.IsLatest {
+					deletePath := fmt.Sprintf("%s/%s", destPath, *item.Key)
+					err := os.Remove(deletePath)
+					if err != nil {
+						innerError = err
+					}
+					keyVersions[*item.Key] = *item.VersionId
+				}
+			}
 			return !lastPage
 		})
 	if err != nil {
-		return err
-	} else if downloadError != nil {
-		return downloadError
+		return nil, err
+	} else if innerError != nil {
+		return nil, innerError
 	}
-	return nil
+	return keyVersions, nil
 }
 
 func downloadS3Object(downloader *s3manager.Downloader, key, versionId, bucket, destPath string) error {
@@ -3141,7 +3143,8 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 		}
 		return backoffState
 	}
-	err = f.downloadS3Bucket(svc, transferRequest.RemoteName, destPath, transferRequestId, &pollResult)
+	var metaMap map[string]string
+	metaMap, err = downloadS3Bucket(svc, transferRequest.RemoteName, destPath, transferRequestId, &pollResult)
 	if err != nil {
 		f.innerResponses <- &Event{
 			Name: "s3-pull-initiator-cant-pull-from-s3",
@@ -3151,7 +3154,14 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 	}
 	//f.incrementPollResultIndex
 	// commit it
-
+	metaMap["message"] = "S3 content"
+	metadata := metadata(metaMap)
+	response, _ := f.snapshot(&Event{Name: "snapshot",
+		Args: &EventArgs{"metadata": metadata}})
+	if response.Name != "snapshotted" {
+		f.innerResponses <- response
+		return backoffState
+	}
 	pollResult.Status = "finished"
 	pollResult.Index = pollResult.Total
 	err = updatePollResult(transferRequestId, pollResult)
