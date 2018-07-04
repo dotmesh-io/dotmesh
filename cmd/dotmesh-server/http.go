@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"net"
@@ -218,102 +217,6 @@ func (state *InMemoryState) runUnixDomainServer() {
 	// disk.
 	http.Serve(listener, NewAdminHandler(unixSocketRouter))
 }
-
-type AuthHandler struct {
-	subHandler  http.Handler
-	userManager user.UserManager
-}
-
-// func auth(w http.ResponseWriter, r *http.Request) (*http.Request, error) {
-// 	notAuth := func(w http.ResponseWriter) {
-// 		http.Error(w, "Unauthorized.", 401)
-// 	}
-// 	// check for empty username, if so show a login box
-// 	user, pass, _ := r.BasicAuth()
-// 	if user == "" {
-// 		notAuth(w)
-// 		return r, fmt.Errorf("Permission denied.")
-// 	}
-// 	// ok, user has provided u/p, try to log them in
-// 	authorized, passworded, err := CheckPassword(user, pass)
-// 	if err != nil {
-// 		log.Printf(
-// 			"[AuthHandler] Error running check on %s: %s:",
-// 			user, err,
-// 		)
-// 		http.Error(w, fmt.Sprintf("Error: %s.", err), 401)
-// 		return r, err
-// 	}
-// 	if !authorized {
-// 		notAuth(w)
-// 		return r, fmt.Errorf("Permission denied.")
-// 	}
-// 	u, err := GetUserByName(user)
-// 	if err != nil {
-// 		log.Printf(
-// 			"[AuthHandler] Unable to locate user %v: %v", user, err,
-// 		)
-// 		notAuth(w)
-// 		return r, fmt.Errorf("Permission denied.")
-// 	}
-// 	r = r.WithContext(
-// 		context.WithValue(context.WithValue(r.Context(), "authenticated-user-id", u.Id),
-// 			"password-authenticated", passworded),
-// 	)
-// 	return r, nil
-// }
-
-func (a *AuthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	username, password, ok := r.BasicAuth()
-	if !ok {
-		http.Error(w, "Unauthorized.", http.StatusUnauthorized)
-		return
-	}
-
-	u, err := a.userManager.Authenticate(username, password)
-	if err != nil {
-		log.Printf(
-			"[AuthHandler] Error running check on %s: %s:",
-			username, err,
-		)
-		http.Error(w, "Unauthorized.", http.StatusUnauthorized)
-		return
-	}
-
-	r = r.WithContext(
-		context.WithValue(context.WithValue(r.Context(), "authenticated-user-id", u.Id),
-			"password-authenticated", true),
-	)
-
-	// if user == "" {
-	// 	notAuth(w)
-	// 	return r, fmt.Errorf("Permission denied.")
-	// }
-
-	// r, err := auth(w, r)
-	// if err != nil {
-	// 	// Communicating the error upstream is handled by auth
-	// 	return
-	// }
-	a.subHandler.ServeHTTP(w, r)
-}
-
-func NewAuthHandler(handler http.Handler, um user.UserManager) http.Handler {
-	return &AuthHandler{
-		subHandler:  handler,
-		userManager: um,
-	}
-}
-
-// func authHandlerFunc(f func(w http.ResponseWriter, r *http.Request)) func(w http.ResponseWriter, r *http.Request) {
-// 	return func(w http.ResponseWriter, r *http.Request) {
-// 		r, err := auth(w, r)
-// 		if err != nil {
-// 			return
-// 		}
-// 		f(w, r)
-// 	}
-// }
 
 // handler which makes all requests appear as the admin user!
 // DANGER - only use for unix domain sockets.
