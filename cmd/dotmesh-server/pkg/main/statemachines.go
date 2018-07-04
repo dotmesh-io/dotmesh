@@ -3016,7 +3016,8 @@ func getS3Client(transferRequest S3TransferRequest) (*s3.S3, error) {
 	return svc, nil
 }
 
-func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string, pollResult *TransferPollResult, currentKeyVersions map[string]string) (map[string]string, error) {
+func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string, pollResult *TransferPollResult, currentKeyVersions map[string]string) (bool, map[string]string, error) {
+	var bucketChanged bool
 	// TODO refactor this a lil so we can get the folder structure easily
 	fmt.Printf("[downloadS3Bucket] currentVersions: %#v", currentKeyVersions)
 	params := &s3.ListObjectVersionsInput{
@@ -3024,7 +3025,6 @@ func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string
 	}
 	downloader := s3manager.NewDownloaderWithClient(svc)
 	var innerError error
-	keyVersions := make(map[string]string)
 	err := svc.ListObjectVersionsPages(params,
 		func(page *s3.ListObjectVersionsOutput, lastPage bool) bool {
 			for _, item := range page.Versions {
@@ -3035,15 +3035,24 @@ func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string
 					pollResult.Size = *item.Size
 					pollResult.Status = "Pulling"
 					// ERROR CATCHING?
-					updatePollResult(transferRequestId, *pollResult)
-					innerError = downloadS3Object(downloader, *item.Key, *item.VersionId, bucketName, destPath)
-					if innerError == nil {
-						pollResult.Sent = *item.Size
-						pollResult.Status = "Pulled file successfully"
-						// todo error catching
-						updatePollResult(transferRequestId, *pollResult)
-						keyVersions[*item.Key] = *item.VersionId
+					innerError = updatePollResult(transferRequestId, *pollResult)
+					if innerError != nil {
+						return false
 					}
+					innerError = downloadS3Object(downloader, *item.Key, *item.VersionId, bucketName, destPath)
+					if innerError != nil {
+						return false
+					}
+					pollResult.Sent = *item.Size
+					pollResult.Status = "Pulled file successfully"
+					// todo error catching
+					innerError = updatePollResult(transferRequestId, *pollResult)
+					if innerError != nil {
+						return false
+					}
+					currentKeyVersions[*item.Key] = *item.VersionId
+					bucketChanged = true
+
 				}
 			}
 			for _, item := range page.DeleteMarkers {
@@ -3054,9 +3063,10 @@ func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string
 					err := os.Remove(deletePath)
 					if err != nil && !os.IsNotExist(err) {
 						innerError = err
-					} else {
-						keyVersions[*item.Key] = *item.VersionId
+						return false
 					}
+					currentKeyVersions[*item.Key] = *item.VersionId
+					bucketChanged = true
 
 				}
 			}
@@ -3068,12 +3078,12 @@ func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string
 	}
 
 	if err != nil {
-		return nil, err
+		return bucketChanged, nil, err
 	} else if innerError != nil {
-		return nil, innerError
+		return bucketChanged, nil, innerError
 	}
-	fmt.Printf("New key versions: %#v", keyVersions)
-	return keyVersions, nil
+	fmt.Printf("New key versions: %#v", currentKeyVersions)
+	return bucketChanged, currentKeyVersions, nil
 }
 
 func downloadS3Object(downloader *s3manager.Downloader, key, versionId, bucket, destPath string) error {
@@ -3188,6 +3198,8 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 			return backoffState
 		}
 		err = json.Unmarshal(data, &latestMeta)
+		fmt.Printf("serial data: %s", string(data))
+		fmt.Printf("latest meta read: %#v", latestMeta)
 		if err != nil {
 			f.innerResponses <- &Event{
 				Name: "cannot-unmarshal-metadata-json",
@@ -3196,7 +3208,7 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 			return backoffState
 		}
 	}
-	metaMap, err := downloadS3Bucket(svc, transferRequest.RemoteName, destPath, transferRequestId, &pollResult, latestMeta)
+	bucketChanged, keyVersions, err := downloadS3Bucket(svc, transferRequest.RemoteName, destPath, transferRequestId, &pollResult, latestMeta)
 	if err != nil {
 		f.innerResponses <- &Event{
 			Name: "s3-pull-initiator-cant-pull-from-s3",
@@ -3204,7 +3216,7 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 		}
 		return backoffState
 	}
-	if len(metaMap) != 0 {
+	if bucketChanged {
 		id, err := uuid.NewV4()
 		if err != nil {
 			f.innerResponses <- &Event{
@@ -3222,15 +3234,7 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 			return backoffState
 		}
 		pathToCommitMeta := fmt.Sprintf("%s/%s", subPath, snapshotId)
-		file, err := os.Create(pathToCommitMeta)
-		if err != nil {
-			f.innerResponses <- &Event{
-				Name: "failed-creating-commit-meta-file",
-				Args: &EventArgs{"err": err},
-			}
-			return backoffState
-		}
-		data, err := json.Marshal(metaMap)
+		data, err := json.Marshal(keyVersions)
 		if err != nil {
 			f.innerResponses <- &Event{
 				Name: "failed-marshalling-meta-json",
@@ -3238,7 +3242,8 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 			}
 			return backoffState
 		}
-		_, err = file.Write(data)
+		fmt.Printf("data: %s", string(data))
+		err = ioutil.WriteFile(pathToCommitMeta, data, 0600)
 		if err != nil {
 			f.innerResponses <- &Event{
 				Name: "failed-writing-meta-json",
