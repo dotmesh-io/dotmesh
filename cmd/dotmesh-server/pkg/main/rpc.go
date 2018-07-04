@@ -270,8 +270,7 @@ func (d *DotmeshRPC) RegisterNewUser(
 	return nil
 }
 
-// the user must have authenticated correctly with their old password in order
-// to run this method
+// update a users password given their id - admin only
 func (d *DotmeshRPC) UpdateUserPassword(
 	r *http.Request,
 	args *struct {
