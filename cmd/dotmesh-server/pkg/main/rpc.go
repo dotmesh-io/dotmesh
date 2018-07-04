@@ -309,6 +309,25 @@ func (d *DotmeshRPC) UserFromEmail(
 	return nil
 }
 
+func (d *DotmeshRPC) UserFromName(
+	r *http.Request,
+	args *struct{ Name string },
+	result *SafeUser,
+) error {
+
+	err := ensureAdminUser(r)
+	if err != nil {
+		return err
+	}
+	user, err := GetUserByName(args.Name)
+	if err != nil {
+		return err
+	}
+
+	*result = safeUser(user)
+	return nil
+}
+
 // set a single value for the user Metadata
 func (d *DotmeshRPC) SetUserMetadataField(
 	r *http.Request,
