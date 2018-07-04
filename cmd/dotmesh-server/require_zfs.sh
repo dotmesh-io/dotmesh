@@ -309,6 +309,11 @@ TERMINATING=no
 cleanup() {
     local REASON="$1"
 
+    if [ -z "$CONTAINER_POOL_MNT" ]; then
+        echo "Skipping shutdown actions in local mode"
+        return
+    fi
+
     if [ $TERMINATING = no ]
     then
         echo "Shutting down due to $REASON"
@@ -342,7 +347,7 @@ cleanup() {
 
     # Step 1: Unmount any dots and the ZFS mountpoint (if it's there)
     echo "Unmount dots in $MOUNTPOINT/mnt/dmfs:"
-    run_in_zfs_container zpool-unmount-dots sh -c "cd \"$MOUNTPOINT/mnt/dmfs\"; for i in *; do umount --force $i; done" || true
+    run_in_zfs_container zpool-unmount-dots sh -c "cd \"$MOUNTPOINT/mnt/dmfs\" && for i in *; do umount --force \$i; done" || true
     echo "Unmounting $MOUNTPOINT:"
     run_in_zfs_container zpool-unmount umount --force --recursive "$MOUNTPOINT"|| true
 

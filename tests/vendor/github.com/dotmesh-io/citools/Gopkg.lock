@@ -3,16 +3,16 @@
 
 [[projects]]
   branch = "master"
-  name = "github.com/dotmesh-io/rpc"
+  name = "github.com/gorilla/rpc"
   packages = [
     "v2",
     "v2/json2"
   ]
-  revision = "a4d307ba3406b4c16a55897a1f1f494cd61d4cdd"
+  revision = "5c1378103183095acc1b9289ac1475e3bc1e818e"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "43baecc753da9eadca3f1792180c66244723fad334bd61b6bf5c247275ef8042"
+  inputs-digest = "d2f3787cea070b4cc03e8937630e2c1c0e24d1e3f253f5e73e3440b5bab0c8cc"
   solver-name = "gps-cdcl"
   solver-version = 1

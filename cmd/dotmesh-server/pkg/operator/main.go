@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -16,7 +18,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
@@ -31,6 +32,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"net/http"
 )
+
+// k8s API docs:
+
+// Core() below refers to https://godoc.org/k8s.io/client-go/kubernetes/typed/core/v1#CoreV1Interface from which
+// many other useful interfaces spring.
+
+// Types like v1.Pod etc can be found at https://godoc.org/k8s.io/api/core/v1
 
 // Log verbosities:
 
@@ -567,8 +575,9 @@ func (c *dotmeshController) process() error {
 		}
 
 		image := dotmesh.Spec.Containers[0].Image
+
+		//check version dotmesh-server image
 		if image != DOTMESH_IMAGE {
-			// Wrong image, mark it for death
 			glog.V(2).Infof("Observing pod %s running wrong image %s (should be %s)", podName, image, DOTMESH_IMAGE)
 			dotmeshesToKill[podName] = struct{}{}
 			// But don't try starting any new dotmesh on the node it's SUPPOSED to be on until it's gone
@@ -607,12 +616,43 @@ func (c *dotmeshController) process() error {
 				dotmesh.Status.Message,
 				dotmesh.Status.Reason,
 			)
-			for _, cond := range dotmesh.Status.Conditions {
-				glog.Infof("Failed pod %s - condition %#v", podName, cond)
+			for idx, cond := range dotmesh.Status.Conditions {
+				glog.Infof("Failed pod %s - condition %d: %#v", podName, idx, cond)
 			}
-			for _, cont := range dotmesh.Status.ContainerStatuses {
-				glog.Infof("Failed pod %s - container %#v", podName, cont)
+			for idx, cont := range dotmesh.Status.ContainerStatuses {
+				glog.Infof("Failed pod %s - container %d: %#v", podName, idx, cont)
 			}
+
+			// Get logs
+			logReq := c.client.Core().Pods(dotmesh.ObjectMeta.Namespace).
+				GetLogs(podName,
+					&v1.PodLogOptions{},
+				)
+
+			func() {
+				readCloser, err := logReq.Stream()
+				if err != nil {
+					glog.Errorf("Failed pod %s - error getting logs - %#v", podName, err)
+					return // Only from inner func
+				}
+				defer readCloser.Close()
+				scanner := bufio.NewReader(readCloser)
+				for {
+					line, err := scanner.ReadString('\n')
+					if line != "" {
+						glog.Infof("Failed pod %s log: %s", podName, line)
+					}
+					if err != nil {
+						if err == io.EOF {
+							glog.Infof("Failed pod %s log ends", podName, line)
+							return // Only from inner func
+						} else {
+							glog.Errorf("Failed pod %s - error reading logs - %#v", podName, err)
+							return // Only from inner func
+						}
+					}
+				}
+			}()
 
 			// Broken, mark it for death
 			dotmeshesToKill[podName] = struct{}{}
@@ -702,6 +742,14 @@ func (c *dotmeshController) process() error {
 		}
 	}
 
+	// CREATE NEW DOTMESH PODS WHERE NEEDED
+	c.createDotmeshPods(undottedNodes, suspendedNodes, unusedPVCs)
+
+	return nil
+}
+
+//priya
+func (c *dotmeshController) createDotmeshPods(undottedNodes map[string]struct{}, suspendedNodes map[string]struct{}, unusedPVCs map[string]struct{}) {
 	// FIXME: This hardcodes the name of the Deployment to be the
 	// ownerRef of created pods. It would be nicer to use an API to
 	// find the Pod containing the currently running process and then
@@ -709,15 +757,6 @@ func (c *dotmeshController) process() error {
 	// other names/namespaces.
 
 	// GET /apis/extensions/v1beta1/namespaces/{namespace}/deployments/dotmesh-operator
-
-	operatorDeployment, err := c.client.AppsV1().Deployments(DOTMESH_NAMESPACE).Get("dotmesh-operator", meta_v1.GetOptions{})
-
-	if err != nil {
-		glog.Warning(err)
-		operatorDeployment = nil
-	}
-
-	// CREATE NEW DOTMESH PODS WHERE NEEDED
 
 nodeLoop:
 	for node, _ := range undottedNodes {
@@ -993,19 +1032,11 @@ nodeLoop:
 			},
 		}
 
-		if operatorDeployment != nil {
-			newDotmesh.ObjectMeta.OwnerReferences = []meta_v1.OwnerReference{
-				*meta_v1.NewControllerRef(operatorDeployment, schema.FromAPIVersionAndKind("apps/v1beta", "Deployment")),
-			}
-		}
-
 		glog.Infof("Creating pod %s running %s on node %s", newDotmesh.ObjectMeta.Name, DOTMESH_IMAGE, node)
-		_, err = c.client.Core().Pods(DOTMESH_NAMESPACE).Create(&newDotmesh)
+		_, err := c.client.Core().Pods(DOTMESH_NAMESPACE).Create(&newDotmesh)
 		if err != nil {
 			// Do not abort in error case, just keep pressing on
 			glog.Error(err)
 		}
 	}
-
-	return nil
 }

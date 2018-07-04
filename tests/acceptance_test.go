@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -18,6 +20,13 @@ import (
 Take a look at docs/dev-commands.md to see how to run these tests.
 
 */
+
+func TestMain(m *testing.M) {
+	citools.InitialCleanup()
+	retCode := m.Run()
+	citools.FinalCleanup(retCode)
+	os.Exit(retCode)
+}
 
 func TestDefaultDot(t *testing.T) {
 	// Test default dot select on a totally fresh cluster
@@ -916,8 +925,10 @@ func TestDeletionSimple(t *testing.T) {
 	t.Run("DeleteInUseFails", func(t *testing.T) {
 		fsname := citools.UniqName()
 
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 		go func() {
-			citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO; tail -f /dev/null'")
+			citools.RunOnNodeContext(ctx, t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO; tail -f /dev/null'")
 		}()
 
 		for !strings.Contains(citools.OutputFromRunOnNode(t, node1, "docker ps"), "busybox") {

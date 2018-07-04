@@ -358,7 +358,7 @@ func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
 			if len(containerNames) == 0 {
 				fmt.Fprintf(out, "\n")
 			} else {
-				fmt.Fprintf(out, " (containers: %s)\n", branch, strings.Join(containerNames, ","))
+				fmt.Fprintf(out, " (containers: %s)\n", strings.Join(containerNames, ","))
 			}
 		}
 

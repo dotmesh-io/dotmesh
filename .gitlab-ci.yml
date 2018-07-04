@@ -15,6 +15,8 @@ variables:
 
     CI_SERVICE_BEING_TESTED: dotmesh
 
+    DOTMESH_TEST_CLEANUP: always
+
 stages:
     - build
     - test
@@ -179,6 +181,16 @@ linux_smoke:
         - docker version
         - which docker
     only:
+        - schedules
+
+server_unit_tests:
+    stage: test
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - cd cmd/dotmesh-server/pkg/main && go test
+    except:
         - schedules
 
 versioner_unit_tests:

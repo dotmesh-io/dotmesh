@@ -2,6 +2,7 @@ package citools
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -18,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dotmesh-io/rpc/v2/json2"
+	"github.com/gorilla/rpc/v2/json2"
 )
 
 var DEBUG_ENV = map[string]string{"DEBUG_MODE": "1"}
@@ -60,6 +62,36 @@ exit 0)` // never let the debug command failing cause us to fail the tests!
 
 var timings map[string]float64
 var lastTiming int64
+
+var stamp int64
+
+// DOTMESH_TEST_CLEANUP_ENV - cleanup policy for the tests
+var DOTMESH_TEST_CLEANUP_ENV = "DOTMESH_TEST_CLEANUP"
+
+type cleanupStrategy int
+
+const (
+	cleanupStrategyNone cleanupStrategy = iota
+	cleanupStrategyAlways
+	cleanupStrategyNever
+	cleanupStrategyOnSuccess
+)
+
+var defaultCleanupStrategy = cleanupStrategyOnSuccess
+
+func getCleanupStrategy() cleanupStrategy {
+	c := strings.ToLower(os.Getenv(DOTMESH_TEST_CLEANUP_ENV))
+	switch c {
+	case "always":
+		return cleanupStrategyAlways
+	case "never":
+		return cleanupStrategyNever
+	case "onsuccess":
+		return cleanupStrategyOnSuccess
+	}
+
+	return defaultCleanupStrategy
+}
 
 const HOST_IP_FROM_CONTAINER = "10.192.0.1"
 
@@ -187,18 +219,18 @@ func TestMarkForCleanup(f Federation) {
 	}
 }
 
-func testSetup(t *testing.T, f Federation, stamp int64) error {
-	err := System("bash", "-c", `
+func testSetup(t *testing.T, f Federation) error {
+	err := System("bash", "-c", fmt.Sprintf(`
 		# Create a home for the test pools to live that can have the same path
 		# both from ZFS's perspective and that of the inner container.
 		# (Bind-mounts all the way down.)
-		mkdir -p /dotmesh-test-pools
+		mkdir -p %s
 		# tmpfs makes etcd not completely rinse your IOPS (which it can do
 		# otherwise); create if doesn't exist
 		if [ $(mount |grep "/tmpfs " |wc -l) -eq 0 ]; then
 		        mkdir -p /tmpfs && mount -t tmpfs -o size=4g tmpfs /tmpfs
 		fi
-	`)
+	`, testDirName(stamp)))
 	if err != nil {
 		return err
 	}
@@ -361,6 +393,9 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 			if err != nil {
 				return err
 			}
+
+			RegisterCleanupAction(10, fmt.Sprintf("docker rm -f %s", node))
+
 			// as soon as this completes, add it to c.Nodes. more detail gets
 			// filled in later (eg dotmesh secrets), but it's important that
 			// the basics are in here so that the nodes get marked for cleanup
@@ -411,6 +446,67 @@ type N struct {
 	NodeNum    string
 }
 
+// InitialCleanup is called before starting tests
+func InitialCleanup() {
+	// currently we only remove previous tests if we're using a cleanup strategy that leaves them lurking
+	switch getCleanupStrategy() {
+	case cleanupStrategyOnSuccess, cleanupStrategyNever, cleanupStrategyNone:
+		TeardownFinishedTestRuns()
+	case cleanupStrategyAlways:
+		// nothing to do
+	}
+}
+
+// FinalCleanup is called after running all the tests
+func FinalCleanup(retcode int) {
+	// final cleanup is done based on cleanup strategy. For CI runs
+	// it should be set to 'always'
+	switch getCleanupStrategy() {
+	case cleanupStrategyAlways:
+		TeardownThisTestRun()
+	case cleanupStrategyOnSuccess:
+		if retcode == 0 {
+			TeardownThisTestRun()
+		} else {
+			fmt.Printf("[Final Cleanup] skipping cleanup as tests didn't pass, return code: %d", retcode)
+		}
+	case cleanupStrategyNever, cleanupStrategyNone:
+		// nothing to do
+	}
+}
+
+func RegisterCleanupAction(phase int, command string) {
+	err := System("mkdir",
+		"-p",
+		testDirName(stamp),
+	)
+
+	if err != nil {
+		panic(err)
+	}
+
+	f, err := os.OpenFile(fmt.Sprintf("%s/cleanup-actions.%02d", testDirName(stamp), phase),
+		os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0700)
+
+	if err != nil {
+		panic(err)
+	}
+
+	defer f.Close()
+
+	fmt.Fprintf(f, "%s\n", command)
+}
+
+func TeardownThisTestRun() {
+	// run cleanup actions, in order
+	err := System("bash", "-c", fmt.Sprintf(`for SCRIPT in %s/cleanup-actions.*; do set -x; . $SCRIPT; done`,
+		testDirName(stamp),
+	))
+	if err != nil {
+		fmt.Printf("err cleaning up test resources: %s\n", err)
+	}
+}
+
 func TeardownFinishedTestRuns() {
 
 	// Handle SIGQUIT and mark tests for cleanup in that case, then immediately
@@ -429,7 +525,7 @@ func TeardownFinishedTestRuns() {
 
 		// Block until a signal is received.
 		s := <-c
-		log.Printf("Got signal:", s)
+		log.Printf("Got signal: %s", s)
 		for _, f := range globalCleanupFuncs {
 			f()
 		}
@@ -462,8 +558,8 @@ func TeardownFinishedTestRuns() {
 	if _, err := os.Stat(lockfile); err == nil {
 		for {
 			log.Printf(
-				"Waiting for /dotmesh-test-cleanup.lock to be deleted " +
-					"by some other cleanup process finishing...",
+				"Waiting for %s to be deleted "+
+					"by some other cleanup process finishing...", lockfile,
 			)
 			time.Sleep(1 * time.Second)
 			if _, err := os.Stat(lockfile); os.IsNotExist(err) {
@@ -473,8 +569,25 @@ func TeardownFinishedTestRuns() {
 	}
 	// if path doesn't exist, create it and clean it up on return
 	if _, err := os.Stat(lockfile); os.IsNotExist(err) {
-		os.OpenFile(lockfile, os.O_RDONLY|os.O_CREATE, 0666)
-		defer os.Remove(lockfile)
+		f, err := os.Create(lockfile)
+		if err != nil {
+			return
+		}
+		if os.Getenv("CI_DOCKER_TAG") != "" {
+			// GitLab runner sets this env variable
+			_, err = f.WriteString(fmt.Sprintf("Time: %s  Commit: %s\n", time.Now().String(), os.Getenv("CI_DOCKER_TAG")))
+			if err != nil {
+				log.Printf("Error writing timestamp and commit into the lockfile: %s", err)
+			}
+		} else {
+			// local run
+			_, err = f.WriteString(fmt.Sprintf("Time: %s", time.Now().String()))
+			if err != nil {
+				log.Printf("Error writing timestamp into the lockfile: %s\n", err)
+			}
+		}
+		f.Close()
+		defer os.RemoveAll(lockfile)
 	}
 
 	// Containers that weren't marked as CLEAN_ME_UP but which are older than
@@ -521,13 +634,13 @@ func TeardownFinishedTestRuns() {
 			for _, n := range ns {
 				cn, err := strconv.Atoi(n.ClusterNum)
 				if err != nil {
-					fmt.Printf("can't deduce clusterNum: %s", cn)
+					fmt.Printf("can't deduce clusterNum: %d \n", cn)
 					return
 				}
 
 				nn, err := strconv.Atoi(n.NodeNum)
 				if err != nil {
-					fmt.Printf("can't deduce nodeNum: %s", nn)
+					fmt.Printf("can't deduce nodeNum: %d \n", nn)
 					return
 				}
 
@@ -550,13 +663,13 @@ func TeardownFinishedTestRuns() {
 				}
 				err = System("docker", "rm", "-f", "-v", node)
 				if err != nil {
-					fmt.Printf("erk during teardown %s\n", err)
+					fmt.Printf("err during teardown %s\n", err)
 				}
 
 				// workaround https://github.com/docker/docker/issues/20398
 				err = System("docker", "network", "disconnect", "-f", "bridge", node)
 				if err != nil {
-					fmt.Printf("erk during network force-disconnect %s\n", err)
+					fmt.Printf("err during network force-disconnect %s\n", err)
 				}
 
 				// cleanup after a previous test run; this is a pretty gross hack
@@ -620,11 +733,6 @@ func TeardownFinishedTestRuns() {
 				if err != nil {
 					fmt.Printf("err during cleanup mounts: %s\n", err)
 				}
-				// cleanup zpool data directories
-				err = System("bash", "-c", fmt.Sprintf(`rm -rf /dotmesh-test-pools/testpool-%s*`, nodeSuffix))
-				if err != nil {
-					fmt.Printf("err cleaning up test pools dirs: %s\n", err)
-				}
 			}
 		}()
 		out, err := exec.Command("docker", "volume", "prune", "-f").Output()
@@ -667,6 +775,34 @@ func docker(node string, cmd string, env map[string]string) (string, error) {
 
 }
 
+func dockerContext(ctx context.Context, node string, cmd string, env map[string]string) (string, error) {
+	args := []string{"exec"}
+	if env != nil {
+		for name, value := range env {
+			args = append(args, []string{"-e", fmt.Sprintf("%s=%s", name, value)}...)
+		}
+	}
+	args = append(args, []string{"-i", node, "bash", "-c", cmd}...)
+	c := exec.CommandContext(ctx, "docker", args...)
+
+	var b bytes.Buffer
+	var o, e io.Writer
+	if _, ok := env["DEBUG_MODE"]; ok {
+		o = io.MultiWriter(&b, os.Stdout)
+		e = io.MultiWriter(&b, os.Stderr)
+
+	} else {
+		o = io.MultiWriter(&b)
+		e = io.MultiWriter(&b)
+	}
+
+	c.Stdout = o
+	c.Stderr = e
+	err := c.Run()
+	return string(b.Bytes()), err
+
+}
+
 func RunOnNodeErr(node string, cmd string) (string, error) {
 	return docker(node, cmd, nil)
 }
@@ -681,6 +817,21 @@ func RunOnNode(t *testing.T, node string, cmd string) {
 	s, err := docker(node, cmd, debugEnv)
 	if err != nil {
 		t.Error(fmt.Errorf("%s while running %s on %s: %s", err, cmd, node, s))
+	}
+}
+
+func RunOnNodeContext(ctx context.Context, t *testing.T, node string, cmd string) {
+	fmt.Printf("RUNNING on %s: %s\n", node, cmd)
+	debugEnv := map[string]string{}
+	s, err := dockerContext(ctx, node, cmd, debugEnv)
+	if err != nil {
+		select {
+		case <-ctx.Done():
+			// nothing to do, ctx was cancelled
+			return
+		default:
+			t.Error(fmt.Errorf("%s while running %s on %s: %s", err, cmd, node, s))
+		}
 	}
 }
 
@@ -910,6 +1061,11 @@ func nodeName(now int64, i, j int) string {
 	return fmt.Sprintf("cluster-%d-%d-node-%d", now, i, j)
 }
 
+// testDirName
+func testDirName(now int64) string {
+	return fmt.Sprintf("/dotmesh-test-pools/%d", now)
+}
+
 func NodeName(now int64, i, j int) string {
 	return nodeName(now, i, j)
 }
@@ -986,16 +1142,27 @@ SEARCHABLE HEADER: STARTING CLUSTER
                                          
 `)
 
-	now := time.Now().UnixNano()
-	err := testSetup(t, f, now)
+	stamp = time.Now().UnixNano()
+	err := testSetup(t, f)
 	if err != nil {
 		return err
 	}
+
+	// Register to eradicate all lingering mounts (the awk/sort/cut
+	// sorts by line lengths, longest first, to ensure we unmount /A/B
+	// before /A)
+	RegisterCleanupAction(90, fmt.Sprintf("for MNT in `grep %s /proc/self/mountinfo | cut -f 5 -d ' ' | awk '{ print length, $0 }' | sort -nr | cut -d ' ' -f2-`; do umount -f $MNT; done",
+		testDirName(stamp),
+	))
+
+	// Register to delete top-level directory, last of all
+	RegisterCleanupAction(99, fmt.Sprintf(`rm -rf %s`, testDirName(stamp)))
+
 	LogTiming("setup")
 
 	for i, c := range f {
 		fmt.Printf("==== GOING FOR %d, %+v ====\n", i, c)
-		err = c.Start(t, now, i)
+		err = c.Start(t, stamp, i)
 		if err != nil {
 			return err
 		}
@@ -1221,25 +1388,34 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		logAddr = HOST_IP_FROM_CONTAINER
 	}
 
-	// Move k8s root dir into /dotmesh-test-pools on every node.
+	// Move k8s root dir into /dotmesh-test-pools/<timestamp>/ on every node.
 
 	// This is required for the tests of k8s using PV storage with the
 	// DIND provisioner to work; the container mountpoints must be
 	// consistent between the actual host and the dind kubelet node, or
 	// ZFS will barf on them. Putting the k8s root dir in
-	// /dotmesh-test-pools means the paths are consistent across all
+	// /dotmesh-test-pools/<timestamp> means the paths are consistent across all
 	// containers, as we keep the same filesystem mounted there
 	// throughout.
 	for j := 0; j < c.DesiredNodeCount; j++ {
 		node := nodeName(now, i, j)
-		path := fmt.Sprintf("/dotmesh-test-pools/k8s-%s", node)
-		AddFuncToCleanups(func() {
-			System("rm", "-rf", path)
-		})
+		path := fmt.Sprintf("%s/k8s-%s", testDirName(now), node)
 		cmd := fmt.Sprintf("sed -i 's!hyperkube kubelet !hyperkube kubelet --root-dir %s !' /lib/systemd/system/kubelet.service && mkdir -p %s && systemctl restart kubelet", path, path)
 		_, err := docker(
 			node,
 			cmd,
+			nil,
+		)
+		if err != nil {
+			return err
+		}
+
+		// Also: Leave the config file for the dind-flexvolume driver to make it store files for this test run
+		// in the /dotmesh-test-pools/<timestamp>/ file
+
+		_, err = docker(
+			node,
+			fmt.Sprintf("echo %s/dind-flexvolume > /dind-flexvolume-prefix && mkdir -p `cat /dind-flexvolume-prefix`", testDirName(now)),
 			nil,
 		)
 		if err != nil {
@@ -1384,12 +1560,13 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			"kubectl create configmap -n dotmesh configuration "+
 				"--from-literal=upgradesUrl= "+
 				"'--from-literal=poolNamePrefix=%s-#HOSTNAME#-' "+
-				"'--from-literal=local.poolLocation=/dotmesh-test-pools/%s-#HOSTNAME#' "+
+				"'--from-literal=local.poolLocation=%s/%s-#HOSTNAME#' "+
 				"--from-literal=logAddress=%s "+
 				"--from-literal=storageMode=%s "+
 				"--from-literal=pvcPerNode.storageClass=dind-pv "+
 				"--from-literal=nodeSelector=clusterSize-%d=yes", // This needs to be in here so it can be replaced with sed
 			poolId(now, i, 0),
+			testDirName(now),
 			poolId(now, i, 0),
 			logAddr,
 			c.StorageMode,
@@ -1397,6 +1574,11 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		),
 		nil,
 	)
+
+	RegisterCleanupAction(50, fmt.Sprintf(
+		"for POOL in `zpool list -H | cut -f 1 | grep %s`; do zpool destroy -f $POOL; done",
+		poolId(now, i, 0),
+	))
 
 	if err != nil {
 		return err
@@ -1613,11 +1795,18 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 	}
 
 	dmInitCommand := "EXTRA_HOST_COMMANDS='echo Testing EXTRA_HOST_COMMANDS' dm cluster init " + localImageArgs() +
-		" --use-pool-dir /dotmesh-test-pools/" + poolId(now, i, 0) +
+		" --use-pool-dir " + testDirName(now) + "/" + poolId(now, i, 0) +
 		" --use-pool-name " + poolId(now, i, 0) +
 		" --dotmesh-upgrades-url ''" +
 		" --port " + strconv.Itoa(c.Port) +
 		c.ClusterArgs
+
+	RegisterCleanupAction(50, fmt.Sprintf(
+		"MNT=%s/%s/mnt; umount -f $MNT; zpool destroy -f %s",
+		testDirName(now),
+		poolId(now, i, 0),
+		poolId(now, i, 0),
+	))
 
 	fmt.Printf("running dm cluster init with following command: %s\n", dmInitCommand)
 
@@ -1655,7 +1844,7 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 		// node).
 		_, err = docker(nodeName(now, i, j), fmt.Sprintf(
 			"dm cluster join %s %s %s",
-			localImageArgs()+" --use-pool-dir /dotmesh-test-pools/"+poolId(now, i, j),
+			localImageArgs()+" --use-pool-dir "+filepath.Join(testDirName(now), poolId(now, i, j)),
 			joinUrl,
 			" --use-pool-name "+poolId(now, i, j)+c.ClusterArgs,
 		), env)

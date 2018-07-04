@@ -30,5 +30,5 @@
   unused-packages = true
 
 [[constraint]]
-  name = "github.com/dotmesh-io/rpc"
+  name = "github.com/gorilla/rpc"
   branch = "master"
