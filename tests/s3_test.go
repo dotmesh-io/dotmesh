@@ -83,7 +83,7 @@ func TestS3Remote(t *testing.T) {
 			t.Error("Did not delete file")
 		}
 		citools.RunOnNode(t, node1, "dm pull test-real-s3 "+fsname)
-		citools.RunOnNode(t, node1, "dm dot show "+fsname+" -H | grep commitCount")
+		resp = citools.OutputFromRunOnNode(t, node1, "dm dot show "+fsname+" -H | grep commitCount")
 		if !strings.Contains(resp, "\t3") {
 			t.Error("Created extra commit for no change")
 		}
