@@ -849,11 +849,11 @@ func activeState(f *fsMachine) stateFn {
 			}
 			f.lastTransferRequestId = transferRequestId
 
-			log.Printf("GOT TRANSFER REQUEST %+v", f.lastS3TransferRequest)
+			log.Printf("GOT S3 TRANSFER REQUEST %+v", f.lastS3TransferRequest)
 			if f.lastS3TransferRequest.Direction == "push" {
 				return pushInitiatorState
 			} else if f.lastS3TransferRequest.Direction == "pull" {
-				return pullInitiatorState
+				return s3PullInitiatorState
 			}
 		} else if e.Name == "peer-transfer" {
 
@@ -3040,14 +3040,14 @@ func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string
 			for _, item := range page.DeleteMarkers {
 				if *item.IsLatest {
 					deletePath := fmt.Sprintf("%s/%s", destPath, *item.Key)
-					
+
 					err := os.Remove(deletePath)
-					if err != nil and !os.IsNotExist(err) {
+					if err != nil && !os.IsNotExist(err) {
 						innerError = err
 					} else {
 						keyVersions[*item.Key] = *item.VersionId
 					}
-					
+
 				}
 			}
 			return !lastPage
@@ -3056,7 +3056,7 @@ func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string
 		pollResult.Status = "finished"
 		updatePollResult(transferRequestId, *pollResult)
 	}
-	
+
 	if err != nil {
 		return nil, err
 	} else if innerError != nil {
