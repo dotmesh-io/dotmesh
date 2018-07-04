@@ -948,25 +948,6 @@ func clusterReset(cmd *cobra.Command, args []string, out io.Writer) error {
 	// TODO this should gather a _list_ of errors, not just at-most-one!
 	var bailErr error
 
-	fmt.Printf("Destroying all dotmesh data... ")
-	resp, err := exec.Command(
-		"docker", "exec", "dotmesh-server-inner",
-		"zfs", "destroy", "-r", "pool",
-	).CombinedOutput()
-	if err != nil {
-		if strings.Contains(string(resp), "dataset is busy") {
-			return fmt.Errorf("unable to destroy zfs pool because it was busy, please ensure all containers using dotmesh volumes are deleted and then try again; use dm list to see them: %v", string(resp))
-		} else {
-			fmt.Printf("response: %s\n", resp)
-			bailErr = err
-		}
-	}
-	fmt.Printf("done.\n")
-
-	// TODO consider wiping out /var/run/docker/dotmesh/* including mnt
-	// TODO investigate why /var/run/docker/dotmesh/mnt can ever have non-zfs
-	// mounted directories in it
-
 	fmt.Printf("Deleting dotmesh-etcd container... ")
 	resp, err = exec.Command(
 		"docker", "rm", "-v", "-f", "dotmesh-etcd",
@@ -1006,24 +987,6 @@ func clusterReset(cmd *cobra.Command, args []string, out io.Writer) error {
 	}
 	fmt.Printf("done.\n")
 
-	fmt.Printf("Deleting dotmesh-etcd-data local volume... ")
-	resp, err = exec.Command(
-		"docker", "volume", "rm", "dotmesh-etcd-data",
-	).CombinedOutput()
-	if err != nil {
-		fmt.Printf("response: %s\n", resp)
-		bailErr = err
-	}
-	fmt.Printf("done.\n")
-	fmt.Printf("Deleting dotmesh-kernel-modules local volume... ")
-	resp, err = exec.Command(
-		"docker", "volume", "rm", "dotmesh-kernel-modules",
-	).CombinedOutput()
-	if err != nil {
-		fmt.Printf("response: %s\n", resp)
-		bailErr = err
-	}
-	fmt.Printf("done.\n")
 	fmt.Printf("Deleting 'local' remote... ")
 	config, err := remotes.NewConfiguration(configPath)
 	if err != nil {
