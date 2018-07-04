@@ -949,7 +949,7 @@ func clusterReset(cmd *cobra.Command, args []string, out io.Writer) error {
 	var bailErr error
 
 	fmt.Printf("Deleting dotmesh-etcd container... ")
-	resp, err = exec.Command(
+	resp, err := exec.Command(
 		"docker", "rm", "-v", "-f", "dotmesh-etcd",
 	).CombinedOutput()
 	if err != nil {
