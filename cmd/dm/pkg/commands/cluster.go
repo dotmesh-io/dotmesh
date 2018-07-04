@@ -188,7 +188,7 @@ func NewCmdClusterBackupEtcd(out io.Writer) *cobra.Command {
 		Long:  "Online help: FIXME",
 		Run: func(cmd *cobra.Command, args []string) {
 
-			dm, err := remotes.NewDotmeshAPI(configPath)
+			dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err.Error())
 				os.Exit(1)
@@ -218,7 +218,7 @@ func NewCmdClusterRestoreEtcd(out io.Writer, in io.Reader) *cobra.Command {
 				os.Exit(1)
 			}
 
-			dm, err := remotes.NewDotmeshAPI(configPath)
+			dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err.Error())
 				os.Exit(1)
@@ -910,7 +910,7 @@ func clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath string) err
 	for !connected {
 		try++
 		connected = func() bool {
-			dm, err := remotes.NewDotmeshAPI(configPath)
+			dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
 			e := func() {
 				if try == 4*120 { // 120 seconds (250ms per try)
 					fmt.Printf(

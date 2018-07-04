@@ -18,6 +18,7 @@ import (
 )
 
 var configPath string
+var verboseOutput bool
 var makeBranch bool
 var forceMode bool
 var scriptingMode bool
@@ -75,6 +76,12 @@ func Initialise() {
 		"~/.dotmesh/config",
 		"Config file to use",
 	)
+
+	MainCmd.PersistentFlags().BoolVarP(
+		&verboseOutput, "verbose", "",
+		false,
+		"Display details of RPC requests and responses to the dotmesh server",
+	)
 }
 
 func NewCmdRemote(out io.Writer) *cobra.Command {
@@ -89,7 +96,7 @@ func NewCmdRemote(out io.Writer) *cobra.Command {
 					return fmt.Errorf("Too many arguments specified.")
 				}
 
-				dm, err := remotes.NewDotmeshAPI(configPath)
+				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
 				}
@@ -161,7 +168,7 @@ func NewCmdRemote(out io.Writer) *cobra.Command {
 						)
 					}
 				}
-				dm, err := remotes.NewDotmeshAPI(configPath)
+				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
 				}
@@ -215,7 +222,7 @@ func NewCmdRemote(out io.Writer) *cobra.Command {
 
 		Run: func(cmd *cobra.Command, args []string) {
 			runHandlingError(func() error {
-				dm, err := remotes.NewDotmeshAPI(configPath)
+				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
 				}
@@ -234,7 +241,7 @@ func NewCmdRemote(out io.Writer) *cobra.Command {
 		Long:  "Online help: https://docs.dotmesh.com/references/cli/#select-the-current-remote-dm-remote-switch-name",
 		Run: func(cmd *cobra.Command, args []string) {
 			runHandlingError(func() error {
-				dm, err := remotes.NewDotmeshAPI(configPath)
+				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
 				}
@@ -262,7 +269,7 @@ func NewCmdCheckout(out io.Writer) *cobra.Command {
 					return fmt.Errorf("Please give me a branch name.")
 				}
 				branch := args[0]
-				dm, err := remotes.NewDotmeshAPI(configPath)
+				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
 				}
@@ -298,7 +305,7 @@ func NewCmdList(out io.Writer) *cobra.Command {
 		Long:    "Online help: https://docs.dotmesh.com/references/cli/#list-the-available-dots-dm-list-h-scripting",
 		Run: func(cmd *cobra.Command, args []string) {
 			err := func() error {
-				dm, err := remotes.NewDotmeshAPI(configPath)
+				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
 				}
@@ -412,7 +419,7 @@ func NewCmdInit(out io.Writer) *cobra.Command {
 		Long:  "Online help: https://docs.dotmesh.com/references/cli/#create-an-empty-dot-dm-init-dot",
 		Run: func(cmd *cobra.Command, args []string) {
 			err := func() error {
-				dm, err := remotes.NewDotmeshAPI(configPath)
+				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
 				}
@@ -455,7 +462,7 @@ func NewCmdSwitch(out io.Writer) *cobra.Command {
 		Long:  "Online help: https://docs.dotmesh.com/references/cli/#select-a-different-current-dot-dm-switch-dot",
 		Run: func(cmd *cobra.Command, args []string) {
 			err := func() error {
-				dm, err := remotes.NewDotmeshAPI(configPath)
+				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
 				}
@@ -513,7 +520,7 @@ func NewCmdCommit(out io.Writer) *cobra.Command {
 					metadataPairs[metadataStringParts[0]] = metadataStringParts[1]
 				}
 
-				dm, err := remotes.NewDotmeshAPI(configPath)
+				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
 				}
@@ -556,7 +563,7 @@ func NewCmdLog(out io.Writer) *cobra.Command {
 		Long:  "Online help: https://docs.dotmesh.com/references/cli/#list-commits-dm-log",
 		Run: func(cmd *cobra.Command, args []string) {
 			err := func() error {
-				dm, err := remotes.NewDotmeshAPI(configPath)
+				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
 				}
@@ -612,7 +619,7 @@ func NewCmdBranch(out io.Writer) *cobra.Command {
 		Long:  "Online help: https://docs.dotmesh.com/references/cli/#list-the-branches-dm-branch",
 		Run: func(cmd *cobra.Command, args []string) {
 			err := func() error {
-				dm, err := remotes.NewDotmeshAPI(configPath)
+				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
 				}
@@ -654,7 +661,7 @@ func NewCmdReset(out io.Writer) *cobra.Command {
 		Long:  "Online help: https://docs.dotmesh.com/references/cli/#roll-back-commits-dm-reset-hard-commit",
 		Run: func(cmd *cobra.Command, args []string) {
 			err := func() error {
-				dm, err := remotes.NewDotmeshAPI(configPath)
+				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
 				}

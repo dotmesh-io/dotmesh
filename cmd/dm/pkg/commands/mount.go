@@ -37,7 +37,7 @@ NOTE: this currently only works for Linux.`,
 }
 
 func mountDot(cmd *cobra.Command, args []string, out io.Writer) error {
-	dm, err := remotes.NewDotmeshAPI(configPath)
+	dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
 	if err != nil {
 		return err
 	}

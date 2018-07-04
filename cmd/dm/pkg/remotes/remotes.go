@@ -310,7 +310,7 @@ func (c *Configuration) RemoveRemote(remote string) error {
 	return c.save()
 }
 
-func (c *Configuration) ClusterFromRemote(remote string) (*JsonRpcClient, error) {
+func (c *Configuration) ClusterFromRemote(remote string, verbose bool) (*JsonRpcClient, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	remoteCreds, ok := c.Remotes[remote]
@@ -322,11 +322,12 @@ func (c *Configuration) ClusterFromRemote(remote string) (*JsonRpcClient, error)
 		Hostname: remoteCreds.Hostname,
 		Port:     remoteCreds.Port,
 		ApiKey:   remoteCreds.ApiKey,
+		Verbose:  verbose,
 	}, nil
 }
 
-func (c *Configuration) ClusterFromCurrentRemote() (*JsonRpcClient, error) {
-	return c.ClusterFromRemote(c.CurrentRemote)
+func (c *Configuration) ClusterFromCurrentRemote(verbose bool) (*JsonRpcClient, error) {
+	return c.ClusterFromRemote(c.CurrentRemote, verbose)
 }
 
 type JsonRpcClient struct {
@@ -334,6 +335,7 @@ type JsonRpcClient struct {
 	Hostname string
 	Port     int
 	ApiKey   string
+	Verbose  bool
 }
 
 func (jsonRpcClient JsonRpcClient) String() string {
@@ -429,6 +431,12 @@ func (j *JsonRpcClient) reallyCallRemote(
 	if err != nil {
 		return err
 	}
+
+	if j.Verbose {
+		fmt.Fprintln(os.Stdout, "send rpc request")
+		fmt.Fprintln(os.Stdout, string(message))
+	}
+
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(message))
 	if err != nil {
 		return err
@@ -458,6 +466,11 @@ func (j *JsonRpcClient) reallyCallRemote(
 	if err != nil {
 		span.SetTag("error", err.Error())
 		return fmt.Errorf("Error reading body: %s", err)
+	}
+
+	if j.Verbose {
+		fmt.Fprintln(os.Stdout, "got rpc response")
+		fmt.Fprintln(os.Stdout, string(b))
 	}
 	err = json2.DecodeClientResponse(bytes.NewBuffer(b), &result)
 	if err != nil {
