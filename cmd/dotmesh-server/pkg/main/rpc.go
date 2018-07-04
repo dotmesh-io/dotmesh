@@ -27,10 +27,10 @@ func NewDotmeshRPC(state *InMemoryState) *DotmeshRPC {
 	return &DotmeshRPC{state: state}
 }
 
-var reNamespaceName = regexp.MustCompile(`^[a-zA-Z0-9_\-]+$`)
-var reVolumeName = regexp.MustCompile(`^[a-zA-Z0-9_\-]+$`)
-var reBranchName = regexp.MustCompile(`^[a-zA-Z0-9_\-]+$`)
-var reSubdotName = regexp.MustCompile(`^[a-zA-Z0-9_\-]+$`)
+var reNamespaceName = regexp.MustCompile(`^[a-zA-Z0-9_\-]{1,50}$`)
+var reVolumeName = regexp.MustCompile(`^[a-zA-Z0-9_\-]{1,50}$`)
+var reBranchName = regexp.MustCompile(`^[a-zA-Z0-9_\-]{1,50}$`)
+var reSubdotName = regexp.MustCompile(`^[a-zA-Z0-9_\-]{1,50}$`)
 
 func requireValidVolumeName(name VolumeName) error {
 	// Reject the request with an error if the volume name is invalid
@@ -41,13 +41,16 @@ func requireValidVolumeName(name VolumeName) error {
 	}
 
 	if !reVolumeName.MatchString(name.Name) {
-		return fmt.Errorf("Invalid dot name %v", name.Namespace)
+		return fmt.Errorf("Invalid dot name %v", name.Name)
 	}
 
 	return nil
 }
 
 func requireValidBranchName(name string) error {
+	// "" is a special case indicating the master branch, so we check
+	// it here rather than allow it in the regexp.
+
 	if name != "" && !reBranchName.MatchString(name) {
 		return fmt.Errorf("Invalid branch name %v", name)
 	}
@@ -2574,5 +2577,26 @@ func (d *DotmeshRPC) ForceBranchMasterById(
 	}
 
 	*result = true
+	return nil
+}
+
+func (d *DotmeshRPC) CheckNameIsValid(
+	r *http.Request,
+	args *struct{ Namespace, Name, Branch string },
+	result *string,
+) error {
+	err := requireValidVolumeName(VolumeName{args.Namespace, args.Name})
+	if err != nil {
+		*result = fmt.Sprintf("%s", err)
+		return nil
+	}
+
+	err = requireValidBranchName(args.Branch)
+	if err != nil {
+		*result = fmt.Sprintf("%s", err)
+		return nil
+	}
+
+	*result = ""
 	return nil
 }
