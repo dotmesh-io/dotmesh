@@ -22,6 +22,7 @@ var verboseOutput bool
 var makeBranch bool
 var forceMode bool
 var scriptingMode bool
+var parseDebugParamsJSON bool
 var commitMsg string
 var commitMetadata *[]string
 var resetHard bool

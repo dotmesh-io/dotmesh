@@ -24,7 +24,17 @@ func NewCmdDebug(out io.Writer) *cobra.Command {
 				}
 				var response interface{}
 				if len(args) > 1 {
-					err = dm.CallRemote(context.Background(), method, args[1], &response)
+					if parseDebugParamsJSON {
+						var params map[string]interface{}
+						err = json.Unmarshal([]byte(args[1]), &params)
+						if err != nil {
+							fmt.Fprintln(os.Stderr, err.Error())
+							os.Exit(1)
+						}
+						err = dm.CallRemote(context.Background(), method, params, &response)
+					} else {
+						err = dm.CallRemote(context.Background(), method, args[1], &response)
+					}
 				} else {
 					err = dm.CallRemote(context.Background(), method, nil, &response)
 				}
@@ -41,5 +51,10 @@ func NewCmdDebug(out io.Writer) *cobra.Command {
 			}
 		},
 	}
+	cmd.Flags().BoolVarP(
+		&parseDebugParamsJSON, "parse-json", "", false,
+		"Parse the params argument into JSON before handing off to CallRemote.  "+
+			"This enables the passing of structured params to RPC endpoints.",
+	)
 	return cmd
 }
