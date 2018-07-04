@@ -3040,15 +3040,23 @@ func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string
 			for _, item := range page.DeleteMarkers {
 				if *item.IsLatest {
 					deletePath := fmt.Sprintf("%s/%s", destPath, *item.Key)
+					
 					err := os.Remove(deletePath)
-					if err != nil {
+					if err != nil and !os.IsNotExist(err) {
 						innerError = err
+					} else {
+						keyVersions[*item.Key] = *item.VersionId
 					}
-					keyVersions[*item.Key] = *item.VersionId
+					
 				}
 			}
 			return !lastPage
 		})
+	if pollResult.Total == pollResult.Index {
+		pollResult.Status = "finished"
+		updatePollResult(transferRequestId, *pollResult)
+	}
+	
 	if err != nil {
 		return nil, err
 	} else if innerError != nil {
