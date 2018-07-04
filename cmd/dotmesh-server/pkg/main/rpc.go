@@ -1097,22 +1097,20 @@ func (d *DotmeshRPC) S3Transfer(
 	localExists := localFilesystemId != ""
 
 	// note; was a bunch of logic checks for whether remote/local ends exist here - I don't think we need them because we'd have returned an error already if remote didn't exist
-
-	var filesystemId string
 	if args.Direction == "pull" && !localExists {
 		id, err := uuid.NewV4()
 		if err != nil {
 			return err
 		}
-		filesystemId = id.String()
+		localFilesystemId = id.String()
 		err = d.registerFilesystemBecomeMaster(
 			r.Context(),
 			args.LocalNamespace,
 			args.LocalName,
 			args.LocalBranchName,
-			filesystemId,
+			localFilesystemId,
 			PathToTopLevelFilesystem{
-				TopLevelFilesystemId:   filesystemId,
+				TopLevelFilesystemId:   localFilesystemId,
 				TopLevelFilesystemName: localVolumeName,
 				Clones:                 ClonesList{},
 			},
@@ -1129,7 +1127,7 @@ func (d *DotmeshRPC) S3Transfer(
 	// etcd.
 
 	responseChan, requestId, err := d.state.globalFsRequestId(
-		filesystemId,
+		localFilesystemId,
 		&Event{Name: "s3-transfer",
 			Args: &EventArgs{
 				"Transfer": args,
