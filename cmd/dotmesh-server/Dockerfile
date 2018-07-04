@@ -5,4 +5,5 @@ RUN apt-get -y update && apt-get -y install zfsutils-linux iproute kmod curl
 RUN echo 'search updates extra ubuntu built-in weak-updates' > /etc/depmod.d/ubuntu.conf
 ADD cmd/dotmesh-server/require_zfs.sh /require_zfs.sh
 # COPY ./target/* /usr/local/bin/
-COPY cmd/dotmesh-server/target/* /usr/local/bin/
+# COPY cmd/dotmesh-server/target/* /usr/local/bin/
+COPY target/* /usr/local/bin/
