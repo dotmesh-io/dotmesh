@@ -703,13 +703,19 @@ func (f *fsMachine) snapshot(e *Event) (responseEvent *Event, nextState stateFn)
 			Name: "failed-metadata-encode", Args: &EventArgs{"err": err},
 		}, backoffState
 	}
-	id, err := uuid.NewV4()
-	if err != nil {
-		return &Event{
-			Name: "failed-uuid", Args: &EventArgs{"err": err},
-		}, backoffState
+	var snapshotId string
+	snapshotIdInter, ok := (*e.Args)["snapshotId"]
+	if !ok {
+		id, err := uuid.NewV4()
+		if err != nil {
+			return &Event{
+				Name: "failed-uuid", Args: &EventArgs{"err": err},
+			}, backoffState
+		}
+		snapshotId = id.String()
+	} else {
+		snapshotId = snapshotIdInter.(string)
 	}
-	snapshotId := id.String()
 	args := []string{"snapshot"}
 	args = append(args, metadataEncoded...)
 	args = append(args, fq(f.filesystemId)+"@"+snapshotId)
@@ -3010,9 +3016,9 @@ func getS3Client(transferRequest S3TransferRequest) (*s3.S3, error) {
 	return svc, nil
 }
 
-func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string, pollResult *TransferPollResult) (map[string]string, error) {
+func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string, pollResult *TransferPollResult, currentKeyVersions map[string]string) (map[string]string, error) {
 	// TODO refactor this a lil so we can get the folder structure easily
-
+	fmt.Printf("[downloadS3Bucket] currentVersions: %#v", currentKeyVersions)
 	params := &s3.ListObjectVersionsInput{
 		Bucket: aws.String(bucketName),
 	}
@@ -3022,23 +3028,27 @@ func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string
 	err := svc.ListObjectVersionsPages(params,
 		func(page *s3.ListObjectVersionsOutput, lastPage bool) bool {
 			for _, item := range page.Versions {
-				if *item.IsLatest {
+				latestMeta, _ := currentKeyVersions[*item.Key]
+				if *item.IsLatest && latestMeta != *item.VersionId {
 					pollResult.Index += 1
 					pollResult.Total += 1
 					pollResult.Size = *item.Size
 					pollResult.Status = "Pulling"
+					// ERROR CATCHING?
 					updatePollResult(transferRequestId, *pollResult)
 					innerError = downloadS3Object(downloader, *item.Key, *item.VersionId, bucketName, destPath)
 					if innerError == nil {
 						pollResult.Sent = *item.Size
 						pollResult.Status = "Pulled file successfully"
+						// todo error catching
 						updatePollResult(transferRequestId, *pollResult)
 						keyVersions[*item.Key] = *item.VersionId
 					}
 				}
 			}
 			for _, item := range page.DeleteMarkers {
-				if *item.IsLatest {
+				latestMeta, _ := currentKeyVersions[*item.Key]
+				if *item.IsLatest && latestMeta != *item.VersionId {
 					deletePath := fmt.Sprintf("%s/%s", destPath, *item.Key)
 
 					err := os.Remove(deletePath)
@@ -3062,6 +3072,7 @@ func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string
 	} else if innerError != nil {
 		return nil, innerError
 	}
+	fmt.Printf("New key versions: %#v", keyVersions)
 	return keyVersions, nil
 }
 
@@ -3077,6 +3088,24 @@ func downloadS3Object(downloader *s3manager.Downloader, key, versionId, bucket, 
 		VersionId: &versionId,
 	})
 	return nil
+}
+
+func createSubDot(filesystemId, subDir string) (string, error) {
+	destPath := fmt.Sprintf("%s/%s", mnt(filesystemId), subDir)
+	// TODO: take the contents of the bucket
+	// dump it in destpath
+	if _, err := os.Stat(destPath); err != nil {
+		if os.IsNotExist(err) {
+			if err := os.MkdirAll(destPath, 0777); err != nil {
+				log.Printf("[createSubDot] error creating subdot %s: %+v", destPath, err)
+				return "", err
+			}
+		} else {
+			log.Printf("[createSubDot] error statting subdot %s: %+v", destPath, err)
+			return "", err
+		}
+	}
+	return destPath, nil
 }
 
 func s3PullInitiatorState(f *fsMachine) stateFn {
@@ -3105,27 +3134,13 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 	// TODO pull this out somewhere as I've duplicated this in rpc.go
 
 	// create the default paths
-	destPath := fmt.Sprintf("%s/__default__", mnt(f.filesystemId))
-	// TODO: take the contents of the bucket
-	// dump it in destpath
-	if _, err := os.Stat(destPath); err != nil {
-		if os.IsNotExist(err) {
-			if err := os.MkdirAll(destPath, 0777); err != nil {
-				log.Printf("[s3PullInitiatorState] error creating subdot %s: %+v", destPath, err)
-				f.innerResponses <- &Event{
-					Name: "error-creating-subdot",
-					Args: &EventArgs{"err": err, "destpath": destPath},
-				}
-				return backoffState
-			}
-		} else {
-			log.Printf("[s3PullInitiatorState] error statting subdot %s: %+v", destPath, err)
-			f.innerResponses <- &Event{
-				Name: "error-statting-subdot",
-				Args: &EventArgs{"err": err, "destpath": destPath},
-			}
-			return backoffState
+	destPath, err := createSubDot(f.filesystemId, "__default__")
+	if err != nil {
+		f.innerResponses <- &Event{
+			Name: "cannot-create-default-dir",
+			Args: &EventArgs{"err": err},
 		}
+		return backoffState
 	}
 	svc, err := getS3Client(transferRequest)
 	if err != nil {
@@ -3151,8 +3166,37 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 		}
 		return backoffState
 	}
-	var metaMap map[string]string
-	metaMap, err = downloadS3Bucket(svc, transferRequest.RemoteName, destPath, transferRequestId, &pollResult)
+
+	snaps, err := f.state.snapshotsForCurrentMaster(f.filesystemId)
+	if err != nil {
+		f.innerResponses <- &Event{
+			Name: "s3-pull-initiator-cant-get-snapshot-data",
+			Args: &EventArgs{"err": err},
+		}
+		return backoffState
+	}
+	latestMeta := make(map[string]string)
+	if len(snaps) > 0 {
+		latestSnap := snaps[len(snaps)-1]
+		pathToCommitMeta := fmt.Sprintf("%s/dm.s3-versions/%s", mnt(f.filesystemId), latestSnap.Id)
+		data, err := ioutil.ReadFile(pathToCommitMeta)
+		if err != nil {
+			f.innerResponses <- &Event{
+				Name: "s3-pull-initiator-cant-read-metadata",
+				Args: &EventArgs{"err": err},
+			}
+			return backoffState
+		}
+		err = json.Unmarshal(data, &latestMeta)
+		if err != nil {
+			f.innerResponses <- &Event{
+				Name: "cannot-unmarshal-metadata-json",
+				Args: &EventArgs{"err": err},
+			}
+			return backoffState
+		}
+	}
+	metaMap, err := downloadS3Bucket(svc, transferRequest.RemoteName, destPath, transferRequestId, &pollResult, latestMeta)
 	if err != nil {
 		f.innerResponses <- &Event{
 			Name: "s3-pull-initiator-cant-pull-from-s3",
@@ -3160,15 +3204,55 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 		}
 		return backoffState
 	}
-	//f.incrementPollResultIndex
-	// commit it
-	metaMap["message"] = "S3 content"
-	metadata := metadata(metaMap)
-	response, _ := f.snapshot(&Event{Name: "snapshot",
-		Args: &EventArgs{"metadata": metadata}})
-	if response.Name != "snapshotted" {
-		f.innerResponses <- response
-		return backoffState
+	if len(metaMap) != 0 {
+		id, err := uuid.NewV4()
+		if err != nil {
+			f.innerResponses <- &Event{
+				Name: "failed-uuid", Args: &EventArgs{"err": err},
+			}
+			return backoffState
+		}
+		snapshotId := id.String()
+		subPath, err := createSubDot(f.filesystemId, "dm.s3-versions")
+		if err != nil {
+			f.innerResponses <- &Event{
+				Name: "couldnt-create-metadata-subdot",
+				Args: &EventArgs{"err": err},
+			}
+			return backoffState
+		}
+		pathToCommitMeta := fmt.Sprintf("%s/%s", subPath, snapshotId)
+		file, err := os.Create(pathToCommitMeta)
+		if err != nil {
+			f.innerResponses <- &Event{
+				Name: "failed-creating-commit-meta-file",
+				Args: &EventArgs{"err": err},
+			}
+			return backoffState
+		}
+		data, err := json.Marshal(metaMap)
+		if err != nil {
+			f.innerResponses <- &Event{
+				Name: "failed-marshalling-meta-json",
+				Args: &EventArgs{"err": err},
+			}
+			return backoffState
+		}
+		_, err = file.Write(data)
+		if err != nil {
+			f.innerResponses <- &Event{
+				Name: "failed-writing-meta-json",
+				Args: &EventArgs{"err": err},
+			}
+			return backoffState
+		}
+		response, _ := f.snapshot(&Event{Name: "snapshot",
+			Args: &EventArgs{"metadata": metadata{"message": "s3 content"},
+				"snapshotId": snapshotId}})
+		if response.Name != "snapshotted" {
+			f.innerResponses <- response
+			return backoffState
+		}
 	}
 	pollResult.Status = "finished"
 	pollResult.Index = pollResult.Total
