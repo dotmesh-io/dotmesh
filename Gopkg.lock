@@ -2,27 +2,6 @@
 
 
 [[projects]]
-  branch = "master"
-  name = "github.com/Azure/go-ansiterm"
-  packages = [
-    ".",
-    "winterm"
-  ]
-  revision = "d6e3b3328b783f23731bc4d058875b0371ff8109"
-
-[[projects]]
-  name = "github.com/Microsoft/go-winio"
-  packages = ["."]
-  revision = "67921128fb397dd80339870d2193d6b1e6856fd4"
-  version = "v0.4.8"
-
-[[projects]]
-  branch = "master"
-  name = "github.com/Nvveen/Gotty"
-  packages = ["."]
-  revision = "cd527374f1e5bff4938207604a14f2e38a9cf512"
-
-[[projects]]
   name = "github.com/PuerkitoBio/purell"
   packages = ["."]
   revision = "0bcb03f4b4d0a9428594752bd2a3b9aa0a9d4bd4"
@@ -64,16 +43,10 @@
   version = "v3.5.1"
 
 [[projects]]
-  branch = "master"
-  name = "github.com/containerd/continuity"
-  packages = ["pathdriver"]
-  revision = "246e49050efdf45e8f17fbbcf1547ee376f9939e"
-
-[[projects]]
   name = "github.com/coreos/bbolt"
   packages = ["."]
-  revision = "583e8937c61f1af6513608ccc75c97b6abdf4ff9"
-  version = "v1.3.0"
+  revision = "48ea1b39c25fc1bab3506fbc712ecbaa842c4d2d"
+  version = "v1.3.1-coreos.6"
 
 [[projects]]
   name = "github.com/coreos/etcd"
@@ -180,25 +153,25 @@
   version = "v3.2.0"
 
 [[projects]]
-  branch = "428-ports"
+  name = "github.com/docker/distribution"
+  packages = [
+    "digest",
+    "reference"
+  ]
+  revision = "48294d928ced5dd9b378f7fd7c6f5da3ff3f2c89"
+  version = "v2.6.2"
+
+[[projects]]
+  branch = "master"
   name = "github.com/dotmesh-io/citools"
   packages = ["."]
-  revision = "97437547d4c31e70cd9e521176971bb03ccac0ea"
+  revision = "a433f673376c905b8e2f5b8c219a813dd3346c99"
 
 [[projects]]
   branch = "master"
   name = "github.com/dotmesh-io/go-checkpoint"
   packages = ["."]
   revision = "edad9decbae8e2e2e58a64b18f7bd5efa76deb5a"
-
-[[projects]]
-  branch = "master"
-  name = "github.com/dotmesh-io/rpc"
-  packages = [
-    "v2",
-    "v2/json2"
-  ]
-  revision = "a4d307ba3406b4c16a55897a1f1f494cd61d4cdd"
 
 [[projects]]
   name = "github.com/eapache/go-resiliency"
@@ -256,17 +229,12 @@
     "external/golang.org/x/sys/unix"
   ]
   revision = "b87634a9d98e8671b847597fb264953a3e0d02b5"
+
 [[projects]]
   name = "github.com/ghodss/yaml"
   packages = ["."]
   revision = "0ca9ea5df5451ffdf184b4428c902747c2c11cd7"
   version = "v1.0.0"
-
-[[projects]]
-  name = "github.com/go-logfmt/logfmt"
-  packages = ["."]
-  revision = "390ab7935ee28ec6b286364bba9b4dd6410cb3d5"
-  version = "v0.3.0"
 
 [[projects]]
   branch = "master"
@@ -482,12 +450,6 @@
   version = "1.0.1"
 
 [[projects]]
-  branch = "master"
-  name = "github.com/kr/logfmt"
-  packages = ["."]
-  revision = "b84e30acd515aadc4b783ad4ff83aff3299bdfe0"
-
-[[projects]]
   name = "github.com/kubernetes-incubator/external-storage"
   packages = [
     "lib/controller",
@@ -550,27 +512,6 @@
   revision = "179d4d0c4d8d407a32af483c2354df1d2c91e6c3"
 
 [[projects]]
-  name = "github.com/opencontainers/go-digest"
-  packages = ["."]
-  revision = "279bed98673dd5bef374d3b6e4b09e2af76183bf"
-  version = "v1.0.0-rc1"
-
-[[projects]]
-  name = "github.com/opencontainers/image-spec"
-  packages = [
-    "specs-go",
-    "specs-go/v1"
-  ]
-  revision = "d60099175f88c47cd379c4738d158884749ed235"
-  version = "v1.0.1"
-
-[[projects]]
-  name = "github.com/opencontainers/runc"
-  packages = ["libcontainer/user"]
-  revision = "baf6536d6259209c3edfa2b22237af82942d3dfa"
-  version = "v0.1.1"
-
-[[projects]]
   name = "github.com/opentracing/opentracing-go"
   packages = [
     ".",
@@ -613,12 +554,6 @@
   ]
   revision = "1958fd8fff7f115e79725b1288e0b878b3e06b00"
   version = "v2.0.3"
-
-[[projects]]
-  name = "github.com/pkg/errors"
-  packages = ["."]
-  revision = "645ef00459ed84a119197bfb8d8205042c6df63d"
-  version = "v0.8.0"
 
 [[projects]]
   name = "github.com/prometheus/client_golang"
@@ -1001,6 +936,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "90803ba6bef9a5eea85e5e8ef9303dcbefbfd56cd31af70b53c4a359aff8c9fe"
+  inputs-digest = "a54ed7c2ac63976b457b6fd2395cf393130fd112e183e3594b8b20b3b87e111a"
   solver-name = "gps-cdcl"
   solver-version = 1
