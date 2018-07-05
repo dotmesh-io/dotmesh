@@ -75,8 +75,13 @@ type ResponseGet struct {
 	Err    string
 }
 
+var containerMountDirLock sync.Mutex
+
 // create a symlink from /dotmesh/:name[@:branch] into /dmfs/:filesystemId
 func newContainerMountSymlink(name VolumeName, filesystemId string, subvolume string) (string, error) {
+	containerMountDirLock.Lock()
+	defer containerMountDirLock.Unlock()
+
 	log.Printf("[newContainerMountSymlink] name=%+v, fsId=%s.%s", name, filesystemId, subvolume)
 	if _, err := os.Stat(CONTAINER_MOUNT_PREFIX); err != nil {
 		if os.IsNotExist(err) {
