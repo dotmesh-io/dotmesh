@@ -208,7 +208,7 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 		return DotmeshVolume{}, err
 	}
 
-	quietLogger(fmt.Sprintf("[getOne] starting for %v", fs))
+	log.Debugf("[getOne] starting for %", fs)
 
 	if tlf, clone, err := s.registry.LookupFilesystemById(fs); err == nil {
 		authorized, err := tlf.Authorize(ctx)
@@ -223,25 +223,24 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 		}
 		// if not exists, 0 is fine
 		s.globalDirtyCacheLock.Lock()
-		quietLogger(fmt.Sprintf(
-			"[getOne] looking up %s with master %s in %s",
-			fs, master, *s.globalDirtyCache,
-		))
+
+		log.WithFields(log.Fields{
+			"fs":     fs,
+			"master": master,
+			"cache":  *s.globalDirtyCache,
+		}).Debug("[getOne] looking up fs with master in cache")
+
 		dirty, ok := (*s.globalDirtyCache)[fs]
 		var dirtyBytes int64
 		var sizeBytes int64
 		if ok {
 			dirtyBytes = dirty.DirtyBytes
 			sizeBytes = dirty.SizeBytes
-			quietLogger(fmt.Sprintf(
-				"[getOne] got dirtyInfo %d,%d for %s with master %s in %s",
-				sizeBytes, dirtyBytes, fs, master, *s.globalDirtyCache,
-			))
+			log.Debugf("[getOne] got dirtyInfo %d,%d for %s with master %s in %s", sizeBytes, dirtyBytes, fs, master, *s.globalDirtyCache)
+
 		} else {
-			quietLogger(fmt.Sprintf(
-				"[getOne] %s was not in %s",
-				fs, *s.globalDirtyCache,
-			))
+			log.Debugf("[getOne] %s was not in %s", fs, *s.globalDirtyCache)
+
 		}
 		s.globalDirtyCacheLock.Unlock()
 		// if not exists, 0 is fine
@@ -294,9 +293,7 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 			d.ServerStatuses[server.Id] = status
 			s.globalStateCacheLock.Unlock()
 		}
-		quietLogger(fmt.Sprintf(
-			"[getOne] here is your volume: %s", d,
-		))
+		log.Debugf("[getOne] here is your volume: %d", d)
 		return d, nil
 	} else {
 		return DotmeshVolume{}, fmt.Errorf("Unable to find filesystem name for id %s", fs)
@@ -377,7 +374,7 @@ func (s *InMemoryState) fetchRelatedContainers() error {
 			return err
 		}
 		// wait for the next hint that containers have changed
-		_ = <-s.fetchRelatedContainersChan
+		<-s.fetchRelatedContainersChan
 	}
 }
 
@@ -635,7 +632,7 @@ func (state *InMemoryState) reallyProcureFilesystem(ctx context.Context, name Vo
 			case <-time.After(30 * time.Second):
 				// something needs to read the response from the
 				// response chan
-				go func() { _ = <-responseChan }()
+				go func() { <-responseChan }()
 				// TODO implement some kind of liveness check to avoid
 				// timing out too early on slow transfers.
 				return "", fmt.Errorf(
@@ -675,7 +672,7 @@ func (state *InMemoryState) reallyProcureFilesystem(ctx context.Context, name Vo
 						"transitions", stateChangeChan,
 					)
 					state.filesystemsLock.Unlock()
-					_ = <-stateChangeChan
+					<-stateChangeChan
 					state.filesystemsLock.Lock()
 					(*state.filesystems)[filesystemId].transitionObserver.Unsubscribe(
 						"transitions", stateChangeChan,
