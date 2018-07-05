@@ -26,7 +26,7 @@
 
 
 [[constraint]]
-  branch = "authpackage"
+  branch = "master"
   name = "github.com/dotmesh-io/citools"
 
 [prune]
