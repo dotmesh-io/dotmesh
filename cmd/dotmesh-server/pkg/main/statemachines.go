@@ -3191,6 +3191,11 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 		pathToCommitMeta := fmt.Sprintf("%s/dm.s3-versions/%s", mnt(f.filesystemId), latestSnap.Id)
 		data, err := ioutil.ReadFile(pathToCommitMeta)
 		if err != nil {
+			if os.IsNotExist(err) {
+				pollResult.Status = "error"
+				pollResult.Message = "Could not read commit s3 metadata - you have changes which have not been pushed to s3."
+				updatePollResult(transferRequestId, pollResult)
+			}
 			f.innerResponses <- &Event{
 				Name: "s3-pull-initiator-cant-read-metadata",
 				Args: &EventArgs{"err": err},
