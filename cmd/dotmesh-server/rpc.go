@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"regexp"
 	"runtime"
@@ -14,7 +13,10 @@ import (
 	"github.com/coreos/etcd/client"
 	"golang.org/x/net/context"
 
+	"github.com/dotmesh-io/dotmesh/pkg/auth"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // TODO ensure contexts are threaded through in all RPC calls for correct
@@ -93,7 +95,8 @@ func requireValidVolumeNameWithBranch(name VolumeName) error {
 }
 
 func ensureAdminUser(r *http.Request) error {
-	requestId := r.Context().Value("authenticated-user-id").(string)
+	// requestId := auth.GetUserID(r)
+	requestId := auth.GetUserID(r)
 
 	// we have already authenticated the admin password so are safe to just compare ids
 	if requestId != ADMIN_USER_UUID {
@@ -164,9 +167,12 @@ func requirePassword(r *http.Request) error {
 	// authenticated with an API key rather than a password. Use this
 	// to protect RPC methods that require a password.
 
-	if r.Context().Value("password-authenticated").(bool) {
+	at := auth.GetAuthenticationType(r)
+
+	switch at {
+	case user.AuthenticationTypePassword:
 		return nil
-	} else {
+	default:
 		return fmt.Errorf("Password authentication is required for this method.")
 	}
 }
@@ -174,7 +180,7 @@ func requirePassword(r *http.Request) error {
 func (d *DotmeshRPC) CurrentUser(
 	r *http.Request, args *struct{}, result *SafeUser,
 ) error {
-	user, err := GetUserById(r.Context().Value("authenticated-user-id").(string))
+	user, err := GetUserById(auth.GetUserID(r))
 	if err != nil {
 		return err
 	}
@@ -191,7 +197,7 @@ func (d *DotmeshRPC) AuthenticatedUser(
 		return err
 	}
 
-	user, err := GetUserById(r.Context().Value("authenticated-user-id").(string))
+	user, err := GetUserById(auth.GetUserID(r))
 	if err != nil {
 		return err
 	}
@@ -208,7 +214,7 @@ func (d *DotmeshRPC) ResetApiKey(
 		return err
 	}
 
-	user, err := GetUserById(r.Context().Value("authenticated-user-id").(string))
+	user, err := GetUserById(auth.GetUserID(r))
 	if err != nil {
 		return err
 	}
@@ -236,7 +242,7 @@ func (d *DotmeshRPC) ResetApiKey(
 func (d *DotmeshRPC) GetApiKey(
 	r *http.Request, args *struct{}, result *struct{ ApiKey string },
 ) error {
-	user, err := GetUserById(r.Context().Value("authenticated-user-id").(string))
+	user, err := GetUserById(auth.GetUserID(r))
 	if err != nil {
 		return err
 	}
@@ -250,7 +256,7 @@ func (d *DotmeshRPC) GetApiKey(
 func (d *DotmeshRPC) UpdatePassword(
 	r *http.Request, args *struct{ NewPassword string }, result *SafeUser,
 ) error {
-	user, err := GetUserById(r.Context().Value("authenticated-user-id").(string))
+	user, err := GetUserById(auth.GetUserID(r))
 	if err != nil {
 		return err
 	}
@@ -1637,7 +1643,7 @@ func (d *DotmeshRPC) AllDotsAndBranches(
 	args *struct{},
 	result *VolumesAndBranches,
 ) error {
-	quietLogger("[AllDotsAndBranches] starting...")
+	log.Debug("[AllDotsAndBranches] starting...")
 
 	vac := VolumesAndBranches{}
 
@@ -1678,7 +1684,7 @@ func (d *DotmeshRPC) AllDotsAndBranches(
 		if err != nil {
 			switch err := err.(type) {
 			default:
-				log.Printf("[AllDotsAndBranches] ERROR in getOne(%v): %v, continuing...", tlfId, err)
+				log.Errorf("[AllDotsAndBranches] ERROR in getOne(%v): %v, continuing...", tlfId, err)
 				continue
 			case PermissionDenied:
 				continue
@@ -1705,7 +1711,7 @@ func (d *DotmeshRPC) AllDotsAndBranches(
 		vac.Dots = append(vac.Dots, tlf)
 	}
 	*result = vac
-	quietLogger("[AllDotsAndBranches] finished!")
+	log.Debug("[AllDotsAndBranches] finished!")
 	return nil
 }
 
@@ -1778,7 +1784,8 @@ func (d *DotmeshRPC) RemoveCollaborator(
 		)
 	}
 
-	authenticatedUserId := r.Context().Value("authenticated-user-id").(string)
+	authenticatedUserId := auth.GetUserID(r)
+
 	authenticatedUser, err := GetUserById(authenticatedUserId)
 
 	if err != nil {
@@ -1917,7 +1924,7 @@ func (d *DotmeshRPC) Delete(
 		return err
 	}
 
-	user, err := GetUserById(r.Context().Value("authenticated-user-id").(string))
+	user, err := GetUserById(auth.GetUserID(r))
 
 	// Look up the top-level filesystem. This will error if the
 	// filesystem name isn't registered.

@@ -10,7 +10,7 @@ import (
 func TestSetAuthenticationCtxA(t *testing.T) {
 	req, _ := http.NewRequest("GET", "https://google.com", nil)
 
-	req = SetAuthenticationDetails(req, "user-x", user.AuthenticationTypePassword)
+	req = SetAuthenticationDetails(req, &user.User{Id: "user-x"}, user.AuthenticationTypePassword)
 
 	if GetUserID(req) != "user-x" {
 		t.Errorf("unexpected user ID: %s", GetUserID(req))
@@ -20,7 +20,7 @@ func TestSetAuthenticationCtxA(t *testing.T) {
 func TestSetAuthenticationCtxB(t *testing.T) {
 	req, _ := http.NewRequest("GET", "https://google.com", nil)
 
-	req = SetAuthenticationDetails(req, "user-y", user.AuthenticationTypeAPIKey)
+	req = SetAuthenticationDetails(req, &user.User{Id: "user-y"}, user.AuthenticationTypeAPIKey)
 
 	if GetUserID(req) != "user-y" {
 		t.Errorf("unexpected user ID: %s", GetUserID(req))

@@ -8,9 +8,10 @@ import (
 )
 
 const authenticationUserIDContextKey = "authenticated-user-id"
+const authenticationUserObjectContextKey = "authenticated-user-object"
 const authenticationPasswordAuthContextKey = "authentication-type"
 
-// getAccountID returns current user for this request
+// GetUserID - gets current user ID from this request
 func GetUserID(r *http.Request) (id string) {
 	if accountID := r.Context().Value(authenticationUserIDContextKey); accountID != nil {
 		return accountID.(string)
@@ -18,16 +19,38 @@ func GetUserID(r *http.Request) (id string) {
 	return ""
 }
 
+// GetUserIDFromCtx - get user ID from context
+func GetUserIDFromCtx(ctx context.Context) string {
+	if u := ctx.Value(authenticationUserIDContextKey); u != nil {
+		return u.(string)
+	}
+	return ""
+}
+
+// SetUserIDCtx - set user ID to given context
+func SetUserIDCtx(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, authenticationUserIDContextKey, id)
+}
+
+// GetUser - gets user object from request context
+func GetUser(r *http.Request) *user.User {
+	if u := r.Context().Value(authenticationUserObjectContextKey); u != nil {
+		return u.(*user.User)
+	}
+	return nil
+}
+
 func GetAuthenticationType(r *http.Request) user.AuthenticationType {
-	if accountID := r.Context().Value(authenticationPasswordAuthContextKey); accountID != nil {
-		return accountID.(user.AuthenticationType)
+	if at := r.Context().Value(authenticationPasswordAuthContextKey); at != nil {
+		return at.(user.AuthenticationType)
 	}
 	return user.AuthenticationTypeNone
 }
 
-// setUserID sets user for this request
-func SetAuthenticationDetails(r *http.Request, id string, authenticationType user.AuthenticationType) *http.Request {
-	ctx := context.WithValue(r.Context(), authenticationUserIDContextKey, id)
+// SetAuthenticationDetails sets user details for this request
+func SetAuthenticationDetails(r *http.Request, user *user.User, authenticationType user.AuthenticationType) *http.Request {
+	ctx := context.WithValue(r.Context(), authenticationUserIDContextKey, user.Id)
+	ctx = context.WithValue(ctx, authenticationUserObjectContextKey, user)
 	ctx = context.WithValue(ctx, authenticationPasswordAuthContextKey, authenticationType)
 	return r.WithContext(ctx)
 }

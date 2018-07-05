@@ -11,6 +11,8 @@ import (
 	"github.com/coreos/etcd/client"
 	"github.com/nu7hatch/gouuid"
 	"golang.org/x/crypto/scrypt"
+
+	"github.com/dotmesh-io/dotmesh/pkg/auth"
 )
 
 // The following consts MUST MATCH those defined in cmd/dm/pkg/commands/cluster.go
@@ -280,7 +282,7 @@ func (t TopLevelFilesystem) Authorize(ctx context.Context) (bool, error) {
 }
 
 func (t TopLevelFilesystem) authorize(ctx context.Context, includeCollab bool) (bool, error) {
-	authenticatedUserId := ctx.Value("authenticated-user-id").(string)
+	authenticatedUserId := auth.GetUserIDFromCtx(ctx)
 	if authenticatedUserId == "" {
 		return false, fmt.Errorf("No user found in context.")
 	}
@@ -329,7 +331,7 @@ func UserIsNamespaceAdministrator(userId, namespace string) (bool, error) {
 }
 
 func AuthenticatedUserIsNamespaceAdministrator(ctx context.Context, namespace string) (bool, error) {
-	u := ctx.Value("authenticated-user-id").(string)
+	u := auth.GetUserIDFromCtx(ctx)
 	if u == "" {
 		return false, fmt.Errorf("No user found in context.")
 	}

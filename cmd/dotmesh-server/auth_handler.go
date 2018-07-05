@@ -1,14 +1,15 @@
 package main
 
 import (
-	"context"
 	"net/http"
 
+	"github.com/dotmesh-io/dotmesh/pkg/auth"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 
 	log "github.com/sirupsen/logrus"
 )
 
+// NewAuthHandler - create new authentication handler
 func NewAuthHandler(handler http.Handler, um user.UserManager) http.Handler {
 	return &AuthHandler{
 		subHandler:  handler,
@@ -16,6 +17,8 @@ func NewAuthHandler(handler http.Handler, um user.UserManager) http.Handler {
 	}
 }
 
+// AuthHandler - acts as a middleware that authenticates any incoming request
+// and if it's authenticated, adds additional context
 type AuthHandler struct {
 	subHandler  http.Handler
 	userManager user.UserManager
@@ -40,10 +43,7 @@ func (a *AuthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	r = r.WithContext(
-		context.WithValue(context.WithValue(r.Context(), "authenticated-user-id", u.Id),
-			"password-authenticated", authenticationType.Privileged()),
-	)
+	r = auth.SetAuthenticationDetails(r, u, authenticationType)
 
 	a.subHandler.ServeHTTP(w, r)
 }
