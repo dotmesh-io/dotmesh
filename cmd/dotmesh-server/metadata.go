@@ -2,10 +2,13 @@ package main
 
 import (
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"regexp"
 )
+
+const keyRegex = "[a-z]+[a-z0-9-]*"
+
+var rxKeyRegex = regexp.MustCompile(keyRegex)
 
 func encodeMetadata(meta metadata) ([]string, error) {
 	/*
@@ -18,22 +21,15 @@ func encodeMetadata(meta metadata) ([]string, error) {
 	   hyphens after the initial character.
 	*/
 	metadataEncoded := []string{}
-	KEY_REGEX := "[a-z]+[a-z0-9-]*"
 	for k, v := range meta {
-		result, err := regexp.Match(KEY_REGEX, []byte(k))
-		if err != nil {
-			return []string{}, err
+		if !rxKeyRegex.MatchString(k) {
+			return []string{}, fmt.Errorf("%s does not match %s", k, keyRegex)
+
 		}
-		if !result {
-			return []string{}, errors.New(
-				fmt.Sprintf("%r does not match %s", k, KEY_REGEX),
-			)
-		}
+
 		encoded := base64.StdEncoding.EncodeToString([]byte(v))
 		if len(encoded) > 1024 {
-			return []string{}, errors.New(
-				"Encoded metadata value size exceeds 1024 bytes",
-			)
+			return []string{}, fmt.Errorf("Encoded metadata value size exceeds 1024 bytes")
 		}
 		metadataEncoded = append(
 			metadataEncoded, "-o",
