@@ -20,7 +20,6 @@ func TestSetGet(t *testing.T) {
 		t.Errorf("failed to Put kv: %s", err)
 	}
 	// getting it
-
 	n, err := kv.Get("test", "foo")
 	if err != nil {
 		t.Fatalf("failed to get key, error: %s", err)

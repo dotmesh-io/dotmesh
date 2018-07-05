@@ -11,7 +11,10 @@ import (
 type KV interface {
 	List(prefix string) ([]*client.Node, error)
 	CreateWithIndex(prefix, id, name string, val string) (*client.Node, error)
+
 	DeleteFromIndex(prefix, name string) error
+	AddToIndex(prefix, name, id string) error
+
 	Set(prefix, id, val string) (*client.Node, error)
 	Get(prefix, ref string) (*client.Node, error)
 	Delete(prefix, id string, recursive bool) error
@@ -25,6 +28,7 @@ type EtcdKV struct {
 func New(client client.KeysAPI, prefix string) *EtcdKV {
 	return &EtcdKV{
 		client: client,
+		prefix: prefix,
 	}
 }
 
@@ -50,6 +54,10 @@ func (k *EtcdKV) CreateWithIndex(prefix, id, name string, val string) (*client.N
 
 	}
 	return resp.Node, nil
+}
+
+func (k *EtcdKV) AddToIndex(prefix, name, id string) error {
+	return k.idxAdd(prefix, name, id)
 }
 
 func (k *EtcdKV) DeleteFromIndex(prefix, name string) error {
