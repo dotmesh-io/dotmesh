@@ -14,6 +14,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/dotmesh-io/dotmesh/pkg/auth"
 )
 
 const PLUGINS_DIR = "/run/docker/plugins"
@@ -158,8 +160,7 @@ func (state *InMemoryState) mustCleanupSocket() {
 
 // Annotate a context with admin-level authorization.
 func AdminContext(ctx context.Context) context.Context {
-	ctx = context.WithValue(ctx, "authenticated-user-id", ADMIN_USER_UUID)
-	return ctx
+	return auth.SetUserIDCtx(ctx, ADMIN_USER_UUID)
 }
 
 func (state *InMemoryState) runPlugin() {
@@ -246,7 +247,10 @@ func (state *InMemoryState) runPlugin() {
 			return
 		}
 
-		name := VolumeName{namespace, localName}
+		name := VolumeName{
+			Namespace: namespace,
+			Name:      localName,
+		}
 		mountPoint := containerMntSubvolume(name, subvolume)
 
 		log.Printf("Mountpoint for %s: %s", name, mountPoint)
@@ -281,7 +285,7 @@ func (state *InMemoryState) runPlugin() {
 			return
 		}
 
-		name := VolumeName{namespace, localName}
+		name := VolumeName{Namespace: namespace, Name: localName}
 
 		filesystemId, err := state.procureFilesystem(ctx, name)
 		if err != nil {
@@ -374,7 +378,7 @@ func (state *InMemoryState) runPlugin() {
 			return
 		}
 
-		name := VolumeName{namespace, localName}
+		name := VolumeName{Namespace: namespace, Name: localName}
 
 		var response = ResponseGet{
 			Err: "",

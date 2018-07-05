@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -17,6 +16,8 @@ import (
 	"github.com/coreos/etcd/client"
 	"github.com/nu7hatch/gouuid"
 	"golang.org/x/net/context"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // etcd related pieces, including the parts of InMemoryState which interact with etcd
@@ -364,7 +365,7 @@ func listFilesystemsPendingCleanup(kapi client.KeysAPI) (map[string]NameOrClone,
 		}
 	}
 
-	result := make(map[string]NameOrClone, 0)
+	result := make(map[string]NameOrClone)
 	for _, node := range pending.Node.Nodes {
 		// /dotmesh.io/filesystems/cleanupPending/3ed24670-8fd0-4cec-4191-d3d5bae15172
 		pieces := strings.Split(node.Key, "/")
@@ -503,7 +504,7 @@ func (s *InMemoryState) handleOneFilesystemMaster(node *client.Node) error {
 			}
 		}
 		go func() {
-			_ = <-responseChan
+			<-responseChan
 		}()
 	}
 	return nil
@@ -512,7 +513,7 @@ func (s *InMemoryState) handleOneFilesystemMaster(node *client.Node) error {
 func (s *InMemoryState) handleOneFilesystemDeletion(node *client.Node) error {
 	// This is where each node is notified of a filesystem being
 	// deleted.  We must inform the fsmachine.
-	log.Printf("DELETING: %s=%s", node.Key, node.Value)
+	log.Infof("DELETING: %s=%s", node.Key, node.Value)
 
 	pieces := strings.Split(node.Key, "/")
 	fs := pieces[len(pieces)-1]
@@ -522,9 +523,9 @@ func (s *InMemoryState) handleOneFilesystemDeletion(node *client.Node) error {
 		defer s.filesystemsLock.Unlock()
 		f, ok := (*s.filesystems)[fs]
 		if ok {
-			log.Printf("[handleOneFilesystemDeletion:%s] before initFs..  state: %s, status: %s", fs, f.currentState, f.status)
+			log.Infof("[handleOneFilesystemDeletion:%s] before initFs..  state: %s, status: %s", fs, f.currentState, f.status)
 		} else {
-			log.Printf("[handleOneFilesystemDeletion:%s] before initFs.. no fsMachine")
+			log.Infof("[handleOneFilesystemDeletion:%s] before initFs.. no fsMachine", fs)
 		}
 	}()
 
@@ -535,9 +536,9 @@ func (s *InMemoryState) handleOneFilesystemDeletion(node *client.Node) error {
 		defer s.filesystemsLock.Unlock()
 		f, ok := (*s.filesystems)[fs]
 		if ok {
-			log.Printf("[handleOneFilesystemDeletion:%s] after initFs.. state: %s, status: %s", fs, f.currentState, f.status)
+			log.Infof("[handleOneFilesystemDeletion:%s] after initFs.. state: %s, status: %s", fs, f.currentState, f.status)
 		} else {
-			log.Printf("[handleOneFilesystemDeletion:%s] after initFs.. no fsMachine")
+			log.Infof("[handleOneFilesystemDeletion:%s] after initFs.. no fsMachine", fs)
 		}
 	}()
 
@@ -553,7 +554,7 @@ func (s *InMemoryState) handleOneFilesystemDeletion(node *client.Node) error {
 		return err
 	}
 	go func() {
-		_ = <-responseChan
+		<-responseChan
 	}()
 	return nil
 }
@@ -586,7 +587,7 @@ func (s *InMemoryState) globalFsRequestId(fs string, e *Event) (chan *Event, str
 		&client.SetOptions{PrevExist: client.PrevNoExist, TTL: 604800 * time.Second},
 	)
 	if err != nil {
-		log.Printf("globalFsRequest - error setting: %s", e, err)
+		log.Warnf("globalFsRequest - error setting %s: %s", e, err)
 		return nil, "", err
 	}
 	responseChan := make(chan *Event)
@@ -966,7 +967,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 	*/
 	updateFilesystemRegistry := func(node *client.Node) error {
 		pieces := strings.Split(node.Key, "/")
-		name := VolumeName{pieces[4], pieces[5]}
+		name := VolumeName{Namespace: pieces[4], Name: pieces[5]}
 		rf := registryFilesystem{}
 		if node.Value == "" {
 			// Deletion: the empty registryFilesystem will indicate that.
@@ -1129,7 +1130,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 
 	// on first connect, fetch all of, well, everything
 	current, err := kapi.Get(context.Background(),
-		fmt.Sprintf(ETCD_PREFIX),
+		fmt.Sprint(ETCD_PREFIX),
 		&client.GetOptions{Recursive: true, Sort: false, Quorum: true},
 	)
 	if err != nil {
