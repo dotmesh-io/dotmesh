@@ -2,10 +2,11 @@ package kv
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/coreos/etcd/client"
 	"github.com/dotmesh-io/dotmesh/pkg/validator"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type KV interface {
@@ -49,9 +50,11 @@ func (k *EtcdKV) CreateWithIndex(prefix, id, name string, val string) (*client.N
 
 	err = k.idxAdd(prefix, name, id)
 	if err != nil {
-		// log it
-		fmt.Println("failed to create index: ", err)
-
+		log.WithFields(log.Fields{
+			"error": err,
+			"name":  name,
+			"id":    id,
+		}).Error("kv: failed to create index")
 	}
 	return resp.Node, nil
 }
@@ -79,11 +82,14 @@ func (k *EtcdKV) Get(prefix, ref string) (*client.Node, error) {
 	}
 	id, err := k.idxFindID(prefix, ref)
 	if err != nil {
-		fmt.Println("index couldn't find it, getting by ref, error: ", err)
+		log.WithFields(log.Fields{
+			"error":  err,
+			"prefix": prefix,
+			"ref":    ref,
+		}).Warn("kv: failed to find by index, getting by ref")
 		// trying to get it by ref anyway
 		return k.get(prefix, ref)
 	}
-	fmt.Println("index found: ", id)
 	return k.get(prefix, id)
 }
 
