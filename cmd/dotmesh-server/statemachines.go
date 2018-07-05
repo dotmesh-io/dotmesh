@@ -1518,9 +1518,9 @@ func (f *fsMachine) recoverFromDivergence(rollbackTo snapshot) error {
 	t := time.Now().UTC()
 	newBranchName := ""
 	if parentBranchName == "" {
-		newBranchName = fmt.Sprintf("master-DIVERGED-%s", t.Format(time.RFC3339))
+		newBranchName = fmt.Sprintf("master-DIVERGED-%s", strings.Replace(t.Format(time.RFC3339), ":", "-", -1))
 	} else {
-		newBranchName = fmt.Sprintf("%s-DIVERGED-%s", parentBranchName, t.Format(time.RFC3339))
+		newBranchName = fmt.Sprintf("%s-DIVERGED-%s", parentBranchName, strings.Replace(t.Format(time.RFC3339), ":", "-", -1))
 	}
 
 	errorName, err := activateClone(f.state, topLevelFilesystemId, f.filesystemId, rollbackTo.Id, newFilesystemId, newBranchName)

@@ -35,7 +35,7 @@ Online help: https://docs.dotmesh.com/references/cli/#push-dm-push-remote-remote
 `,
 		Run: func(cmd *cobra.Command, args []string) {
 			err := func() error {
-				dm, err := remotes.NewDotmeshAPI(configPath)
+				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
 				}

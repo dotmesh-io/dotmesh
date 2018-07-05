@@ -31,6 +31,7 @@ type DotmeshAPI struct {
 	Configuration *Configuration
 	configPath    string
 	client        *JsonRpcClient
+	verbose       bool
 }
 
 type DotmeshVolume struct {
@@ -49,18 +50,19 @@ func CheckName(name string) bool {
 	return len(name) <= 50
 }
 
-func NewDotmeshAPI(configPath string) (*DotmeshAPI, error) {
+func NewDotmeshAPI(configPath string, verbose bool) (*DotmeshAPI, error) {
 	c, err := NewConfiguration(configPath)
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.ClusterFromCurrentRemote()
+	client, err := c.ClusterFromCurrentRemote(verbose)
 	// intentionally disregard err, since not being able to get a client is
 	// non-fatal for some operations (like creating a remote). instead, push
 	// the error checking into CallRemote.
 	d := &DotmeshAPI{
 		Configuration: c,
 		client:        client,
+		verbose:       verbose,
 	}
 	return d, nil
 }
@@ -1014,7 +1016,7 @@ func (dm *DotmeshAPI) RequestTransfer(
 	}
 
 	// connect to connectionInitiator
-	client, err := dm.Configuration.ClusterFromRemote(connectionInitiator)
+	client, err := dm.Configuration.ClusterFromRemote(connectionInitiator, dm.verbose)
 	if err != nil {
 		return "", err
 	}

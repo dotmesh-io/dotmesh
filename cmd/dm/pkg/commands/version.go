@@ -23,7 +23,7 @@ func NewCmdVersion(out io.Writer) *cobra.Command {
 		Long:  "Online help: https://docs.dotmesh.com/references/cli/#comparing-client-and-remote-versions-dm-version",
 		Run: func(cmd *cobra.Command, args []string) {
 			err := func() error {
-				dm, err := remotes.NewDotmeshAPI(configPath)
+				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
 				if !scriptingMode {
 					fmt.Fprintf(
 						out,

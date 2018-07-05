@@ -5,14 +5,16 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/coreos/etcd/client"
-	"github.com/dotmesh-io/dotmesh/pkg/user"
 	"golang.org/x/net/context"
+
+	"github.com/dotmesh-io/dotmesh/pkg/user"
 )
 
 // TODO ensure contexts are threaded through in all RPC calls for correct
@@ -28,35 +30,42 @@ func NewDotmeshRPC(state *InMemoryState, um user.UserManager) *DotmeshRPC {
 	return &DotmeshRPC{state: state, usersManager: um}
 }
 
+var reNamespaceName = regexp.MustCompile(`^[a-zA-Z0-9_\-]{1,50}$`)
+var reVolumeName = regexp.MustCompile(`^[a-zA-Z0-9_\-]{1,50}$`)
+var reBranchName = regexp.MustCompile(`^[a-zA-Z0-9_\-]{1,50}$`)
+var reSubdotName = regexp.MustCompile(`^[a-zA-Z0-9_\-]{1,50}$`)
+
 func requireValidVolumeName(name VolumeName) error {
 	// Reject the request with an error if the volume name is invalid
 	// This function allows only pure volume names - no volume@branch$subvolume or similar!
 
-	// Bad chars in namespace names are:
-
-	// : - because Docker uses it as a separator in -v <volume name>:<container path>
-	// / - for namespaces
-
-	if strings.ContainsAny(name.Namespace, ":/") {
-		return fmt.Errorf("Invalid namespace name %v - it must not contain : or /", name.Namespace)
+	if !reNamespaceName.MatchString(name.Namespace) {
+		return fmt.Errorf("Invalid namespace name %v", name.Namespace)
 	}
 
-	// Bad chars in volume names are:
-
-	// $ - for subvolumes
-	// @ - for branch/snapshot
-	// : - because Docker uses it as a separator in -v <volume name>:<container path>
-	// / - for namespaces
-
-	if strings.ContainsAny(name.Name, "$@:/") {
-		return fmt.Errorf("Invalid dot name %v - it must not contain $, @, : or /", name.Name)
+	if !reVolumeName.MatchString(name.Name) {
+		return fmt.Errorf("Invalid dot name %v", name.Name)
 	}
 
 	return nil
 }
 
 func requireValidBranchName(name string) error {
-	// What are the rules for valid branch names?
+	// "" is a special case indicating the master branch, so we check
+	// it here rather than allow it in the regexp.
+
+	if name != "" && !reBranchName.MatchString(name) {
+		return fmt.Errorf("Invalid branch name %v", name)
+	}
+
+	return nil
+}
+
+func requireValidSubdotName(name string) error {
+	if !reSubdotName.MatchString(name) {
+		return fmt.Errorf("Invalid subdot name %v", name)
+	}
+
 	return nil
 }
 
@@ -64,7 +73,11 @@ func requireValidVolumeNameWithBranch(name VolumeName) error {
 	// Reject the request with an error if the volume name is invalid.
 
 	// This function allows pure volume names or ones with branches,
-	// but does not allow subvolume syntax.
+	// but does not allow subvolume syntax because that should have
+	// been parsed out BEFORE we got into VolumeName territory.  The
+	// only reason branch syntax leaks in here is because we've not
+	// properly refactored the Procure API to accept a separate branch
+	// name!
 
 	if strings.Contains(name.Name, "@") {
 		shrapnel := strings.Split(name.Name, "@")
@@ -115,6 +128,11 @@ func (d *DotmeshRPC) Procure(
 		return err
 	}
 
+	err = requireValidSubdotName(args.Subdot)
+	if err != nil {
+		return err
+	}
+
 	filesystemId, err := d.state.procureFilesystem(ctx, vn)
 	if err != nil {
 		return err
@@ -156,6 +174,23 @@ func requirePassword(r *http.Request) error {
 func (d *DotmeshRPC) CurrentUser(
 	r *http.Request, args *struct{}, result *SafeUser,
 ) error {
+	user, err := GetUserById(r.Context().Value("authenticated-user-id").(string))
+	if err != nil {
+		return err
+	}
+
+	*result = safeUser(user)
+	return nil
+}
+
+func (d *DotmeshRPC) AuthenticatedUser(
+	r *http.Request, args *struct{}, result *SafeUser,
+) error {
+	err := requirePassword(r)
+	if err != nil {
+		return err
+	}
+
 	user, err := GetUserById(r.Context().Value("authenticated-user-id").(string))
 	if err != nil {
 		return err
@@ -272,6 +307,34 @@ func (d *DotmeshRPC) RegisterNewUser(
 	return nil
 }
 
+// update a users password given their id - admin only
+func (d *DotmeshRPC) UpdateUserPassword(
+	r *http.Request,
+	args *struct {
+		Id          string
+		NewPassword string
+	},
+	result *SafeUser,
+) error {
+
+	err := ensureAdminUser(r)
+	if err != nil {
+		return err
+	}
+
+	user, err := GetUserById(args.Id)
+	if err != nil {
+		return err
+	}
+	user.UpdatePassword(args.NewPassword)
+	err = user.Save()
+	if err != nil {
+		return err
+	}
+	*result = safeUser(user)
+	return nil
+}
+
 // given a stripe customerId - return the safeUser
 func (d *DotmeshRPC) UserFromCustomerId(
 	r *http.Request,
@@ -311,6 +374,25 @@ func (d *DotmeshRPC) UserFromEmail(
 	return nil
 }
 
+func (d *DotmeshRPC) UserFromName(
+	r *http.Request,
+	args *struct{ Name string },
+	result *SafeUser,
+) error {
+
+	err := ensureAdminUser(r)
+	if err != nil {
+		return err
+	}
+	user, err := GetUserByName(args.Name)
+	if err != nil {
+		return err
+	}
+
+	*result = safeUser(user)
+	return nil
+}
+
 // set a single value for the user Metadata
 func (d *DotmeshRPC) SetUserMetadataField(
 	r *http.Request,
@@ -332,6 +414,35 @@ func (d *DotmeshRPC) SetUserMetadataField(
 	}
 
 	user.Metadata[args.Field] = args.Value
+
+	err = user.Save()
+	if err != nil {
+		return err
+	}
+	*result = safeUser(user)
+	return nil
+}
+
+// update the users email address
+func (d *DotmeshRPC) SetUserEmail(
+	r *http.Request,
+	args *struct {
+		Id    string
+		Email string
+	},
+	result *SafeUser,
+) error {
+
+	err := ensureAdminUser(r)
+	if err != nil {
+		return err
+	}
+	user, err := GetUserById(args.Id)
+	if err != nil {
+		return err
+	}
+
+	user.Email = args.Email
 
 	err = user.Save()
 	if err != nil {
@@ -525,6 +636,16 @@ func (d *DotmeshRPC) SwitchContainers(
 		return err
 	}
 
+	err = requireValidVolumeName(VolumeName{args.Namespace, args.Name})
+	if err != nil {
+		return err
+	}
+
+	err = requireValidBranchName(args.NewBranchName)
+	if err != nil {
+		return err
+	}
+
 	toFilesystemId, err := d.state.registry.MaybeCloneFilesystemId(
 		VolumeName{args.Namespace, args.Name},
 		args.NewBranchName,
@@ -568,6 +689,16 @@ func (d *DotmeshRPC) Containers(
 	result *[]DockerContainer,
 ) error {
 	log.Printf("[Containers] called with %+v", *args)
+
+	err := requireValidVolumeName(VolumeName{args.Namespace, args.Name})
+	if err != nil {
+		return err
+	}
+
+	err = requireValidBranchName(args.Branch)
+	if err != nil {
+		return err
+	}
 
 	filesystemId, err := d.state.registry.MaybeCloneFilesystemId(
 		VolumeName{args.Namespace, args.Name},
@@ -613,6 +744,16 @@ func (d *DotmeshRPC) Exists(
 	args *struct{ Namespace, Name, Branch string },
 	result *string,
 ) error {
+	err := requireValidVolumeName(VolumeName{args.Namespace, args.Name})
+	if err != nil {
+		return err
+	}
+
+	err = requireValidBranchName(args.Branch)
+	if err != nil {
+		return err
+	}
+
 	fsId := d.state.registry.Exists(VolumeName{args.Namespace, args.Name}, args.Branch)
 	deleted, err := isFilesystemDeletedInEtcd(fsId)
 	if err != nil {
@@ -632,6 +773,16 @@ func (d *DotmeshRPC) Lookup(
 	args *struct{ Namespace, Name, Branch string },
 	result *string,
 ) error {
+	err := requireValidVolumeName(VolumeName{args.Namespace, args.Name})
+	if err != nil {
+		return err
+	}
+
+	err = requireValidBranchName(args.Branch)
+	if err != nil {
+		return err
+	}
+
 	filesystemId, err := d.state.registry.MaybeCloneFilesystemId(
 		VolumeName{args.Namespace, args.Name}, args.Branch,
 	)
@@ -658,6 +809,16 @@ func (d *DotmeshRPC) Commits(
 	args *struct{ Namespace, Name, Branch string },
 	result *[]snapshot,
 ) error {
+	err := requireValidVolumeName(VolumeName{args.Namespace, args.Name})
+	if err != nil {
+		return err
+	}
+
+	err = requireValidBranchName(args.Branch)
+	if err != nil {
+		return err
+	}
+
 	filesystemId, err := d.state.registry.MaybeCloneFilesystemId(
 		VolumeName{args.Namespace, args.Name},
 		args.Branch,
@@ -718,6 +879,16 @@ func (d *DotmeshRPC) Commit(
 			}
 	*/
 
+	err := requireValidVolumeName(VolumeName{args.Namespace, args.Name})
+	if err != nil {
+		return err
+	}
+
+	err = requireValidBranchName(args.Branch)
+	if err != nil {
+		return err
+	}
+
 	// Insert a command into etcd for the current master to respond to, and
 	// wait for a response to be inserted into etcd as well, before firing with
 	// that.
@@ -775,6 +946,16 @@ func (d *DotmeshRPC) Rollback(
 		return err
 	}
 
+	err = requireValidVolumeName(VolumeName{args.Namespace, args.Name})
+	if err != nil {
+		return err
+	}
+
+	err = requireValidBranchName(args.Branch)
+	if err != nil {
+		return err
+	}
+
 	// Insert a command into etcd for the current master to respond to, and
 	// wait for a response to be inserted into etcd as well, before firing with
 	// that.
@@ -824,6 +1005,11 @@ func maybeError(e *Event) error {
 
 // Return a list of clone names attributed to a given top-level filesystem name
 func (d *DotmeshRPC) Branches(r *http.Request, filesystemName *VolumeName, result *[]string) error {
+	err := requireValidVolumeName(*filesystemName)
+	if err != nil {
+		return err
+	}
+
 	filesystemId, err := d.state.registry.IdFromName(*filesystemName)
 	if err != nil {
 		return err
@@ -853,6 +1039,21 @@ func (d *DotmeshRPC) Branch(
 	// able to delete the master branch because it's equivalent to the
 	// topLevelFilesystemId. You could rename it though, I suppose. That's
 	// probably fine. We could fix this later by allowing promotions.
+
+	err := requireValidVolumeName(VolumeName{args.Namespace, args.Name})
+	if err != nil {
+		return err
+	}
+
+	err = requireValidBranchName(args.SourceBranch)
+	if err != nil {
+		return err
+	}
+
+	err = requireValidBranchName(args.NewBranchName)
+	if err != nil {
+		return err
+	}
 
 	tlf, err := d.state.registry.LookupFilesystem(VolumeName{args.Namespace, args.Name})
 	if err != nil {
@@ -1058,11 +1259,6 @@ func (d *DotmeshRPC) RegisterFilesystem(
 ) error {
 	log.Printf("[RegisterFilesystem] called with args: %+v", args)
 
-	err := requireValidVolumeName(VolumeName{args.Namespace, args.TopLevelFilesystemName})
-	if err != nil {
-		return err
-	}
-
 	isAdmin, err := AuthenticatedUserIsNamespaceAdministrator(r.Context(), args.Namespace)
 	if err != nil {
 		return err
@@ -1071,6 +1267,16 @@ func (d *DotmeshRPC) RegisterFilesystem(
 	if !isAdmin {
 		return fmt.Errorf("User is not an administrator for namespace %s, so cannot create volumes",
 			args.Namespace)
+	}
+
+	err = requireValidVolumeName(VolumeName{args.Namespace, args.TopLevelFilesystemName})
+	if err != nil {
+		return err
+	}
+
+	err = requireValidBranchName(args.CloneName)
+	if err != nil {
+		return err
 	}
 
 	if !args.BecomeMasterIfNotExists {
@@ -1110,6 +1316,18 @@ func (d *DotmeshRPC) RegisterTransfer(
 	result *bool,
 ) error {
 	log.Printf("[RegisterTransfer] called with args: %+v", args)
+
+	// We are the "remote" here. Local name is welcome to be invalid,
+	// that's the far end's problem
+	err := requireValidVolumeName(VolumeName{args.RemoteNamespace, args.RemoteName})
+	if err != nil {
+		return err
+	}
+	err = requireValidBranchName(args.RemoteBranchName)
+	if err != nil {
+		return err
+	}
+
 	serialized, err := json.Marshal(args)
 	if err != nil {
 		return err
@@ -1171,21 +1389,18 @@ func (d *DotmeshRPC) Transfer(
 
 	log.Printf("[Transfer] starting with %+v", safeArgs(*args))
 
-	switch args.Direction {
-	case "push":
-		err := requireValidVolumeName(VolumeName{args.RemoteNamespace, args.RemoteName})
-		if err != nil {
-			return err
-		}
-	case "pull":
-		err := requireValidVolumeName(VolumeName{args.LocalNamespace, args.LocalName})
-		if err != nil {
-			return err
-		}
+	// Remote name is welcome to be invalid, that's the far end's problem
+	err := requireValidVolumeName(VolumeName{args.LocalNamespace, args.LocalName})
+	if err != nil {
+		return err
+	}
+	err = requireValidBranchName(args.LocalBranchName)
+	if err != nil {
+		return err
 	}
 
 	var remoteFilesystemId string
-	err := client.CallRemote(r.Context(),
+	err = client.CallRemote(r.Context(),
 		"DotmeshRPC.Exists", map[string]string{
 			"Namespace": args.RemoteNamespace,
 			"Name":      args.RemoteName,
@@ -1535,6 +1750,73 @@ func (d *DotmeshRPC) AddCollaborator(
 	return nil
 }
 
+func (d *DotmeshRPC) RemoveCollaborator(
+	r *http.Request,
+	args *struct {
+		MasterBranchID string
+		Collaborator   string
+	},
+	result *bool,
+) error {
+	// check authenticated user is owner of volume.
+	crappyTlf, clone, err := d.state.registry.LookupFilesystemById(args.MasterBranchID)
+	if err != nil {
+		return err
+	}
+	if clone != "" {
+		return fmt.Errorf(
+			"Please remove collaborators from the master branch of the dot",
+		)
+	}
+	authorized, err := crappyTlf.AuthorizeOwner(r.Context())
+	if err != nil {
+		return err
+	}
+	if !authorized {
+		return fmt.Errorf(
+			"Not owner. Please ask the owner to remove the collaborator.",
+		)
+	}
+
+	authenticatedUserId := r.Context().Value("authenticated-user-id").(string)
+	authenticatedUser, err := GetUserById(authenticatedUserId)
+
+	if err != nil {
+		return err
+	}
+
+	if authenticatedUser.Name == args.Collaborator {
+		return fmt.Errorf(
+			"You cannot remove yourself as a collaborator from a dot.",
+		)
+	}
+
+	collaboratorIndex := -1
+
+	for i, collaborator := range crappyTlf.Collaborators {
+		if collaborator.Name == args.Collaborator {
+			collaboratorIndex = i
+		}
+	}
+
+	if collaboratorIndex == -1 {
+		return fmt.Errorf(
+			"%s is not a collaborator on this dot so cannot remove.",
+			args.Collaborator,
+		)
+	}
+
+	// remove collaborator in registry, re-save.
+	newCollaborators := append(crappyTlf.Collaborators[:collaboratorIndex], crappyTlf.Collaborators[collaboratorIndex+1:]...)
+
+	err = d.state.registry.UpdateCollaborators(r.Context(), crappyTlf, newCollaborators)
+	if err != nil {
+		return err
+	}
+	*result = true
+	return nil
+}
+
 func (d *DotmeshRPC) DeducePathToTopLevelFilesystem(
 	r *http.Request,
 	args *struct {
@@ -1545,6 +1827,16 @@ func (d *DotmeshRPC) DeducePathToTopLevelFilesystem(
 	result *PathToTopLevelFilesystem,
 ) error {
 	log.Printf("[DeducePathToTopLevelFilesystem] called with args: %+v", args)
+
+	err := requireValidVolumeName(VolumeName{args.RemoteNamespace, args.RemoteFilesystemName})
+	if err != nil {
+		return err
+	}
+	err = requireValidBranchName(args.RemoteCloneName)
+	if err != nil {
+		return err
+	}
+
 	res, err := d.state.registry.deducePathToTopLevelFilesystem(
 		VolumeName{args.RemoteNamespace, args.RemoteFilesystemName}, args.RemoteCloneName,
 	)
@@ -1619,6 +1911,11 @@ func (d *DotmeshRPC) Delete(
 	result *bool,
 ) error {
 	*result = false
+
+	err := requireValidVolumeName(*args)
+	if err != nil {
+		return err
+	}
 
 	user, err := GetUserById(r.Context().Value("authenticated-user-id").(string))
 
@@ -2266,6 +2563,15 @@ func (d *DotmeshRPC) GetReplicationLatencyForBranch(
 		return err
 	}
 
+	err = requireValidVolumeName(VolumeName{args.Namespace, args.Name})
+	if err != nil {
+		return err
+	}
+	err = requireValidBranchName(args.Branch)
+	if err != nil {
+		return err
+	}
+
 	fs, err := d.state.registry.MaybeCloneFilesystemId(VolumeName{Namespace: args.Namespace, Name: args.Name}, args.Branch)
 	if err != nil {
 		return err
@@ -2320,5 +2626,26 @@ func (d *DotmeshRPC) ForceBranchMasterById(
 	}
 
 	*result = true
+	return nil
+}
+
+func (d *DotmeshRPC) CheckNameIsValid(
+	r *http.Request,
+	args *struct{ Namespace, Name, Branch string },
+	result *string,
+) error {
+	err := requireValidVolumeName(VolumeName{args.Namespace, args.Name})
+	if err != nil {
+		*result = fmt.Sprintf("%s", err)
+		return nil
+	}
+
+	err = requireValidBranchName(args.Branch)
+	if err != nil {
+		*result = fmt.Sprintf("%s", err)
+		return nil
+	}
+
+	*result = ""
 	return nil
 }

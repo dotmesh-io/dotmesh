@@ -113,7 +113,7 @@ is used.`,
 }
 
 func dotSetUpstream(cmd *cobra.Command, args []string, out io.Writer) error {
-	dm, err := remotes.NewDotmeshAPI(configPath)
+	dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
 	if err != nil {
 		return err
 	}
@@ -157,7 +157,7 @@ func dotSetUpstream(cmd *cobra.Command, args []string, out io.Writer) error {
 }
 
 func branchSetMaster(cmd *cobra.Command, args []string, out io.Writer) error {
-	dm, err := remotes.NewDotmeshAPI(configPath)
+	dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
 	if err != nil {
 		return err
 	}
@@ -201,7 +201,7 @@ func branchSetMaster(cmd *cobra.Command, args []string, out io.Writer) error {
 }
 
 func dotDelete(cmd *cobra.Command, args []string, out io.Writer) error {
-	dm, err := remotes.NewDotmeshAPI(configPath)
+	dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
 	if err != nil {
 		return err
 	}
@@ -233,7 +233,7 @@ func dotDelete(cmd *cobra.Command, args []string, out io.Writer) error {
 }
 
 func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
-	dm, err := remotes.NewDotmeshAPI(configPath)
+	dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
 	if err != nil {
 		return err
 	}

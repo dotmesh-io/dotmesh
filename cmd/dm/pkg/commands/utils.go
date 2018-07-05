@@ -35,7 +35,7 @@ func resolveTransferArgs(args []string) (returnPeer string, returnFilesystemName
 		  of a "remote tracking branch"?)
 
 	*/
-	dm, err := remotes.NewDotmeshAPI(configPath)
+	dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
 	if err != nil {
 		return "", "", "", err
 	}
