@@ -21,7 +21,7 @@ ARG VERSION=local
 ENV VERSION ${VERSION}
 ENV GOPATH=/go
 ADD . /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server
-WORKDIR /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/main
+WORKDIR /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server
 RUN go build -ldflags "-X main.serverVersion=${VERSION}" -o /target/dotmesh-server
 
 FROM ubuntu:artful
