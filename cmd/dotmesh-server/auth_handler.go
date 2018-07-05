@@ -28,7 +28,7 @@ func (a *AuthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	u, err := a.userManager.Authenticate(username, password)
+	u, authenticationType, err := a.userManager.Authenticate(username, password)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error":    err,
@@ -42,7 +42,7 @@ func (a *AuthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	r = r.WithContext(
 		context.WithValue(context.WithValue(r.Context(), "authenticated-user-id", u.Id),
-			"password-authenticated", true),
+			"password-authenticated", authenticationType.Privileged()),
 	)
 
 	a.subHandler.ServeHTTP(w, r)

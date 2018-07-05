@@ -57,6 +57,37 @@ type Query struct {
 	Selector string // K8s style selector to filter based on user metadata fields
 }
 
+type AuthenticationType int
+
+// Privileged - authentication type that enables
+// certain API action
+func (at AuthenticationType) Privileged() bool {
+	switch at {
+	case AuthenticationTypePassword:
+		return true
+	}
+	return false
+}
+
+func (at AuthenticationType) String() string {
+	switch at {
+	case AuthenticationTypeNone:
+		return "none"
+	case AuthenticationTypePassword:
+		return "password"
+	case AuthenticationTypeAPIKey:
+		return "apikey"
+	}
+	return "unknown"
+}
+
+const (
+	AuthenticationTypeNone AuthenticationType = iota
+	AuthenticationTypePassword
+	AuthenticationTypeAPIKey
+	// AuthenticationTypeOAuth
+)
+
 type UserManager interface {
 	NewAdmin(user *User) error
 
@@ -70,7 +101,9 @@ type UserManager interface {
 	Delete(id string) error
 	List(selector string) ([]*User, error)
 
-	Authenticate(username, password string) (*User, error)
+	// Authenticate user, if successful returns User struct and
+	// authentication type or error if unsuccessful
+	Authenticate(username, password string) (*User, AuthenticationType, error)
 }
 
 type DefaultManager struct {
@@ -213,10 +246,10 @@ func (m *DefaultManager) ResetAPIKey(username string) (*User, error) {
 	return m.Update(u)
 }
 
-func (m *DefaultManager) Authenticate(username, password string) (*User, error) {
+func (m *DefaultManager) Authenticate(username, password string) (*User, AuthenticationType, error) {
 	user, err := m.Get(&Query{Ref: username})
 	if err != nil {
-		return nil, err
+		return nil, AuthenticationTypeNone, err
 	}
 
 	// See if API key matches
@@ -225,13 +258,13 @@ func (m *DefaultManager) Authenticate(username, password string) (*User, error) 
 		[]byte(password)) == 1
 
 	if apiKeyMatch {
-		return user, nil
+		return user, AuthenticationTypeAPIKey, nil
 	}
 	// checking password
 	hashedPassword, err := scrypt.Key([]byte(password), user.Salt, SCRYPT_N, SCRYPT_R, SCRYPT_P, HASH_BYTES)
 
 	if err != nil {
-		return nil, err
+		return nil, AuthenticationTypeNone, err
 	}
 
 	passwordMatch := subtle.ConstantTimeCompare(
@@ -239,10 +272,10 @@ func (m *DefaultManager) Authenticate(username, password string) (*User, error) 
 		[]byte(hashedPassword)) == 1
 
 	if passwordMatch {
-		return user, nil
+		return user, AuthenticationTypePassword, nil
 	}
 
-	return nil, fmt.Errorf("Username or password doesn't match")
+	return nil, AuthenticationTypeNone, fmt.Errorf("Username or password doesn't match")
 }
 
 func (m *DefaultManager) Get(q *Query) (*User, error) {

@@ -116,7 +116,7 @@ func TestAuthenticateWithoutIndex(t *testing.T) {
 		t.Errorf("failed to delete from index: %s", err)
 	}
 
-	stored, err := um.Authenticate("foo", "verysecret")
+	stored, _, err := um.Authenticate("foo", "verysecret")
 	if err != nil {
 		t.Fatalf("failed to get user: %s", err)
 	}
@@ -142,7 +142,7 @@ func TestAuthenticateUserByPassword(t *testing.T) {
 		t.Fatalf("failed to create new user: %s", err)
 	}
 
-	authenticated, err := um.Authenticate("joe", "verysecret")
+	authenticated, _, err := um.Authenticate("joe", "verysecret")
 	if err != nil {
 		t.Fatalf("unexpected authentication failure: %s", err)
 	}
@@ -170,12 +170,16 @@ func TestAuthenticateUserByAPIKey(t *testing.T) {
 
 	t.Logf("authenticating by API key '%s'", stored.ApiKey)
 
-	authenticated, err := um.Authenticate("joe", stored.ApiKey)
+	authenticated, at, err := um.Authenticate("joe", stored.ApiKey)
 	if err != nil {
 		t.Fatalf("unexpected authentication failure: %s. API key: %s", err, stored.ApiKey)
 	}
 
 	if authenticated.Name != "joe" {
 		t.Errorf("expected to found joe, got: %s", authenticated.Name)
+	}
+
+	if at != AuthenticationTypeAPIKey {
+		t.Errorf("unexpected authentication type: %s", at)
 	}
 }
