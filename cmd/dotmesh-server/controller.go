@@ -4,7 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"log"
+
 	"os"
 	"sort"
 	"strings"
@@ -14,6 +14,10 @@ import (
 	"github.com/coreos/etcd/client"
 	"github.com/nu7hatch/gouuid"
 	"golang.org/x/net/context"
+
+	"github.com/dotmesh-io/dotmesh/pkg/user"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // typically methods on the InMemoryState "god object"
@@ -63,6 +67,7 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 		interclusterTransfersLock: &sync.Mutex{},
 		globalDirtyCacheLock:      &sync.Mutex{},
 		globalDirtyCache:          &map[string]dirtyInfo{},
+		userManager:               config.UserManager,
 		versionInfo:               &VersionInfo{InstalledVersion: serverVersion},
 	}
 	// a registry of names of filesystems and branches (clones) mapping to
@@ -344,39 +349,16 @@ func (s *InMemoryState) insertInitialAdminPassword() error {
 		os.Getenv("INITIAL_ADMIN_API_KEY"),
 	)
 	if err != nil {
+
 		return err
 	}
 
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		return err
-	}
-
-	salt, hashedPassword, err := HashPassword(string(adminPassword))
-	if err != nil {
-		return err
-	}
-
-	user := struct {
-		Id       string
-		Name     string
-		Salt     []byte
-		Password []byte
-		ApiKey   string
-	}{Id: ADMIN_USER_UUID, Name: "admin", Salt: salt, Password: hashedPassword, ApiKey: string(adminKey)}
-	encoded, err := json.Marshal(user)
-	if err != nil {
-		return err
-	}
-
-	_, err = kapi.Set(
-		context.Background(),
-		fmt.Sprintf("/dotmesh.io/users/%s", ADMIN_USER_UUID),
-		string(encoded),
-		&client.SetOptions{PrevExist: client.PrevNoExist},
-	)
-	return err
-
+	return s.userManager.NewAdmin(&user.User{
+		Id:       ADMIN_USER_UUID,
+		Name:     "admin",
+		Password: adminPassword,
+		ApiKey:   string(adminKey),
+	})
 }
 
 // query container runtime for any containers which have dotmesh volumes.
