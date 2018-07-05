@@ -11,6 +11,8 @@ import (
 	"sync"
 
 	"github.com/coreos/etcd/client"
+
+	"github.com/dotmesh-io/dotmesh/pkg/auth"
 )
 
 // A branch is just another filesystem, but which exists as a ZFS clone of a
@@ -214,7 +216,7 @@ func (r *Registry) RegisterFilesystem(ctx context.Context, name VolumeName, file
 	if err != nil {
 		return err
 	}
-	authenticatedUserId := ctx.Value("authenticated-user-id").(string)
+	authenticatedUserId := auth.GetUserIDFromCtx(ctx)
 	if authenticatedUserId == "" {
 		return fmt.Errorf("No user found in request context.")
 	}

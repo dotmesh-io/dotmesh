@@ -36,7 +36,7 @@ func (o *Observer) String() string {
 	defer o.rwMutex.RUnlock()
 	s := []string{}
 	for k, v := range o.events {
-		s = append(s, fmt.Sprintf("%s=%s", k, v))
+		s = append(s, fmt.Sprintf("%s=%v", k, v))
 	}
 	return strings.Join(s, " ")
 }
