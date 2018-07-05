@@ -63,21 +63,6 @@ var (
 	}, []string{"node_name", "pool_name"})
 )
 
-func prometheusHandler() http.Handler {
-	return prometheus.Handler()
-}
-
-func pathExists(path string) (bool, error) {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true, nil
-	}
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	return true, err
-}
-
 // setting up and running our http server
 // rpc and replication live in rpc.go and replication.go respectively
 
@@ -246,10 +231,9 @@ func Instrument(state *InMemoryState) MetricsMiddleware {
 			irw := NewInstrResponseWriter(w)
 			defer func() {
 				duration := time.Since(startedAt)
-				url := fmt.Sprintf("%s", r.URL)
 				statusCode := fmt.Sprintf("%v", irw.statusCode)
-				requestDuration.WithLabelValues(url, r.Method, statusCode).Observe(duration.Seconds())
-				requestCounter.WithLabelValues(url, r.Method, statusCode).Add(1)
+				requestDuration.WithLabelValues(r.URL.String(), r.Method, statusCode).Observe(duration.Seconds())
+				requestCounter.WithLabelValues(r.URL.String(), r.Method, statusCode).Add(1)
 			}()
 			h.ServeHTTP(irw, r)
 		})
@@ -272,9 +256,8 @@ func rpcAfterFunc(reqInfo *rpc.RequestInfo) {
 			return
 		}
 		duration := time.Since(startedAt)
-		url := fmt.Sprintf("%s", reqInfo.Request.URL)
 		statusCode := fmt.Sprintf("%v", reqInfo.StatusCode)
-		rpcRequestDuration.WithLabelValues(url, reqInfo.Method, statusCode).Observe(duration.Seconds())
+		rpcRequestDuration.WithLabelValues(reqInfo.Request.URL.String(), reqInfo.Method, statusCode).Observe(duration.Seconds())
 		delete(rpcTracker.rpcDuration, reqUUID)
 	}
 }
