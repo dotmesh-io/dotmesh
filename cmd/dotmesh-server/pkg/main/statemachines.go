@@ -3186,8 +3186,19 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 		return backoffState
 	}
 	latestMeta := make(map[string]string)
-	if len(snaps) > 0 {
-		latestSnap := snaps[len(snaps)-1]
+	var latestSnap *snapshot
+	for idx := len(snaps)-1;idx--;idx>0 {
+		commitType, ok := snaps[idx].Metadata["type"]
+		if !ok || commitType != "metadata-only" {
+			latestSnap = &snaps[idx]
+		}
+	}
+	if latestSnap != nil {
+		// todo:
+		// if "type" == "metadata-only" in commit ignore it 
+		// go back to the one before it until we find one that isn't that type
+		
+		
 		pathToCommitMeta := fmt.Sprintf("%s/dm.s3-versions/%s", mnt(f.filesystemId), latestSnap.Id)
 		data, err := ioutil.ReadFile(pathToCommitMeta)
 		if err != nil {
@@ -3225,7 +3236,8 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 		id, err := uuid.NewV4()
 		if err != nil {
 			f.innerResponses <- &Event{
-				Name: "failed-uuid", Args: &EventArgs{"err": err},
+				Name: "failed-uuid", 
+				Args: &EventArgs{"err": err},
 			}
 			return backoffState
 		}
@@ -3247,7 +3259,6 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 			}
 			return backoffState
 		}
-		fmt.Printf("data: %s", string(data))
 		err = ioutil.WriteFile(pathToCommitMeta, data, 0600)
 		if err != nil {
 			f.innerResponses <- &Event{
