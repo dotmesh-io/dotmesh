@@ -2031,6 +2031,11 @@ func (d *DotmeshRPC) Delete(
 		if err != nil {
 			return err
 		}
+
+		err = deleteContainerMntSymlink(*args)
+		if err != nil {
+			return err
+		}
 	}
 
 	*result = true

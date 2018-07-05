@@ -224,6 +224,23 @@ func containerMntSubvolume(id VolumeName, subvolume string) string {
 	}
 }
 
+func deleteContainerMntSymlink(id VolumeName) error {
+	path := containerMnt(id)
+	err := os.Remove(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Already gone!
+			return nil
+		} else {
+			// Something went wrong :-(
+			return err
+		}
+	}
+
+	// Deletion happened OK
+	return nil
+}
+
 func returnCode(name string, arg ...string) (int, error) {
 	// Run a command and either get the returncode or an error if the command
 	// failed to execute, based on
