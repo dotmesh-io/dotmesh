@@ -38,6 +38,8 @@ var CONTAINER_MOUNT_PREFIX string
 
 var serverVersion string = "<uninitialized>"
 
+var containerMountDirLock sync.Mutex
+
 func main() {
 
 	// TODO proper flag parsing

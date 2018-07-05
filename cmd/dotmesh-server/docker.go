@@ -75,8 +75,6 @@ type ResponseGet struct {
 	Err    string
 }
 
-var containerMountDirLock sync.Mutex
-
 // create a symlink from /dotmesh/:name[@:branch] into /dmfs/:filesystemId
 func newContainerMountSymlink(name VolumeName, filesystemId string, subvolume string) (string, error) {
 	containerMountDirLock.Lock()
