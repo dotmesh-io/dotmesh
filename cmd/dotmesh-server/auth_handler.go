@@ -2,10 +2,11 @@ package main
 
 import (
 	"context"
-	"log"
 	"net/http"
 
 	"github.com/dotmesh-io/dotmesh/pkg/user"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func NewAuthHandler(handler http.Handler, um user.UserManager) http.Handler {
@@ -29,10 +30,12 @@ func (a *AuthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	u, err := a.userManager.Authenticate(username, password)
 	if err != nil {
-		log.Printf(
-			"[AuthHandler] Error running check on %s: %s:",
-			username, err,
-		)
+		log.WithFields(log.Fields{
+			"error":    err,
+			"path":     r.URL.Path,
+			"username": username,
+		}).Warn("auth handler: authentication failed")
+
 		http.Error(w, "Unauthorized.", http.StatusUnauthorized)
 		return
 	}
