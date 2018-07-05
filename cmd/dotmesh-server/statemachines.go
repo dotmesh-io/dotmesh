@@ -3,6 +3,14 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/coreos/etcd/client"
+	"github.com/nu7hatch/gouuid"
+	"golang.org/x/net/context"
 	"io"
 	"io/ioutil"
 	"log"
@@ -14,10 +22,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/coreos/etcd/client"
-	"github.com/nu7hatch/gouuid"
-	"golang.org/x/net/context"
 )
 
 func newFilesystemMachine(filesystemId string, s *InMemoryState) *fsMachine {
@@ -698,13 +702,19 @@ func (f *fsMachine) snapshot(e *Event) (responseEvent *Event, nextState stateFn)
 			Name: "failed-metadata-encode", Args: &EventArgs{"err": err},
 		}, backoffState
 	}
-	id, err := uuid.NewV4()
-	if err != nil {
-		return &Event{
-			Name: "failed-uuid", Args: &EventArgs{"err": err},
-		}, backoffState
+	var snapshotId string
+	snapshotIdInter, ok := (*e.Args)["snapshotId"]
+	if !ok {
+		id, err := uuid.NewV4()
+		if err != nil {
+			return &Event{
+				Name: "failed-uuid", Args: &EventArgs{"err": err},
+			}, backoffState
+		}
+		snapshotId = id.String()
+	} else {
+		snapshotId = snapshotIdInter.(string)
 	}
-	snapshotId := id.String()
 	args := []string{"snapshot"}
 	args = append(args, metadataEncoded...)
 	args = append(args, fq(f.filesystemId)+"@"+snapshotId)
@@ -822,6 +832,34 @@ func activeState(f *fsMachine) stateFn {
 				return pushInitiatorState
 			} else if f.lastTransferRequest.Direction == "pull" {
 				return pullInitiatorState
+			}
+		} else if e.Name == "s3-transfer" {
+
+			// TODO dedupe
+			transferRequest, err := s3TransferRequestify((*e.Args)["Transfer"])
+			if err != nil {
+				f.innerResponses <- &Event{
+					Name: "s3-cant-cast-transfer-request",
+					Args: &EventArgs{"err": err},
+				}
+				return backoffState
+			}
+			f.lastS3TransferRequest = transferRequest
+			transferRequestId, ok := (*e.Args)["RequestId"].(string)
+			if !ok {
+				f.innerResponses <- &Event{
+					Name: "s3-cant-cast-transfer-requestid",
+					Args: &EventArgs{"err": err},
+				}
+				return backoffState
+			}
+			f.lastTransferRequestId = transferRequestId
+
+			log.Printf("GOT S3 TRANSFER REQUEST %+v", f.lastS3TransferRequest)
+			if f.lastS3TransferRequest.Direction == "push" {
+				return s3PushInitiatorState
+			} else if f.lastS3TransferRequest.Direction == "pull" {
+				return s3PullInitiatorState
 			}
 		} else if e.Name == "peer-transfer" {
 
@@ -1192,6 +1230,26 @@ func (f *fsMachine) attemptReceive() bool {
 	}
 }
 
+func s3TransferRequestify(in interface{}) (S3TransferRequest, error) {
+	typed, ok := in.(map[string]interface{})
+	if !ok {
+		log.Printf("[s3TransferRequestify] Unable to cast %s to map[string]interface{}", in)
+		return S3TransferRequest{}, fmt.Errorf(
+			"Unable to cast %s to map[string]interface{}", in,
+		)
+	}
+	return S3TransferRequest{
+		KeyID:           typed["KeyID"].(string),
+		SecretKey:       typed["SecretKey"].(string),
+		Endpoint:        typed["Endpoint"].(string),
+		Direction:       typed["Direction"].(string),
+		LocalNamespace:  typed["LocalNamespace"].(string),
+		LocalName:       typed["LocalName"].(string),
+		LocalBranchName: typed["LocalBranchName"].(string),
+		RemoteName:      typed["RemoteName"].(string),
+	}, nil
+}
+
 func transferRequestify(in interface{}) (TransferRequest, error) {
 	typed, ok := in.(map[string]interface{})
 	if !ok {
@@ -1308,6 +1366,63 @@ func missingState(f *fsMachine) stateFn {
 				return backoffState
 			} else if f.lastTransferRequest.Direction == "pull" {
 				return pullInitiatorState
+			}
+		} else if e.Name == "s3-transfer" {
+			log.Printf("GOT S3 TRANSFER REQUEST (while missing) %+v", e.Args)
+
+			// TODO dedupe
+			transferRequest, err := s3TransferRequestify((*e.Args)["Transfer"])
+			if err != nil {
+				f.innerResponses <- &Event{
+					Name: "cant-cast-s3-transfer-request",
+					Args: &EventArgs{"err": err},
+				}
+				return backoffState
+			}
+			f.lastS3TransferRequest = transferRequest
+			transferRequestId, ok := (*e.Args)["RequestId"].(string)
+			if !ok {
+				f.innerResponses <- &Event{
+					Name: "cant-cast-s3-transfer-requestid",
+					Args: &EventArgs{"err": err},
+				}
+				return backoffState
+			}
+			f.lastTransferRequestId = transferRequestId
+
+			if f.lastS3TransferRequest.Direction == "push" {
+				// Can't push when we're missing.
+				f.innerResponses <- &Event{
+					Name: "cant-push-while-missing",
+					Args: &EventArgs{"request": e, "node": f.state.myNodeId},
+				}
+				return backoffState
+			} else if f.lastS3TransferRequest.Direction == "pull" {
+				log.Printf("%s %s %s", ZFS, "create", fq(f.filesystemId))
+				out, err := exec.Command(ZFS, "create", fq(f.filesystemId)).CombinedOutput()
+				if err != nil {
+					log.Printf("%v while trying to create %s", err, fq(f.filesystemId))
+					f.innerResponses <- &Event{
+						Name: "failed-create",
+						Args: &EventArgs{"err": err, "combined-output": string(out)},
+					}
+					return backoffState
+				}
+				responseEvent, _ := f.mount()
+				if responseEvent.Name == "mounted" {
+
+					return s3PullInitiatorState
+				} else {
+					f.innerResponses <- responseEvent
+					return backoffState
+				}
+			} else {
+				log.Printf("Unknown direction %s, going to backoff", f.lastS3TransferRequest.Direction)
+				f.innerResponses <- &Event{
+					Name: "failed-s3-transfer",
+					Args: &EventArgs{"unknown-direction": f.lastS3TransferRequest.Direction},
+				}
+				return backoffState
 			}
 		} else if e.Name == "peer-transfer" {
 			// A transfer has been registered. Try to go into the appropriate
@@ -1775,6 +1890,96 @@ func TransferPollResultFromTransferRequest(
 		Total:  total,
 		Status: status,
 	}
+}
+
+func (f *fsMachine) sendEvent(params *EventArgs, eventName, loggerString string) {
+	log.Printf(loggerString)
+	f.innerResponses <- &Event{
+		Name: eventName,
+		Args: params,
+	}
+}
+
+func updateUser(message, transferRequestId string, pollResult TransferPollResult) error {
+	pollResult.Status = "error"
+	pollResult.Message = message
+	return updatePollResult(transferRequestId, pollResult)
+}
+
+func (f *fsMachine) sendArgsEventUpdateUser(args *EventArgs, eventName, loggerString string, pollResult TransferPollResult) {
+	f.sendEvent(args, eventName, loggerString)
+	err := updateUser(loggerString, f.lastTransferRequestId, pollResult)
+	if err != nil {
+		f.sendEvent(&EventArgs{"err": err}, "cant-write-to-etcd", "Cannot write to etcd")
+	}
+}
+
+func (f *fsMachine) sendEventUpdateUser(err error, eventName, loggerString string, pollResult TransferPollResult) {
+	f.sendArgsEventUpdateUser(&EventArgs{"err": err}, eventName, loggerString, pollResult)
+}
+
+func (f *fsMachine) getLastNonMetadataSnapshot() (*snapshot, error) {
+	snaps, err := f.state.snapshotsForCurrentMaster(f.filesystemId)
+	if err != nil {
+		return nil, err
+	}
+	var latestSnap *snapshot
+	for idx := len(snaps) - 1; idx > 0; idx-- {
+		commitType, ok := (*snaps[idx].Metadata)["type"]
+		if !ok || commitType != "dotmesh.metadata_only" {
+			latestSnap = &snaps[idx]
+			break
+		}
+	}
+	return latestSnap, nil
+}
+
+func loadS3Meta(filesystemId, latestSnapId string, latestMeta *map[string]string) error {
+	pathToCommitMeta := fmt.Sprintf("%s/dm.s3-versions/%s", mnt(filesystemId), latestSnapId)
+	data, err := ioutil.ReadFile(pathToCommitMeta)
+	if err != nil {
+		return err
+	}
+	err = json.Unmarshal(data, &latestMeta)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func s3PushInitiatorState(f *fsMachine) stateFn {
+	f.transitionedTo("s3PushInitiatorState", "requesting")
+	transferRequest := f.lastS3TransferRequest
+	transferRequestId := f.lastTransferRequestId
+	pollResult := TransferPollResult{
+		TransferRequestId: transferRequestId,
+		Direction:         transferRequest.Direction,
+		InitiatorNodeId:   f.state.myNodeId,
+		Index:             1,
+		Status:            "starting",
+	}
+	_, err := getS3Client(transferRequest)
+	if err != nil {
+		f.sendEventUpdateUser(err, "couldnt-create-s3-client", "Couldn't create s3 client - check credentials are correct", pollResult)
+		return backoffState
+	}
+	latestSnap, err := f.getLastNonMetadataSnapshot()
+	if err != nil {
+		f.sendEventUpdateUser(err, "s3-push-initiator-cant-get-snapshot-data", "cant get snapshot data", pollResult)
+		return backoffState
+	}
+
+	if latestSnap != nil {
+		pathToFile := fmt.Sprintf("%s/dm.s3-versions/%s", mnt(f.filesystemId), latestSnap.Id)
+		if _, err := os.Stat(pathToFile); err == nil {
+			f.sendArgsEventUpdateUser(&EventArgs{"path": pathToFile}, "commit-already-in-s3", "Found s3 metadata for latest snap - nothing to push!", pollResult)
+			return backoffState
+		} else if !os.IsNotExist(err) {
+			f.sendEventUpdateUser(err, "couldnt-stat-s3-meta-file", fmt.Sprintf("Could not stat s3 meta file %s", pathToFile), pollResult)
+			return backoffState
+		}
+	}
+	return discoveringState
 }
 
 func pushInitiatorState(f *fsMachine) stateFn {
@@ -2891,6 +3096,251 @@ func pushPeerState(f *fsMachine) stateFn {
 			}
 		}
 	}
+}
+
+// todo pull this out into the dotmesh client library, we probably need parts of this on the client end too.
+func getS3Client(transferRequest S3TransferRequest) (*s3.S3, error) {
+	config := &aws.Config{Credentials: credentials.NewStaticCredentials(transferRequest.KeyID, transferRequest.SecretKey, "")}
+	if transferRequest.Endpoint != "" {
+		config.Endpoint = &transferRequest.Endpoint
+	}
+	sess, err := session.NewSession(config)
+	if err != nil {
+		return nil, err
+	}
+	region, err := s3manager.GetBucketRegion(context.Background(), sess, transferRequest.RemoteName, "us-west-1")
+	if err != nil {
+		return nil, err
+	}
+	svc := s3.New(sess, aws.NewConfig().WithRegion(region))
+	return svc, nil
+}
+
+func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string, pollResult *TransferPollResult, currentKeyVersions map[string]string) (bool, map[string]string, error) {
+	var bucketChanged bool
+	// TODO refactor this a lil so we can get the folder structure easily
+	fmt.Printf("[downloadS3Bucket] currentVersions: %#v", currentKeyVersions)
+	params := &s3.ListObjectVersionsInput{
+		Bucket: aws.String(bucketName),
+	}
+	downloader := s3manager.NewDownloaderWithClient(svc)
+	var innerError error
+	err := svc.ListObjectVersionsPages(params,
+		func(page *s3.ListObjectVersionsOutput, lastPage bool) bool {
+			for _, item := range page.Versions {
+				latestMeta, _ := currentKeyVersions[*item.Key]
+				if *item.IsLatest && latestMeta != *item.VersionId {
+					pollResult.Index += 1
+					pollResult.Total += 1
+					pollResult.Size = *item.Size
+					pollResult.Status = "Pulling"
+					// ERROR CATCHING?
+					innerError = updatePollResult(transferRequestId, *pollResult)
+					if innerError != nil {
+						return false
+					}
+					innerError = downloadS3Object(downloader, *item.Key, *item.VersionId, bucketName, destPath)
+					if innerError != nil {
+						return false
+					}
+					pollResult.Sent = *item.Size
+					pollResult.Status = "Pulled file successfully"
+					// todo error catching
+					innerError = updatePollResult(transferRequestId, *pollResult)
+					if innerError != nil {
+						return false
+					}
+					currentKeyVersions[*item.Key] = *item.VersionId
+					bucketChanged = true
+
+				}
+			}
+			for _, item := range page.DeleteMarkers {
+				latestMeta, _ := currentKeyVersions[*item.Key]
+				if *item.IsLatest && latestMeta != *item.VersionId {
+					deletePath := fmt.Sprintf("%s/%s", destPath, *item.Key)
+
+					err := os.Remove(deletePath)
+					if err != nil && !os.IsNotExist(err) {
+						innerError = err
+						return false
+					}
+					currentKeyVersions[*item.Key] = *item.VersionId
+					bucketChanged = true
+
+				}
+			}
+			return !lastPage
+		})
+	if pollResult.Total == pollResult.Index {
+		pollResult.Status = "finished"
+		updatePollResult(transferRequestId, *pollResult)
+	}
+
+	if err != nil {
+		return bucketChanged, nil, err
+	} else if innerError != nil {
+		return bucketChanged, nil, innerError
+	}
+	fmt.Printf("New key versions: %#v", currentKeyVersions)
+	return bucketChanged, currentKeyVersions, nil
+}
+
+func downloadS3Object(downloader *s3manager.Downloader, key, versionId, bucket, destPath string) error {
+	fpath := fmt.Sprintf("%s/%s", destPath, key)
+	file, err := os.Create(fpath)
+	if err != nil {
+		return err
+	}
+	downloader.Download(file, &s3.GetObjectInput{
+		Bucket:    &bucket,
+		Key:       &key,
+		VersionId: &versionId,
+	})
+	return nil
+}
+
+func createSubDot(filesystemId, subDir string) (string, error) {
+	destPath := fmt.Sprintf("%s/%s", mnt(filesystemId), subDir)
+	// TODO: take the contents of the bucket
+	// dump it in destpath
+	if _, err := os.Stat(destPath); err != nil {
+		if os.IsNotExist(err) {
+			if err := os.MkdirAll(destPath, 0777); err != nil {
+				log.Printf("[createSubDot] error creating subdot %s: %+v", destPath, err)
+				return "", err
+			}
+		} else {
+			log.Printf("[createSubDot] error statting subdot %s: %+v", destPath, err)
+			return "", err
+		}
+	}
+	return destPath, nil
+}
+
+func s3PullInitiatorState(f *fsMachine) stateFn {
+	f.transitionedTo("s3PullInitiatorState", "requesting")
+	transferRequest := f.lastS3TransferRequest
+	transferRequestId := f.lastTransferRequestId
+	pollResult := TransferPollResult{
+		TransferRequestId: transferRequestId,
+		Direction:         transferRequest.Direction,
+		InitiatorNodeId:   f.state.myNodeId,
+		Index:             1,
+		Status:            "starting",
+	}
+	containers, err := f.containersRunning()
+	if err != nil {
+		f.sendEventUpdateUser(err, "error-listing-containers-during-pull", "Can't list containers running", pollResult)
+		return backoffState
+	}
+	if len(containers) > 0 {
+		f.sendArgsEventUpdateUser(&EventArgs{"containers": containers}, "cannot-pull-while-containers-running", "Can't pull into filesystem while containers are using it", pollResult)
+		return backoffState
+	}
+
+	// TODO pull this out somewhere as I've duplicated this in rpc.go
+
+	// create the default paths
+	destPath, err := createSubDot(f.filesystemId, "__default__")
+	if err != nil {
+		f.sendEventUpdateUser(err, "cannot-create-default-dir", "Could not create default directory", pollResult)
+		return backoffState
+	}
+	svc, err := getS3Client(transferRequest)
+	if err != nil {
+		f.sendEventUpdateUser(err, "couldnt-create-s3-client", "Couldn't create s3 client - check credentials are correct", pollResult)
+		return backoffState
+	}
+
+	f.lastPollResult = &pollResult
+	err = updatePollResult(transferRequestId, pollResult)
+	if err != nil {
+		f.sendEvent(&EventArgs{"err": err}, "s3-pull-initiator-cant-write-to-etcd", "cannot write to etcd")
+		return backoffState
+	}
+
+	latestMeta := make(map[string]string)
+	latestSnap, err := f.getLastNonMetadataSnapshot()
+	if err != nil {
+		f.sendEventUpdateUser(err, "s3-pull-initiator-cant-get-snapshot-data", "cant get snapshot data", pollResult)
+		return backoffState
+	}
+	if latestSnap != nil {
+		// todo:
+		// if "type" == "metadata-only" in commit ignore it
+		// go back to the one before it until we find one that isn't that type
+		err := loadS3Meta(f.filesystemId, latestSnap.Id, &latestMeta)
+		if err != nil {
+			message := "s3 pull initiator can't read metadata"
+			if os.IsNotExist(err) {
+				message = "Could not read commit s3 metadata - you have changes which have not been pushed to s3."
+			}
+			f.sendEventUpdateUser(err, "s3-pull-initiator-cant-read-metadata", message, pollResult)
+			return backoffState
+		}
+	}
+	bucketChanged, keyVersions, err := downloadS3Bucket(svc, transferRequest.RemoteName, destPath, transferRequestId, &pollResult, latestMeta)
+	if err != nil {
+		f.sendEventUpdateUser(err, "cant-pull-from-s3", "cant pull from s3", pollResult)
+		return backoffState
+	}
+	if bucketChanged {
+		id, err := uuid.NewV4()
+		if err != nil {
+			f.innerResponses <- &Event{
+				Name: "failed-uuid",
+				Args: &EventArgs{"err": err},
+			}
+			return backoffState
+		}
+		snapshotId := id.String()
+		subPath, err := createSubDot(f.filesystemId, "dm.s3-versions")
+		if err != nil {
+			f.innerResponses <- &Event{
+				Name: "couldnt-create-metadata-subdot",
+				Args: &EventArgs{"err": err},
+			}
+			return backoffState
+		}
+		pathToCommitMeta := fmt.Sprintf("%s/%s", subPath, snapshotId)
+		data, err := json.Marshal(keyVersions)
+		if err != nil {
+			f.sendEventUpdateUser(err, "failed-marshalling-metadata-json", "cant marshal metadata json", pollResult)
+			return backoffState
+		}
+		err = ioutil.WriteFile(pathToCommitMeta, data, 0600)
+		if err != nil {
+			f.sendEventUpdateUser(err, "failed-writing-metadata", "cant write metadata file", pollResult)
+			return backoffState
+		}
+		response, _ := f.snapshot(&Event{Name: "snapshot",
+			Args: &EventArgs{"metadata": metadata{"message": "s3 content"},
+				"snapshotId": snapshotId}})
+		if response.Name != "snapshotted" {
+			f.innerResponses <- response
+			err = updateUser("Could not take snapshot", transferRequestId, pollResult)
+			if err != nil {
+				f.sendEvent(&EventArgs{"err": err}, "cant-write-to-etcd", "cant write to etcd")
+			}
+			return backoffState
+		}
+	}
+	pollResult.Status = "finished"
+	pollResult.Index = pollResult.Total
+	err = updatePollResult(transferRequestId, pollResult)
+	if err != nil {
+		f.innerResponses <- &Event{
+			Name: "s3-pull-initiator-cant-write-to-etcd",
+			Args: &EventArgs{"err": err},
+		}
+		return backoffState
+	}
+	f.innerResponses <- &Event{
+		Name: "s3-transferred",
+		Args: &EventArgs{},
+	}
+	return discoveringState
 }
 
 func pullInitiatorState(f *fsMachine) stateFn {

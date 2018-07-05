@@ -248,12 +248,38 @@ type fsMachine struct {
 	status                  string
 	lastTransitionTimestamp int64
 	transitionObserver      *Observer
+	lastS3TransferRequest   S3TransferRequest
 	lastTransferRequest     TransferRequest
 	lastTransferRequestId   string
 	pushCompleted           chan bool
 	dirtyDelta              int64
 	sizeBytes               int64
 	lastPollResult          *TransferPollResult
+}
+
+type S3TransferRequest struct {
+	KeyID           string
+	SecretKey       string
+	Endpoint        string
+	Direction       string
+	LocalNamespace  string
+	LocalName       string
+	LocalBranchName string
+	RemoteName      string
+}
+
+func (transferRequest S3TransferRequest) String() string {
+	v := reflect.ValueOf(transferRequest)
+	toString := ""
+	for i := 0; i < v.NumField(); i++ {
+		fieldName := v.Type().Field(i).Name
+		if fieldName == "SecretKey" {
+			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, "****")
+		} else {
+			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, v.Field(i).Interface())
+		}
+	}
+	return toString
 }
 
 type TransferRequest struct {

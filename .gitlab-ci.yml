@@ -430,6 +430,23 @@ linux_two_double_node_clusters:
     except:
         - schedules
 
+linux_s3:
+    stage: test
+    dependencies:
+        - build_server
+        - build_client_linux
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - ./test.sh -run TestS3Remote
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
+    except:
+        - schedules
+
 # Test disabled while we rethink how it works (see comments in acceptance_test.go)
 .linux_kubernetes_test_tooling:
     stage: test

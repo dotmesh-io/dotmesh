@@ -5,15 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/coreos/etcd/client"
+	"github.com/nu7hatch/gouuid"
+	"golang.org/x/net/context"
 	"os"
 	"sort"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/coreos/etcd/client"
-	"github.com/nu7hatch/gouuid"
-	"golang.org/x/net/context"
 
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 
