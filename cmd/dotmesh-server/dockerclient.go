@@ -235,7 +235,7 @@ func (d *DockerClient) SwitchSymlinks(volumeName, toFilesystemIdPath string) err
 					}
 					// ok, container is not running, and we know the symlink to
 					// switcharoo.
-					func() {
+					err = func() error {
 						containerMountDirLock.Lock()
 						defer containerMountDirLock.Unlock()
 
@@ -246,7 +246,12 @@ func (d *DockerClient) SwitchSymlinks(volumeName, toFilesystemIdPath string) err
 						if err := os.Symlink(toFilesystemIdPath, mountPoint); err != nil {
 							return err
 						}
+						return nil
 					}()
+					if err != nil {
+						log.Printf("Error switching %s to %s: %#v", mountPoint, toFilesystemIdPath, err)
+						return err
+					}
 				}
 			}
 		}
