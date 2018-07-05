@@ -189,7 +189,7 @@ server_unit_tests:
         - ubuntu
         - fast
     script:
-        - cd cmd/dotmesh-server/pkg/main && go test
+        - go test `go list ./... | egrep -v /tests`
     except:
         - schedules
 
