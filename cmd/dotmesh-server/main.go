@@ -146,9 +146,9 @@ func main() {
 
 	for _, filesystemId := range findFilesystemIdsOnSystem() {
 		log.Printf("Initializing fsMachine for %s", filesystemId)
-		go func() {
-			s.initFilesystemMachine(filesystemId)
-		}()
+		go func(fsID string) {
+			s.initFilesystemMachine(fsID)
+		}(filesystemId)
 	}
 
 	// Set the URL to an empty string (or leave it unset) to disable checkpoints
