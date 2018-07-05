@@ -1118,8 +1118,36 @@ func (d *DotmeshRPC) S3Transfer(
 		if err != nil {
 			return err
 		}
+	} else if args.Direction == "pull" && localExists {
+		// Consult ourselves
+		err = tryUntilSucceedsN(func() error {
+			dirtyBytes, containersRunning, err := d.dirtyDataAndRunningContainers(r.Context(), localFilesystemId)
+			if err != nil {
+				return err
+			}
+			if dirtyBytes > 0 {
+				// TODO backoff and retry above
+				return fmt.Errorf(
+					"Aborting because there are %.2f MiB of uncommitted changes on volume "+
+						"where data would be written. Use 'dm reset' to roll back.",
+					float64(dirtyBytes)/(1024*1024),
+				)
+			}
+			if len(containersRunning) > 0 {
+
+				return fmt.Errorf(
+					"Aborting because there are active containers running on "+
+						"volume where data would be written: %s. Stop the containers.",
+					strings.Join(containersRunning, ", "),
+				)
+			}
+			return nil
+		}, "checking for dirty data and running containers", 2)
+		if err != nil {
+			return err
+		}
 	}
-	// TODO: look at the logic for filesystem combinations, there was a bunch of logic for pulling/pushing fsystems that were in sync or had dirty changes. Not sure we need or can use those
+	// TODO: do divergence based on extra commits
 
 	// Now run globalFsRequest, returning the request id, to make the master of
 	// a (possibly nonexisting) filesystem start pulling or pushing it, and
@@ -1203,6 +1231,24 @@ func (d *DotmeshRPC) RegisterTransfer(
 	}
 
 	return nil
+}
+
+func (d *DotmeshRPC) dirtyDataAndRunningContainers(ctx context.Context, filesystemId string) (int64, []string, error) {
+	v, err := d.state.getOne(ctx, filesystemId)
+	if err != nil {
+		return 0, nil, err
+	}
+	dirtyBytes := v.DirtyBytes
+	log.Printf("[TransferIt] got %d dirty bytes for %s from local", dirtyBytes, filesystemId)
+
+	d.state.globalContainerCacheLock.Lock()
+	defer d.state.globalContainerCacheLock.Unlock()
+	c, _ := (*d.state.globalContainerCache)[filesystemId]
+	containersRunning := []string{}
+	for _, container := range c.Containers {
+		containersRunning = append(containersRunning, string(container.Name))
+	}
+	return dirtyBytes, containersRunning, nil
 }
 
 // Need both push and pull because one cluster will often be behind NAT.
@@ -1344,8 +1390,8 @@ func (d *DotmeshRPC) Transfer(
 		// This is an incremental update, not a new filesystem for the writer.
 		// Check whether there are uncommitted changes or containers running
 		// where the writes are going to happen.
-
 		var cs []DockerContainer
+		var containersRunning []string
 		var dirtyBytes int64
 
 		err = tryUntilSucceedsN(func() error {
@@ -1367,20 +1413,13 @@ func (d *DotmeshRPC) Transfer(
 					return err
 				}
 				log.Printf("[TransferIt] got %+v remote containers for %s from peer", cs, filesystemId)
+				for _, container := range cs {
+					containersRunning = append(containersRunning, string(container.Name))
+				}
 
 			} else if args.Direction == "pull" {
 				// Consult ourselves
-				v, err := d.state.getOne(r.Context(), filesystemId)
-				if err != nil {
-					return err
-				}
-				dirtyBytes = v.DirtyBytes
-				log.Printf("[TransferIt] got %d dirty bytes for %s from local", dirtyBytes, filesystemId)
-
-				d.state.globalContainerCacheLock.Lock()
-				defer d.state.globalContainerCacheLock.Unlock()
-				c, _ := (*d.state.globalContainerCache)[filesystemId]
-				cs = c.Containers
+				dirtyBytes, containersRunning, err = d.dirtyDataAndRunningContainers(r.Context(), filesystemId)
 			}
 
 			if dirtyBytes > 0 {
@@ -1392,11 +1431,8 @@ func (d *DotmeshRPC) Transfer(
 				)
 			}
 
-			if len(cs) > 0 {
-				containersRunning := []string{}
-				for _, c := range cs {
-					containersRunning = append(containersRunning, string(c.Name))
-				}
+			if len(containersRunning) > 0 {
+
 				return fmt.Errorf(
 					"Aborting because there are active containers running on "+
 						"volume where data would be written: %s. Stop the containers.",
