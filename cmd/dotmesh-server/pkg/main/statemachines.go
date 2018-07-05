@@ -1917,6 +1917,7 @@ func (f *fsMachine) getLastNonMetadataSnapshot() (*snapshot, error) {
 		commitType, ok := (*snaps[idx].Metadata)["type"]
 		if !ok || commitType != "dotmesh.metadata_only" {
 			latestSnap = &snaps[idx]
+			break
 		}
 	}
 	return latestSnap, nil
