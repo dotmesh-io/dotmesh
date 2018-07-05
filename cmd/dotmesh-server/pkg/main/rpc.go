@@ -180,6 +180,23 @@ func (d *DotmeshRPC) CurrentUser(
 	return nil
 }
 
+func (d *DotmeshRPC) AuthenticatedUser(
+	r *http.Request, args *struct{}, result *SafeUser,
+) error {
+	err := requirePassword(r)
+	if err != nil {
+		return err
+	}
+
+	user, err := GetUserById(r.Context().Value("authenticated-user-id").(string))
+	if err != nil {
+		return err
+	}
+
+	*result = safeUser(user)
+	return nil
+}
+
 func (d *DotmeshRPC) ResetApiKey(
 	r *http.Request, args *struct{}, result *struct{ ApiKey string },
 ) error {
