@@ -2032,6 +2032,10 @@ func (d *DotmeshRPC) Delete(
 			return err
 		}
 
+		// This duplicates the work done by
+		// cleanupDockerFilesystemState(), and only on the node that the
+		// Delete call happens to land on, as part of a horrible
+		// belt-and-braces
 		err = deleteContainerMntSymlink(*args)
 		if err != nil {
 			return err
