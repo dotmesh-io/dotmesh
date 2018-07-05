@@ -403,6 +403,35 @@ func (d *DotmeshRPC) SetUserMetadataField(
 	return nil
 }
 
+// update the users email address
+func (d *DotmeshRPC) SetUserEmail(
+	r *http.Request,
+	args *struct {
+		Id    string
+		Email string
+	},
+	result *SafeUser,
+) error {
+
+	err := ensureAdminUser(r)
+	if err != nil {
+		return err
+	}
+	user, err := GetUserById(args.Id)
+	if err != nil {
+		return err
+	}
+
+	user.Email = args.Email
+
+	err = user.Save()
+	if err != nil {
+		return err
+	}
+	*result = safeUser(user)
+	return nil
+}
+
 // delete a value for the user Metadata
 func (d *DotmeshRPC) DeleteUserMetadataField(
 	r *http.Request,
