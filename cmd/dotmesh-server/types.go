@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+
+	"github.com/dotmesh-io/dotmesh/pkg/user"
 )
 
 type User struct {
@@ -191,6 +193,7 @@ type InMemoryState struct {
 	interclusterTransfersLock  *sync.Mutex
 	globalDirtyCacheLock       *sync.Mutex
 	globalDirtyCache           *map[string]dirtyInfo
+	userManager                user.UserManager
 
 	debugPartialFailCreateFilesystem bool
 	versionInfo                      *VersionInfo
@@ -347,6 +350,7 @@ type transferFn func(
 // Defaults are specified in main.go
 type Config struct {
 	FilesystemMetadataTimeout int64
+	UserManager               user.UserManager
 }
 
 type SafeConfig struct {

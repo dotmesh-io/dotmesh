@@ -15,6 +15,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dotmesh-io/dotmesh/pkg/kv"
+	"github.com/dotmesh-io/dotmesh/pkg/user"
+
 	"github.com/opentracing/opentracing-go"
 	zipkin "github.com/openzipkin/zipkin-go-opentracing"
 )
@@ -131,6 +134,14 @@ func main() {
 	}
 	ips, _ := guessIPv4Addresses()
 	log.Printf("Detected my node ID as %s (%s)", localPoolId, ips)
+
+	etcdClient, err := getEtcdKeysApi()
+	if err != nil {
+		log.Fatalf("Unable to get Etcd client: '%s'", err)
+	}
+	kvClient := kv.New(etcdClient, ETCD_PREFIX)
+	config.UserManager = user.New(kvClient)
+
 	s := NewInMemoryState(localPoolId, config)
 
 	for _, filesystemId := range findFilesystemIdsOnSystem() {

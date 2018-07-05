@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/client"
+	"github.com/dotmesh-io/dotmesh/pkg/user"
 	"golang.org/x/net/context"
 )
 
@@ -19,11 +20,12 @@ import (
 
 // rpc server
 type DotmeshRPC struct {
-	state *InMemoryState
+	state        *InMemoryState
+	usersManager user.UserManager
 }
 
-func NewDotmeshRPC(state *InMemoryState) *DotmeshRPC {
-	return &DotmeshRPC{state: state}
+func NewDotmeshRPC(state *InMemoryState, um user.UserManager) *DotmeshRPC {
+	return &DotmeshRPC{state: state, usersManager: um}
 }
 
 func requireValidVolumeName(name VolumeName) error {

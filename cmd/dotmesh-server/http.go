@@ -10,9 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dotmesh-io/dotmesh/pkg/kv"
-
-	"github.com/dotmesh-io/dotmesh/pkg/user"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	rpc "github.com/gorilla/rpc/v2"
@@ -91,21 +88,14 @@ func (state *InMemoryState) runServer() {
 		log.Println(http.ListenAndServe(":6060", nil))
 	}()
 
-	etcdClient, err := getEtcdKeysApi()
-	if err != nil {
-		log.Fatalf("Unable to get Etcd client: '%s'", err)
-	}
-	kvClient := kv.New(etcdClient, ETCD_PREFIX)
-	userManager := user.New(kvClient)
-
 	r := rpc.NewServer()
 	registerMetrics()
 	r.RegisterCodec(rpcjson.NewCodec(), "application/json")
 	r.RegisterCodec(rpcjson.NewCodec(), "application/json;charset=UTF-8")
 	r.RegisterInterceptFunc(rpcInterceptFunc)
 	r.RegisterAfterFunc(rpcAfterFunc)
-	d := NewDotmeshRPC(state)
-	err = r.RegisterService(d, "") // deduces name from type name
+	d := NewDotmeshRPC(state, state.userManager)
+	err := r.RegisterService(d, "") // deduces name from type name
 	if err != nil {
 		log.Printf("Error while registering services %s", err)
 	}
@@ -117,34 +107,34 @@ func (state *InMemoryState) runServer() {
 		tracer := opentracing.GlobalTracer()
 
 		router.Handle("/rpc",
-			middleware.FromHTTPRequest(tracer, "rpc")(Instrument(state)(NewAuthHandler(r, userManager))),
+			middleware.FromHTTPRequest(tracer, "rpc")(Instrument(state)(NewAuthHandler(r, state.userManager))),
 		)
 
 		router.Handle(
 			"/filesystems/{filesystem}/{fromSnap}/{toSnap}",
 			middleware.FromHTTPRequest(tracer, "zfs-sender")(
-				Instrument(state)(NewAuthHandler(state.NewZFSSendingServer(), userManager)),
+				Instrument(state)(NewAuthHandler(state.NewZFSSendingServer(), state.userManager)),
 			),
 		).Methods("GET")
 
 		router.Handle(
 			"/filesystems/{filesystem}/{fromSnap}/{toSnap}",
 			middleware.FromHTTPRequest(tracer, "zfs-receiver")(
-				Instrument(state)(NewAuthHandler(state.NewZFSReceivingServer(), userManager)),
+				Instrument(state)(NewAuthHandler(state.NewZFSReceivingServer(), state.userManager)),
 			),
 		).Methods("POST")
 
 	} else {
-		router.Handle("/rpc", Instrument(state)(NewAuthHandler(r, userManager)))
+		router.Handle("/rpc", Instrument(state)(NewAuthHandler(r, state.userManager)))
 
 		router.Handle(
 			"/filesystems/{filesystem}/{fromSnap}/{toSnap}",
-			Instrument(state)(NewAuthHandler(state.NewZFSSendingServer(), userManager)),
+			Instrument(state)(NewAuthHandler(state.NewZFSSendingServer(), state.userManager)),
 		).Methods("GET")
 
 		router.Handle(
 			"/filesystems/{filesystem}/{fromSnap}/{toSnap}",
-			Instrument(state)(NewAuthHandler(state.NewZFSReceivingServer(), userManager)),
+			Instrument(state)(NewAuthHandler(state.NewZFSReceivingServer(), state.userManager)),
 		).Methods("POST")
 
 	}
@@ -188,7 +178,7 @@ func (state *InMemoryState) runUnixDomainServer() {
 	r := rpc.NewServer()
 	r.RegisterCodec(rpcjson.NewCodec(), "application/json")
 	r.RegisterCodec(rpcjson.NewCodec(), "application/json;charset=UTF-8")
-	d := NewDotmeshRPC(state)
+	d := NewDotmeshRPC(state, state.userManager)
 	err := r.RegisterService(d, "") // deduces name from type name
 	if err != nil {
 		log.Printf("[runUnixDomainServer] Error while registering services %s", err)
