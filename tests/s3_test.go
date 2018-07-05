@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/dotmesh-io/citools"
 	"os"
 	"strings"
@@ -87,10 +88,23 @@ func TestS3Remote(t *testing.T) {
 		if !strings.Contains(resp, "\t3") {
 			t.Error("Created extra commit for no change")
 		}
-		resp = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" echo 'dirty data' > hello-world.txt")
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/hello-world.txt")
+		citools.TryUntilSucceeds(func() error {
+			output := citools.OutputFromRunOnNode(t, node1, "dm dot show "+fsname+" -H | grep dirty")
+			if strings.Contains(output, "\t0") {
+				return fmt.Errorf("not dirty yet")
+			}
+			return nil
+		}, "waiting for dirty data...")
 		_, err := citools.RunOnNodeErr(node1, "dm pull test-real-s3 "+fsname)
 		if err == nil {
-			t.Error("Pull command did not detect divergence")
+			t.Error("Pull command did not detect dirty data")
+		}
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+		citools.RunOnNode(t, node1, "dm commit -m 'non-s3 pushed data'")
+		_, err = citools.RunOnNodeErr(node1, "dm pull test-real-s3 "+fsname)
+		if err == nil {
+			t.Error("Pull command did not detect extra commits")
 		}
 	})
 }
