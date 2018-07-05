@@ -6,6 +6,7 @@ import (
 	"encoding/base32"
 	"encoding/json"
 	"fmt"
+	// "log"
 	"reflect"
 
 	"github.com/nu7hatch/gouuid"
@@ -14,6 +15,8 @@ import (
 
 	"github.com/dotmesh-io/dotmesh/pkg/kv"
 	"github.com/dotmesh-io/dotmesh/pkg/validator"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // special admin user with global privs
@@ -55,6 +58,8 @@ type Query struct {
 }
 
 type UserManager interface {
+	NewAdmin(user *User) error
+
 	New(name, email, password string) (*User, error)
 	Get(q *Query) (*User, error)
 	Update(user *User) (*User, error)
@@ -76,6 +81,40 @@ func New(kv kv.KV) *DefaultManager {
 	return &DefaultManager{
 		kv: kv,
 	}
+}
+
+func (m *DefaultManager) NewAdmin(user *User) error {
+
+	log.WithFields(log.Fields{
+		"id":   user.Id,
+		"name": user.Name,
+	}).Info("user manager: creating admin account")
+
+	salt, hashedPassword, err := hashPassword(string(user.Password))
+	if err != nil {
+		return err
+	}
+	user.Salt = salt
+	user.Password = hashedPassword
+
+	if user.ApiKey == "" {
+		apiKeyBytes := make([]byte, API_KEY_BYTES)
+		_, err = rand.Read(apiKeyBytes)
+		if err != nil {
+			return err
+		}
+
+		apiKey := base32.StdEncoding.EncodeToString(apiKeyBytes)
+		user.ApiKey = apiKey
+	}
+
+	bts, err := json.Marshal(&user)
+	if err != nil {
+		return err
+	}
+
+	_, err = m.kv.CreateWithIndex(UsersPrefix, user.Id, user.Name, string(bts))
+	return err
 }
 
 func (m *DefaultManager) New(username, email, password string) (*User, error) {
@@ -104,8 +143,6 @@ func (m *DefaultManager) New(username, email, password string) (*User, error) {
 	}
 
 	apiKey := base32.StdEncoding.EncodeToString(apiKeyBytes)
-
-	fmt.Println("new user created, API key: ", apiKey)
 
 	u := User{
 		Id:       id.String(),
@@ -220,7 +257,8 @@ func (m *DefaultManager) Get(q *Query) (*User, error) {
 
 	u, err := m.kv.Get(UsersPrefix, q.Ref)
 	if err != nil {
-		return nil, err
+
+		return m.fullSearch(q.Ref)
 	}
 
 	var user User
@@ -229,6 +267,30 @@ func (m *DefaultManager) Get(q *Query) (*User, error) {
 		return nil, err
 	}
 	return &user, nil
+}
+
+func (m *DefaultManager) fullSearch(ref string) (*User, error) {
+	users, err := m.List("")
+	if err != nil {
+		return nil, err
+	}
+
+	for _, u := range users {
+		if u.Name == ref {
+			// adding user to the index for later faster lookup
+			err = m.kv.AddToIndex(UsersPrefix, u.Name, u.Id)
+			if err != nil {
+				log.WithFields(log.Fields{
+					"name":  u.Name,
+					"id":    u.Id,
+					"error": err,
+				}).Error("users manager: error while adding user to the index")
+			}
+
+			return u, nil
+		}
+	}
+	return nil, fmt.Errorf("User name=%s not found", ref)
 }
 
 func (m *DefaultManager) Delete(id string) error {
