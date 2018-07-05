@@ -80,7 +80,7 @@ build_server:
     script:
         # push to the OVH registry.
         - docker login -u $OVH_REGISTRY_USERNAME -p $OVH_REGISTRY_PASSWORD registry.containers.ovh.net
-        - (cd cmd/dotmesh-server && ./rebuild.sh) # also pushes
+        - (./rebuild_server.sh) # also pushes
         - echo "pushed $CI_DOCKER_SERVER_IMAGE"
         - echo "pushed $CI_DOCKER_PROVISIONER_IMAGE"
         - echo "pushed $CI_DOCKER_OPERATOR_IMAGE"
@@ -89,10 +89,10 @@ build_server:
         # not CI_DOCKER_DIND_PROVISIONER_IMAGE because that's test-only
         # tooling).
         - docker login -u $QUAY_USER -p $QUAY_PASSWORD quay.io
-        - (cd cmd/dotmesh-server && export CI_DOCKER_SERVER_IMAGE=$RELEASE_DOCKER_REGISTRY/dotmesh-server:$CI_COMMIT_SHA; export CI_DOCKER_PROVISIONER_IMAGE=$RELEASE_DOCKER_REGISTRY/dotmesh-dynamic-provisioner:$CI_COMMIT_SHA; export CI_DOCKER_OPERATOR_IMAGE=$RELEASE_DOCKER_REGISTRY/dotmesh-operator:$CI_COMMIT_SHA; ./rebuild.sh; echo "pushed $CI_DOCKER_SERVER_IMAGE"; echo "pushed $CI_DOCKER_PROVISIONER_IMAGE"; echo "pushed $CI_DOCKER_OPERATOR_IMAGE")
+        - (export CI_DOCKER_SERVER_IMAGE=$RELEASE_DOCKER_REGISTRY/dotmesh-server:$CI_COMMIT_SHA; export CI_DOCKER_PROVISIONER_IMAGE=$RELEASE_DOCKER_REGISTRY/dotmesh-dynamic-provisioner:$CI_COMMIT_SHA; export CI_DOCKER_OPERATOR_IMAGE=$RELEASE_DOCKER_REGISTRY/dotmesh-operator:$CI_COMMIT_SHA; ./rebuild_server.sh; echo "pushed $CI_DOCKER_SERVER_IMAGE"; echo "pushed $CI_DOCKER_PROVISIONER_IMAGE"; echo "pushed $CI_DOCKER_OPERATOR_IMAGE")
     artifacts:
         paths:
-            - cmd/dotmesh-server/target
+            - target
         expire_in: 1 week
 
 # run sanity check that things still work on Windows and macOS
@@ -189,7 +189,7 @@ server_unit_tests:
         - ubuntu
         - fast
     script:
-        - cd cmd/dotmesh-server/pkg/main && go test
+        - go test `go list ./... | egrep -v /tests`
     except:
         - schedules
 

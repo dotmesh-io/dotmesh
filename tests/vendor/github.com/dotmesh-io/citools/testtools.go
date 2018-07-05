@@ -1613,7 +1613,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			export NODE=%s
 			docker exec -i $NODE mkdir -p \
 				/usr/libexec/kubernetes/kubelet-plugins/volume/exec/dotmesh.io~dind
-			docker cp ../cmd/dotmesh-server/target/dind-flexvolume \
+			docker cp ../target/dind-flexvolume \
 				$NODE:/usr/libexec/kubernetes/kubelet-plugins/volume/exec/dotmesh.io~dind/dind
 			docker exec -i $NODE systemctl restart kubelet
 			`,
