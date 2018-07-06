@@ -2050,20 +2050,22 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 				return backoffState
 			}
 		}
-		// check if there is anything in s3 that isn't in this list - if there is, delete it
-		// unmount the current commit
+
 		event, _ = f.unmountSnap(latestSnap.Id)
 		if event.Name != "unmounted" {
 			f.innerResponses <- event
 			updateUser("Could not unmount filesystem@commit", transferRequestId, pollResult)
 			return backoffState
 		}
+		// check if there is anything in s3 that isn't in this list - if there is, delete it
 		// create a file under the last commit id in the appropriate place + dump out the new versions to it
-		err = writeS3Metadata(pathToS3Metadata, newVersions)
+		dirtyPathToS3Meta := fmt.Sprintf("%s/dm.s3-versions/%s", mnt(f.filesystemId), latestSnap.Id)
+		err = writeS3Metadata(dirtyPathToS3Meta, newVersions)
 		if err != nil {
 			f.sendEventUpdateUser(err, "couldnt-write-s3-metadata-push", "could not write s3 metadata to file after pushing - will not be able to detect the last commit was put into S3!", pollResult)
 			return backoffState
 		}
+
 		// create a new commit with the type "dotmesh.metadata_only" so that we can ignore it when detecting new commits
 		response, _ := f.snapshot(&Event{
 			Name: "snapshot",
@@ -2081,6 +2083,8 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 			}
 			return backoffState
 		}
+		// unmount the current commit
+
 		// put something in S3 to let us know the filesystem ID/other dotmesh details in case we need to recover at a later stage
 	}
 	// todo set this to something more reasonable and do stuff with all of the above
