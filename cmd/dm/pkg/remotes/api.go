@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"golang.org/x/net/context"
-	"gopkg.in/cheggaaa/pb.v1"
+	pb "gopkg.in/cheggaaa/pb.v1"
 )
 
 const DEFAULT_BRANCH string = "master"
@@ -691,17 +691,7 @@ func (dm *DotmeshAPI) RelatedContainers(volumeName VolumeName, branch string) ([
 
 type TransferPollResult struct {
 	TransferRequestId string
-	Peer              string // hostname
-	User              string
-	ApiKey            string //protected value in toString()
 	Direction         string // "push" or "pull"
-
-	// Hold onto this information, it might become useful for e.g. recursive
-	// receives of clone filesystems.
-	LocalFilesystemName  string
-	LocalCloneName       string
-	RemoteFilesystemName string
-	RemoteCloneName      string
 
 	// Same across both clusters
 	FilesystemId string
@@ -895,6 +885,17 @@ type TransferRequest struct {
 	TargetCommit     string
 }
 
+type S3TransferRequest struct {
+	KeyID           string
+	SecretKey       string
+	Endpoint        string
+	Direction       string
+	LocalNamespace  string
+	LocalName       string
+	LocalBranchName string
+	RemoteName      string
+}
+
 // attempt to get the latest commits in filesystemId (which may be a branch)
 // from fromRemote to toRemote as a one-off.
 //
@@ -907,12 +908,14 @@ func (dm *DotmeshAPI) RequestTransfer(
 ) (string, error) {
 	connectionInitiator := dm.Configuration.CurrentRemote
 
-	/*
+	debugMode := os.Getenv("DEBUG_MODE") != ""
+
+	if debugMode {
 		fmt.Printf("[DEBUG RequestTransfer] dir=%s peer=%s lfs=%s lb=%s rfs=%s rb=%s\n",
 			direction, peer,
 			localFilesystemName, localBranchName,
 			remoteFilesystemName, remoteBranchName)
-	*/
+	}
 
 	var err error
 
@@ -961,7 +964,6 @@ func (dm *DotmeshAPI) RequestTransfer(
 
 	// Guess defaults for the remote filesystem
 	var remoteNamespace, remoteVolume string
-
 	if remoteFilesystemName == "" {
 		// No remote specified. Do we already have a default configured?
 		defaultRemoteNamespace, defaultRemoteVolume, ok := dm.Configuration.DefaultRemoteVolumeFor(peer, localNamespace, localVolume)
@@ -973,12 +975,12 @@ func (dm *DotmeshAPI) RequestTransfer(
 			// If not, default to the un-namespaced local filesystem name.
 			// This causes it to default into the user's own namespace
 			// when we parse the name, too.
-			remoteNamespace = remote.User
+			remoteNamespace = remote.DefaultNamespace()
 			remoteVolume = localVolume
 		}
 	} else {
 		// Default namespace for remote volume is the username on this remote
-		remoteNamespace, remoteVolume, err = ParseNamespacedVolumeWithDefault(remoteFilesystemName, remote.User)
+		remoteNamespace, remoteVolume, err = ParseNamespacedVolumeWithDefault(remoteFilesystemName, remote.DefaultNamespace())
 		if err != nil {
 			return "", err
 		}
@@ -1023,12 +1025,14 @@ func (dm *DotmeshAPI) RequestTransfer(
 	var transferId string
 	// TODO make ApiKey time- and domain- (filesystem?) limited
 	// cryptographically somehow
-	err = client.CallRemote(context.Background(),
-		"DotmeshRPC.Transfer", TransferRequest{
-			Peer:             remote.Hostname,
-			User:             remote.User,
-			Port:             remote.Port,
-			ApiKey:           remote.ApiKey,
+	dmRemote, ok := remote.(*DMRemote)
+
+	if ok {
+		transferRequest := TransferRequest{
+			Peer:             dmRemote.Hostname,
+			User:             dmRemote.User,
+			Port:             dmRemote.Port,
+			ApiKey:           dmRemote.ApiKey,
 			Direction:        direction,
 			LocalNamespace:   localNamespace,
 			LocalName:        localVolume,
@@ -1038,11 +1042,49 @@ func (dm *DotmeshAPI) RequestTransfer(
 			RemoteBranchName: deMasterify(remoteBranchName),
 			// TODO add TargetSnapshot here, to support specifying "push to a given
 			// snapshot" rather than just "push all snapshots up to the latest"
-		}, &transferId)
-	if err != nil {
-		return "", err
+		}
+
+		if debugMode {
+			fmt.Printf("[DEBUG] TransferRequest: %#v\n", transferRequest)
+		}
+
+		err = client.CallRemote(context.Background(),
+			"DotmeshRPC.Transfer", transferRequest, &transferId)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		s3Remote, ok := remote.(*S3Remote)
+		if ok {
+
+			transferRequest := S3TransferRequest{
+				KeyID:           s3Remote.KeyID,
+				SecretKey:       s3Remote.SecretKey,
+				Endpoint:        s3Remote.Endpoint,
+				Direction:       direction,
+				LocalNamespace:  localNamespace,
+				LocalName:       localVolume,
+				LocalBranchName: deMasterify(localBranchName),
+				RemoteName:      remoteVolume,
+				// TODO add TargetSnapshot here, to support specifying "push to a given
+				// snapshot" rather than just "push all snapshots up to the latest"
+			}
+
+			if debugMode {
+				fmt.Printf("[DEBUG] S3TransferRequest: %#v\n", transferRequest)
+			}
+
+			err = client.CallRemote(context.Background(),
+				"DotmeshRPC.S3Transfer", transferRequest, &transferId)
+			if err != nil {
+				return "", err
+			}
+		} else {
+			return "", fmt.Errorf("Unknown remote type %#v\n", remote)
+		}
 	}
 	return transferId, nil
+
 }
 
 // FIXME: Put this in a shared library, as it duplicates the copy in

@@ -40,7 +40,20 @@ import (
 	"github.com/openzipkin/zipkin-go-opentracing/examples/middleware"
 )
 
-type Remote struct {
+type Remote interface {
+	DefaultNamespace() string
+	DefaultRemoteVolumeFor(string, string) (VolumeName, bool)
+	SetDefaultRemoteVolumeFor(string, string, string, string)
+}
+
+type S3Remote struct {
+	KeyID                string
+	SecretKey            string
+	Endpoint             string
+	DefaultRemoteVolumes map[string]map[string]VolumeName
+}
+
+type DMRemote struct {
 	User                 string
 	Hostname             string
 	Port                 int `json:",omitempty"`
@@ -50,7 +63,58 @@ type Remote struct {
 	DefaultRemoteVolumes map[string]map[string]VolumeName
 }
 
-func (remote Remote) String() string {
+func (remote DMRemote) DefaultNamespace() string {
+	return remote.User
+}
+
+func (remote S3Remote) DefaultNamespace() string {
+	return ""
+}
+
+// TODO is there a less hacky way of doing this? hate the duplication, but otherwise you need to cast all over the place
+func (remote *DMRemote) SetDefaultRemoteVolumeFor(localNamespace, localVolume, remoteNamespace, remoteVolume string) {
+	if remote.DefaultRemoteVolumes == nil {
+		remote.DefaultRemoteVolumes = map[string]map[string]VolumeName{}
+	}
+	if remote.DefaultRemoteVolumes[localNamespace] == nil {
+		remote.DefaultRemoteVolumes[localNamespace] = map[string]VolumeName{}
+	}
+	remote.DefaultRemoteVolumes[localNamespace][localVolume] = VolumeName{remoteNamespace, remoteVolume}
+}
+
+func (remote *DMRemote) DefaultRemoteVolumeFor(localNamespace, localVolume string) (VolumeName, bool) {
+	if remote.DefaultRemoteVolumes == nil {
+		remote.DefaultRemoteVolumes = map[string]map[string]VolumeName{}
+	}
+	if remote.DefaultRemoteVolumes[localNamespace] == nil {
+		remote.DefaultRemoteVolumes[localNamespace] = map[string]VolumeName{}
+	}
+	volName, ok := remote.DefaultRemoteVolumes[localNamespace][localVolume]
+	return volName, ok
+}
+
+func (remote *S3Remote) SetDefaultRemoteVolumeFor(localNamespace, localVolume, remoteNamespace, remoteVolume string) {
+	if remote.DefaultRemoteVolumes == nil {
+		remote.DefaultRemoteVolumes = map[string]map[string]VolumeName{}
+	}
+	if remote.DefaultRemoteVolumes[localNamespace] == nil {
+		remote.DefaultRemoteVolumes[localNamespace] = map[string]VolumeName{}
+	}
+	remote.DefaultRemoteVolumes[localNamespace][localVolume] = VolumeName{remoteNamespace, remoteVolume}
+}
+
+func (remote *S3Remote) DefaultRemoteVolumeFor(localNamespace, localVolume string) (VolumeName, bool) {
+	if remote.DefaultRemoteVolumes == nil {
+		remote.DefaultRemoteVolumes = map[string]map[string]VolumeName{}
+	}
+	if remote.DefaultRemoteVolumes[localNamespace] == nil {
+		remote.DefaultRemoteVolumes[localNamespace] = map[string]VolumeName{}
+	}
+	volName, ok := remote.DefaultRemoteVolumes[localNamespace][localVolume]
+	return volName, ok
+}
+
+func (remote DMRemote) String() string {
 	v := reflect.ValueOf(remote)
 	toString := ""
 	for i := 0; i < v.NumField(); i++ {
@@ -66,7 +130,8 @@ func (remote Remote) String() string {
 
 type Configuration struct {
 	CurrentRemote string
-	Remotes       map[string]*Remote
+	DMRemotes     map[string]*DMRemote `json:"Remotes"`
+	S3Remotes     map[string]*S3Remote
 	lock          sync.Mutex
 	configPath    string
 }
@@ -74,7 +139,8 @@ type Configuration struct {
 func NewConfiguration(configPath string) (*Configuration, error) {
 	c := &Configuration{
 		configPath: configPath,
-		Remotes:    make(map[string]*Remote),
+		DMRemotes:  make(map[string]*DMRemote),
+		S3Remotes:  make(map[string]*S3Remote),
 	}
 	if err := c.Load(); err != nil {
 		return nil, err
@@ -114,20 +180,36 @@ func (c *Configuration) save() error {
 	return nil
 }
 
-func (c *Configuration) GetRemote(name string) (*Remote, error) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	r, ok := c.Remotes[name]
+func (c *Configuration) getRemote(name string) (Remote, error) {
+	var r Remote
+	var ok bool
+	r, ok = c.DMRemotes[name]
 	if !ok {
-		return nil, fmt.Errorf("Unable to find remote '%s'", name)
+		r, ok = c.S3Remotes[name]
+		if !ok {
+			return nil, fmt.Errorf("Unable to find remote '%s'", name)
+		}
 	}
 	return r, nil
 }
 
-func (c *Configuration) GetRemotes() map[string]*Remote {
+func (c *Configuration) GetRemote(name string) (Remote, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	return c.Remotes
+	return c.getRemote(name)
+}
+
+// todo this should probably return interfaces and just make a map of all of them
+func (c *Configuration) GetRemotes() map[string]*DMRemote {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	return c.DMRemotes
+}
+
+func (c *Configuration) GetS3Remotes() map[string]*S3Remote {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	return c.S3Remotes
 }
 
 func (c *Configuration) GetCurrentRemote() string {
@@ -139,9 +221,13 @@ func (c *Configuration) GetCurrentRemote() string {
 func (c *Configuration) SetCurrentRemote(remote string) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	_, ok := c.Remotes[remote]
+	_, ok := c.DMRemotes[remote]
 	if !ok {
-		return fmt.Errorf("No such remote '%s'", remote)
+		if _, ok = c.S3Remotes[remote]; ok {
+			return fmt.Errorf("Cannot switch to remote '%s' - is an S3 remote", remote)
+		} else {
+			return fmt.Errorf("No such remote '%s'", remote)
+		}
 	}
 	c.CurrentRemote = remote
 	return c.save()
@@ -154,7 +240,7 @@ func (c *Configuration) CurrentVolume() (string, error) {
 }
 
 func (c *Configuration) currentVolume() (string, error) {
-	r, ok := c.Remotes[c.CurrentRemote]
+	r, ok := c.DMRemotes[c.CurrentRemote]
 	if !ok {
 		return "", fmt.Errorf(
 			"Unable to find remote '%s', which was apparently current",
@@ -167,51 +253,51 @@ func (c *Configuration) currentVolume() (string, error) {
 func (c *Configuration) SetCurrentVolume(volume string) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	_, ok := c.Remotes[c.CurrentRemote]
+	_, ok := c.DMRemotes[c.CurrentRemote]
 	if !ok {
 		return fmt.Errorf(
 			"Unable to find remote '%s', which was apparently current",
 			c.CurrentRemote,
 		)
 	}
-	(*c.Remotes[c.CurrentRemote]).CurrentVolume = volume
+	(*c.DMRemotes[c.CurrentRemote]).CurrentVolume = volume
 	return c.save()
 }
 
 func (c *Configuration) DefaultRemoteVolumeFor(peer, namespace, volume string) (string, string, bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	defaultRemoteVolume, ok := c.Remotes[peer].DefaultRemoteVolumes[namespace][volume]
-	if !ok {
+	remote, err := c.getRemote(peer)
+	if err != nil {
+		// TODO should we return an error instead of bool? this is getting messy
 		return "", "", false
 	}
-	return defaultRemoteVolume.Namespace, defaultRemoteVolume.Name, true
+	defaultRemoteVolume, ok := remote.DefaultRemoteVolumeFor(namespace, volume)
+	if ok {
+		return defaultRemoteVolume.Namespace, defaultRemoteVolume.Name, true
+	}
+	return "", "", false
+
 }
 
 func (c *Configuration) SetDefaultRemoteVolumeFor(peer, namespace, volume, remoteNamespace, remoteVolume string) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	remote, ok := c.Remotes[peer]
-	if !ok {
+	remote, err := c.getRemote(peer)
+	if err != nil {
 		return fmt.Errorf(
 			"Unable to find remote '%s'",
 			peer,
 		)
 	}
-	if remote.DefaultRemoteVolumes == nil {
-		remote.DefaultRemoteVolumes = map[string]map[string]VolumeName{}
-	}
-	if remote.DefaultRemoteVolumes[namespace] == nil {
-		remote.DefaultRemoteVolumes[namespace] = map[string]VolumeName{}
-	}
-	remote.DefaultRemoteVolumes[namespace][volume] = VolumeName{remoteNamespace, remoteVolume}
+	remote.SetDefaultRemoteVolumeFor(namespace, volume, remoteNamespace, remoteVolume)
 	return c.save()
 }
 
 func (c *Configuration) CurrentBranchFor(volume string) (string, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	currentBranch, ok := c.Remotes[c.CurrentRemote].CurrentBranches[volume]
+	currentBranch, ok := c.DMRemotes[c.CurrentRemote].CurrentBranches[volume]
 	if !ok {
 		return DEFAULT_BRANCH, nil
 	}
@@ -235,27 +321,27 @@ func (c *Configuration) SetCurrentBranch(branch string) error {
 	if err != nil {
 		return err
 	}
-	c.Remotes[c.CurrentRemote].CurrentBranches[cur] = branch
+	c.DMRemotes[c.CurrentRemote].CurrentBranches[cur] = branch
 	return c.save()
 }
 
 func (c *Configuration) DeleteStateForVolume(volume string) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	_, ok := c.Remotes[c.CurrentRemote]
+	_, ok := c.DMRemotes[c.CurrentRemote]
 	if !ok {
 		return fmt.Errorf(
 			"Unable to find remote '%s', which was apparently current",
 			c.CurrentRemote,
 		)
 	}
-	delete(c.Remotes[c.CurrentRemote].CurrentBranches, volume)
-	if volume == c.Remotes[c.CurrentRemote].CurrentVolume {
-		c.Remotes[c.CurrentRemote].CurrentVolume = ""
+	delete(c.DMRemotes[c.CurrentRemote].CurrentBranches, volume)
+	if volume == c.DMRemotes[c.CurrentRemote].CurrentVolume {
+		c.DMRemotes[c.CurrentRemote].CurrentVolume = ""
 	}
 	n, v, err := ParseNamespacedVolume(volume)
 	if err == nil {
-		delete(c.Remotes[c.CurrentRemote].DefaultRemoteVolumes[n], v)
+		delete(c.DMRemotes[c.CurrentRemote].DefaultRemoteVolumes[n], v)
 	} else {
 		return err
 	}
@@ -265,31 +351,47 @@ func (c *Configuration) DeleteStateForVolume(volume string) error {
 func (c *Configuration) SetCurrentBranchForVolume(volume, branch string) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	_, ok := c.Remotes[c.CurrentRemote]
+	_, ok := c.DMRemotes[c.CurrentRemote]
 	if !ok {
 		return fmt.Errorf(
 			"Unable to find remote '%s', which was apparently current",
 			c.CurrentRemote,
 		)
 	}
-	if c.Remotes[c.CurrentRemote].CurrentBranches == nil {
-		c.Remotes[c.CurrentRemote].CurrentBranches = map[string]string{}
+	if c.DMRemotes[c.CurrentRemote].CurrentBranches == nil {
+		c.DMRemotes[c.CurrentRemote].CurrentBranches = map[string]string{}
 	}
-	c.Remotes[c.CurrentRemote].CurrentBranches[volume] = branch
+	c.DMRemotes[c.CurrentRemote].CurrentBranches[volume] = branch
 	return c.save()
 }
 
 func (c *Configuration) RemoteExists(remote string) bool {
-	_, ok := c.Remotes[remote]
+	_, ok := c.DMRemotes[remote]
+	if !ok {
+		_, ok = c.S3Remotes[remote]
+	}
 	return ok
 }
 
-func (c *Configuration) AddRemote(remote, user, hostname string, port int, apiKey string) error {
-	_, ok := c.Remotes[remote]
+func (c *Configuration) AddS3Remote(remote, keyID, secretKey, endpoint string) error {
+	ok := c.RemoteExists(remote)
 	if ok {
 		return fmt.Errorf("Remote exists '%s'", remote)
 	}
-	c.Remotes[remote] = &Remote{
+	c.S3Remotes[remote] = &S3Remote{
+		KeyID:     keyID,
+		SecretKey: secretKey,
+		Endpoint:  endpoint,
+	}
+	return c.save()
+}
+
+func (c *Configuration) AddRemote(remote, user, hostname string, port int, apiKey string) error {
+	ok := c.RemoteExists(remote)
+	if ok {
+		return fmt.Errorf("Remote exists '%s'", remote)
+	}
+	c.DMRemotes[remote] = &DMRemote{
 		User:     user,
 		Hostname: hostname,
 		Port:     port,
@@ -299,11 +401,17 @@ func (c *Configuration) AddRemote(remote, user, hostname string, port int, apiKe
 }
 
 func (c *Configuration) RemoveRemote(remote string) error {
-	_, ok := c.Remotes[remote]
+	_, ok := c.DMRemotes[remote]
 	if !ok {
-		return fmt.Errorf("No such remote '%s'", remote)
+		_, ok = c.S3Remotes[remote]
+		if ok {
+			delete(c.S3Remotes, remote)
+		} else {
+			return fmt.Errorf("No such remote '%s'", remote)
+		}
+	} else {
+		delete(c.DMRemotes, remote)
 	}
-	delete(c.Remotes, remote)
 	if c.CurrentRemote == remote {
 		c.CurrentRemote = ""
 	}
@@ -313,7 +421,7 @@ func (c *Configuration) RemoveRemote(remote string) error {
 func (c *Configuration) ClusterFromRemote(remote string, verbose bool) (*JsonRpcClient, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	remoteCreds, ok := c.Remotes[remote]
+	remoteCreds, ok := c.DMRemotes[remote]
 	if !ok {
 		return nil, fmt.Errorf("No such remote '%s'", remote)
 	}

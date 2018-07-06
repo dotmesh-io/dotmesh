@@ -10,7 +10,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/coreos/etcd/client"
+	"github.com/nu7hatch/gouuid"
 	"golang.org/x/net/context"
 
 	"github.com/dotmesh-io/dotmesh/pkg/auth"
@@ -1314,6 +1320,131 @@ func (d *DotmeshRPC) GetTransfer(
 	return nil
 }
 
+func (d *DotmeshRPC) S3Transfer(
+	r *http.Request,
+	args *S3TransferRequest,
+	result *string,
+) error {
+	localVolumeName := VolumeName{args.LocalNamespace, args.LocalName}
+	// Remote name is welcome to be invalid, that's the far end's problem
+	err := requireValidVolumeName(VolumeName{args.LocalNamespace, args.LocalName})
+	if err != nil {
+		return err
+	}
+	err = requireValidBranchName(args.LocalBranchName)
+	if err != nil {
+		return err
+	}
+	// set up the s3 session and client
+	config := &aws.Config{Credentials: credentials.NewStaticCredentials(args.KeyID, args.SecretKey, "")}
+	if args.Endpoint != "" {
+		config.Endpoint = &args.Endpoint
+	}
+	sess, err := session.NewSession(config)
+	if err != nil {
+		return fmt.Errorf("Could not establish connection with AWS using supplied credentials")
+	}
+	region, err := s3manager.GetBucketRegion(r.Context(), sess, args.RemoteName, "us-west-1")
+	if err != nil {
+		fmt.Printf("[S3Transfer] Got err from S3: %#v", err)
+		return fmt.Errorf("Could not get bucket region - does the bucket exist?")
+	}
+	// I don't think region actually matters, but if none is supplied the client complains
+	svc := s3.New(sess, aws.NewConfig().WithRegion(region))
+	var output *s3.HeadBucketOutput
+	// Check the bucket exists, and that we can access it
+	output, err = svc.HeadBucket(&s3.HeadBucketInput{Bucket: &args.RemoteName})
+	if err != nil {
+		fmt.Printf("[S3Transfer] %#v, error: %#v", output, err)
+		return fmt.Errorf("Head request failed - do the remote credentials have access to this bucket?")
+	}
+	log.Printf("[S3Transfer] starting with %+v", safeS3(*args))
+
+	localFilesystemId := d.state.registry.Exists(
+		localVolumeName, args.LocalBranchName,
+	)
+	localExists := localFilesystemId != ""
+
+	// note; was a bunch of logic checks for whether remote/local ends exist here - I don't think we need them because we'd have returned an error already if remote didn't exist
+	if args.Direction == "pull" && !localExists {
+		id, err := uuid.NewV4()
+		if err != nil {
+			return err
+		}
+		localFilesystemId = id.String()
+		err = d.registerFilesystemBecomeMaster(
+			r.Context(),
+			args.LocalNamespace,
+			args.LocalName,
+			args.LocalBranchName,
+			localFilesystemId,
+			PathToTopLevelFilesystem{
+				TopLevelFilesystemId:   localFilesystemId,
+				TopLevelFilesystemName: localVolumeName,
+				Clones:                 ClonesList{},
+			},
+		)
+		if err != nil {
+			return err
+		}
+	} else if args.Direction == "pull" && localExists {
+		// Consult ourselves
+		err = tryUntilSucceedsN(func() error {
+			dirtyBytes, containersRunning, err := d.dirtyDataAndRunningContainers(r.Context(), localFilesystemId)
+			if err != nil {
+				return err
+			}
+			if dirtyBytes > 0 {
+				// TODO backoff and retry above
+				return fmt.Errorf(
+					"Aborting because there are %.2f MiB of uncommitted changes on volume "+
+						"where data would be written. Use 'dm reset' to roll back.",
+					float64(dirtyBytes)/(1024*1024),
+				)
+			}
+			if len(containersRunning) > 0 {
+
+				return fmt.Errorf(
+					"Aborting because there are active containers running on "+
+						"volume where data would be written: %s. Stop the containers.",
+					strings.Join(containersRunning, ", "),
+				)
+			}
+			return nil
+		}, "checking for dirty data and running containers", 2)
+		if err != nil {
+			return err
+		}
+	}
+	// TODO: do divergence based on extra commits
+
+	// Now run globalFsRequest, returning the request id, to make the master of
+	// a (possibly nonexisting) filesystem start pulling or pushing it, and
+	// make it update status as it goes in a new pollable "transfers" object in
+	// etcd.
+
+	responseChan, requestId, err := d.state.globalFsRequestId(
+		localFilesystemId,
+		&Event{Name: "s3-transfer",
+			Args: &EventArgs{
+				"Transfer": args,
+			},
+		},
+	)
+	if err != nil {
+		return err
+	}
+	go func() {
+		// asynchronously throw away the response, transfers can be polled via
+		// their own entries in etcd
+		e := <-responseChan
+		log.Printf("finished transfer of %+v, %+v", args, e)
+	}()
+
+	*result = requestId
+	return nil
+}
+
 // Register a transfer from an initiator (the cluster where the user initially
 // connected) to a peer (the cluster which will be the target of a push/pull).
 func (d *DotmeshRPC) RegisterTransfer(
@@ -1379,6 +1510,24 @@ func (d *DotmeshRPC) RegisterTransfer(
 	}
 
 	return nil
+}
+
+func (d *DotmeshRPC) dirtyDataAndRunningContainers(ctx context.Context, filesystemId string) (int64, []string, error) {
+	v, err := d.state.getOne(ctx, filesystemId)
+	if err != nil {
+		return 0, nil, err
+	}
+	dirtyBytes := v.DirtyBytes
+	log.Printf("[TransferIt] got %d dirty bytes for %s from local", dirtyBytes, filesystemId)
+
+	d.state.globalContainerCacheLock.Lock()
+	defer d.state.globalContainerCacheLock.Unlock()
+	c, _ := (*d.state.globalContainerCache)[filesystemId]
+	containersRunning := []string{}
+	for _, container := range c.Containers {
+		containersRunning = append(containersRunning, string(container.Name))
+	}
+	return dirtyBytes, containersRunning, nil
 }
 
 // Need both push and pull because one cluster will often be behind NAT.
@@ -1519,6 +1668,7 @@ func (d *DotmeshRPC) Transfer(
 		// where the writes are going to happen.
 
 		var cs []DockerContainer
+		var containersRunning []string
 		var dirtyBytes int64
 
 		err = tryUntilSucceedsN(func() error {
@@ -1540,20 +1690,13 @@ func (d *DotmeshRPC) Transfer(
 					return err
 				}
 				log.Printf("[TransferIt] got %+v remote containers for %s from peer", cs, filesystemId)
+				for _, container := range cs {
+					containersRunning = append(containersRunning, string(container.Name))
+				}
 
 			} else if args.Direction == "pull" {
 				// Consult ourselves
-				v, err := d.state.getOne(r.Context(), filesystemId)
-				if err != nil {
-					return err
-				}
-				dirtyBytes = v.DirtyBytes
-				log.Printf("[TransferIt] got %d dirty bytes for %s from local", dirtyBytes, filesystemId)
-
-				d.state.globalContainerCacheLock.Lock()
-				defer d.state.globalContainerCacheLock.Unlock()
-				c, _ := (*d.state.globalContainerCache)[filesystemId]
-				cs = c.Containers
+				dirtyBytes, containersRunning, err = d.dirtyDataAndRunningContainers(r.Context(), filesystemId)
 			}
 
 			if dirtyBytes > 0 {
@@ -1565,11 +1708,8 @@ func (d *DotmeshRPC) Transfer(
 				)
 			}
 
-			if len(cs) > 0 {
-				containersRunning := []string{}
-				for _, c := range cs {
-					containersRunning = append(containersRunning, string(c.Name))
-				}
+			if len(containersRunning) > 0 {
+
 				return fmt.Errorf(
 					"Aborting because there are active containers running on "+
 						"volume where data would be written: %s. Stop the containers.",
@@ -1616,6 +1756,11 @@ func (d *DotmeshRPC) Transfer(
 
 	*result = requestId
 	return nil
+}
+
+func safeS3(t S3TransferRequest) S3TransferRequest {
+	t.SecretKey = "<redacted>"
+	return t
 }
 
 func safeArgs(t TransferRequest) TransferRequest {
@@ -2029,6 +2174,15 @@ func (d *DotmeshRPC) Delete(
 
 	if rootId == filesystem.MasterBranch.Id {
 		err = d.state.registry.UnregisterFilesystem(*args)
+		if err != nil {
+			return err
+		}
+
+		// This duplicates the work done by
+		// cleanupDockerFilesystemState(), and only on the node that the
+		// Delete call happens to land on, as part of a horrible
+		// belt-and-braces
+		err = deleteContainerMntSymlink(*args)
 		if err != nil {
 			return err
 		}

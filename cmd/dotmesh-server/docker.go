@@ -78,7 +78,16 @@ type ResponseGet struct {
 }
 
 // create a symlink from /dotmesh/:name[@:branch] into /dmfs/:filesystemId
+
+// NOTE: If we've done a SwitchSymlinks for this name before, then we
+// might already have a symlink, but to a different filesystemId. This
+// is a fine situation and we mustn't break it.
+
+// However, an existing symlink to a nonexistant target needs fixing.
 func newContainerMountSymlink(name VolumeName, filesystemId string, subvolume string) (string, error) {
+	containerMountDirLock.Lock()
+	defer containerMountDirLock.Unlock()
+
 	log.Printf("[newContainerMountSymlink] name=%+v, fsId=%s.%s", name, filesystemId, subvolume)
 	if _, err := os.Stat(CONTAINER_MOUNT_PREFIX); err != nil {
 		if os.IsNotExist(err) {
@@ -109,8 +118,9 @@ func newContainerMountSymlink(name VolumeName, filesystemId string, subvolume st
 
 	// Only create symlink if it doesn't already exist. Otherwise just hand it back
 	// (the target of it may have been updated elsewhere).
-	if stat, err := os.Stat(mountpoint); err != nil {
+	if stat, err := os.Lstat(mountpoint); err != nil {
 		if os.IsNotExist(err) {
+			log.Printf("[newContainerMountSymlink] Creating symlink %s -> %s", mountpoint, mnt(filesystemId))
 			err = os.Symlink(mnt(filesystemId), mountpoint)
 			if err != nil {
 				log.Printf("[newContainerMountSymlink] error symlinking mountpoint %s: %+v", mountpoint, err)
@@ -121,8 +131,55 @@ func newContainerMountSymlink(name VolumeName, filesystemId string, subvolume st
 			return "", err
 		}
 	} else {
-		// FIXME: Check it really is a symlink. Various bugs lead to a raw directory being here, which then silently breaks things.
-		log.Printf("[newContainerMountSymlink] mountpoint %s found: %+v", mountpoint, stat)
+		// Check it really is a symlink. Various bugs lead to a raw directory being here, which then silently breaks things.
+		fileType := stat.Mode() & os.ModeType
+		if fileType == os.ModeSymlink {
+			// Already a symlink!
+
+			// It might point to mnt(filesystemId), or it might point to
+			// a different filesystemId if we've called SwitchSymlinks to
+			// select a different default branch.
+
+			// However, if it points to something that doesn't exist,
+			// then that's bad and we need to re-create it.
+
+			target, err := os.Readlink(mountpoint)
+			if err != nil {
+				log.Printf("[newContainerMountSymlink] error reading symlink %s: %+v", mountpoint, err)
+				return "", err
+			}
+
+			// Stat not Lstat, so we dereference the symlink
+			if _, err := os.Stat(mountpoint); err != nil {
+				if os.IsNotExist(err) {
+					log.Printf("[newContainerMountSymlink] symlink %s already exists with missing target %s", mountpoint, target)
+					err = os.Remove(mountpoint)
+					if err != nil {
+						log.Printf("[newContainerMountSymlink] error removing old symlink to %s at mountpoint %s: %+v", target, mountpoint, err)
+						return "", err
+					}
+					log.Printf("[newContainerMountSymlink] Recreating symlink %s -> %s", mountpoint, mnt(filesystemId))
+					err = os.Symlink(mnt(filesystemId), mountpoint)
+					if err != nil {
+						log.Printf("[newContainerMountSymlink] error symlinking mountpoint %s: %+v", mountpoint, err)
+						return "", err
+					}
+				} else {
+					log.Printf("[newContainerMountSymlink] error statting mountpoint target %s: %+v", mountpoint, err)
+					return "", err
+				}
+			} else {
+				if target == mnt(filesystemId) {
+					log.Printf("[newContainerMountSymlink] symlink %s already exists with default target %s", mountpoint, target)
+				} else {
+					log.Printf("[newContainerMountSymlink] symlink %s already exists with non-default target %s", mountpoint, target)
+				}
+			}
+		} else {
+			// Already a directory there? :'-(
+			log.Printf("[newContainerMountSymlink] mountpoint %s contains something other than a symlink: %+v", mountpoint, stat)
+			return "", fmt.Errorf("mountpoint %s contains something other than a symlink: %+v", mountpoint, stat)
+		}
 	}
 
 	// ...and we return either that raw mountpoint, or a subvolume within

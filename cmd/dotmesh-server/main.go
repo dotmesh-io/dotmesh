@@ -13,6 +13,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dotmesh-io/dotmesh/pkg/kv"
@@ -37,6 +38,8 @@ var POOL string
 var CONTAINER_MOUNT_PREFIX string
 
 var serverVersion string = "<uninitialized>"
+
+var containerMountDirLock sync.Mutex
 
 func main() {
 
