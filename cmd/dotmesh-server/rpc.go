@@ -510,39 +510,24 @@ func (d *DotmeshRPC) List(
 	r *http.Request, args *struct{}, result *map[string]map[string]DotmeshVolume) error {
 	log.Printf("[List] starting!")
 
-	d.state.mastersCacheLock.Lock()
-	filesystems := []string{}
-	for fs, _ := range *d.state.mastersCache {
-		filesystems = append(filesystems, fs)
+	err, volumes := d.state.GetListOfVolumes(r.Context())
+
+	if err != nil {
+		return err
 	}
-	d.state.mastersCacheLock.Unlock()
 
 	gather := map[string]map[string]DotmeshVolume{}
-	for _, fs := range filesystems {
-		one, err := d.state.getOne(r.Context(), fs)
-		// Just skip this in the result list if the context (eg authenticated
-		// user) doesn't have permission to read it.
-		if err != nil {
-			switch err := err.(type) {
-			case PermissionDenied:
-				log.Printf("[List] permission denied reading %v", fs)
-				continue
-			default:
-				log.Printf("[List] err: %v", err)
-				// If we got an error looking something up, it might just be
-				// because the fsMachine list or the registry is temporarily
-				// inconsistent wrt the mastersCache. Proceed, at the risk of
-				// lying slightly...
-				continue
+	for _, v := range volumes {
+		// Just get top-level filesystems
+		if v.Branch == "" {
+			submap, ok := gather[v.Name.Namespace]
+			if !ok {
+				submap = map[string]DotmeshVolume{}
+				gather[v.Name.Namespace] = submap
 			}
-		}
-		submap, ok := gather[one.Name.Namespace]
-		if !ok {
-			submap = map[string]DotmeshVolume{}
-			gather[one.Name.Namespace] = submap
-		}
 
-		submap[one.Name.Name] = one
+			submap[v.Name.Name] = v
+		}
 	}
 	log.Printf("[List] gather = %+v", gather)
 	*result = gather
@@ -554,53 +539,34 @@ func (d *DotmeshRPC) ListWithContainers(
 	r *http.Request, args *struct{}, result *map[string]map[string]DotmeshVolumeAndContainers) error {
 	log.Printf("[List] starting!")
 
-	d.state.mastersCacheLock.Lock()
-	filesystems := []string{}
-	for fs, _ := range *d.state.mastersCache {
-		filesystems = append(filesystems, fs)
-	}
-	d.state.mastersCacheLock.Unlock()
+	err, volumes := d.state.GetListOfVolumes(r.Context())
 
-	d.state.globalContainerCacheLock.Lock()
-	defer d.state.globalContainerCacheLock.Unlock()
+	if err != nil {
+		return err
+	}
 
 	gather := map[string]map[string]DotmeshVolumeAndContainers{}
-	for _, fs := range filesystems {
-		one, err := d.state.getOne(r.Context(), fs)
-		// Just skip this in the result list if the context (eg authenticated
-		// user) doesn't have permission to read it.
-		if err != nil {
-			switch err := err.(type) {
-			case PermissionDenied:
-				log.Printf("[List] permission denied reading %v", fs)
-				continue
-			default:
-				log.Printf("[List] err: %v", err)
-				// If we got an error looking something up, it might just be
-				// because the fsMachine list or the registry is temporarily
-				// inconsistent wrt the mastersCache. Proceed, at the risk of
-				// lying slightly...
-				continue
+	for _, v := range volumes {
+		// Just get top-level filesystems
+		if v.Branch == "" {
+			var containers []DockerContainer
+			containerInfo, ok := (*d.state.globalContainerCache)[v.Id]
+			if ok {
+				containers = containerInfo.Containers
+			} else {
+				containers = []DockerContainer{}
 			}
-		}
 
-		var containers []DockerContainer
-		containerInfo, ok := (*d.state.globalContainerCache)[one.Id]
-		if ok {
-			containers = containerInfo.Containers
-		} else {
-			containers = []DockerContainer{}
-		}
+			submap, ok := gather[v.Name.Namespace]
+			if !ok {
+				submap = map[string]DotmeshVolumeAndContainers{}
+				gather[v.Name.Namespace] = submap
+			}
 
-		submap, ok := gather[one.Name.Namespace]
-		if !ok {
-			submap = map[string]DotmeshVolumeAndContainers{}
-			gather[one.Name.Namespace] = submap
-		}
-
-		submap[one.Name.Name] = DotmeshVolumeAndContainers{
-			Volume:     one,
-			Containers: containers,
+			submap[v.Name.Name] = DotmeshVolumeAndContainers{
+				Volume:     v,
+				Containers: containers,
+			}
 		}
 	}
 	log.Printf("[List] gather = %+v", gather)
@@ -1799,18 +1765,51 @@ func (d *DotmeshRPC) AllDotsAndBranches(
 	d.state.serverAddressesCacheLock.Unlock()
 	sort.Sort(ByAddress(vac.Servers))
 
-	filesystemNames := d.state.registry.Filesystems()
-	for _, fsName := range filesystemNames {
-		tlfId, err := d.state.registry.IdFromName(fsName)
-		if err != nil {
-			return err
+	err, volumes := d.state.GetListOfVolumes(r.Context())
+
+	if err != nil {
+		return err
+	}
+
+	masterBranches := []DotmeshVolume{}
+
+	// Map from toplevel namespace * name
+	otherBranches := map[string]map[string][]DotmeshVolume{}
+
+	for _, volume := range volumes {
+		if volume.Branch == "" {
+			masterBranches = append(masterBranches, volume)
+		} else {
+			ns, ok := otherBranches[volume.Name.Namespace]
+
+			if ok {
+				vols, ok := ns[volume.Name.Name]
+				if ok {
+					vols = append(vols, volume)
+				} else {
+					vols = []DotmeshVolume{volume}
+				}
+
+				ns[volume.Name.Name] = vols
+			} else {
+				ns = map[string][]DotmeshVolume{
+					volume.Name.Name: []DotmeshVolume{volume},
+				}
+			}
+
+			otherBranches[volume.Name.Namespace] = ns
 		}
+	}
+
+	for _, v := range masterBranches {
+		tlfId := v.Id
+
 		// XXX: crappyTlf is crappy because it contains an incomplete
 		// TopLevelFilesystem object (see UpdateFilesystemFromEtcd). The only
 		// thing we use it for here is the owner and collaborator data, and we
 		// construct a new TopLevelFilesystem for ourselves. Probably the
 		// following logic should be put somewhere inside the registry...
-		crappyTlf, err := d.state.registry.LookupFilesystem(fsName)
+		crappyTlf, err := d.state.registry.LookupFilesystem(v.Name)
 		if err != nil {
 			return err
 		}
@@ -1821,7 +1820,7 @@ func (d *DotmeshRPC) AllDotsAndBranches(
 			Owner          User
 			Collaborators  []User
 		*/
-		v, err := d.state.getOne(r.Context(), tlfId)
+
 		// Just skip this in the result list if the context (eg authenticated
 		// user) doesn't have permission to read it.
 		if err != nil {
@@ -1834,14 +1833,13 @@ func (d *DotmeshRPC) AllDotsAndBranches(
 			}
 		}
 		tlf.MasterBranch = v
-		// now add clones to tlf
-		clones := d.state.registry.ClonesFor(tlfId)
-		for _, clone := range clones {
-			c, err := d.state.getOne(r.Context(), clone.FilesystemId)
-			if err != nil {
-				return err
+
+		ns, ok := otherBranches[v.Name.Namespace]
+		if ok {
+			vs, ok2 := ns[v.Name.Name]
+			if ok2 {
+				tlf.OtherBranches = vs
 			}
-			tlf.OtherBranches = append(tlf.OtherBranches, c)
 		}
 		sort.Sort(dotmeshVolumeByName(tlf.OtherBranches))
 
