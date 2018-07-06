@@ -538,10 +538,10 @@ waitingForSlaveSnapshot:
 	return inactiveState
 }
 
-func (f *fsMachine) mountSnap(snapId *string, readonly bool) (responseEvent *Event, nextState stateFn) {
+func (f *fsMachine) mountSnap(snapId string, readonly bool) (responseEvent *Event, nextState stateFn) {
 	fullId := f.filesystemId
-	if snapId != nil {
-		fullId += "@" + *snapId
+	if snapId != "" {
+		fullId += "@" + snapId
 	}
 	mountPath := mnt(fullId)
 	zfsPath := fq(fullId)
@@ -550,7 +550,7 @@ func (f *fsMachine) mountSnap(snapId *string, readonly bool) (responseEvent *Eve
 		out, err := exec.Command(
 			"mkdir", "-p", mountPath).CombinedOutput()
 		if err != nil {
-			log.Printf("[mount:%s] %v while trying to mkdir mountpoint %s", f.filesystemId, err, zfsPath)
+			log.Printf("[mount:%s] %v while trying to mkdir mountpoint %s", fullId, err, zfsPath)
 			return &Event{
 				Name: "failed-mkdir-mountpoint",
 				Args: &EventArgs{"err": err, "combined-output": string(out)},
@@ -559,7 +559,7 @@ func (f *fsMachine) mountSnap(snapId *string, readonly bool) (responseEvent *Eve
 	}
 	// only try to use mount.zfs if it's not already present in the output
 	// of calling "mount"
-	mounted, err := isFilesystemMounted(f.filesystemId)
+	mounted, err := isFilesystemMounted(fullId)
 	if err != nil {
 		return &Event{
 			Name: "failed-checking-if-mounted",
@@ -574,7 +574,7 @@ func (f *fsMachine) mountSnap(snapId *string, readonly bool) (responseEvent *Eve
 		out, err := exec.Command("mount.zfs", "-o", options,
 			zfsPath, mountPath).CombinedOutput()
 		if err != nil {
-			log.Printf("[mount:%s] %v while trying to mount %s", f.filesystemId, err, zfsPath)
+			log.Printf("[mount:%s] %v while trying to mount %s", fullId, err, zfsPath)
 			if strings.Contains(string(out), "already mounted") {
 				// This can happen when the filesystem is mounted in some other
 				// namespace for some reason. Try searching for it in all
@@ -601,14 +601,14 @@ func (f *fsMachine) mountSnap(snapId *string, readonly bool) (responseEvent *Eve
 						// return the first namespace found, as we'll unmount
 						// in there and then try again (recursively)
 						for _, line := range strings.Split(string(mounts), "\n") {
-							if strings.Contains(line, f.filesystemId) {
+							if strings.Contains(line, fullId) {
 								shrapnel := strings.Split(mountTable, "/")
 								// e.g. (0)/(1)proc/(2)X/(3)mounts
 								return shrapnel[2], nil
 							}
 						}
 					}
-					return "", fmt.Errorf("unable to find %s in any /proc/*/mounts", f.filesystemId)
+					return "", fmt.Errorf("unable to find %s in any /proc/*/mounts", fullId)
 				}()
 				if rerr != nil {
 					return &Event{
@@ -621,7 +621,7 @@ func (f *fsMachine) mountSnap(snapId *string, readonly bool) (responseEvent *Eve
 				}
 				log.Printf(
 					"[mount:%s] attempting recovery-unmount in ns %s after %v/%v",
-					f.filesystemId, firstPidNSToUnmount, err, string(out),
+					fullId, firstPidNSToUnmount, err, string(out),
 				)
 				rout, rerr := exec.Command(
 					"nsenter", "-t", firstPidNSToUnmount, "-m", "-u", "-n", "-i",
@@ -640,7 +640,7 @@ func (f *fsMachine) mountSnap(snapId *string, readonly bool) (responseEvent *Eve
 				// mount this time?
 				//
 				// TODO limit recursion depth
-				return f.mount()
+				return f.mountSnap(snapId, readonly)
 			}
 			// if there is an error - it means we could not mount so don't
 			// update the filesystem with mounted = true
@@ -660,7 +660,7 @@ func (f *fsMachine) mountSnap(snapId *string, readonly bool) (responseEvent *Eve
 }
 
 func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
-	response, nextState := f.mountSnap(nil, false)
+	response, nextState := f.mountSnap("", false)
 	if response.Name == "mounted" {
 		f.filesystem.exists = true // needed in create case
 		f.filesystem.mounted = true
@@ -669,7 +669,19 @@ func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
 }
 
 func (f *fsMachine) unmount() (responseEvent *Event, nextState stateFn) {
-	mounted, err := isFilesystemMounted(f.filesystemId)
+	event, nextState := f.unmountSnap("")
+	if event.Name == "unmounted" {
+		f.filesystem.mounted = false
+	}
+	return event, nextState
+}
+
+func (f *fsMachine) unmountSnap(snapId string) (responseEvent *Event, nextState stateFn) {
+	fsPoint := f.filesystemId
+	if snapId != "" {
+		fsPoint += "@" + snapId
+	}
+	mounted, err := isFilesystemMounted(fsPoint)
 	if err != nil {
 		return &Event{
 			Name: "failed-checking-if-mounted",
@@ -677,15 +689,15 @@ func (f *fsMachine) unmount() (responseEvent *Event, nextState stateFn) {
 		}, backoffState
 	}
 	if mounted {
-		out, err := exec.Command("umount", mnt(f.filesystemId)).CombinedOutput()
+		out, err := exec.Command("umount", mnt(fsPoint)).CombinedOutput()
 		if err != nil {
-			log.Printf("%v while trying to unmount %s", err, fq(f.filesystemId))
+			log.Printf("%v while trying to unmount %s", err, fq(fsPoint))
 			return &Event{
 				Name: "failed-unmount",
 				Args: &EventArgs{"err": err, "combined-output": string(out)},
 			}, backoffState
 		}
-		mounted, err := isFilesystemMounted(f.filesystemId)
+		mounted, err := isFilesystemMounted(fsPoint)
 		if err != nil {
 			return &Event{
 				Name: "failed-checking-if-mounted",
@@ -693,11 +705,9 @@ func (f *fsMachine) unmount() (responseEvent *Event, nextState stateFn) {
 			}, backoffState
 		}
 		if mounted {
-			return f.unmount()
+			return f.unmountSnap(snapId)
 		}
 	}
-
-	f.filesystem.mounted = false
 	return &Event{Name: "unmounted"}, inactiveState
 }
 
@@ -1968,7 +1978,7 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 		TransferRequestId: transferRequestId,
 		Direction:         transferRequest.Direction,
 		InitiatorNodeId:   f.state.myNodeId,
-		Index:             1,
+		Index:             0,
 		Status:            "starting",
 	}
 	f.lastPollResult = &pollResult
@@ -1991,16 +2001,56 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 			f.sendEventUpdateUser(err, "couldnt-stat-s3-meta-file", fmt.Sprintf("Could not stat s3 meta file %s", pathToFile), pollResult)
 			return backoffState
 		}
-		_, err := getS3Client(transferRequest)
+		svc, err := getS3Client(transferRequest)
 		if err != nil {
 			f.sendEventUpdateUser(err, "couldnt-connect-to-s3", "Couldn't connect to s3 - check credentials", pollResult)
+			return backoffState
 		}
 		// here we:
 		// mount the current commit readonly - keep a log somewhere of how many references there are using it. If already mounted, increment that refcount
+		f.mountSnap(latestSnap.Id, true)
 		// list everything in there
+		pathToMount := fmt.Sprintf("%s/__default__", mnt(fmt.Sprintf("%s@%s", f.filesystemId, latestSnap.Id)))
+		paths, dirSize, err := getKeysForDir(pathToMount, "")
 		// push everything to s3
+		uploader := s3manager.NewUploaderWithClient(svc)
+		var file *os.File
+		pollResult.Total = len(paths)
+		pollResult.Size = dirSize
+		pollResult.Status = "beginning upload"
+		err = updatePollResult(transferRequestId, pollResult)
+		if err != nil {
+			f.sendEvent(&EventArgs{"err": err}, "cant-write-etcd", "")
+		}
+		newVersions := make(map[string]string)
+		for key, size := range paths {
+			path := fmt.Sprintf("%s/%s", pathToMount, key)
+			file, err = os.Open(path)
+			pollResult.Index += 1
+
+			if err != nil {
+				f.sendEventUpdateUser(err, "couldnt-read-file", "Couldn't read a file in the volume", pollResult)
+				return backoffState
+			}
+			output, err := uploader.Upload(&s3manager.UploadInput{
+				Bucket: aws.String(transferRequest.RemoteName),
+				Key:    aws.String(key),
+				Body:   file,
+			})
+			if err != nil {
+				f.sendEventUpdateUser(err, "failed-upload-to-s3", "Couldn't upload a file to s3", pollResult)
+				return backoffState
+			}
+			newVersions[key] = *output.VersionID
+			pollResult.Sent += size
+			updatePollResult(transferRequestId, pollResult)
+		}
 		// check if there is anything in s3 that isn't in this list - if there is, delete it
 		// unmount the current commit
+		f.unmountSnap(latestSnap.Id)
+		// create a file under the last commit id in the appropriate place + dump out the new versions to it
+		// create a new commit with the type "dotmesh.metadata_only" so that we can ignore it when detecting new commits
+		// put something in S3 to let us know the filesystem ID/other dotmesh details in case we need to recover at a later stage
 	}
 	// todo set this to something more reasonable and do stuff with all of the above
 	pollResult.Status = "finished"
@@ -2011,6 +2061,39 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 		f.sendEvent(&EventArgs{"err": err}, "cant-write-to-etcd", "S3 push initiator couldn't write to etcd")
 	}
 	return discoveringState
+}
+
+func getKeysForDir(parentPath string, subPath string) (map[string]int64, int64, error) {
+	path := parentPath
+	if subPath != "" {
+		path += "/" + subPath
+	}
+	files, err := ioutil.ReadDir(path)
+	if err != nil {
+		return nil, 0, err
+	}
+	var dirSize int64
+	keys := make(map[string]int64)
+	for _, fileInfo := range files {
+		if fileInfo.IsDir() {
+			paths, size, err := getKeysForDir(path, fileInfo.Name())
+			if err != nil {
+				return nil, 0, err
+			}
+			for k, v := range paths {
+				keys[k] = v
+			}
+			dirSize += size
+		} else {
+			keyPath := fileInfo.Name()
+			if subPath != "" {
+				keyPath = subPath + "/" + keyPath
+			}
+			keys[keyPath] = fileInfo.Size()
+			dirSize += fileInfo.Size()
+		}
+	}
+	return keys, dirSize, nil
 }
 
 func pushInitiatorState(f *fsMachine) stateFn {
