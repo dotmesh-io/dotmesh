@@ -1376,8 +1376,6 @@ func (d *DotmeshRPC) RegisterTransfer(
 	if e.Name != "awaiting-transfer" {
 		// Something went wrong!
 		return fmt.Errorf("Error requesting peer transfer: %+v", e)
-	} else {
-		return nil
 	}
 
 	return nil
@@ -1693,19 +1691,25 @@ func (d *DotmeshRPC) AllDotsAndBranches(
 		tlf.MasterBranch = v
 		// now add clones to tlf
 		clones := d.state.registry.ClonesFor(tlfId)
-		cloneNames := []string{}
-		for c, _ := range clones {
-			cloneNames = append(cloneNames, c)
-		}
-		sort.Strings(cloneNames)
-		for _, cloneName := range cloneNames {
-			clone := clones[cloneName]
+
+		// cloneNames := []string{}
+		// for c, _ := range clones {
+		// cloneNames = append(cloneNames, c)
+		// }
+
+		// sort.Strings(cloneNames)
+		// for _, cloneName := range cloneNames {
+		for _, clone := range clones {
+			// clone := clones[cloneName]
 			c, err := d.state.getOne(r.Context(), clone.FilesystemId)
 			if err != nil {
 				return err
 			}
 			tlf.OtherBranches = append(tlf.OtherBranches, c)
 		}
+
+		sort.Sort(dotmeshVolumeByName(tlf.OtherBranches))
+
 		tlf.Owner = crappyTlf.Owner
 		tlf.Collaborators = crappyTlf.Collaborators
 		vac.Dots = append(vac.Dots, tlf)
