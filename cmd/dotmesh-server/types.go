@@ -181,18 +181,18 @@ type TransferPollResult struct {
 // A container for some state that is truly global to this process.
 type InMemoryState struct {
 	config                     Config
-	filesystems                *fsMap
+	filesystems                map[string]*fsMachine
 	filesystemsLock            *sync.Mutex
 	myNodeId                   string
-	mastersCache               *map[string]string
+	mastersCache               map[string]string
 	mastersCacheLock           *sync.Mutex
-	serverAddressesCache       *map[string]string
+	serverAddressesCache       map[string]string
 	serverAddressesCacheLock   *sync.Mutex
-	globalSnapshotCache        *map[string]map[string][]snapshot
+	globalSnapshotCache        map[string]map[string][]snapshot
 	globalSnapshotCacheLock    *sync.Mutex
-	globalStateCache           *map[string]map[string]map[string]string
+	globalStateCache           map[string]map[string]map[string]string
 	globalStateCacheLock       *sync.Mutex
-	globalContainerCache       *map[string]containerInfo
+	globalContainerCache       map[string]containerInfo
 	globalContainerCacheLock   *sync.Mutex
 	etcdWaitTimestamp          int64
 	etcdWaitState              string
@@ -203,10 +203,10 @@ type InMemoryState struct {
 	containers                 *DockerClient
 	containersLock             *sync.Mutex
 	fetchRelatedContainersChan chan bool
-	interclusterTransfers      *map[string]TransferPollResult
+	interclusterTransfers      map[string]TransferPollResult
 	interclusterTransfersLock  *sync.Mutex
 	globalDirtyCacheLock       *sync.Mutex
-	globalDirtyCache           *map[string]dirtyInfo
+	globalDirtyCache           map[string]dirtyInfo
 	userManager                user.UserManager
 
 	debugPartialFailCreateFilesystem bool
@@ -223,7 +223,7 @@ type VersionInfo struct {
 	Outdated            bool   `json:"outdated"`
 }
 
-type fsMap map[string]*fsMachine
+// type fsMap map[string]*fsMachine
 
 // state machinery
 type stateFn func(*fsMachine) stateFn

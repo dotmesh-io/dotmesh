@@ -521,7 +521,7 @@ func (s *InMemoryState) handleOneFilesystemDeletion(node *client.Node) error {
 	func() {
 		s.filesystemsLock.Lock()
 		defer s.filesystemsLock.Unlock()
-		f, ok := (*s.filesystems)[fs]
+		f, ok := s.filesystems[fs]
 		if ok {
 			log.Infof("[handleOneFilesystemDeletion:%s] before initFs..  state: %s, status: %s", fs, f.currentState, f.status)
 		} else {
@@ -534,7 +534,7 @@ func (s *InMemoryState) handleOneFilesystemDeletion(node *client.Node) error {
 	func() {
 		s.filesystemsLock.Lock()
 		defer s.filesystemsLock.Unlock()
-		f, ok := (*s.filesystems)[fs]
+		f, ok := s.filesystems[fs]
 		if ok {
 			log.Infof("[handleOneFilesystemDeletion:%s] after initFs.. state: %s, status: %s", fs, f.currentState, f.status)
 		} else {
@@ -768,10 +768,10 @@ func (s *InMemoryState) updateSnapshotsFromKnownState(
 	}
 
 	s.globalSnapshotCacheLock.Lock()
-	if _, ok := (*s.globalSnapshotCache)[server]; !ok {
-		(*s.globalSnapshotCache)[server] = map[string][]snapshot{}
+	if _, ok := s.globalSnapshotCache[server]; !ok {
+		s.globalSnapshotCache[server] = map[string][]snapshot{}
 	}
-	(*s.globalSnapshotCache)[server][filesystem] = *snapshots
+	s.globalSnapshotCache[server][filesystem] = *snapshots
 	s.globalSnapshotCacheLock.Unlock()
 
 	log.Printf(
@@ -803,7 +803,7 @@ func (s *InMemoryState) updateSnapshotsFromKnownState(
 	// also slice it filesystem-wise, and publish to any observers
 	// listening on a per-filesystem observer parameterized on server
 	s.filesystemsLock.Lock()
-	fs, ok := (*s.filesystems)[filesystem]
+	fs, ok := s.filesystems[filesystem]
 	s.filesystemsLock.Unlock()
 	if !ok {
 		log.Printf(
@@ -854,10 +854,10 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 
 		var modified bool
 		if node.Value == "" {
-			delete(*s.mastersCache, fs)
+			delete(s.mastersCache, fs)
 			delete(filesystemBelongsToMe, fs)
 		} else {
-			old, ok := (*s.mastersCache)[fs]
+			old, ok := s.mastersCache[fs]
 			if ok && old != node.Value {
 				modified = true
 			}
@@ -865,7 +865,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 				// new value
 				modified = true
 			}
-			(*s.mastersCache)[fs] = node.Value
+			s.mastersCache[fs] = node.Value
 			if node.Value == s.myNodeId {
 				filesystemBelongsToMe[fs] = true
 			} else {
@@ -881,7 +881,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 
 		s.serverAddressesCacheLock.Lock()
 		defer s.serverAddressesCacheLock.Unlock()
-		(*s.serverAddressesCache)[server] = node.Value
+		s.serverAddressesCache[server] = node.Value
 		return nil
 	}
 	updateStates := func(node *client.Node) error {
@@ -895,8 +895,8 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 
 		stateMetadata := &map[string]string{}
 		if node.Value == "" {
-			if _, ok := (*s.globalStateCache)[server]; !ok {
-				delete((*s.globalStateCache)[server], filesystem)
+			if _, ok := s.globalStateCache[server]; !ok {
+				delete(s.globalStateCache[server], filesystem)
 			} else {
 				// We don't know about the server anyway, so there's nothing to do
 			}
@@ -906,15 +906,15 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 				log.Printf("Unable to marshal for updateStates - %s: %s", node.Value, err)
 				return err
 			}
-			if _, ok := (*s.globalStateCache)[server]; !ok {
-				(*s.globalStateCache)[server] = map[string]map[string]string{}
+			if _, ok := s.globalStateCache[server]; !ok {
+				s.globalStateCache[server] = map[string]map[string]string{}
 			} else {
-				if _, ok := (*s.globalStateCache)[server][filesystem]; !ok {
+				if _, ok := s.globalStateCache[server][filesystem]; !ok {
 					// ok, we'll be setting it below...
 				} else {
 					// state already exists. check that we're updating with a
 					// revision that is the same or newer...
-					currentVersion := (*s.globalStateCache)[server][filesystem]["version"]
+					currentVersion := s.globalStateCache[server][filesystem]["version"]
 					i, err := strconv.ParseUint(currentVersion, 10, 64)
 					if err != nil {
 						return err
@@ -922,15 +922,15 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 					if i > node.ModifiedIndex {
 						log.Printf(
 							"Out of order updates! %s is older than %s",
-							(*s.globalStateCache)[server][filesystem],
+							s.globalStateCache[server][filesystem],
 							node,
 						)
 						return nil
 					}
 				}
 			}
-			(*s.globalStateCache)[server][filesystem] = *stateMetadata
-			(*s.globalStateCache)[server][filesystem]["version"] = fmt.Sprintf(
+			s.globalStateCache[server][filesystem] = *stateMetadata
+			s.globalStateCache[server][filesystem]["version"] = fmt.Sprintf(
 				"%d", node.ModifiedIndex,
 			)
 		}
@@ -1018,7 +1018,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		if node.Value == "" {
 			s.globalDirtyCacheLock.Lock()
 			defer s.globalDirtyCacheLock.Unlock()
-			delete((*s.globalDirtyCache), filesystemId)
+			delete(s.globalDirtyCache, filesystemId)
 		} else {
 			err := json.Unmarshal([]byte(node.Value), dirtyInfo)
 			if err != nil {
@@ -1026,7 +1026,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 			}
 			s.globalDirtyCacheLock.Lock()
 			defer s.globalDirtyCacheLock.Unlock()
-			(*s.globalDirtyCache)[filesystemId] = *dirtyInfo
+			s.globalDirtyCache[filesystemId] = *dirtyInfo
 		}
 		return nil
 	}
@@ -1037,7 +1037,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		if node.Value == "" {
 			s.globalContainerCacheLock.Lock()
 			defer s.globalContainerCacheLock.Unlock()
-			delete(*s.globalContainerCache, filesystemId)
+			delete(s.globalContainerCache, filesystemId)
 		} else {
 			err := json.Unmarshal([]byte(node.Value), containerInfo)
 			if err != nil {
@@ -1045,7 +1045,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 			}
 			s.globalContainerCacheLock.Lock()
 			defer s.globalContainerCacheLock.Unlock()
-			(*s.globalContainerCache)[filesystemId] = *containerInfo
+			(s.globalContainerCache)[filesystemId] = *containerInfo
 		}
 		return nil
 	}
@@ -1058,7 +1058,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		if node.Value == "" {
 			s.interclusterTransfersLock.Lock()
 			defer s.interclusterTransfersLock.Unlock()
-			delete(*s.interclusterTransfers, transferId)
+			delete(s.interclusterTransfers, transferId)
 		} else {
 			err := json.Unmarshal([]byte(node.Value), transferInfo)
 			if err != nil {
@@ -1066,7 +1066,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 			}
 			s.interclusterTransfersLock.Lock()
 			defer s.interclusterTransfersLock.Unlock()
-			(*s.interclusterTransfers)[transferId] = *transferInfo
+			s.interclusterTransfers[transferId] = *transferInfo
 		}
 		return nil
 	}

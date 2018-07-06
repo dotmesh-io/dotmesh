@@ -3,14 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-	"github.com/coreos/etcd/client"
-	"github.com/nu7hatch/gouuid"
-	"golang.org/x/net/context"
 	"io"
 	"io/ioutil"
 	"log"
@@ -22,6 +14,15 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/coreos/etcd/client"
+	"github.com/nu7hatch/gouuid"
+	"golang.org/x/net/context"
 )
 
 func newFilesystemMachine(filesystemId string, s *InMemoryState) *fsMachine {
@@ -143,7 +144,7 @@ func (f *fsMachine) run() {
 		// We must hold the fslock while calling terminateRunners... to avoid a deadlock with
 		// waitForFilesystemDeath in utils.go
 		terminateRunnersWhileFilesystemLived(f.filesystemId)
-		delete(*(f.state.filesystems), f.filesystemId)
+		delete(f.state.filesystems, f.filesystemId)
 
 		log.Printf("[run:%s] terminated", f.filesystemId)
 	}()
@@ -358,10 +359,10 @@ func (f *fsMachine) transitionedTo(state string, status string) {
 	defer f.state.globalStateCacheLock.Unlock()
 	// fake an etcd version for anyone expecting a version field
 	update["version"] = "0"
-	if _, ok := (*f.state.globalStateCache)[f.state.myNodeId]; !ok {
-		(*f.state.globalStateCache)[f.state.myNodeId] = map[string]map[string]string{}
+	if _, ok := f.state.globalStateCache[f.state.myNodeId]; !ok {
+		f.state.globalStateCache[f.state.myNodeId] = map[string]map[string]string{}
 	}
-	(*f.state.globalStateCache)[f.state.myNodeId][f.filesystemId] = update
+	f.state.globalStateCache[f.state.myNodeId][f.filesystemId] = update
 }
 
 // state functions

@@ -336,7 +336,7 @@ func (s *InMemoryState) waitForFilesystemDeath(filesystemId string) {
 	func() {
 		s.filesystemsLock.Lock()
 		defer s.filesystemsLock.Unlock()
-		fs, ok := (*s.filesystems)[filesystemId]
+		fs, ok := s.filesystems[filesystemId]
 		if ok {
 			log.Printf("[waitForFilesystemDeath:%s] state: %s, status: %s", filesystemId, fs.currentState, fs.status)
 		} else {

@@ -30,7 +30,7 @@ func (s *InMemoryState) repl() {
 				out("Known servers:\n")
 				s.serverAddressesCacheLock.Lock()
 				out("SERVER ID\tSERVER IP\n")
-				for server, addresses := range *s.serverAddressesCache {
+				for server, addresses := range s.serverAddressesCache {
 					out(server, "\t", addresses, "\n")
 				}
 				s.serverAddressesCacheLock.Unlock()
@@ -55,12 +55,12 @@ func (s *InMemoryState) repl() {
 				out("\n")
 				filesystems := []string{}
 				s.filesystemsLock.Lock()
-				for _, fs := range *s.filesystems {
+				for _, fs := range s.filesystems {
 					filesystems = append(filesystems, fs.filesystemId)
 				}
 				sort.Strings(filesystems)
 				for _, fsName := range filesystems {
-					out("-", fsName, (*s.filesystems)[fsName].snapshotsLock, "\n")
+					out("-", fsName, s.filesystems[fsName].snapshotsLock, "\n")
 				}
 				out("\n")
 				s.filesystemsLock.Unlock()
@@ -180,8 +180,8 @@ func (s *InMemoryState) repl() {
 				s.mastersCacheLock.Lock()
 				s.serverAddressesCacheLock.Lock()
 				out("FILESYSTEM\tSERVER ID\tSERVER IP\n")
-				for fs, master := range *s.mastersCache {
-					serverAddress, ok := (*s.serverAddressesCache)[master]
+				for fs, master := range s.mastersCache {
+					serverAddress, ok := s.serverAddressesCache[master]
 					if !ok {
 						serverAddress = "<unknown>"
 					}
@@ -219,7 +219,7 @@ func (s *InMemoryState) repl() {
 				} else {
 					s.filesystemsLock.Lock()
 					fs := words[1]
-					filesystem, ok := (*s.filesystems)[fs]
+					filesystem, ok := s.filesystems[fs]
 					if !ok {
 						out("no such filesystem\n")
 					} else {
@@ -238,12 +238,12 @@ func (s *InMemoryState) repl() {
 			case "list":
 				filesystems := []string{}
 				s.filesystemsLock.Lock()
-				for _, fs := range *s.filesystems {
+				for _, fs := range s.filesystems {
 					filesystems = append(filesystems, fs.filesystemId)
 				}
 				sort.Strings(filesystems)
 				for _, fsName := range filesystems {
-					fs := (*s.filesystems)[fsName]
+					fs := s.filesystems[fsName]
 					fs.snapshotsLock.Lock()
 					numSnapshots := len(fs.filesystem.snapshots)
 					out(
@@ -265,7 +265,7 @@ func (s *InMemoryState) repl() {
 				s.fetchRelatedContainersChan <- true
 			case "containers":
 				s.globalContainerCacheLock.Lock()
-				for k, v := range *s.globalContainerCache {
+				for k, v := range s.globalContainerCache {
 					out(fmt.Sprintf("%s => %s\n", k, v))
 				}
 				s.globalContainerCacheLock.Unlock()

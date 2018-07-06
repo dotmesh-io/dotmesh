@@ -2,23 +2,24 @@ package main
 
 import (
 	"fmt"
-	cp "github.com/dotmesh-io/go-checkpoint"
 	"os/exec"
 	"strings"
+
+	cp "github.com/dotmesh-io/go-checkpoint"
 )
 
 func (state *InMemoryState) checkForUpdates() error {
 	numberOfDots := func() string {
 		state.mastersCacheLock.Lock()
 		defer state.mastersCacheLock.Unlock()
-		return fmt.Sprintf("%d", len(*state.mastersCache))
+		return fmt.Sprintf("%d", len(state.mastersCache))
 	}()
 
 	totalBytes := func() string {
 		state.globalDirtyCacheLock.Lock()
 		defer state.globalDirtyCacheLock.Unlock()
 		var totalBytes int64 = 0
-		for _, dirtyInfo := range *state.globalDirtyCache {
+		for _, dirtyInfo := range state.globalDirtyCache {
 			totalBytes += dirtyInfo.SizeBytes
 		}
 		return fmt.Sprintf("%d", totalBytes)
@@ -28,7 +29,7 @@ func (state *InMemoryState) checkForUpdates() error {
 		state.serverAddressesCacheLock.Lock()
 		defer state.serverAddressesCacheLock.Unlock()
 		idList := ""
-		for server, _ := range *state.serverAddressesCache {
+		for server, _ := range state.serverAddressesCache {
 			if idList == "" {
 				idList = server
 			} else {

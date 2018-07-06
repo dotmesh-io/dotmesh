@@ -187,7 +187,7 @@ func (r *Registry) ClonesFor(filesystemId string) map[string]Clone {
 // whether its origin snapshot exists here
 func (r *Registry) CanPullClone(c Clone) bool {
 	r.state.filesystemsLock.Lock()
-	fsMachine, ok := (*r.state.filesystems)[c.Origin.FilesystemId]
+	fsMachine, ok := r.state.filesystems[c.Origin.FilesystemId]
 	r.state.filesystemsLock.Unlock()
 	if !ok {
 		return false

@@ -5,14 +5,15 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/coreos/etcd/client"
-	"github.com/nu7hatch/gouuid"
-	"golang.org/x/net/context"
 	"os"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/coreos/etcd/client"
+	"github.com/nu7hatch/gouuid"
+	"golang.org/x/net/context"
 
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 
@@ -28,23 +29,23 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 	}
 	s := &InMemoryState{
 		config:          config,
-		filesystems:     &fsMap{},
+		filesystems:     make(map[string]*fsMachine),
 		filesystemsLock: &sync.Mutex{},
 		myNodeId:        localPoolId,
 		// filesystem => node id
-		mastersCache:     &map[string]string{},
+		mastersCache:     make(map[string]string),
 		mastersCacheLock: &sync.Mutex{},
 		// server id => comma-separated IPv[46] addresses
-		serverAddressesCache:     &map[string]string{},
+		serverAddressesCache:     make(map[string]string),
 		serverAddressesCacheLock: &sync.Mutex{},
 		// server id => filesystem id => snapshot metadata
-		globalSnapshotCache:     &map[string]map[string][]snapshot{},
+		globalSnapshotCache:     make(map[string]map[string][]snapshot),
 		globalSnapshotCacheLock: &sync.Mutex{},
 		// server id => filesystem id => state machine metadata
-		globalStateCache:     &map[string]map[string]map[string]string{},
+		globalStateCache:     make(map[string]map[string]map[string]string),
 		globalStateCacheLock: &sync.Mutex{},
 		// global container state (what containers are running where), filesystemId -> containerInfo
-		globalContainerCache:     &map[string]containerInfo{},
+		globalContainerCache:     make(map[string]containerInfo),
 		globalContainerCacheLock: &sync.Mutex{},
 		// When did we start waiting for etcd?
 		etcdWaitTimestamp:     0,
@@ -62,10 +63,10 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 		// volume
 		fetchRelatedContainersChan: make(chan bool),
 		// inter-cluster transfers are recorded here
-		interclusterTransfers:     &map[string]TransferPollResult{},
+		interclusterTransfers:     make(map[string]TransferPollResult),
 		interclusterTransfersLock: &sync.Mutex{},
 		globalDirtyCacheLock:      &sync.Mutex{},
-		globalDirtyCache:          &map[string]dirtyInfo{},
+		globalDirtyCache:          make(map[string]dirtyInfo),
 		userManager:               config.UserManager,
 		versionInfo:               &VersionInfo{InstalledVersion: serverVersion},
 	}
@@ -88,7 +89,7 @@ func (s *InMemoryState) deleteFilesystem(filesystemId string) error {
 	func() {
 		s.filesystemsLock.Lock()
 		defer s.filesystemsLock.Unlock()
-		delete(*s.filesystems, filesystemId)
+		delete(s.filesystems, filesystemId)
 	}()
 
 	// Don't delete from mastersCache, because we want to be consistent wrt
@@ -98,7 +99,7 @@ func (s *InMemoryState) deleteFilesystem(filesystemId string) error {
 	func() {
 		s.globalContainerCacheLock.Lock()
 		defer s.globalContainerCacheLock.Unlock()
-		delete(*s.globalContainerCache, filesystemId)
+		delete(s.globalContainerCache, filesystemId)
 	}()
 
 	// No need to worry about globalStateCache, as the fsmachine's termination will gracefully handle that
@@ -140,7 +141,7 @@ func (s *InMemoryState) alignMountStateWithMasters(filesystemId string) error {
 		s.filesystemsLock.Lock()
 		defer s.filesystemsLock.Unlock()
 
-		fs, ok := (*s.filesystems)[filesystemId]
+		fs, ok := s.filesystems[filesystemId]
 		if !ok {
 			log.Printf(
 				"[alignMountStateWithMasters] not doing anything - cannot find %v in fsMachines",
@@ -226,25 +227,25 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 		log.WithFields(log.Fields{
 			"fs":     fs,
 			"master": master,
-			"cache":  *s.globalDirtyCache,
+			"cache":  s.globalDirtyCache,
 		}).Debug("[getOne] looking up fs with master in cache")
 
-		dirty, ok := (*s.globalDirtyCache)[fs]
+		dirty, ok := s.globalDirtyCache[fs]
 		var dirtyBytes int64
 		var sizeBytes int64
 		if ok {
 			dirtyBytes = dirty.DirtyBytes
 			sizeBytes = dirty.SizeBytes
-			log.Debugf("[getOne] got dirtyInfo %d,%d for %s with master %s in %s", sizeBytes, dirtyBytes, fs, master, *s.globalDirtyCache)
+			log.Debugf("[getOne] got dirtyInfo %d,%d for %s with master %s in %s", sizeBytes, dirtyBytes, fs, master, s.globalDirtyCache)
 
 		} else {
-			log.Debugf("[getOne] %s was not in %s", fs, *s.globalDirtyCache)
+			log.Debugf("[getOne] %s was not in %s", fs, s.globalDirtyCache)
 
 		}
 		s.globalDirtyCacheLock.Unlock()
 		// if not exists, 0 is fine
 		s.globalSnapshotCacheLock.Lock()
-		snapshots, ok := (*s.globalSnapshotCache)[master][fs]
+		snapshots, ok := s.globalSnapshotCache[master][fs]
 		s.globalSnapshotCacheLock.Unlock()
 		var commitCount int64
 		if ok {
@@ -265,7 +266,7 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 		defer s.serverAddressesCacheLock.Unlock()
 
 		servers := []Server{}
-		for server, addresses := range *s.serverAddressesCache {
+		for server, addresses := range s.serverAddressesCache {
 			servers = append(servers, Server{
 				Id: server, Addresses: strings.Split(addresses, ","),
 			})
@@ -275,10 +276,10 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 			// get current state and status for filesystem on server from our
 			// cache
 			s.globalSnapshotCacheLock.Lock()
-			numSnapshots := len((*s.globalSnapshotCache)[server.Id][fs])
+			numSnapshots := len(s.globalSnapshotCache[server.Id][fs])
 			s.globalSnapshotCacheLock.Unlock()
 			s.globalStateCacheLock.Lock()
-			state, ok := (*s.globalStateCache)[server.Id][fs]
+			state, ok := s.globalStateCache[server.Id][fs]
 			status := ""
 			if !ok {
 				status = fmt.Sprintf("unknown, %d snaps", numSnapshots)
@@ -301,7 +302,7 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 
 func (s *InMemoryState) notifyPushCompleted(filesystemId string, success bool) {
 	s.filesystemsLock.Lock()
-	f, ok := (*s.filesystems)[filesystemId]
+	f, ok := s.filesystems[filesystemId]
 	s.filesystemsLock.Unlock()
 	if !ok {
 		log.Printf("[notifyPushCompleted] No such filesystem id %s", filesystemId)
@@ -319,7 +320,7 @@ func (s *InMemoryState) getCurrentState(filesystemId string) (string, error) {
 
 	s.filesystemsLock.Lock()
 	defer s.filesystemsLock.Unlock()
-	f, ok := (*s.filesystems)[filesystemId]
+	f, ok := s.filesystems[filesystemId]
 	if !ok {
 		return "", fmt.Errorf("No such filesystem id %s", filesystemId)
 	}
@@ -397,7 +398,7 @@ func (s *InMemoryState) findRelatedContainers() error {
 
 	myFilesystems := []string{}
 	s.mastersCacheLock.Lock()
-	for filesystemId, master := range *s.mastersCache {
+	for filesystemId, master := range s.mastersCache {
 		if s.myNodeId == master {
 			myFilesystems = append(myFilesystems, filesystemId)
 		}
@@ -433,8 +434,8 @@ func (s *InMemoryState) findRelatedContainers() error {
 		// the window for races against setting this cache value.
 		func() {
 			s.globalContainerCacheLock.Lock()
-			defer s.globalContainerCacheLock.Unlock()
-			(*s.globalContainerCache)[filesystemId] = value
+			s.globalContainerCache[filesystemId] = value
+			s.globalContainerCacheLock.Unlock()
 		}()
 
 		log.Printf(
@@ -456,7 +457,7 @@ func (s *InMemoryState) currentMaster(filesystemId string) (string, error) {
 	s.mastersCacheLock.Lock()
 	defer s.mastersCacheLock.Unlock()
 
-	master, ok := (*s.mastersCache)[filesystemId]
+	master, ok := s.mastersCache[filesystemId]
 	if !ok {
 		return "", fmt.Errorf("No known filesystem with id %s", filesystemId)
 	}
@@ -474,7 +475,7 @@ func (s *InMemoryState) snapshotsForCurrentMaster(filesystemId string) ([]snapsh
 func (s *InMemoryState) snapshotsFor(server string, filesystemId string) ([]snapshot, error) {
 	s.globalSnapshotCacheLock.Lock()
 	defer s.globalSnapshotCacheLock.Unlock()
-	filesystems, ok := (*s.globalSnapshotCache)[server]
+	filesystems, ok := s.globalSnapshotCache[server]
 	if !ok {
 		return []snapshot{}, nil
 	}
@@ -489,7 +490,7 @@ func (s *InMemoryState) snapshotsFor(server string, filesystemId string) ([]snap
 func (s *InMemoryState) addressesFor(server string) []string {
 	s.serverAddressesCacheLock.Lock()
 	defer s.serverAddressesCacheLock.Unlock()
-	addresses, ok := (*s.serverAddressesCache)[server]
+	addresses, ok := s.serverAddressesCache[server]
 	if !ok {
 		// don't know about this server
 		// TODO maybe this should be an error
@@ -501,7 +502,7 @@ func (s *InMemoryState) addressesFor(server string) []string {
 func (s *InMemoryState) masterFor(filesystem string) string {
 	s.mastersCacheLock.Lock()
 	defer s.mastersCacheLock.Unlock()
-	currentMaster, ok := (*s.mastersCache)[filesystem]
+	currentMaster, ok := s.mastersCache[filesystem]
 	if !ok {
 		// don't know about this filesystem
 		// TODO maybe this should be an error
@@ -516,7 +517,7 @@ func (s *InMemoryState) initFilesystemMachine(filesystemId string) *fsMachine {
 	fs, deleted := func() (*fsMachine, bool) {
 		s.filesystemsLock.Lock()
 		defer s.filesystemsLock.Unlock()
-		fs, ok := (*s.filesystems)[filesystemId]
+		fs, ok := s.filesystems[filesystemId]
 		log.Printf("[initFilesystemMachine] acquired lock: %s", filesystemId)
 		// do nothing if the fsMachine is already running
 		deleted := false
@@ -534,9 +535,9 @@ func (s *InMemoryState) initFilesystemMachine(filesystemId string) *fsMachine {
 		}
 		if !deleted {
 			log.Printf("[initFilesystemMachine] initializing new fsMachine for %s", filesystemId)
-			(*s.filesystems)[filesystemId] = newFilesystemMachine(filesystemId, s)
-			go (*s.filesystems)[filesystemId].run() // concurrently run state machine
-			return (*s.filesystems)[filesystemId], deleted
+			s.filesystems[filesystemId] = newFilesystemMachine(filesystemId, s)
+			go s.filesystems[filesystemId].run() // concurrently run state machine
+			return s.filesystems[filesystemId], deleted
 		} else {
 			return fs, deleted
 		}
@@ -555,7 +556,7 @@ func (s *InMemoryState) initFilesystemMachine(filesystemId string) *fsMachine {
 func (s *InMemoryState) exists(filesystem string) bool {
 	s.filesystemsLock.Lock()
 	defer s.filesystemsLock.Unlock()
-	_, ok := (*s.filesystems)[filesystem]
+	_, ok := s.filesystems[filesystem]
 	return ok
 }
 
@@ -655,25 +656,25 @@ func (state *InMemoryState) reallyProcureFilesystem(ctx context.Context, name Vo
 			// though, so wait on that here.
 
 			state.filesystemsLock.Lock()
-			if (*state.filesystems)[filesystemId].currentState == "active" {
+			if state.filesystems[filesystemId].currentState == "active" {
 				// great - we're already active
 				log.Printf("Found %s was already active, giving it to Docker", filesystemId)
 				state.filesystemsLock.Unlock()
 			} else {
-				for (*state.filesystems)[filesystemId].currentState != "active" {
+				for state.filesystems[filesystemId].currentState != "active" {
 					log.Printf(
 						"%s was %s, waiting for it to change to active...",
-						filesystemId, (*state.filesystems)[filesystemId].currentState,
+						filesystemId, state.filesystems[filesystemId].currentState,
 					)
 					// wait for state change
 					stateChangeChan := make(chan interface{})
-					(*state.filesystems)[filesystemId].transitionObserver.Subscribe(
+					state.filesystems[filesystemId].transitionObserver.Subscribe(
 						"transitions", stateChangeChan,
 					)
 					state.filesystemsLock.Unlock()
 					<-stateChangeChan
 					state.filesystemsLock.Lock()
-					(*state.filesystems)[filesystemId].transitionObserver.Unsubscribe(
+					state.filesystems[filesystemId].transitionObserver.Unsubscribe(
 						"transitions", stateChangeChan,
 					)
 				}
@@ -801,7 +802,7 @@ func (s *InMemoryState) CreateFilesystem(
 	func() {
 		s.mastersCacheLock.Lock()
 		defer s.mastersCacheLock.Unlock()
-		(*s.mastersCache)[filesystemId] = s.myNodeId
+		s.mastersCache[filesystemId] = s.myNodeId
 	}()
 
 	// go ahead and create the filesystem
@@ -827,7 +828,7 @@ func (s *InMemoryState) GetReplicationLatency(fs string) (error, map[string][]st
 	func() {
 		s.globalSnapshotCacheLock.Lock()
 		defer s.globalSnapshotCacheLock.Unlock()
-		for server, filesystems := range *(s.globalSnapshotCache) {
+		for server, filesystems := range s.globalSnapshotCache {
 			snapshots, ok := filesystems[fs]
 			commitsOnServer[server] = map[string]struct{}{}
 			if ok {

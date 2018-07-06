@@ -512,7 +512,7 @@ func (d *DotmeshRPC) List(
 
 	d.state.mastersCacheLock.Lock()
 	filesystems := []string{}
-	for fs, _ := range *d.state.mastersCache {
+	for fs, _ := range d.state.mastersCache {
 		filesystems = append(filesystems, fs)
 	}
 	d.state.mastersCacheLock.Unlock()
@@ -556,7 +556,7 @@ func (d *DotmeshRPC) ListWithContainers(
 
 	d.state.mastersCacheLock.Lock()
 	filesystems := []string{}
-	for fs, _ := range *d.state.mastersCache {
+	for fs, _ := range d.state.mastersCache {
 		filesystems = append(filesystems, fs)
 	}
 	d.state.mastersCacheLock.Unlock()
@@ -585,7 +585,7 @@ func (d *DotmeshRPC) ListWithContainers(
 		}
 
 		var containers []DockerContainer
-		containerInfo, ok := (*d.state.globalContainerCache)[one.Id]
+		containerInfo, ok := d.state.globalContainerCache[one.Id]
 		if ok {
 			containers = containerInfo.Containers
 		} else {
@@ -722,7 +722,7 @@ func (d *DotmeshRPC) Containers(
 	}
 	d.state.globalContainerCacheLock.Lock()
 	defer d.state.globalContainerCacheLock.Unlock()
-	containerInfo, ok := (*d.state.globalContainerCache)[filesystemId]
+	containerInfo, ok := d.state.globalContainerCache[filesystemId]
 	if !ok {
 		*result = []DockerContainer{}
 		return nil
@@ -742,7 +742,7 @@ func (d *DotmeshRPC) ContainersById(
 ) error {
 	d.state.globalContainerCacheLock.Lock()
 	defer d.state.globalContainerCacheLock.Unlock()
-	containerInfo, ok := (*d.state.globalContainerCache)[*filesystemId]
+	containerInfo, ok := d.state.globalContainerCache[*filesystemId]
 	if !ok {
 		*result = []DockerContainer{}
 		return nil
@@ -1226,7 +1226,7 @@ func (d *DotmeshRPC) registerFilesystemBecomeMaster(
 			func() {
 				d.state.mastersCacheLock.Lock()
 				defer d.state.mastersCacheLock.Unlock()
-				(*d.state.mastersCache)[filesystemId] = d.state.myNodeId
+				d.state.mastersCache[filesystemId] = d.state.myNodeId
 			}()
 
 		}
@@ -1312,7 +1312,7 @@ func (d *DotmeshRPC) GetTransfer(
 	result *TransferPollResult,
 ) error {
 	// Poll the status of a transfer by fetching it from our local cache.
-	res, ok := (*d.state.interclusterTransfers)[*args]
+	res, ok := d.state.interclusterTransfers[*args]
 	if !ok {
 		return fmt.Errorf("No such intercluster transfer %s", *args)
 	}
@@ -1522,7 +1522,7 @@ func (d *DotmeshRPC) dirtyDataAndRunningContainers(ctx context.Context, filesyst
 
 	d.state.globalContainerCacheLock.Lock()
 	defer d.state.globalContainerCacheLock.Unlock()
-	c, _ := (*d.state.globalContainerCache)[filesystemId]
+	c, _ := d.state.globalContainerCache[filesystemId]
 	containersRunning := []string{}
 	for _, container := range c.Containers {
 		containersRunning = append(containersRunning, string(container.Name))
@@ -1791,7 +1791,7 @@ func (d *DotmeshRPC) AllDotsAndBranches(
 	vac := VolumesAndBranches{}
 
 	d.state.serverAddressesCacheLock.Lock()
-	for server, addresses := range *d.state.serverAddressesCache {
+	for server, addresses := range d.state.serverAddressesCache {
 		vac.Servers = append(vac.Servers, Server{
 			Id: server, Addresses: strings.Split(addresses, ","),
 		})
@@ -2019,7 +2019,7 @@ func checkNotInUse(d *DotmeshRPC, fsid string, origins map[string]string) error 
 	containersInUse := func() int {
 		d.state.globalContainerCacheLock.Lock()
 		defer d.state.globalContainerCacheLock.Unlock()
-		containerInfo, ok := (*d.state.globalContainerCache)[fsid]
+		containerInfo, ok := d.state.globalContainerCache[fsid]
 		if !ok {
 			return 0
 		}
@@ -2284,7 +2284,7 @@ func (d *DotmeshRPC) DumpInternalState(
 		s.filesystemsLock.Lock()
 		defer s.filesystemsLock.Unlock()
 
-		for id, fs := range *(s.filesystems) {
+		for id, fs := range s.filesystems {
 			resultChan <- []string{fmt.Sprintf("filesystems.%s.STARTED", id), "yes"}
 			fs.snapshotsLock.Lock()
 			defer fs.snapshotsLock.Unlock()
@@ -2325,7 +2325,7 @@ func (d *DotmeshRPC) DumpInternalState(
 		resultChan <- []string{"mastersCache.STARTED", "yes"}
 		s.mastersCacheLock.Lock()
 		defer s.mastersCacheLock.Unlock()
-		for fsId, server := range *(s.mastersCache) {
+		for fsId, server := range s.mastersCache {
 			resultChan <- []string{fmt.Sprintf("mastersCache.%s", fsId), server}
 		}
 		resultChan <- []string{"mastersCache.DONE", "yes"}
@@ -2336,7 +2336,7 @@ func (d *DotmeshRPC) DumpInternalState(
 		resultChan <- []string{"serverAddressesCache.STARTED", "yes"}
 		s.serverAddressesCacheLock.Lock()
 		defer s.serverAddressesCacheLock.Unlock()
-		for serverId, addr := range *(s.serverAddressesCache) {
+		for serverId, addr := range s.serverAddressesCache {
 			resultChan <- []string{fmt.Sprintf("serverAddressesCache.%s", serverId), addr}
 		}
 		resultChan <- []string{"serverAddressesCache.DONE", "yes"}
@@ -2347,7 +2347,7 @@ func (d *DotmeshRPC) DumpInternalState(
 		resultChan <- []string{"globalSnapshotCache.STARTED", "yes"}
 		s.globalSnapshotCacheLock.Lock()
 		defer s.globalSnapshotCacheLock.Unlock()
-		for serverId, d := range *(s.globalSnapshotCache) {
+		for serverId, d := range s.globalSnapshotCache {
 			for fsId, snapshots := range d {
 				for idx, snapshot := range snapshots {
 					resultChan <- []string{fmt.Sprintf("globalSnapshotCache.%s.%s.snapshots[%d].id", serverId, fsId, idx), snapshot.Id}
@@ -2365,7 +2365,7 @@ func (d *DotmeshRPC) DumpInternalState(
 		resultChan <- []string{"globalStateCache.STARTED", "yes"}
 		s.globalStateCacheLock.Lock()
 		defer s.globalStateCacheLock.Unlock()
-		for serverId, d := range *(s.globalStateCache) {
+		for serverId, d := range s.globalStateCache {
 			for fsId, states := range d {
 				for key, val := range states {
 					resultChan <- []string{fmt.Sprintf("globalStateCache.%s.%s.%s", serverId, fsId, key), val}
@@ -2380,7 +2380,7 @@ func (d *DotmeshRPC) DumpInternalState(
 		resultChan <- []string{"globalContainerCache.STARTED", "yes"}
 		s.globalContainerCacheLock.Lock()
 		defer s.globalContainerCacheLock.Unlock()
-		for fsId, ci := range *(s.globalContainerCache) {
+		for fsId, ci := range s.globalContainerCache {
 			resultChan <- []string{fmt.Sprintf("globalContainerCache.%s", fsId), toJsonString(ci)}
 		}
 		resultChan <- []string{"globalContainerCache.DONE", "yes"}
@@ -2391,7 +2391,7 @@ func (d *DotmeshRPC) DumpInternalState(
 		resultChan <- []string{"globalDirtyCache.STARTED", "yes"}
 		s.globalDirtyCacheLock.Lock()
 		defer s.globalDirtyCacheLock.Unlock()
-		for fsId, di := range *(s.globalDirtyCache) {
+		for fsId, di := range s.globalDirtyCache {
 			resultChan <- []string{fmt.Sprintf("globalDirtyCache.%s", fsId), toJsonString(di)}
 		}
 		resultChan <- []string{"globalDirtyCache.DONE", "yes"}
@@ -2402,7 +2402,7 @@ func (d *DotmeshRPC) DumpInternalState(
 		resultChan <- []string{"interclusterTransfers.STARTED", "yes"}
 		s.interclusterTransfersLock.Lock()
 		defer s.interclusterTransfersLock.Unlock()
-		for txId, tpr := range *(s.interclusterTransfers) {
+		for txId, tpr := range s.interclusterTransfers {
 			resultChan <- []string{fmt.Sprintf("interclusterTransfers.%s", txId), toJsonString(tpr)}
 		}
 		resultChan <- []string{"interclusterTransfers.DONE", "yes"}
