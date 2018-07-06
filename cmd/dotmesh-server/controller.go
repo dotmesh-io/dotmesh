@@ -867,7 +867,7 @@ func (s *InMemoryState) GetListOfVolumes(ctx context.Context) (error, []DotmeshV
 
 	s.mastersCacheLock.Lock()
 	filesystems := []string{}
-	for fs, _ := range *s.mastersCache {
+	for fs, _ := range s.mastersCache {
 		filesystems = append(filesystems, fs)
 	}
 	s.mastersCacheLock.Unlock()
