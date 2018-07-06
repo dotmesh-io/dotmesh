@@ -119,6 +119,20 @@ type DotmeshVolume struct {
 	ServerStatuses map[string]string // serverId => status
 }
 
+type dotmeshVolumeByName []DotmeshVolume
+
+func (v dotmeshVolumeByName) Len() int {
+	return len(v)
+}
+
+func (v dotmeshVolumeByName) Swap(i, j int) {
+	v[i], v[j] = v[j], v[i]
+}
+
+func (v dotmeshVolumeByName) Less(i, j int) bool {
+	return v[i].Name.Name < v[j].Name.Name
+}
+
 type DotmeshVolumeAndContainers struct {
 	Volume     DotmeshVolume
 	Containers []DockerContainer
