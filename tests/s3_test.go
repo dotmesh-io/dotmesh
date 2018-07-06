@@ -107,4 +107,28 @@ func TestS3Remote(t *testing.T) {
 			t.Error("Pull command did not detect extra commits")
 		}
 	})
+
+	t.Run("Push", func(t *testing.T) {
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm clone test-real-s3 test.dotmesh --local-name="+fsname)
+		_, err := citools.RunOnNodeErr(node1, "dm push test-real-s3 "+fsname)
+		if err == nil {
+			t.Error("Push command did not detect there were no changes")
+		}
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/pushed-file.txt")
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+		citools.RunOnNode(t, node1, "dm commit -m 'push this back to s3'")
+		citools.RunOnNode(t, node1, "dm push test-real-s3 "+fsname)
+		resp := citools.OutputFromRunOnNode(t, node1, s3cmd+" ls s3://test.dotmesh")
+		if !strings.Contains(resp, "pushed-file.txt") {
+			t.Error("Did not push new file to S3")
+		}
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" rm /foo/hello-world.txt")
+		citools.RunOnNode(t, node1, "dm commit -m 'cut this file from s3'")
+		citools.RunOnNode(t, node1, "dm push test-real-s3 "+fsname)
+		resp = citools.OutputFromRunOnNode(t, node1, s3cmd+" ls s3://test.dotmesh")
+		if strings.Contains(resp, "hello-world.txt") {
+			t.Error("Did not push new file to S3")
+		}
+	})
 }
