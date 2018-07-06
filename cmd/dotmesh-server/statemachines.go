@@ -538,23 +538,33 @@ waitingForSlaveSnapshot:
 	return inactiveState
 }
 
-func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
-	mountPath := mnt(f.filesystemId)
-	zfsPath := fq(f.filesystemId)
-
-	// only try to make the directory if it doesn't already exist
+func mkdirIfNotExist(mountPath string) error {
 	if _, err := os.Stat(mountPath); os.IsNotExist(err) {
 		out, err := exec.Command(
 			"mkdir", "-p", mountPath).CombinedOutput()
 		if err != nil {
-			log.Printf("[mount:%s] %v while trying to mkdir mountpoint %s", f.filesystemId, err, zfsPath)
-			return &Event{
-				Name: "failed-mkdir-mountpoint",
-				Args: &EventArgs{"err": err, "combined-output": string(out)},
-			}, backoffState
+			return error
 		}
 	}
+	return nil
+}
 
+func (f *fsMachine) mountSnap(snapId *string, readonly bool) (responseEvent *Event, nextState stateFn) {
+	fullId = f.filesystemId
+	if snapId != nil {
+		fullId += "@" + snapId
+	}
+	mountPath := mnt(fullId)
+	zfsPath := fq(fullId)
+	// only try to make the directory if it doesn't already exist
+	err := mkdirIfNotExist(mountPath)
+	if err != nil {
+		log.Printf("[mount:%s] %v while trying to mkdir mountpoint %s", f.filesystemId, err, zfsPath)
+		return &Event{
+			Name: "failed-mkdir-mountpoint",
+			Args: &EventArgs{"err": err, "combined-output": string(out)},
+		}, backoffState
+	}
 	// only try to use mount.zfs if it's not already present in the output
 	// of calling "mount"
 	mounted, err := isFilesystemMounted(f.filesystemId)
@@ -565,7 +575,11 @@ func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
 		}, backoffState
 	}
 	if !mounted {
-		out, err := exec.Command("mount.zfs", "-o", "noatime",
+		options := "noatime"
+		if readonly {
+			options += ",ro"
+		}
+		out, err := exec.Command("mount.zfs", "-o", options,
 			zfsPath, mountPath).CombinedOutput()
 		if err != nil {
 			log.Printf("[mount:%s] %v while trying to mount %s", f.filesystemId, err, zfsPath)
@@ -650,9 +664,16 @@ func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
 	// mounted
 	f.snapshotsLock.Lock()
 	defer f.snapshotsLock.Unlock()
-	f.filesystem.exists = true // needed in create case
-	f.filesystem.mounted = true
 	return &Event{Name: "mounted", Args: &EventArgs{}}, activeState
+}
+
+func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
+	response, nextState := f.mountSnap(nil, false)
+	if response.Name == "mounted" {
+		f.filesystem.exists = true // needed in create case
+		f.filesystem.mounted = true
+	}
+	return response, nextState
 }
 
 func (f *fsMachine) unmount() (responseEvent *Event, nextState stateFn) {
@@ -1963,11 +1984,6 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 	if err != nil {
 		f.sendEvent(&EventArgs{"err": err}, "cant-write-to-etcd", "S3 push initiator couldn't write to etcd")
 	}
-	_, err = getS3Client(transferRequest)
-	if err != nil {
-		f.sendEventUpdateUser(err, "couldnt-create-s3-client", "Couldn't create s3 client - check credentials are correct", pollResult)
-		return backoffState
-	}
 	snaps, err := f.state.snapshotsForCurrentMaster(f.filesystemId)
 	latestSnap, err := f.getLastNonMetadataSnapshot()
 	if err != nil {
@@ -1984,6 +2000,16 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 			f.sendEventUpdateUser(err, "couldnt-stat-s3-meta-file", fmt.Sprintf("Could not stat s3 meta file %s", pathToFile), pollResult)
 			return backoffState
 		}
+		svc, err := getS3Client(transferRequest)
+		if err != nil {
+			f.sendEventUpdateUser(err, "couldnt-connect-to-s3", "Couldn't connect to s3 - check credentials", pollResult)
+		}
+		// here we:
+		// mount the current commit readonly - keep a log somewhere of how many references there are using it. If already mounted, increment that refcount
+		// list everything in there
+		// push everything to s3
+		// check if there is anything in s3 that isn't in this list - if there is, delete it
+		// unmount the current commit
 	}
 	// todo set this to something more reasonable and do stuff with all of the above
 	pollResult.Status = "finished"
@@ -1995,6 +2021,8 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 	}
 	return discoveringState
 }
+
+func mountReadOnly()
 
 func pushInitiatorState(f *fsMachine) stateFn {
 	// Deduce the latest snapshot in
