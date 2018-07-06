@@ -546,16 +546,13 @@ func (f *fsMachine) mountSnap(snapId string, readonly bool) (responseEvent *Even
 	mountPath := mnt(fullId)
 	zfsPath := fq(fullId)
 	// only try to make the directory if it doesn't already exist
-	if _, err := os.Stat(mountPath); os.IsNotExist(err) {
-		out, err := exec.Command(
-			"mkdir", "-p", mountPath).CombinedOutput()
-		if err != nil {
-			log.Printf("[mount:%s] %v while trying to mkdir mountpoint %s", fullId, err, zfsPath)
-			return &Event{
-				Name: "failed-mkdir-mountpoint",
-				Args: &EventArgs{"err": err, "combined-output": string(out)},
-			}, backoffState
-		}
+	err := os.MkdirAll(mountPath, 0775)
+	if err != nil {
+		log.Printf("[mount:%s] %v while trying to mkdir mountpoint %s", fullId, err, zfsPath)
+		return &Event{
+			Name: "failed-mkdir-mountpoint",
+			Args: &EventArgs{"err": err},
+		}, backoffState
 	}
 	// only try to use mount.zfs if it's not already present in the output
 	// of calling "mount"
@@ -1991,13 +1988,20 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 		f.sendEventUpdateUser(err, "s3-push-initiator-cant-get-snapshot-data", "cant get snapshot data", pollResult)
 		return backoffState
 	}
-	pathToS3Metadata := fmt.Sprintf("%s/dm.s3-versions/%s", mnt(f.filesystemId), latestSnap.Id)
+	event, _ := f.mountSnap(latestSnap.Id, true)
+	if event.Name != "mounted" {
+		f.innerResponses <- event
+		updateUser("Could not mount filesystem@commit readonly", transferRequestId, pollResult)
+		return backoffState
+	}
+	mountPoint := mnt(fmt.Sprintf("%s@%s", f.filesystemId, latestSnap.Id))
+	pathToS3Metadata := fmt.Sprintf("%s/dm.s3-versions/%s", mountPoint, latestSnap.Id)
 	if latestSnap != nil {
-		if _, err := os.Stat(pathToFile); err == nil {
-			f.sendArgsEventUpdateUser(&EventArgs{"path": pathToFile}, "commit-already-in-s3", "Found s3 metadata for latest snap - nothing to push!", pollResult)
+		if _, err := os.Stat(pathToS3Metadata); err == nil {
+			f.sendArgsEventUpdateUser(&EventArgs{"path": pathToS3Metadata}, "commit-already-in-s3", "Found s3 metadata for latest snap - nothing to push!", pollResult)
 			return backoffState
 		} else if !os.IsNotExist(err) {
-			f.sendEventUpdateUser(err, "couldnt-stat-s3-meta-file", fmt.Sprintf("Could not stat s3 meta file %s", pathToFile), pollResult)
+			f.sendEventUpdateUser(err, "couldnt-stat-s3-meta-file", fmt.Sprintf("Could not stat s3 meta file %s", pathToS3Metadata), pollResult)
 			return backoffState
 		}
 		svc, err := getS3Client(transferRequest)
@@ -2005,16 +2009,8 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 			f.sendEventUpdateUser(err, "couldnt-connect-to-s3", "Couldn't connect to s3 - check credentials", pollResult)
 			return backoffState
 		}
-		// here we:
-		// mount the current commit readonly - keep a log somewhere of how many references there are using it. If already mounted, increment that refcount
-		event, _ := f.mountSnap(latestSnap.Id, true)
-		if event.Name != "mounted" {
-			f.innerResponses <- event
-			updateUser("Could not mount filesystem@commit readonly", transferRequestId, pollResult)
-			return backoffState
-		}
-		// list everything in there
-		pathToMount := fmt.Sprintf("%s/__default__", mnt(fmt.Sprintf("%s@%s", f.filesystemId, latestSnap.Id)))
+		// list everything in the main directory
+		pathToMount := fmt.Sprintf("%s/__default__", mountPoint)
 		paths, dirSize, err := getKeysForDir(pathToMount, "")
 		// push everything to s3
 		uploader := s3manager.NewUploaderWithClient(svc)
@@ -2048,6 +2044,11 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 			newVersions[key] = *output.VersionID
 			pollResult.Sent += size
 			updatePollResult(transferRequestId, pollResult)
+			err = file.Close()
+			if err != nil {
+				f.sendEventUpdateUser(err, "failed-closing-file", "failed to close file during s3 upload", pollResult)
+				return backoffState
+			}
 		}
 		// check if there is anything in s3 that isn't in this list - if there is, delete it
 		// unmount the current commit
@@ -2061,6 +2062,7 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 		err = writeS3Metadata(pathToS3Metadata, newVersions)
 		if err != nil {
 			f.sendEventUpdateUser(err, "couldnt-write-s3-metadata-push", "could not write s3 metadata to file after pushing - will not be able to detect the last commit was put into S3!", pollResult)
+			return backoffState
 		}
 		// create a new commit with the type "dotmesh.metadata_only" so that we can ignore it when detecting new commits
 		response, _ := f.snapshot(&Event{
@@ -3343,24 +3345,6 @@ func downloadS3Object(downloader *s3manager.Downloader, key, versionId, bucket, 
 	return nil
 }
 
-func createSubDot(filesystemId, subDir string) (string, error) {
-	destPath := fmt.Sprintf("%s/%s", mnt(filesystemId), subDir)
-	// TODO: take the contents of the bucket
-	// dump it in destpath
-	if _, err := os.Stat(destPath); err != nil {
-		if os.IsNotExist(err) {
-			if err := os.MkdirAll(destPath, 0777); err != nil {
-				log.Printf("[createSubDot] error creating subdot %s: %+v", destPath, err)
-				return "", err
-			}
-		} else {
-			log.Printf("[createSubDot] error statting subdot %s: %+v", destPath, err)
-			return "", err
-		}
-	}
-	return destPath, nil
-}
-
 func s3PullInitiatorState(f *fsMachine) stateFn {
 	f.transitionedTo("s3PullInitiatorState", "requesting")
 	transferRequest := f.lastS3TransferRequest
@@ -3382,10 +3366,9 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 		return backoffState
 	}
 
-	// TODO pull this out somewhere as I've duplicated this in rpc.go
-
 	// create the default paths
-	destPath, err := createSubDot(f.filesystemId, "__default__")
+	destPath := fmt.Sprintf("%s/%s", mnt(f.filesystemId), "__default__")
+	err = os.MkdirAll(destPath, 0775)
 	if err != nil {
 		f.sendEventUpdateUser(err, "cannot-create-default-dir", "Could not create default directory", pollResult)
 		return backoffState
@@ -3438,7 +3421,8 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 			return backoffState
 		}
 		snapshotId := id.String()
-		subPath, err := createSubDot(f.filesystemId, "dm.s3-versions")
+		path := fmt.Sprintf("%s/%s", mnt(f.filesystemId), "dm.s3-versions")
+		err = os.MkdirAll(path, 0775)
 		if err != nil {
 			f.innerResponses <- &Event{
 				Name: "couldnt-create-metadata-subdot",
@@ -3446,7 +3430,7 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 			}
 			return backoffState
 		}
-		pathToCommitMeta := fmt.Sprintf("%s/%s", subPath, snapshotId)
+		pathToCommitMeta := fmt.Sprintf("%s/%s", path, snapshotId)
 		err = writeS3Metadata(pathToCommitMeta, keyVersions)
 		if err != nil {
 			f.sendEventUpdateUser(err, "couldnt-write-s3-metadata-pull", "could not write s3 metadata to file after pulling - will not be able to detect the last commit was an S3 pull!", pollResult)
@@ -3489,6 +3473,7 @@ func writeS3Metadata(path string, versions map[string]string) error {
 	if err != nil {
 		return err
 	}
+	return nil
 }
 
 func pullInitiatorState(f *fsMachine) stateFn {
