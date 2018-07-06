@@ -1924,7 +1924,7 @@ func (f *fsMachine) getLastNonMetadataSnapshot() (*snapshot, error) {
 		return nil, err
 	}
 	var latestSnap *snapshot
-	for idx := len(snaps) - 1; idx > 0; idx-- {
+	for idx := len(snaps) - 1; idx > -1; idx-- {
 		commitType, ok := (*snaps[idx].Metadata)["type"]
 		if !ok || commitType != "dotmesh.metadata_only" {
 			latestSnap = &snaps[idx]
@@ -1958,11 +1958,17 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 		Index:             1,
 		Status:            "starting",
 	}
-	_, err := getS3Client(transferRequest)
+	f.lastPollResult = &pollResult
+	err := updatePollResult(transferRequestId, pollResult)
+	if err != nil {
+		f.sendEvent(&EventArgs{"err": err}, "cant-write-to-etcd", "S3 push initiator couldn't write to etcd")
+	}
+	_, err = getS3Client(transferRequest)
 	if err != nil {
 		f.sendEventUpdateUser(err, "couldnt-create-s3-client", "Couldn't create s3 client - check credentials are correct", pollResult)
 		return backoffState
 	}
+	snaps, err := f.state.snapshotsForCurrentMaster(f.filesystemId)
 	latestSnap, err := f.getLastNonMetadataSnapshot()
 	if err != nil {
 		f.sendEventUpdateUser(err, "s3-push-initiator-cant-get-snapshot-data", "cant get snapshot data", pollResult)
@@ -1978,6 +1984,14 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 			f.sendEventUpdateUser(err, "couldnt-stat-s3-meta-file", fmt.Sprintf("Could not stat s3 meta file %s", pathToFile), pollResult)
 			return backoffState
 		}
+	}
+	// todo set this to something more reasonable and do stuff with all of the above
+	pollResult.Status = "finished"
+	pollResult.Total = pollResult.Index
+	f.lastPollResult = &pollResult
+	err = updatePollResult(transferRequestId, pollResult)
+	if err != nil {
+		f.sendEvent(&EventArgs{"err": err}, "cant-write-to-etcd", "S3 push initiator couldn't write to etcd")
 	}
 	return discoveringState
 }
