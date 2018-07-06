@@ -127,6 +127,10 @@ func TestS3Remote(t *testing.T) {
 		if !strings.Contains(resp, "pushed-file.txt") {
 			t.Error("Did not push new file to S3")
 		}
+		_, err = citools.RunOnNodeErr(node1, "dm push test-real-s3 "+fsname)
+		if err == nil {
+			t.Error("Push command did not detect there were no changes")
+		}
 		// citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" rm /foo/hello-world.txt")
 		// citools.TryUntilSucceeds(func() error {
 		// 	output := citools.OutputFromRunOnNode(t, node1, "dm dot show "+fsname+" -H | grep dirty")

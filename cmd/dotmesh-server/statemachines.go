@@ -1991,9 +1991,8 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 		f.sendEventUpdateUser(err, "s3-push-initiator-cant-get-snapshot-data", "cant get snapshot data", pollResult)
 		return backoffState
 	}
-
+	pathToS3Metadata := fmt.Sprintf("%s/dm.s3-versions/%s", mnt(f.filesystemId), latestSnap.Id)
 	if latestSnap != nil {
-		pathToFile := fmt.Sprintf("%s/dm.s3-versions/%s", mnt(f.filesystemId), latestSnap.Id)
 		if _, err := os.Stat(pathToFile); err == nil {
 			f.sendArgsEventUpdateUser(&EventArgs{"path": pathToFile}, "commit-already-in-s3", "Found s3 metadata for latest snap - nothing to push!", pollResult)
 			return backoffState
@@ -2008,7 +2007,12 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 		}
 		// here we:
 		// mount the current commit readonly - keep a log somewhere of how many references there are using it. If already mounted, increment that refcount
-		f.mountSnap(latestSnap.Id, true)
+		event, _ := f.mountSnap(latestSnap.Id, true)
+		if event.Name != "mounted" {
+			f.innerResponses <- event
+			updateUser("Could not mount filesystem@commit readonly", transferRequestId, pollResult)
+			return backoffState
+		}
 		// list everything in there
 		pathToMount := fmt.Sprintf("%s/__default__", mnt(fmt.Sprintf("%s@%s", f.filesystemId, latestSnap.Id)))
 		paths, dirSize, err := getKeysForDir(pathToMount, "")
@@ -2047,9 +2051,34 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 		}
 		// check if there is anything in s3 that isn't in this list - if there is, delete it
 		// unmount the current commit
-		f.unmountSnap(latestSnap.Id)
+		event, _ = f.unmountSnap(latestSnap.Id)
+		if event.Name != "unmounted" {
+			f.innerResponses <- event
+			updateUser("Could not unmount filesystem@commit", transferRequestId, pollResult)
+			return backoffState
+		}
 		// create a file under the last commit id in the appropriate place + dump out the new versions to it
+		err = writeS3Metadata(pathToS3Metadata, newVersions)
+		if err != nil {
+			f.sendEventUpdateUser(err, "couldnt-write-s3-metadata-push", "could not write s3 metadata to file after pushing - will not be able to detect the last commit was put into S3!", pollResult)
+		}
 		// create a new commit with the type "dotmesh.metadata_only" so that we can ignore it when detecting new commits
+		response, _ := f.snapshot(&Event{
+			Name: "snapshot",
+			Args: &EventArgs{"metadata": metadata{
+				"message": "adding s3 metadata",
+				"type":    "dotmesh.metadata_only",
+			}
+		}
+		})
+		if response.Name != "snapshotted" {
+			f.innerResponses <- response
+			err = updateUser("Could not take snapshot", transferRequestId, pollResult)
+			if err != nil {
+				f.sendEvent(&EventArgs{"err": err}, "cant-write-to-etcd", "cant write to etcd")
+			}
+			return backoffState
+		}
 		// put something in S3 to let us know the filesystem ID/other dotmesh details in case we need to recover at a later stage
 	}
 	// todo set this to something more reasonable and do stuff with all of the above
@@ -3418,15 +3447,9 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 			return backoffState
 		}
 		pathToCommitMeta := fmt.Sprintf("%s/%s", subPath, snapshotId)
-		data, err := json.Marshal(keyVersions)
+		err = writeS3Metadata(pathToCommitMeta, keyVersions)
 		if err != nil {
-			f.sendEventUpdateUser(err, "failed-marshalling-metadata-json", "cant marshal metadata json", pollResult)
-			return backoffState
-		}
-		err = ioutil.WriteFile(pathToCommitMeta, data, 0600)
-		if err != nil {
-			f.sendEventUpdateUser(err, "failed-writing-metadata", "cant write metadata file", pollResult)
-			return backoffState
+			f.sendEventUpdateUser(err, "couldnt-write-s3-metadata-pull", "could not write s3 metadata to file after pulling - will not be able to detect the last commit was an S3 pull!", pollResult)
 		}
 		response, _ := f.snapshot(&Event{Name: "snapshot",
 			Args: &EventArgs{"metadata": metadata{"message": "s3 content"},
@@ -3455,6 +3478,17 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 		Args: &EventArgs{},
 	}
 	return discoveringState
+}
+
+func writeS3Metadata(path string, versions map[string]string) error {
+	data, err := json.Marshal(versions)
+	if err != nil {
+		return err
+	}
+	err = ioutil.WriteFile(path, data, 0600)
+	if err != nil {
+		return err
+	}
 }
 
 func pullInitiatorState(f *fsMachine) stateFn {
