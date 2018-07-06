@@ -1691,23 +1691,13 @@ func (d *DotmeshRPC) AllDotsAndBranches(
 		tlf.MasterBranch = v
 		// now add clones to tlf
 		clones := d.state.registry.ClonesFor(tlfId)
-
-		// cloneNames := []string{}
-		// for c, _ := range clones {
-		// cloneNames = append(cloneNames, c)
-		// }
-
-		// sort.Strings(cloneNames)
-		// for _, cloneName := range cloneNames {
 		for _, clone := range clones {
-			// clone := clones[cloneName]
 			c, err := d.state.getOne(r.Context(), clone.FilesystemId)
 			if err != nil {
 				return err
 			}
 			tlf.OtherBranches = append(tlf.OtherBranches, c)
 		}
-
 		sort.Sort(dotmeshVolumeByName(tlf.OtherBranches))
 
 		tlf.Owner = crappyTlf.Owner

@@ -1118,7 +1118,9 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 	// etcd gets wiped underneath us.
 	err = s.insertInitialAdminPassword()
 	if err != nil {
-		log.Printf("[insertInitialAdminPassword] err: %v", err)
+		log.WithFields(log.Fields{
+			"error": err,
+		}).Error("failed to create initial admin")
 	}
 
 	func() {
