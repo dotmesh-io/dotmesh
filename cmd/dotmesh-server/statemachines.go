@@ -538,32 +538,24 @@ waitingForSlaveSnapshot:
 	return inactiveState
 }
 
-func mkdirIfNotExist(mountPath string) error {
-	if _, err := os.Stat(mountPath); os.IsNotExist(err) {
-		out, err := exec.Command(
-			"mkdir", "-p", mountPath).CombinedOutput()
-		if err != nil {
-			return error
-		}
-	}
-	return nil
-}
-
 func (f *fsMachine) mountSnap(snapId *string, readonly bool) (responseEvent *Event, nextState stateFn) {
-	fullId = f.filesystemId
+	fullId := f.filesystemId
 	if snapId != nil {
-		fullId += "@" + snapId
+		fullId += "@" + *snapId
 	}
 	mountPath := mnt(fullId)
 	zfsPath := fq(fullId)
 	// only try to make the directory if it doesn't already exist
-	err := mkdirIfNotExist(mountPath)
-	if err != nil {
-		log.Printf("[mount:%s] %v while trying to mkdir mountpoint %s", f.filesystemId, err, zfsPath)
-		return &Event{
-			Name: "failed-mkdir-mountpoint",
-			Args: &EventArgs{"err": err, "combined-output": string(out)},
-		}, backoffState
+	if _, err := os.Stat(mountPath); os.IsNotExist(err) {
+		out, err := exec.Command(
+			"mkdir", "-p", mountPath).CombinedOutput()
+		if err != nil {
+			log.Printf("[mount:%s] %v while trying to mkdir mountpoint %s", f.filesystemId, err, zfsPath)
+			return &Event{
+				Name: "failed-mkdir-mountpoint",
+				Args: &EventArgs{"err": err, "combined-output": string(out)},
+			}, backoffState
+		}
 	}
 	// only try to use mount.zfs if it's not already present in the output
 	// of calling "mount"
@@ -1984,7 +1976,6 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 	if err != nil {
 		f.sendEvent(&EventArgs{"err": err}, "cant-write-to-etcd", "S3 push initiator couldn't write to etcd")
 	}
-	snaps, err := f.state.snapshotsForCurrentMaster(f.filesystemId)
 	latestSnap, err := f.getLastNonMetadataSnapshot()
 	if err != nil {
 		f.sendEventUpdateUser(err, "s3-push-initiator-cant-get-snapshot-data", "cant get snapshot data", pollResult)
@@ -2000,7 +1991,7 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 			f.sendEventUpdateUser(err, "couldnt-stat-s3-meta-file", fmt.Sprintf("Could not stat s3 meta file %s", pathToFile), pollResult)
 			return backoffState
 		}
-		svc, err := getS3Client(transferRequest)
+		_, err := getS3Client(transferRequest)
 		if err != nil {
 			f.sendEventUpdateUser(err, "couldnt-connect-to-s3", "Couldn't connect to s3 - check credentials", pollResult)
 		}
@@ -2021,8 +2012,6 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 	}
 	return discoveringState
 }
-
-func mountReadOnly()
 
 func pushInitiatorState(f *fsMachine) stateFn {
 	// Deduce the latest snapshot in
