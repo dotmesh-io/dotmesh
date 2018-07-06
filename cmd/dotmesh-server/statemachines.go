@@ -2068,8 +2068,8 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 			Args: &EventArgs{"metadata": metadata{
 				"message": "adding s3 metadata",
 				"type":    "dotmesh.metadata_only",
-			}
-		}
+			},
+			},
 		})
 		if response.Name != "snapshotted" {
 			f.innerResponses <- response
