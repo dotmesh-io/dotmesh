@@ -860,3 +860,39 @@ func (s *InMemoryState) GetReplicationLatency(fs string) (error, map[string][]st
 	log.Printf("[GetReplicationLatency] result: %+v", result)
 	return nil, result
 }
+
+// Volumes might be dots or branches, we get 'em all in one big list
+func (s *InMemoryState) GetListOfVolumes(ctx context.Context) (error, []DotmeshVolume) {
+	result := []DotmeshVolume{}
+
+	s.mastersCacheLock.Lock()
+	filesystems := []string{}
+	for fs, _ := range *s.mastersCache {
+		filesystems = append(filesystems, fs)
+	}
+	s.mastersCacheLock.Unlock()
+
+	for _, fs := range filesystems {
+		one, err := s.getOne(ctx, fs)
+		// Just skip this in the result list if the context (eg authenticated
+		// user) doesn't have permission to read it.
+		if err != nil {
+			switch err := err.(type) {
+			case PermissionDenied:
+				log.Printf("[GetListOfVoumes] permission denied reading %v", fs)
+				continue
+			default:
+				log.Printf("[GetListOfVolumes] err: %v", err)
+				// If we got an error looking something up, it might just be
+				// because the fsMachine list or the registry is temporarily
+				// inconsistent wrt the mastersCache. Proceed, at the risk of
+				// lying slightly...
+				continue
+			}
+		}
+
+		result = append(result, one)
+	}
+
+	return nil, result
+}
