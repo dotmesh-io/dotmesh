@@ -510,7 +510,7 @@ func (d *DotmeshRPC) List(
 	r *http.Request, args *struct{}, result *map[string]map[string]DotmeshVolume) error {
 	log.Printf("[List] starting!")
 
-	err, volumes := d.state.GetListOfVolumes(r.Context())
+	volumes, err := d.state.GetListOfVolumes(r.Context())
 
 	if err != nil {
 		return err
@@ -539,8 +539,7 @@ func (d *DotmeshRPC) ListWithContainers(
 	r *http.Request, args *struct{}, result *map[string]map[string]DotmeshVolumeAndContainers) error {
 	log.Printf("[List] starting!")
 
-	err, volumes := d.state.GetListOfVolumes(r.Context())
-
+	volumes, err := d.state.GetListOfVolumes(r.Context())
 	if err != nil {
 		return err
 	}
@@ -1765,7 +1764,7 @@ func (d *DotmeshRPC) AllDotsAndBranches(
 	d.state.serverAddressesCacheLock.Unlock()
 	sort.Sort(ByAddress(vac.Servers))
 
-	err, volumes := d.state.GetListOfVolumes(r.Context())
+	volumes, err := d.state.GetListOfVolumes(r.Context())
 
 	if err != nil {
 		return err
@@ -2730,12 +2729,7 @@ func (d *DotmeshRPC) GetReplicationLatencyForBranch(
 		return err
 	}
 
-	err, res := d.state.GetReplicationLatency(fs)
-	if err != nil {
-		return err
-	}
-
-	*result = res
+	*result = d.state.GetReplicationLatency(fs)
 
 	return nil
 }

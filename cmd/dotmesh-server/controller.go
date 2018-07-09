@@ -821,7 +821,7 @@ func (s *InMemoryState) CreateFilesystem(
 }
 
 // Returns a map from server name to a list of commit IDs that server is MISSING
-func (s *InMemoryState) GetReplicationLatency(fs string) (error, map[string][]string) {
+func (s *InMemoryState) GetReplicationLatency(fs string) map[string][]string {
 	commitsOnServer := map[string]map[string]struct{}{}
 	allCommits := map[string]struct{}{}
 
@@ -858,11 +858,11 @@ func (s *InMemoryState) GetReplicationLatency(fs string) (error, map[string][]st
 	}
 
 	log.Printf("[GetReplicationLatency] result: %+v", result)
-	return nil, result
+	return result
 }
 
 // Volumes might be dots or branches, we get 'em all in one big list
-func (s *InMemoryState) GetListOfVolumes(ctx context.Context) (error, []DotmeshVolume) {
+func (s *InMemoryState) GetListOfVolumes(ctx context.Context) ([]DotmeshVolume, error) {
 	result := []DotmeshVolume{}
 
 	filesystems := s.registry.FilesystemIdsIncludingClones()
@@ -889,5 +889,5 @@ func (s *InMemoryState) GetListOfVolumes(ctx context.Context) (error, []DotmeshV
 		result = append(result, one)
 	}
 
-	return nil, result
+	return result, nil
 }
