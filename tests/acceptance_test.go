@@ -1216,6 +1216,8 @@ func TestTwoNodesSameCluster(t *testing.T) {
 		citools.RunOnNode(t, node1, "dm dot show")
 		citools.RunOnNode(t, node2, "dm dot show")
 
+		time.Sleep(5 * time.Second)
+
 		// Check status of convergence
 	retryLoop:
 		for try := 1; try < 5; try++ {
@@ -1224,6 +1226,7 @@ func TestTwoNodesSameCluster(t *testing.T) {
 				if strings.Contains(dotStatus, "receiving") {
 					// Still replicating!
 					fmt.Printf("Still replicating, give it a second and try again...\n")
+					t.Logf("Still replicating, give it a second and try again... (%d retries)", try)
 					time.Sleep(time.Second)
 					continue retryLoop
 				}
