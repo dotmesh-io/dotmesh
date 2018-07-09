@@ -61,6 +61,14 @@ func TestS3Remote(t *testing.T) {
 
 	t.Run("PushPullDirectories", func(t *testing.T) {
 		// TODO: need to check whether keys containing a dir in s3 break stuff, and vice versa
+		citools.RunOnNode(t, node1, "mkdir -p somedir && echo 'directories' > somedir/hello-world.txt")
+		citools.RunOnNode(t, node1, s3cmd+" put somedir/hello-world.txt s3://test.dotmesh/somedir/hello-world.txt")
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm clone test-real-s3 test.dotmesh --local-name="+fsname)
+		resp := citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" ls /foo/somedir")
+		if !strings.Contains(resp, "hello-world.txt") {
+			t.Error("failed to clone s3 bucket")
+		}
 	})
 
 	t.Run("Pull", func(t *testing.T) {

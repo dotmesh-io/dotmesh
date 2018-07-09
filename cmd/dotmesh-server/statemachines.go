@@ -3318,9 +3318,25 @@ func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string
 	var innerError error
 	err := svc.ListObjectVersionsPages(params,
 		func(page *s3.ListObjectVersionsOutput, lastPage bool) bool {
+			for _, item := range page.DeleteMarkers {
+				latestMeta, _ := currentKeyVersions[*item.Key]
+				if *item.IsLatest && latestMeta != *item.VersionId {
+					deletePath := fmt.Sprintf("%s/%s", destPath, *item.Key)
+					log.Printf("Got object for deletion: %#v, key: %s", item, *item.Key)
+					err := os.RemoveAll(deletePath)
+					if err != nil && !os.IsNotExist(err) {
+						innerError = err
+						return false
+					}
+					currentKeyVersions[*item.Key] = *item.VersionId
+					bucketChanged = true
+
+				}
+			}
 			for _, item := range page.Versions {
 				latestMeta, _ := currentKeyVersions[*item.Key]
 				if *item.IsLatest && latestMeta != *item.VersionId {
+					log.Printf("Got object: %#v, key: %s", item, *item.Key)
 					pollResult.Index += 1
 					pollResult.Total += 1
 					pollResult.Size = *item.Size
@@ -3346,21 +3362,6 @@ func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string
 
 				}
 			}
-			for _, item := range page.DeleteMarkers {
-				latestMeta, _ := currentKeyVersions[*item.Key]
-				if *item.IsLatest && latestMeta != *item.VersionId {
-					deletePath := fmt.Sprintf("%s/%s", destPath, *item.Key)
-
-					err := os.Remove(deletePath)
-					if err != nil && !os.IsNotExist(err) {
-						innerError = err
-						return false
-					}
-					currentKeyVersions[*item.Key] = *item.VersionId
-					bucketChanged = true
-
-				}
-			}
 			return !lastPage
 		})
 	if pollResult.Total == pollResult.Index {
@@ -3379,15 +3380,24 @@ func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string
 
 func downloadS3Object(downloader *s3manager.Downloader, key, versionId, bucket, destPath string) error {
 	fpath := fmt.Sprintf("%s/%s", destPath, key)
+	directoryPath := fpath[:strings.LastIndex(fpath, "/")]
+	err := os.MkdirAll(directoryPath, 0666)
+	if err != nil {
+		log.Printf("Hit an error making all dirs")
+		return err
+	}
 	file, err := os.Create(fpath)
 	if err != nil {
 		return err
 	}
-	downloader.Download(file, &s3.GetObjectInput{
+	_, err = downloader.Download(file, &s3.GetObjectInput{
 		Bucket:    &bucket,
 		Key:       &key,
 		VersionId: &versionId,
 	})
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
