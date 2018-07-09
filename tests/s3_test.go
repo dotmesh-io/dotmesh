@@ -30,6 +30,7 @@ func TestS3Remote(t *testing.T) {
 
 	s3cmd := "docker run -v ${PWD}:/app --workdir /app garland/docker-s3cmd s3cmd --access_key=" + s3AccessKey + " --secret_key=" + s3SecretKey
 	citools.RunOnNode(t, node1, s3cmd+" rm s3://test.dotmesh/newfile.txt")
+	citools.RunOnNode(t, node1, s3cmd+" rm s3://test.dotmesh/somedir/hello-world.txt")
 	citools.RunOnNode(t, node1, "echo 'hello, s3' > hello-world.txt")
 	citools.RunOnNode(t, node1, s3cmd+" put hello-world.txt s3://test.dotmesh")
 	t.Run("remote", func(t *testing.T) {
@@ -122,6 +123,7 @@ func TestS3Remote(t *testing.T) {
 
 	t.Run("Push", func(t *testing.T) {
 		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, s3cmd+" put hello-world.txt s3://test.dotmesh")
 		citools.RunOnNode(t, node1, "dm clone test-real-s3 test.dotmesh --local-name="+fsname)
 		_, err := citools.RunOnNodeErr(node1, "dm push test-real-s3 "+fsname)
 		if err == nil {
