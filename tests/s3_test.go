@@ -30,6 +30,7 @@ func TestS3Remote(t *testing.T) {
 
 	s3cmd := "docker run -v ${PWD}:/app --workdir /app garland/docker-s3cmd s3cmd --access_key=" + s3AccessKey + " --secret_key=" + s3SecretKey
 	citools.RunOnNode(t, node1, s3cmd+" rm s3://test.dotmesh/newfile.txt")
+	citools.RunOnNode(t, node1, s3cmd+" rm s3://test.dotmesh/somedir/hello-world.txt")
 	citools.RunOnNode(t, node1, "echo 'hello, s3' > hello-world.txt")
 	citools.RunOnNode(t, node1, s3cmd+" put hello-world.txt s3://test.dotmesh")
 	t.Run("remote", func(t *testing.T) {
@@ -54,6 +55,18 @@ func TestS3Remote(t *testing.T) {
 			t.Error("unable to find volume name in ouput")
 		}
 		resp = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" ls /foo/")
+		if !strings.Contains(resp, "hello-world.txt") {
+			t.Error("failed to clone s3 bucket")
+		}
+	})
+
+	t.Run("PushPullDirectories", func(t *testing.T) {
+		// TODO: need to check whether keys containing a dir in s3 break stuff, and vice versa
+		citools.RunOnNode(t, node1, "mkdir -p somedir && echo 'directories' > somedir/hello-world.txt")
+		citools.RunOnNode(t, node1, s3cmd+" put somedir/hello-world.txt s3://test.dotmesh/somedir/hello-world.txt")
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm clone test-real-s3 test.dotmesh --local-name="+fsname)
+		resp := citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" ls /foo/somedir")
 		if !strings.Contains(resp, "hello-world.txt") {
 			t.Error("failed to clone s3 bucket")
 		}
@@ -106,5 +119,48 @@ func TestS3Remote(t *testing.T) {
 		if err == nil {
 			t.Error("Pull command did not detect extra commits")
 		}
+	})
+
+	t.Run("Push", func(t *testing.T) {
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, s3cmd+" put hello-world.txt s3://test.dotmesh")
+		citools.RunOnNode(t, node1, "dm clone test-real-s3 test.dotmesh --local-name="+fsname)
+		_, err := citools.RunOnNodeErr(node1, "dm push test-real-s3 "+fsname)
+		if err == nil {
+			t.Error("Push command did not detect there were no changes")
+		}
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/pushed-file.txt")
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+		citools.RunOnNode(t, node1, "dm commit -m 'push this back to s3'")
+		citools.RunOnNode(t, node1, "dm push test-real-s3 "+fsname)
+		resp := citools.OutputFromRunOnNode(t, node1, s3cmd+" ls s3://test.dotmesh")
+		if !strings.Contains(resp, "pushed-file.txt") {
+			t.Error("Did not push new file to S3")
+		}
+		_, err = citools.RunOnNodeErr(node1, "dm push test-real-s3 "+fsname)
+		if err == nil {
+			t.Error("Push command did not detect there were no changes")
+		}
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" rm /foo/hello-world.txt")
+		citools.TryUntilSucceeds(func() error {
+			output := citools.OutputFromRunOnNode(t, node1, "dm dot show "+fsname+" -H | grep dirty")
+			if strings.Contains(output, "\t0") {
+				return fmt.Errorf("not dirty yet")
+			}
+			return nil
+		}, "waiting for dirty data...")
+		citools.RunOnNode(t, node1, "dm commit -m 'cut this file from s3'")
+		citools.RunOnNode(t, node1, "dm push test-real-s3 "+fsname)
+		resp = citools.OutputFromRunOnNode(t, node1, s3cmd+" ls s3://test.dotmesh")
+		if strings.Contains(resp, "hello-world.txt") {
+			t.Error("Did not delete file from S3")
+		}
+	})
+
+	t.Run("ClonePushThenDeleteDot", func(t *testing.T) {
+		// todo:
+		// 1. clone an s3 dot
+		// 2. Do some stuff, push it back to s3
+		// 3. Delete it, confirm it doesn't fail
 	})
 }
