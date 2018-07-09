@@ -29,12 +29,12 @@ type Registry struct {
 	// map user facing filesystem name => filesystemId, with implicit null
 	// origin
 	TopLevelFilesystems     map[VolumeName]TopLevelFilesystem
-	TopLevelFilesystemsLock sync.RWMutex
+	TopLevelFilesystemsLock *sync.RWMutex
 	// clones ~= branches
 	// map filesystem.id (of topLevelFilesystem the clone is attributed to - ie
 	// not another clone) => user facing *branch name* => filesystemId,origin pair
 	Clones     map[string]map[string]Clone
-	ClonesLock sync.RWMutex
+	ClonesLock *sync.RWMutex
 	state      *InMemoryState
 }
 
@@ -113,9 +113,11 @@ func (r *Registry) deducePathToTopLevelFilesystem(name VolumeName, cloneName str
 
 func NewRegistry(s *InMemoryState) *Registry {
 	return &Registry{
-		state:               s,
-		TopLevelFilesystems: map[VolumeName]TopLevelFilesystem{},
-		Clones:              map[string]map[string]Clone{},
+		state:                   s,
+		TopLevelFilesystems:     map[VolumeName]TopLevelFilesystem{},
+		Clones:                  map[string]map[string]Clone{},
+		TopLevelFilesystemsLock: &sync.RWMutex{},
+		ClonesLock:              &sync.RWMutex{},
 	}
 }
 
@@ -174,24 +176,19 @@ func (r *Registry) FilesystemIds() []string {
 func (r *Registry) FilesystemIdsIncludingClones() []string {
 	filesystemIds := []string{}
 
-	func() {
-		r.TopLevelFilesystemsLock.RLock()
-		defer r.TopLevelFilesystemsLock.RLock()
-		for _, tlf := range r.TopLevelFilesystems {
-			filesystemIds = append(filesystemIds, tlf.MasterBranch.Id)
-		}
-	}()
+	r.TopLevelFilesystemsLock.RLock()
+	for _, tlf := range r.TopLevelFilesystems {
+		filesystemIds = append(filesystemIds, tlf.MasterBranch.Id)
+	}
+	r.TopLevelFilesystemsLock.RUnlock()
 
-	func() {
-		r.ClonesLock.RLock()
-		defer r.ClonesLock.RLock()
-
-		for _, clones := range r.Clones {
-			for _, clone := range clones {
-				filesystemIds = append(filesystemIds, clone.FilesystemId)
-			}
+	r.ClonesLock.RLock()
+	for _, clones := range r.Clones {
+		for _, clone := range clones {
+			filesystemIds = append(filesystemIds, clone.FilesystemId)
 		}
-	}()
+	}
+	r.ClonesLock.RUnlock()
 
 	sort.Strings(filesystemIds)
 	return filesystemIds

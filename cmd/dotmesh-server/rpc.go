@@ -1487,10 +1487,12 @@ func (d *DotmeshRPC) dirtyDataAndRunningContainers(ctx context.Context, filesyst
 
 	d.state.globalContainerCacheLock.Lock()
 	defer d.state.globalContainerCacheLock.Unlock()
-	c, _ := d.state.globalContainerCache[filesystemId]
+	c, ok := d.state.globalContainerCache[filesystemId]
 	containersRunning := []string{}
-	for _, container := range c.Containers {
-		containersRunning = append(containersRunning, string(container.Name))
+	if ok {
+		for _, container := range c.Containers {
+			containersRunning = append(containersRunning, string(container.Name))
+		}
 	}
 	return dirtyBytes, containersRunning, nil
 }
