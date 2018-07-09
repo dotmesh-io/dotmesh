@@ -865,12 +865,7 @@ func (s *InMemoryState) GetReplicationLatency(fs string) (error, map[string][]st
 func (s *InMemoryState) GetListOfVolumes(ctx context.Context) (error, []DotmeshVolume) {
 	result := []DotmeshVolume{}
 
-	s.mastersCacheLock.Lock()
-	filesystems := []string{}
-	for fs, _ := range s.mastersCache {
-		filesystems = append(filesystems, fs)
-	}
-	s.mastersCacheLock.Unlock()
+	filesystems := s.registry.FilesystemIdsIncludingClones()
 
 	for _, fs := range filesystems {
 		one, err := s.getOne(ctx, fs)

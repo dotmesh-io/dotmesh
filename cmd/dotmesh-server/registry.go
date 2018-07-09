@@ -159,7 +159,7 @@ func (r *Registry) GetByName(name VolumeName) (TopLevelFilesystem, error) {
 	return tlf, nil
 }
 
-// list of filesystem ids
+// list of top-level filesystem ids
 func (r *Registry) FilesystemIds() []string {
 	r.TopLevelFilesystemsLock.Lock()
 	defer r.TopLevelFilesystemsLock.Unlock()
@@ -167,6 +167,32 @@ func (r *Registry) FilesystemIds() []string {
 	for _, tlf := range r.TopLevelFilesystems {
 		filesystemIds = append(filesystemIds, tlf.MasterBranch.Id)
 	}
+	sort.Strings(filesystemIds)
+	return filesystemIds
+}
+
+func (r *Registry) FilesystemIdsIncludingClones() []string {
+	filesystemIds := []string{}
+
+	func() {
+		r.TopLevelFilesystemsLock.Lock()
+		defer r.TopLevelFilesystemsLock.Unlock()
+		for _, tlf := range r.TopLevelFilesystems {
+			filesystemIds = append(filesystemIds, tlf.MasterBranch.Id)
+		}
+	}()
+
+	func() {
+		r.ClonesLock.Lock()
+		defer r.ClonesLock.Unlock()
+
+		for _, clones := range r.Clones {
+			for _, clone := range clones {
+				filesystemIds = append(filesystemIds, clone.FilesystemId)
+			}
+		}
+	}()
+
 	sort.Strings(filesystemIds)
 	return filesystemIds
 }
