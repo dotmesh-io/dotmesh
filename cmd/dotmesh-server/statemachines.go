@@ -1995,7 +1995,17 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 		return backoffState
 	}
 	mountPoint := mnt(fmt.Sprintf("%s@%s", f.filesystemId, latestSnap.Id))
-	pathToS3Metadata := fmt.Sprintf("%s/dm.s3-versions/%s", mountPoint, latestSnap.Id)
+
+	snaps, err := f.state.snapshotsForCurrentMaster(f.filesystemId)
+	metadataSnap := snaps[len(snaps)-1]
+	pathToS3Metadata := fmt.Sprintf("%s@%s/dm.s3-versions/%s", mnt(f.filesystemId), metadataSnap.Id, latestSnap.Id)
+	log.Printf("[s3PushInitiatorState] path to s3 metadata: %s", pathToS3Metadata)
+	event, _ = f.mountSnap(metadataSnap.Id, true)
+	if event.Name != "mounted" {
+		f.innerResponses <- event
+		updateUser("Could not mount filesystem@commit readonly", transferRequestId, pollResult)
+		return backoffState
+	}
 	if latestSnap != nil {
 		if _, err := os.Stat(pathToS3Metadata); err == nil {
 			f.sendArgsEventUpdateUser(&EventArgs{"path": pathToS3Metadata}, "commit-already-in-s3", "Found s3 metadata for latest snap - nothing to push!", pollResult)
@@ -2004,6 +2014,7 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 			f.sendEventUpdateUser(err, "couldnt-stat-s3-meta-file", fmt.Sprintf("Could not stat s3 meta file %s", pathToS3Metadata), pollResult)
 			return backoffState
 		}
+
 		svc, err := getS3Client(transferRequest)
 		if err != nil {
 			f.sendEventUpdateUser(err, "couldnt-connect-to-s3", "Couldn't connect to s3 - check credentials", pollResult)
@@ -2051,12 +2062,12 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 			}
 		}
 
-		event, _ = f.unmountSnap(latestSnap.Id)
-		if event.Name != "unmounted" {
-			f.innerResponses <- event
-			updateUser("Could not unmount filesystem@commit", transferRequestId, pollResult)
-			return backoffState
-		}
+		// event, _ = f.unmountSnap(latestSnap.Id)
+		// if event.Name != "unmounted" {
+		// 	f.innerResponses <- event
+		// 	updateUser("Could not unmount filesystem@commit", transferRequestId, pollResult)
+		// 	return backoffState
+		// }
 		// check if there is anything in s3 that isn't in this list - if there is, delete it
 		// create a file under the last commit id in the appropriate place + dump out the new versions to it
 		dirtyPathToS3Meta := fmt.Sprintf("%s/dm.s3-versions/%s", mnt(f.filesystemId), latestSnap.Id)
@@ -2094,6 +2105,10 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 	err = updatePollResult(transferRequestId, pollResult)
 	if err != nil {
 		f.sendEvent(&EventArgs{"err": err}, "cant-write-to-etcd", "S3 push initiator couldn't write to etcd")
+		return backoffState
+	}
+	f.innerResponses <- &Event{
+		Name: "s3-pushed",
 	}
 	return discoveringState
 }
