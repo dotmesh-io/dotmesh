@@ -131,19 +131,26 @@ func TestS3Remote(t *testing.T) {
 		if err == nil {
 			t.Error("Push command did not detect there were no changes")
 		}
-		// citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" rm /foo/hello-world.txt")
-		// citools.TryUntilSucceeds(func() error {
-		// 	output := citools.OutputFromRunOnNode(t, node1, "dm dot show "+fsname+" -H | grep dirty")
-		// 	if strings.Contains(output, "\t0") {
-		// 		return fmt.Errorf("not dirty yet")
-		// 	}
-		// 	return nil
-		// }, "waiting for dirty data...")
-		// citools.RunOnNode(t, node1, "dm commit -m 'cut this file from s3'")
-		// citools.RunOnNode(t, node1, "dm push test-real-s3 "+fsname)
-		// resp = citools.OutputFromRunOnNode(t, node1, s3cmd+" ls s3://test.dotmesh")
-		// if strings.Contains(resp, "hello-world.txt") {
-		// 	t.Error("Did not push new file to S3")
-		// }
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" rm /foo/hello-world.txt")
+		citools.TryUntilSucceeds(func() error {
+			output := citools.OutputFromRunOnNode(t, node1, "dm dot show "+fsname+" -H | grep dirty")
+			if strings.Contains(output, "\t0") {
+				return fmt.Errorf("not dirty yet")
+			}
+			return nil
+		}, "waiting for dirty data...")
+		citools.RunOnNode(t, node1, "dm commit -m 'cut this file from s3'")
+		citools.RunOnNode(t, node1, "dm push test-real-s3 "+fsname)
+		resp = citools.OutputFromRunOnNode(t, node1, s3cmd+" ls s3://test.dotmesh")
+		if strings.Contains(resp, "hello-world.txt") {
+			t.Error("Did not delete file from S3")
+		}
+	})
+
+	t.Run("ClonePushThenDeleteDot", func(t *testing.T) {
+		// todo:
+		// 1. clone an s3 dot
+		// 2. Do some stuff, push it back to s3
+		// 3. Delete it, confirm it doesn't fail
 	})
 }
