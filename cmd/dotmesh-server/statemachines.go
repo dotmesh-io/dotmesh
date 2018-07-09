@@ -1982,6 +1982,7 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 	err := updatePollResult(transferRequestId, pollResult)
 	if err != nil {
 		f.sendEvent(&EventArgs{"err": err}, "cant-write-to-etcd", "S3 push initiator couldn't write to etcd")
+		return backoffState
 	}
 	latestSnap, err := f.getLastNonMetadataSnapshot()
 	if err != nil {
@@ -2009,7 +2010,7 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 	if latestSnap != nil {
 		if _, err := os.Stat(pathToS3Metadata); err == nil {
 			f.sendArgsEventUpdateUser(&EventArgs{"path": pathToS3Metadata}, "commit-already-in-s3", "Found s3 metadata for latest snap - nothing to push!", pollResult)
-			return backoffState
+			return discoveringState
 		} else if !os.IsNotExist(err) {
 			f.sendEventUpdateUser(err, "couldnt-stat-s3-meta-file", fmt.Sprintf("Could not stat s3 meta file %s", pathToS3Metadata), pollResult)
 			return backoffState
@@ -2032,6 +2033,7 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 		err = updatePollResult(transferRequestId, pollResult)
 		if err != nil {
 			f.sendEvent(&EventArgs{"err": err}, "cant-write-etcd", "")
+			return backoffState
 		}
 		newVersions := make(map[string]string)
 		for key, size := range paths {
@@ -2061,7 +2063,32 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 				return backoffState
 			}
 		}
-
+		params := &s3.ListObjectsV2Input{Bucket: aws.String(transferRequest.RemoteName)}
+		var innerError error
+		err = svc.ListObjectsV2Pages(params, func(output *s3.ListObjectsV2Output, lastPage bool) bool {
+			for _, item := range output.Contents {
+				if _, ok := paths[*item.Key]; !ok {
+					deleteOutput, err := svc.DeleteObject(&s3.DeleteObjectInput{
+						Key:    item.Key,
+						Bucket: aws.String(transferRequest.RemoteName),
+					})
+					if err != nil {
+						innerError = err
+						return false
+					}
+					newVersions[*item.Key] = *deleteOutput.VersionId
+				}
+			}
+			return !lastPage
+		})
+		if err != nil {
+			f.sendEventUpdateUser(err, "error-during-object-pagination", "failed to list s3 objects", pollResult)
+			return backoffState
+		}
+		if innerError != nil {
+			f.sendEventUpdateUser(innerError, "failed-deleting-key", "failed to delete object from s3", pollResult)
+			return backoffState
+		}
 		// event, _ = f.unmountSnap(latestSnap.Id)
 		// if event.Name != "unmounted" {
 		// 	f.innerResponses <- event
