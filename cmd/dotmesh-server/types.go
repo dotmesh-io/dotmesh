@@ -182,18 +182,18 @@ type TransferPollResult struct {
 type InMemoryState struct {
 	config                     Config
 	filesystems                map[string]*fsMachine
-	filesystemsLock            *sync.Mutex
+	filesystemsLock            *sync.RWMutex
 	myNodeId                   string
 	mastersCache               map[string]string
-	mastersCacheLock           *sync.Mutex
+	mastersCacheLock           *sync.RWMutex
 	serverAddressesCache       map[string]string
-	serverAddressesCacheLock   *sync.Mutex
+	serverAddressesCacheLock   *sync.RWMutex
 	globalSnapshotCache        map[string]map[string][]snapshot
-	globalSnapshotCacheLock    *sync.Mutex
+	globalSnapshotCacheLock    *sync.RWMutex
 	globalStateCache           map[string]map[string]map[string]string
-	globalStateCacheLock       *sync.Mutex
+	globalStateCacheLock       *sync.RWMutex
 	globalContainerCache       map[string]containerInfo
-	globalContainerCacheLock   *sync.Mutex
+	globalContainerCacheLock   *sync.RWMutex
 	etcdWaitTimestamp          int64
 	etcdWaitState              string
 	etcdWaitTimestampLock      *sync.Mutex
@@ -201,11 +201,11 @@ type InMemoryState struct {
 	newSnapsOnMaster           *Observer
 	registry                   *Registry
 	containers                 *DockerClient
-	containersLock             *sync.Mutex
+	containersLock             *sync.RWMutex
 	fetchRelatedContainersChan chan bool
 	interclusterTransfers      map[string]TransferPollResult
-	interclusterTransfersLock  *sync.Mutex
-	globalDirtyCacheLock       *sync.Mutex
+	interclusterTransfersLock  *sync.RWMutex
+	globalDirtyCacheLock       *sync.RWMutex
 	globalDirtyCache           map[string]dirtyInfo
 	userManager                user.UserManager
 

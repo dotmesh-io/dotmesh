@@ -30,23 +30,23 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 	s := &InMemoryState{
 		config:          config,
 		filesystems:     make(map[string]*fsMachine),
-		filesystemsLock: &sync.Mutex{},
+		filesystemsLock: &sync.RWMutex{},
 		myNodeId:        localPoolId,
 		// filesystem => node id
 		mastersCache:     make(map[string]string),
-		mastersCacheLock: &sync.Mutex{},
+		mastersCacheLock: &sync.RWMutex{},
 		// server id => comma-separated IPv[46] addresses
 		serverAddressesCache:     make(map[string]string),
-		serverAddressesCacheLock: &sync.Mutex{},
+		serverAddressesCacheLock: &sync.RWMutex{},
 		// server id => filesystem id => snapshot metadata
 		globalSnapshotCache:     make(map[string]map[string][]snapshot),
-		globalSnapshotCacheLock: &sync.Mutex{},
+		globalSnapshotCacheLock: &sync.RWMutex{},
 		// server id => filesystem id => state machine metadata
 		globalStateCache:     make(map[string]map[string]map[string]string),
-		globalStateCacheLock: &sync.Mutex{},
+		globalStateCacheLock: &sync.RWMutex{},
 		// global container state (what containers are running where), filesystemId -> containerInfo
 		globalContainerCache:     make(map[string]containerInfo),
-		globalContainerCacheLock: &sync.Mutex{},
+		globalContainerCacheLock: &sync.RWMutex{},
 		// When did we start waiting for etcd?
 		etcdWaitTimestamp:     0,
 		etcdWaitState:         "",
@@ -58,14 +58,14 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 		localReceiveProgress: NewObserver("localReceiveProgress"),
 		// containers that are running with dotmesh volumes by filesystem id
 		containers:     d,
-		containersLock: &sync.Mutex{},
+		containersLock: &sync.RWMutex{},
 		// channel to send on to hint that a new container is using a dotmesh
 		// volume
 		fetchRelatedContainersChan: make(chan bool),
 		// inter-cluster transfers are recorded here
 		interclusterTransfers:     make(map[string]TransferPollResult),
-		interclusterTransfersLock: &sync.Mutex{},
-		globalDirtyCacheLock:      &sync.Mutex{},
+		interclusterTransfersLock: &sync.RWMutex{},
+		globalDirtyCacheLock:      &sync.RWMutex{},
 		globalDirtyCache:          make(map[string]dirtyInfo),
 		userManager:               config.UserManager,
 		versionInfo:               &VersionInfo{InstalledVersion: serverVersion},
@@ -222,7 +222,7 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 			return DotmeshVolume{}, PermissionDenied{}
 		}
 		// if not exists, 0 is fine
-		s.globalDirtyCacheLock.Lock()
+		s.globalDirtyCacheLock.RLock()
 
 		log.WithFields(log.Fields{
 			"fs":     fs,
@@ -242,15 +242,15 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 			log.Debugf("[getOne] %s was not in %s", fs, s.globalDirtyCache)
 
 		}
-		s.globalDirtyCacheLock.Unlock()
+		s.globalDirtyCacheLock.RUnlock()
 		// if not exists, 0 is fine
-		s.globalSnapshotCacheLock.Lock()
+		s.globalSnapshotCacheLock.RLock()
 		snapshots, ok := s.globalSnapshotCache[master][fs]
-		s.globalSnapshotCacheLock.Unlock()
 		var commitCount int64
 		if ok {
 			commitCount = int64(len(snapshots))
 		}
+		s.globalSnapshotCacheLock.RUnlock()
 
 		d := DotmeshVolume{
 			Name:           tlf.MasterBranch.Name,
@@ -272,13 +272,13 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 			})
 		}
 		sort.Sort(ByAddress(servers))
+
+		s.globalStateCacheLock.RLock()
+		s.globalSnapshotCacheLock.RLock()
 		for _, server := range servers {
 			// get current state and status for filesystem on server from our
 			// cache
-			s.globalSnapshotCacheLock.Lock()
 			numSnapshots := len(s.globalSnapshotCache[server.Id][fs])
-			s.globalSnapshotCacheLock.Unlock()
-			s.globalStateCacheLock.Lock()
 			state, ok := s.globalStateCache[server.Id][fs]
 			status := ""
 			if !ok {
@@ -291,8 +291,11 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 				)
 			}
 			d.ServerStatuses[server.Id] = status
-			s.globalStateCacheLock.Unlock()
+
 		}
+		s.globalSnapshotCacheLock.RUnlock()
+		s.globalStateCacheLock.RUnlock()
+
 		log.Debugf("[getOne] here is your volume: %d", d)
 		return d, nil
 	} else {
@@ -301,9 +304,9 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 }
 
 func (s *InMemoryState) notifyPushCompleted(filesystemId string, success bool) {
-	s.filesystemsLock.Lock()
+	s.filesystemsLock.RLock()
 	f, ok := s.filesystems[filesystemId]
-	s.filesystemsLock.Unlock()
+	s.filesystemsLock.RUnlock()
 	if !ok {
 		log.Printf("[notifyPushCompleted] No such filesystem id %s", filesystemId)
 		return
@@ -318,8 +321,8 @@ func (s *InMemoryState) getCurrentState(filesystemId string) (string, error) {
 	// XXX this trusts (authenticated) POST data :/
 	s.initFilesystemMachine(filesystemId)
 
-	s.filesystemsLock.Lock()
-	defer s.filesystemsLock.Unlock()
+	s.filesystemsLock.RLock()
+	defer s.filesystemsLock.RUnlock()
 	f, ok := s.filesystems[filesystemId]
 	if !ok {
 		return "", fmt.Errorf("No such filesystem id %s", filesystemId)
@@ -454,8 +457,8 @@ func (s *InMemoryState) findRelatedContainers() error {
 }
 
 func (s *InMemoryState) currentMaster(filesystemId string) (string, error) {
-	s.mastersCacheLock.Lock()
-	defer s.mastersCacheLock.Unlock()
+	s.mastersCacheLock.RLock()
+	defer s.mastersCacheLock.RUnlock()
 
 	master, ok := s.mastersCache[filesystemId]
 	if !ok {
@@ -473,8 +476,8 @@ func (s *InMemoryState) snapshotsForCurrentMaster(filesystemId string) ([]snapsh
 }
 
 func (s *InMemoryState) snapshotsFor(server string, filesystemId string) ([]snapshot, error) {
-	s.globalSnapshotCacheLock.Lock()
-	defer s.globalSnapshotCacheLock.Unlock()
+	s.globalSnapshotCacheLock.RLock()
+	defer s.globalSnapshotCacheLock.RUnlock()
 	filesystems, ok := s.globalSnapshotCache[server]
 	if !ok {
 		return []snapshot{}, nil
@@ -488,8 +491,8 @@ func (s *InMemoryState) snapshotsFor(server string, filesystemId string) ([]snap
 
 // the addresses of a named server id
 func (s *InMemoryState) addressesFor(server string) []string {
-	s.serverAddressesCacheLock.Lock()
-	defer s.serverAddressesCacheLock.Unlock()
+	s.serverAddressesCacheLock.RLock()
+	defer s.serverAddressesCacheLock.RUnlock()
 	addresses, ok := s.serverAddressesCache[server]
 	if !ok {
 		// don't know about this server
@@ -500,8 +503,8 @@ func (s *InMemoryState) addressesFor(server string) []string {
 }
 
 func (s *InMemoryState) masterFor(filesystem string) string {
-	s.mastersCacheLock.Lock()
-	defer s.mastersCacheLock.Unlock()
+	s.mastersCacheLock.RLock()
+	defer s.mastersCacheLock.RUnlock()
 	currentMaster, ok := s.mastersCache[filesystem]
 	if !ok {
 		// don't know about this filesystem
@@ -554,9 +557,9 @@ func (s *InMemoryState) initFilesystemMachine(filesystemId string) *fsMachine {
 }
 
 func (s *InMemoryState) exists(filesystem string) bool {
-	s.filesystemsLock.Lock()
-	defer s.filesystemsLock.Unlock()
+	s.filesystemsLock.RLock()
 	_, ok := s.filesystems[filesystem]
+	s.filesystemsLock.RUnlock()
 	return ok
 }
 
@@ -825,21 +828,19 @@ func (s *InMemoryState) GetReplicationLatency(fs string) map[string][]string {
 	commitsOnServer := map[string]map[string]struct{}{}
 	allCommits := map[string]struct{}{}
 
-	func() {
-		s.globalSnapshotCacheLock.Lock()
-		defer s.globalSnapshotCacheLock.Unlock()
-		for server, filesystems := range s.globalSnapshotCache {
-			snapshots, ok := filesystems[fs]
+	s.globalSnapshotCacheLock.RLock()
+	for server, filesystems := range s.globalSnapshotCache {
+		snapshots, ok := filesystems[fs]
+		commitsOnServer[server] = map[string]struct{}{}
+		if ok {
 			commitsOnServer[server] = map[string]struct{}{}
-			if ok {
-				commitsOnServer[server] = map[string]struct{}{}
-				for _, snapshot := range snapshots {
-					commitsOnServer[server][snapshot.Id] = struct{}{}
-					allCommits[snapshot.Id] = struct{}{}
-				}
+			for _, snapshot := range snapshots {
+				commitsOnServer[server][snapshot.Id] = struct{}{}
+				allCommits[snapshot.Id] = struct{}{}
 			}
 		}
-	}()
+	}
+	s.globalSnapshotCacheLock.RUnlock()
 
 	log.Printf("[GetReplicationLatency] got initial data: %+v", commitsOnServer)
 	log.Printf("[GetReplicationLatency] all commits: %+v", allCommits)

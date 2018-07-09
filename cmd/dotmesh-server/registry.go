@@ -196,8 +196,8 @@ func (r *Registry) FilesystemIdsIncludingClones() []string {
 
 // map of clone names => clone objects for a given top-level filesystemId
 func (r *Registry) ClonesFor(filesystemId string) map[string]Clone {
-	r.ClonesLock.Lock()
-	defer r.ClonesLock.Unlock()
+	r.ClonesLock.RLock()
+	defer r.ClonesLock.RUnlock()
 	_, ok := r.Clones[filesystemId]
 	if !ok {
 		// filesystemId not found, return empty map
@@ -209,9 +209,9 @@ func (r *Registry) ClonesFor(filesystemId string) map[string]Clone {
 // Check whether a given clone can be pulled onto this machine, based on
 // whether its origin snapshot exists here
 func (r *Registry) CanPullClone(c Clone) bool {
-	r.state.filesystemsLock.Lock()
+	r.state.filesystemsLock.RLock()
 	fsMachine, ok := r.state.filesystems[c.Origin.FilesystemId]
-	r.state.filesystemsLock.Unlock()
+	r.state.filesystemsLock.RUnlock()
 	if !ok {
 		return false
 	}
