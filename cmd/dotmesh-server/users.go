@@ -282,19 +282,15 @@ func (t TopLevelFilesystem) Authorize(ctx context.Context) (bool, error) {
 }
 
 func (t TopLevelFilesystem) authorize(ctx context.Context, includeCollab bool) (bool, error) {
-	authenticatedUserId := auth.GetUserIDFromCtx(ctx)
-	if authenticatedUserId == "" {
+	user := auth.GetUserFromCtx(ctx)
+	if user == nil {
 		return false, fmt.Errorf("No user found in context.")
 	}
 	// admin user is always authorized (e.g. docker daemon). users and auth are
 	// only really meaningful over the network for data synchronization, when a
 	// dotmesh cluster is being used like a hub.
-	if authenticatedUserId == ADMIN_USER_UUID {
+	if user.Id == ADMIN_USER_UUID {
 		return true, nil
-	}
-	user, err := GetUserById(authenticatedUserId)
-	if err != nil {
-		return false, err
 	}
 	if user.Id == t.Owner.Id {
 		return true, nil

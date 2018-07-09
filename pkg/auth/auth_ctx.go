@@ -27,6 +27,13 @@ func GetUserIDFromCtx(ctx context.Context) string {
 	return ""
 }
 
+func GetUserFromCtx(ctx context.Context) *user.User {
+	if u := ctx.Value(authenticationUserObjectContextKey); u != nil {
+		return u.(*user.User)
+	}
+	return nil
+}
+
 // SetUserIDCtx - set user ID to given context
 func SetUserIDCtx(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, authenticationUserIDContextKey, id)
@@ -34,10 +41,7 @@ func SetUserIDCtx(ctx context.Context, id string) context.Context {
 
 // GetUser - gets user object from request context
 func GetUser(r *http.Request) *user.User {
-	if u := r.Context().Value(authenticationUserObjectContextKey); u != nil {
-		return u.(*user.User)
-	}
-	return nil
+	return GetUserFromCtx(r.Context())
 }
 
 func GetAuthenticationType(r *http.Request) user.AuthenticationType {

@@ -29,12 +29,12 @@ type Registry struct {
 	// map user facing filesystem name => filesystemId, with implicit null
 	// origin
 	TopLevelFilesystems     map[VolumeName]TopLevelFilesystem
-	TopLevelFilesystemsLock sync.Mutex
+	TopLevelFilesystemsLock sync.RWMutex
 	// clones ~= branches
 	// map filesystem.id (of topLevelFilesystem the clone is attributed to - ie
 	// not another clone) => user facing *branch name* => filesystemId,origin pair
 	Clones     map[string]map[string]Clone
-	ClonesLock sync.Mutex
+	ClonesLock sync.RWMutex
 	state      *InMemoryState
 }
 
@@ -130,8 +130,8 @@ func (bn ByNames) Less(i, j int) bool {
 
 // sorted list of top-level filesystem names
 func (r *Registry) Filesystems() []VolumeName {
-	r.TopLevelFilesystemsLock.Lock()
-	defer r.TopLevelFilesystemsLock.Unlock()
+	r.TopLevelFilesystemsLock.RLock()
+	defer r.TopLevelFilesystemsLock.RUnlock()
 	filesystemNames := []VolumeName{}
 	for name, _ := range r.TopLevelFilesystems {
 		filesystemNames = append(filesystemNames, name)
@@ -149,8 +149,8 @@ func (r *Registry) IdFromName(name VolumeName) (string, error) {
 }
 
 func (r *Registry) GetByName(name VolumeName) (TopLevelFilesystem, error) {
-	r.TopLevelFilesystemsLock.Lock()
-	defer r.TopLevelFilesystemsLock.Unlock()
+	r.TopLevelFilesystemsLock.RLock()
+	defer r.TopLevelFilesystemsLock.RUnlock()
 	tlf, ok := r.TopLevelFilesystems[name]
 	if !ok {
 		return TopLevelFilesystem{},
@@ -161,8 +161,8 @@ func (r *Registry) GetByName(name VolumeName) (TopLevelFilesystem, error) {
 
 // list of top-level filesystem ids
 func (r *Registry) FilesystemIds() []string {
-	r.TopLevelFilesystemsLock.Lock()
-	defer r.TopLevelFilesystemsLock.Unlock()
+	r.TopLevelFilesystemsLock.RLock()
+	defer r.TopLevelFilesystemsLock.RUnlock()
 	filesystemIds := []string{}
 	for _, tlf := range r.TopLevelFilesystems {
 		filesystemIds = append(filesystemIds, tlf.MasterBranch.Id)
@@ -175,16 +175,16 @@ func (r *Registry) FilesystemIdsIncludingClones() []string {
 	filesystemIds := []string{}
 
 	func() {
-		r.TopLevelFilesystemsLock.Lock()
-		defer r.TopLevelFilesystemsLock.Unlock()
+		r.TopLevelFilesystemsLock.RLock()
+		defer r.TopLevelFilesystemsLock.RLock()
 		for _, tlf := range r.TopLevelFilesystems {
 			filesystemIds = append(filesystemIds, tlf.MasterBranch.Id)
 		}
 	}()
 
 	func() {
-		r.ClonesLock.Lock()
-		defer r.ClonesLock.Unlock()
+		r.ClonesLock.RLock()
+		defer r.ClonesLock.RLock()
 
 		for _, clones := range r.Clones {
 			for _, clone := range clones {
@@ -435,8 +435,8 @@ func (r *Registry) DeleteCloneFromEtcd(name string, topLevelFilesystemId string)
 }
 
 func (r *Registry) LookupFilesystem(name VolumeName) (TopLevelFilesystem, error) {
-	r.TopLevelFilesystemsLock.Lock()
-	defer r.TopLevelFilesystemsLock.Unlock()
+	r.TopLevelFilesystemsLock.RLock()
+	defer r.TopLevelFilesystemsLock.RUnlock()
 	if _, ok := r.TopLevelFilesystems[name]; !ok {
 		return TopLevelFilesystem{}, fmt.Errorf("No such filesystem named '%s'", name)
 	}
@@ -445,22 +445,22 @@ func (r *Registry) LookupFilesystem(name VolumeName) (TopLevelFilesystem, error)
 
 // XXX naming here is a mess, wrt LookupFilesystem{Id,Name} :/
 func (r *Registry) LookupFilesystemName(filesystemId string) (name VolumeName, err error) {
-	r.TopLevelFilesystemsLock.Lock()
-	defer r.TopLevelFilesystemsLock.Unlock()
+	r.TopLevelFilesystemsLock.RLock()
+	defer r.TopLevelFilesystemsLock.RUnlock()
 	// TODO make a more efficient data structure
 	for name, tlf := range r.TopLevelFilesystems {
 		if tlf.MasterBranch.Id == filesystemId {
 			return name, nil
 		}
 	}
-	return VolumeName{"", ""}, fmt.Errorf("No such filesystem with id '%s'", filesystemId)
+	return VolumeName{Namespace: "", Name: ""}, fmt.Errorf("No such filesystem with id '%s'", filesystemId)
 }
 
 // Look up a clone. If you want to look up based on filesystem name and clone name, do:
 // fsId := LookupFilesystem(fsName); cloneId := LookupClone(fsId, cloneName)
 func (r *Registry) LookupClone(topLevelFilesystemId, cloneName string) (Clone, error) {
-	r.ClonesLock.Lock()
-	defer r.ClonesLock.Unlock()
+	r.ClonesLock.RLock()
+	defer r.ClonesLock.RUnlock()
 	if _, ok := r.Clones[topLevelFilesystemId]; !ok {
 		return Clone{}, fmt.Errorf("No clones at all, let alone named '%s' for filesystem id '%s'", cloneName, topLevelFilesystemId)
 	}
@@ -485,8 +485,8 @@ func (r *Registry) LookupCloneById(filesystemId string) (Clone, error) {
 }
 
 func (r *Registry) LookupCloneByIdWithName(filesystemId string) (Clone, string, error) {
-	r.ClonesLock.Lock()
-	defer r.ClonesLock.Unlock()
+	r.ClonesLock.RLock()
+	defer r.ClonesLock.RUnlock()
 	for _, cloneMap := range r.Clones {
 		for cloneName, clone := range cloneMap {
 			if clone.FilesystemId == filesystemId {
@@ -502,10 +502,10 @@ func (r *Registry) LookupCloneByIdWithName(filesystemId string) (Clone, string, 
 // XXX make this less horrifically inefficient by storing & updating inverted
 // indexes.
 func (r *Registry) LookupFilesystemById(filesystemId string) (TopLevelFilesystem, string, error) {
-	r.TopLevelFilesystemsLock.Lock()
-	defer r.TopLevelFilesystemsLock.Unlock()
-	r.ClonesLock.Lock()
-	defer r.ClonesLock.Unlock()
+	r.TopLevelFilesystemsLock.RLock()
+	defer r.TopLevelFilesystemsLock.RUnlock()
+	r.ClonesLock.RLock()
+	defer r.ClonesLock.RUnlock()
 	for _, tlf := range r.TopLevelFilesystems {
 		if tlf.MasterBranch.Id == filesystemId {
 			// empty-string cloneName ~= "master branch"
@@ -535,16 +535,16 @@ func (r *Registry) LookupFilesystemById(filesystemId string) (TopLevelFilesystem
 
 // filesystem id if exists, else ""
 func (r *Registry) Exists(name VolumeName, cloneName string) string {
-	r.TopLevelFilesystemsLock.Lock()
-	defer r.TopLevelFilesystemsLock.Unlock()
+	r.TopLevelFilesystemsLock.RLock()
+	defer r.TopLevelFilesystemsLock.RUnlock()
 	tlf, ok := r.TopLevelFilesystems[name]
 	if !ok {
 		return ""
 	}
 	filesystemId := tlf.MasterBranch.Id
 	if cloneName != "" {
-		r.ClonesLock.Lock()
-		defer r.ClonesLock.Unlock()
+		r.ClonesLock.RLock()
+		defer r.ClonesLock.RUnlock()
 		if _, ok := r.Clones[filesystemId]; !ok {
 			return ""
 		}
