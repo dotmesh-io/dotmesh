@@ -25,24 +25,24 @@ func TestRequireValidVolumeName(t *testing.T) {
 		t.Error("Funny characters shouldn't be valid")
 	}
 
-	err = requireValidVolumeName(VolumeName{Namespace: "111111111122222222223333333333444444444455555555556", Name: "ok"})
+	err = requireValidVolumeName(VolumeName{Namespace: "00000000001111111111222222222233333333334444444444555555555566666", Name: "ok"})
 	if err == nil {
-		t.Error("51-character names shouldn't be valid")
+		t.Error("65-character names shouldn't be valid")
 	}
 
-	err = requireValidVolumeName(VolumeName{Namespace: "11111111112222222222333333333344444444445555555555", Name: "ok"})
+	err = requireValidVolumeName(VolumeName{Namespace: "0000000000111111111122222222223333333333444444444455555555556666", Name: "ok"})
 	if err != nil {
-		t.Error("50-character names should be valid")
+		t.Error("64-character names should be valid")
 	}
 
-	err = requireValidVolumeName(VolumeName{Namespace: "ok", Name: "111111111122222222223333333333444444444455555555556"})
+	err = requireValidVolumeName(VolumeName{Namespace: "ok", Name: "00000000001111111111222222222233333333334444444444555555555566666"})
 	if err == nil {
-		t.Error("51-character names shouldn't be valid")
+		t.Error("65-character names shouldn't be valid")
 	}
 
-	err = requireValidVolumeName(VolumeName{Namespace: "ok", Name: "11111111112222222222333333333344444444445555555555"})
+	err = requireValidVolumeName(VolumeName{Namespace: "ok", Name: "0000000000111111111122222222223333333333444444444455555555556666"})
 	if err != nil {
-		t.Error("50-character names should be valid")
+		t.Error("64-character names should be valid")
 	}
 }
 
@@ -57,13 +57,13 @@ func TestRequireValidBranchName(t *testing.T) {
 		t.Error("Funny characters shouldn't be valid")
 	}
 
-	err = requireValidBranchName("111111111122222222223333333333444444444455555555556")
+	err = requireValidBranchName("00000000001111111111222222222233333333334444444444555555555566666")
 	if err == nil {
-		t.Error("51-character names shouldn't be valid")
+		t.Error("65-character names shouldn't be valid")
 	}
 
-	err = requireValidBranchName("11111111112222222222333333333344444444445555555555")
+	err = requireValidBranchName("0000000000111111111122222222223333333333444444444455555555556666")
 	if err != nil {
-		t.Error("50-character names should be valid")
+		t.Error("64-character names should be valid")
 	}
 }
