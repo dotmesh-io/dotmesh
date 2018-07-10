@@ -38,10 +38,10 @@ func NewDotmeshRPC(state *InMemoryState, um user.UserManager) *DotmeshRPC {
 	return &DotmeshRPC{state: state, usersManager: um}
 }
 
-var reNamespaceName = regexp.MustCompile(`^[a-zA-Z0-9_\-]{1,50}$`)
-var reVolumeName = regexp.MustCompile(`^[a-zA-Z0-9_\-]{1,50}$`)
-var reBranchName = regexp.MustCompile(`^[a-zA-Z0-9_\-]{1,50}$`)
-var reSubdotName = regexp.MustCompile(`^[a-zA-Z0-9_\-]{1,50}$`)
+var reNamespaceName = regexp.MustCompile(`^[a-zA-Z0-9_\-]{1,64}$`)
+var reVolumeName = regexp.MustCompile(`^[a-zA-Z0-9_\-]{1,64}$`)
+var reBranchName = regexp.MustCompile(`^[a-zA-Z0-9_\-]{1,64}$`)
+var reSubdotName = regexp.MustCompile(`^[a-zA-Z0-9_\-]{1,64}$`)
 
 func requireValidVolumeName(name VolumeName) error {
 	// Reject the request with an error if the volume name is invalid
