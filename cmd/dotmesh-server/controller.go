@@ -72,12 +72,12 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 	}
 	// a registry of names of filesystems and branches (clones) mapping to
 	// their ids
-	s.registry = NewRegistry(s)
+	s.registry = NewRegistry()
 	return s
 }
 
 func (s *InMemoryState) resetRegistry() {
-	s.registry = NewRegistry(s)
+	s.registry = NewRegistry()
 }
 
 func (s *InMemoryState) deleteFilesystem(filesystemId string) error {

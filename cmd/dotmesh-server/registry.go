@@ -24,6 +24,39 @@ import (
 
 const DEFAULT_BRANCH = "master"
 
+type _Registry interface {
+	Filesystems() []VolumeName
+	IdFromName(name VolumeName) (string, error)
+	GetByName(name VolumeName) (TopLevelFilesystem, error)
+	FilesystemIds() []string
+	FilesystemIdsIncludingClones() []string
+
+	ClonesFor(filesystemID string) map[string]Clone
+	// CanPullClone(c Clone) bool
+
+	RegisterFilesystem(ctx context.Context, name VolumeName, filesystemID string) error
+	UnregisterFilesystem(name VolumeName) error
+
+	UpdateCollaborators(ctx context.Context, tlf TopLevelFilesystem, newCollaborators []SafeUser) error
+	RegisterClone(name string, topLevelFilesystemId string, clone Clone) error
+
+	// TODO: why ..FromEtcd?
+	UpdateFilesystemFromEtcd(name VolumeName, rf registryFilesystem) error
+	UpdateCloneFromEtcd(name string, topLevelFilesystemId string, clone Clone)
+	DeleteCloneFromEtcd(name string, topLevelFilesystemId string)
+
+	LookupFilesystem(name VolumeName) (TopLevelFilesystem, error)
+	// LookupFilesystemName(filesystemId string) (name VolumeName, err error)
+	LookupClone(topLevelFilesystemId, cloneName string) (Clone, error)
+	LookupCloneById(filesystemId string) (Clone, error)
+	LookupCloneByIdWithName(filesystemId string) (Clone, string, error)
+	LookupFilesystemById(filesystemId string) (TopLevelFilesystem, string, error)
+
+	Exists(name VolumeName, cloneName string) string
+
+	MaybeCloneFilesystemId(name VolumeName, cloneName string) (string, error)
+}
+
 type Registry struct {
 	// filesystems ~= repos, top-level filesystems
 	// map user facing filesystem name => filesystemId, with implicit null
@@ -35,7 +68,7 @@ type Registry struct {
 	// not another clone) => user facing *branch name* => filesystemId,origin pair
 	Clones     map[string]map[string]Clone
 	ClonesLock *sync.RWMutex
-	state      *InMemoryState
+	// state      *InMemoryState
 }
 
 func (r *Registry) deducePathToTopLevelFilesystem(name VolumeName, cloneName string) (
@@ -111,9 +144,9 @@ func (r *Registry) deducePathToTopLevelFilesystem(name VolumeName, cloneName str
 	}
 }
 
-func NewRegistry(s *InMemoryState) *Registry {
+func NewRegistry() *Registry {
 	return &Registry{
-		state:                   s,
+		// state:                   s,
 		TopLevelFilesystems:     map[VolumeName]TopLevelFilesystem{},
 		Clones:                  map[string]map[string]Clone{},
 		TopLevelFilesystemsLock: &sync.RWMutex{},
@@ -208,22 +241,22 @@ func (r *Registry) ClonesFor(filesystemId string) map[string]Clone {
 
 // Check whether a given clone can be pulled onto this machine, based on
 // whether its origin snapshot exists here
-func (r *Registry) CanPullClone(c Clone) bool {
-	r.state.filesystemsLock.RLock()
-	fsMachine, ok := r.state.filesystems[c.Origin.FilesystemId]
-	r.state.filesystemsLock.RUnlock()
-	if !ok {
-		return false
-	}
-	fsMachine.snapshotsLock.Lock()
-	defer fsMachine.snapshotsLock.Lock()
-	for _, snap := range fsMachine.filesystem.snapshots {
-		if snap.Id == c.Origin.SnapshotId {
-			return true
-		}
-	}
-	return false
-}
+// func (r *Registry) CanPullClone(c Clone) bool {
+// 	r.state.filesystemsLock.RLock()
+// 	fsMachine, ok := r.state.filesystems[c.Origin.FilesystemId]
+// 	r.state.filesystemsLock.RUnlock()
+// 	if !ok {
+// 		return false
+// 	}
+// 	fsMachine.snapshotsLock.Lock()
+// 	defer fsMachine.snapshotsLock.Lock()
+// 	for _, snap := range fsMachine.filesystem.snapshots {
+// 		if snap.Id == c.Origin.SnapshotId {
+// 			return true
+// 		}
+// 	}
+// 	return false
+// }
 
 // the type as stored in the json in etcd (intermediate representation wrt
 // DotmeshVolume)
@@ -441,17 +474,17 @@ func (r *Registry) LookupFilesystem(name VolumeName) (TopLevelFilesystem, error)
 }
 
 // XXX naming here is a mess, wrt LookupFilesystem{Id,Name} :/
-func (r *Registry) LookupFilesystemName(filesystemId string) (name VolumeName, err error) {
-	r.TopLevelFilesystemsLock.RLock()
-	defer r.TopLevelFilesystemsLock.RUnlock()
-	// TODO make a more efficient data structure
-	for name, tlf := range r.TopLevelFilesystems {
-		if tlf.MasterBranch.Id == filesystemId {
-			return name, nil
-		}
-	}
-	return VolumeName{Namespace: "", Name: ""}, fmt.Errorf("No such filesystem with id '%s'", filesystemId)
-}
+// func (r *Registry) LookupFilesystemName(filesystemId string) (name VolumeName, err error) {
+// 	r.TopLevelFilesystemsLock.RLock()
+// 	defer r.TopLevelFilesystemsLock.RUnlock()
+// 	// TODO make a more efficient data structure
+// 	for name, tlf := range r.TopLevelFilesystems {
+// 		if tlf.MasterBranch.Id == filesystemId {
+// 			return name, nil
+// 		}
+// 	}
+// 	return VolumeName{Namespace: "", Name: ""}, fmt.Errorf("No such filesystem with id '%s'", filesystemId)
+// }
 
 // Look up a clone. If you want to look up based on filesystem name and clone name, do:
 // fsId := LookupFilesystem(fsName); cloneId := LookupClone(fsId, cloneName)

@@ -2050,11 +2050,7 @@ func sortFilesystemsInDeletionOrder(in []string, rootId string, origins map[stri
 	return in
 }
 
-func (d *DotmeshRPC) Delete(
-	r *http.Request,
-	args *VolumeName,
-	result *bool,
-) error {
+func (d *DotmeshRPC) Delete(r *http.Request, args *VolumeName, result *bool) error {
 	*result = false
 
 	err := requireValidVolumeName(*args)
@@ -2062,7 +2058,10 @@ func (d *DotmeshRPC) Delete(
 		return err
 	}
 
-	user, err := GetUserById(auth.GetUserID(r))
+	user := auth.GetUser(r)
+	if user == nil {
+		return fmt.Errorf("no user found in request ctx")
+	}
 
 	// Look up the top-level filesystem. This will error if the
 	// filesystem name isn't registered.
