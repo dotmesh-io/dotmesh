@@ -25,3 +25,15 @@ func IsUUID(str string) bool {
 func IsEmail(str string) bool {
 	return rxEmail.MatchString(str)
 }
+
+// IsValidPassword - checks is user supplied password is valid
+func IsValidPassword(str string) (errs []string) {
+	if len(str) == 0 {
+		errs = append(errs, "password cannot be empty")
+	}
+
+	if len(str) < 7 {
+		errs = append(errs, "password length should be at least 7 symbols")
+	}
+	return errs
+}

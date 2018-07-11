@@ -4,8 +4,12 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base32"
+	"fmt"
+	"strings"
 
 	"golang.org/x/crypto/scrypt"
+
+	"github.com/dotmesh-io/dotmesh/pkg/validator"
 )
 
 // Keygen parameters
@@ -22,6 +26,12 @@ const (
 
 // HashPassword - hashes password
 func HashPassword(password string) ([]byte, []byte, error) {
+
+	errs := validator.IsValidPassword(password)
+	if len(errs) > 0 {
+		return nil, nil, fmt.Errorf("invalid password: %s", strings.Join(errs, ", "))
+	}
+
 	salt := make([]byte, saltBytes)
 	_, err := rand.Read(salt)
 	if err != nil {
@@ -43,6 +53,18 @@ func hash(salt []byte, password string) ([]byte, error) {
 // PasswordMatches - checks whether user supplied password(plain string) matches hash password.
 // Requires original hashed password and salt
 func PasswordMatches(salt []byte, suppliedPassword, hashedPassword string) (bool, error) {
+	if len(salt) == 0 {
+		return false, fmt.Errorf("salt not provided")
+	}
+
+	if suppliedPassword == "" {
+		return false, fmt.Errorf("supplied password cannot be empty")
+	}
+
+	if hashedPassword == "" {
+		return false, fmt.Errorf("hashed password cannot be empty")
+	}
+
 	hashedSuppliedPassword, err := hash(salt, suppliedPassword)
 	if err != nil {
 		return false, err
