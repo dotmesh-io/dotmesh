@@ -6,24 +6,7 @@
 # without k8s - export DISABLE_K8S=1 disables the k8s build
 set -xe
 
-VERSION="$(cd cmd/versioner && go run versioner.go)"
-
-CI_DOCKER_SERVER_IMAGE=${CI_DOCKER_SERVER_IMAGE:=$(hostname).local:80/dotmesh/dotmesh-server:latest}
-CI_DOCKER_PROVISIONER_IMAGE=${CI_DOCKER_PROVISIONER_IMAGE:=$(hostname).local:80/dotmesh/dotmesh-dynamic-provisioner:latest}
-CI_DOCKER_OPERATOR_IMAGE=${CI_DOCKER_OPERATOR_IMAGE:=$(hostname).local:80/dotmesh/dotmesh-operator:latest}
-CI_DOCKER_DIND_PROVISIONER_IMAGE=${CI_DOCKER_DIND_PROVISIONER_IMAGE:=$(hostname).local:80/dotmesh/dind-dynamic-provisioner:latest}
-
-if [ -z "$CI_DOCKER_TAG" ]; then
-    # Non-CI build
-    ARTEFACT_CONTAINER=$VERSION
-else
-    ARTEFACT_CONTAINER="${CI_DOCKER_TAG}_${CI_JOB_ID}"
-fi
-
-mkdir -p target
-
-echo "building image: dotmesh-builder:$ARTEFACT_CONTAINER"
-docker build --build-arg VERSION="${VERSION}" -f Dockerfile.build -t dotmesh-builder:$ARTEFACT_CONTAINER .
+. build_setup.sh
 
 # docker
 echo "creating container: dotmesh-builder-docker-$ARTEFACT_CONTAINER"
@@ -37,56 +20,6 @@ docker rm -f dotmesh-builder-docker-$ARTEFACT_CONTAINER
 
 # skip rebuilding Kubernetes components if not using them
 if [ -z "${SKIP_K8S}" ]; then
-    # flexvolume
-    echo "creating container: dotmesh-builder-flexvolume-$ARTEFACT_CONTAINER"
-    docker rm -f dotmesh-builder-flexvolume-$ARTEFACT_CONTAINER || true
-    docker run \
-        --name dotmesh-builder-flexvolume-$ARTEFACT_CONTAINER \
-        -v dotmesh_build_cache_flexvolume:/gocache \
-        -e GOPATH=/go -e GOCACHE=/gocache \
-        -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/flexvolume \
-        dotmesh-builder:$ARTEFACT_CONTAINER \
-        go build -pkgdir /go/pkg -o /target/flexvolume
-    echo "copy binary: /target/flexvolume"
-    docker cp dotmesh-builder-flexvolume-$ARTEFACT_CONTAINER:/target/flexvolume target/
-    docker rm -f dotmesh-builder-flexvolume-$ARTEFACT_CONTAINER
-
-    # dm-provisioner
-    echo "creating container: dotmesh-builder-dm-provisioner-$ARTEFACT_CONTAINER"
-    docker rm -f dotmesh-builder-dm-provisioner-$ARTEFACT_CONTAINER || true
-    docker run \
-        --name dotmesh-builder-dm-provisioner-$ARTEFACT_CONTAINER \
-        -v dotmesh_build_cache_dm_provisioner:/gocache \
-        -e GOPATH=/go -e GOCACHE=/gocache \
-        -e CGO_ENABLED=0 \
-        -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dynamic-provisioning \
-        dotmesh-builder:$ARTEFACT_CONTAINER \
-        go build -pkgdir /go/pkg -ldflags '-extldflags "-static"' -o /target/dm-provisioner .
-    echo "copy binary: /target/dm-provisioner"
-    docker cp dotmesh-builder-dm-provisioner-$ARTEFACT_CONTAINER:/target/dm-provisioner target/
-    docker rm -f dotmesh-builder-dm-provisioner-$ARTEFACT_CONTAINER
-
-    echo "building image: ${CI_DOCKER_PROVISIONER_IMAGE}"
-    docker build -f cmd/dotmesh-server/pkg/dynamic-provisioning/Dockerfile -t "${CI_DOCKER_PROVISIONER_IMAGE}" .
-
-    # operator
-    echo "creating container: dotmesh-builder-operator-$ARTEFACT_CONTAINER"
-    docker rm -f dotmesh-builder-operator-$ARTEFACT_CONTAINER || true
-    docker run \
-        --name dotmesh-builder-operator-$ARTEFACT_CONTAINER \
-        -v dotmesh_build_cache_operator:/gocache \
-        -e GOPATH=/go -e GOCACHE=/gocache \
-        -e CGO_ENABLED=0 \
-        -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/operator \
-        dotmesh-builder:$ARTEFACT_CONTAINER \
-        go build -pkgdir /go/pkg -ldflags "-extldflags \"-static\" -X main.DOTMESH_VERSION=${VERSION} -X main.DOTMESH_IMAGE=${CI_DOCKER_SERVER_IMAGE} " -o /target/operator .
-    echo "copy binary: /target/operator"
-    docker cp dotmesh-builder-operator-$ARTEFACT_CONTAINER:/target/operator target/
-    docker rm -f dotmesh-builder-operator-$ARTEFACT_CONTAINER
-
-    echo "building image: ${CI_DOCKER_OPERATOR_IMAGE}"
-    docker build -f cmd/dotmesh-server/pkg/operator/Dockerfile -t "${CI_DOCKER_OPERATOR_IMAGE}" .
-
     # test tooling, built but not released:
 
     # dind-flexvolume
@@ -144,10 +77,7 @@ if [ -z "${NO_PUSH}" ]; then
     echo "pushing images"
     docker push ${CI_DOCKER_SERVER_IMAGE}
     if [ -z "${SKIP_K8S}" ]; then
-        docker push ${CI_DOCKER_PROVISIONER_IMAGE}
         echo "pushing dind provisioner"
         docker push ${CI_DOCKER_DIND_PROVISIONER_IMAGE}
-        echo "pushing operator"
-        docker push ${CI_DOCKER_OPERATOR_IMAGE}
     fi
 fi
