@@ -1,18 +1,14 @@
 package user
 
 import (
-	"crypto/rand"
-	"crypto/subtle"
-	"encoding/base32"
 	"encoding/json"
 	"fmt"
-	// "log"
 	"reflect"
 
 	"github.com/nu7hatch/gouuid"
-	"golang.org/x/crypto/scrypt"
 	"k8s.io/apimachinery/pkg/labels"
 
+	"github.com/dotmesh-io/dotmesh/pkg/crypto"
 	"github.com/dotmesh-io/dotmesh/pkg/kv"
 	"github.com/dotmesh-io/dotmesh/pkg/validator"
 
@@ -23,7 +19,7 @@ import (
 const ADMIN_USER_UUID = "00000000-0000-0000-0000-000000000000"
 
 // How many bytes of entropy in an API key
-const API_KEY_BYTES = 32
+// const API_KEY_BYTES = 32
 
 // UsersPrefix - KV store prefix for users
 const UsersPrefix = "users"
@@ -123,7 +119,7 @@ func (m *DefaultManager) NewAdmin(user *User) error {
 		"name": user.Name,
 	}).Info("user manager: creating admin account")
 
-	salt, hashedPassword, err := hashPassword(string(user.Password))
+	salt, hashedPassword, err := crypto.HashPassword(string(user.Password))
 	if err != nil {
 		return err
 	}
@@ -131,13 +127,10 @@ func (m *DefaultManager) NewAdmin(user *User) error {
 	user.Password = hashedPassword
 
 	if user.ApiKey == "" {
-		apiKeyBytes := make([]byte, API_KEY_BYTES)
-		_, err = rand.Read(apiKeyBytes)
+		apiKey, err := crypto.GenerateAPIKey()
 		if err != nil {
 			return err
 		}
-
-		apiKey := base32.StdEncoding.EncodeToString(apiKeyBytes)
 		user.ApiKey = apiKey
 	}
 
@@ -164,18 +157,15 @@ func (m *DefaultManager) New(username, email, password string) (*User, error) {
 	if err != nil {
 		return nil, err
 	}
-	salt, hashedPassword, err := hashPassword(password)
+	salt, hashedPassword, err := crypto.HashPassword(password)
 	if err != nil {
 		return nil, err
 	}
 
-	apiKeyBytes := make([]byte, API_KEY_BYTES)
-	_, err = rand.Read(apiKeyBytes)
+	apiKey, err := crypto.GenerateAPIKey()
 	if err != nil {
 		return nil, err
 	}
-
-	apiKey := base32.StdEncoding.EncodeToString(apiKeyBytes)
 
 	u := User{
 		Id:       id.String(),
@@ -217,7 +207,7 @@ func (m *DefaultManager) UpdatePassword(username string, password string) (*User
 	if err != nil {
 		return nil, err
 	}
-	salt, hashedPassword, err := hashPassword(password)
+	salt, hashedPassword, err := crypto.HashPassword(password)
 
 	if err != nil {
 		return nil, err
@@ -236,12 +226,12 @@ func (m *DefaultManager) ResetAPIKey(username string) (*User, error) {
 		return nil, err
 	}
 
-	keyBytes := make([]byte, API_KEY_BYTES)
-	_, err = rand.Read(keyBytes)
+	apiKey, err := crypto.GenerateAPIKey()
 	if err != nil {
 		return nil, err
 	}
-	u.ApiKey = base32.StdEncoding.EncodeToString(keyBytes)
+
+	u.ApiKey = apiKey
 
 	return m.Update(u)
 }
@@ -252,24 +242,14 @@ func (m *DefaultManager) Authenticate(username, password string) (*User, Authent
 		return nil, AuthenticationTypeNone, err
 	}
 
-	// See if API key matches
-	apiKeyMatch := subtle.ConstantTimeCompare(
-		[]byte(user.ApiKey),
-		[]byte(password)) == 1
-
-	if apiKeyMatch {
+	if user.ApiKey == password {
 		return user, AuthenticationTypeAPIKey, nil
 	}
-	// checking password
-	hashedPassword, err := scrypt.Key([]byte(password), user.Salt, SCRYPT_N, SCRYPT_R, SCRYPT_P, HASH_BYTES)
 
+	passwordMatch, err := crypto.PasswordMatches(user.Salt, password, string(user.Password))
 	if err != nil {
 		return nil, AuthenticationTypeNone, err
 	}
-
-	passwordMatch := subtle.ConstantTimeCompare(
-		[]byte(user.Password),
-		[]byte(hashedPassword)) == 1
 
 	if passwordMatch {
 		return user, AuthenticationTypePassword, nil
