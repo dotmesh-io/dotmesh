@@ -77,10 +77,7 @@ if [ -z "${NO_PUSH}" ]; then
     echo "pushing images"
     docker push ${CI_DOCKER_SERVER_IMAGE}
     if [ -z "${SKIP_K8S}" ]; then
-        docker push ${CI_DOCKER_PROVISIONER_IMAGE}
         echo "pushing dind provisioner"
         docker push ${CI_DOCKER_DIND_PROVISIONER_IMAGE}
-        echo "pushing operator"
-        docker push ${CI_DOCKER_OPERATOR_IMAGE}
     fi
 fi

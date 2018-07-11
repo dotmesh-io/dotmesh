@@ -19,3 +19,8 @@ docker rm -f dotmesh-builder-dm-provisioner-$ARTEFACT_CONTAINER
 
 echo "building image: ${CI_DOCKER_PROVISIONER_IMAGE}"
 docker build -f cmd/dynamic-provisioner/Dockerfile -t "${CI_DOCKER_PROVISIONER_IMAGE}" .
+
+if [ -z "${NO_PUSH}" ]; then
+    echo "pushing image"
+    docker push ${CI_DOCKER_PROVISIONER_IMAGE}
+fi

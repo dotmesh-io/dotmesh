@@ -19,3 +19,8 @@ docker rm -f dotmesh-builder-operator-$ARTEFACT_CONTAINER
 
 echo "building image: ${CI_DOCKER_OPERATOR_IMAGE}"
 docker build -f cmd/operator/Dockerfile -t "${CI_DOCKER_OPERATOR_IMAGE}" .
+
+if [ -z "${NO_PUSH}" ]; then
+    echo "pushing image"
+    docker push ${CI_DOCKER_OPERATOR_IMAGE}
+fi
