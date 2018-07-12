@@ -47,6 +47,8 @@ build_client_linux:
         paths:
             - binaries
         expire_in: 1 week
+    except:
+        - schedules
 
 build_client_macos:
     stage: build
@@ -59,6 +61,8 @@ build_client_macos:
         paths:
             - binaries
         expire_in: 1 week
+    except:
+        - schedules
 
 build_yaml:
     stage: build
@@ -71,6 +75,8 @@ build_yaml:
         paths:
             - yaml
         expire_in: 1 week
+    except:
+        - schedules
 
 build_server:
     stage: build
@@ -103,18 +109,16 @@ build_server:
         paths:
             - target
         expire_in: 1 week
+    except:
+        - schedules
 
-macos_docker_stable:
+macos_docker_stable_smoke:
     stage: test
-    dependencies:
-        - build_server
-        - build_client_macos
     tags:
         - macos
         - docker-stable
     script:
-        - docker pull $CI_DOCKER_REGISTRY/dotmesh-server:$CI_DOCKER_TAG
-        - gtimeout 5m ./scripts/smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
+        - gtimeout 5m ./scripts/smoke.sh
     after_script:
         - echo "DOTMESH LOGS"
         - docker logs dotmesh-server
@@ -125,17 +129,13 @@ macos_docker_stable:
     only:
         - schedules
 
-macos_docker_edge:
+macos_docker_edge_smoke:
     stage: test
-    dependencies:
-        - build_server
-        - build_client_macos
     tags:
         - macos
         - docker-edge
     script:
-        - docker pull $CI_DOCKER_REGISTRY/dotmesh-server:$CI_DOCKER_TAG
-        - gtimeout 5m ./scripts/smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
+        - gtimeout 5m ./scripts/smoke.sh
     after_script:
         - echo "DOTMESH LOGS"
         - docker logs dotmesh-server
@@ -148,15 +148,11 @@ macos_docker_edge:
 
 linux_smoke:
     stage: test
-    dependencies:
-        - build_server
-        - build_client_linux
     tags:
         - ubuntu
         - fast
     script:
-        - docker pull $CI_DOCKER_REGISTRY/dotmesh-server:$CI_DOCKER_TAG
-        - timeout 5m ./scripts/smoke.sh $(pwd)/binaries/Linux/dm dotmesh-server
+        - timeout 5m ./scripts/smoke.sh
     after_script:
         - echo "DOTMESH LOGS"
         - docker logs dotmesh-server

@@ -2,23 +2,13 @@
 set -xe
 set -o pipefail
 
-function usage() {
-	echo "usage: $0 path-to-dm-client dotmesh-server-image-name"
-}
-
 # Smoke test to see whether basics still work on e.g. macOS; also tests pushing
 # to the dothub.
 
-if [ -z "$1" ]
-  then
-    usage
-	exit 1
-fi
-
-export DM="$1"
+export SMOKE_TEST_DIR="smoke_test_run"
+export DM="./$SMOKE_TEST_DIR/dm"
 export NEW_UUID=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1 || true)
 export VOL="volume_`date +%s`_${NEW_UUID}"
-export IMAGE="${CI_DOCKER_REGISTRY:-`hostname`.local:80/dotmesh}/"$2":${CI_DOCKER_TAG:-latest}"
 
 # Verbose output on push
 export DEBUG_MODE=1
@@ -42,8 +32,6 @@ function delete_lingering_dots() {
 	done
 }
 
-
-
 # Set traps before we go into the subshells, otherwise they'll never be
 # triggered!
 function finish {
@@ -60,17 +48,28 @@ function finish {
 	delete_lingering_dots
 	"$DM" -c "$CONFIG" list
     rm "$CONFIG" || true
+	rm -r $SMOKE_TEST_DIR || true
 }
 
 trap finish EXIT
 
 ((
 
+echo "### Fetching client"
+
+mkdir -p $SMOKE_TEST_DIR
+
+curl -sSL -o $SMOKE_TEST_DIR/dm https://get.dotmesh.io/unstable/master/$(uname -s)/dm && chmod +x $SMOKE_TEST_DIR/dm
+
 sudo "$DM" -c "$CONFIG" cluster reset || (sleep 10; sudo "$DM" cluster reset) || true
 
-echo "### Installing image ${IMAGE}"
+echo "### Installing cluster"
 
-"$DM" -c "$CONFIG" cluster init --offline --image "$IMAGE"
+"$DM" -c "$CONFIG" cluster init
+
+echo "### Checking version"
+
+"$DM" -c "$CONFIG" version
 
 echo "### Testing docker run..."
 
