@@ -162,5 +162,15 @@ func TestS3Remote(t *testing.T) {
 		// 1. clone an s3 dot
 		// 2. Do some stuff, push it back to s3
 		// 3. Delete it, confirm it doesn't fail
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm clone test-real-s3 test.dotmesh --local-name="+fsname)
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/pushed-file.txt")
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+		citools.RunOnNode(t, node1, "dm commit -m 'push this back to s3'")
+		citools.RunOnNode(t, node1, "dm push test-real-s3 "+fsname)
+		_, err := citools.RunOnNodeErr(node1, "dm dot delete "+fsname)
+		if err != nil {
+			t.Error("Failed deleting dot after push")
+		}
 	})
 }
