@@ -104,32 +104,6 @@ build_server:
             - target
         expire_in: 1 week
 
-# run sanity check that things still work on Windows and macOS
-#windows_docker_stable:
-#    stage: test
-#    tags:
-#        - windows
-#        - docker-stable
-#    before_script:
-#        - |
-#          bash -c "
-#          mkdir -p gopath
-#          export GOPATH=$(pwd)/gopath
-#          cd gopath
-#          mkdir -p src/github.com/dotmesh-io
-#          ln -s `realpath ..` ./src/github.com/dotmesh-io/dotmesh
-#          cd src/github.com/dotmesh-io/dotmesh
-#          "
-#    script:
-#        - |
-#          bash -c "
-#          cd cmd/dotmesh-server;
-#          docker build -t dotmesh-server . || (sleep 30; docker build -t dotmesh-server .)
-#          cd ../..
-#          ./scripts/smoke.sh $(pwd)/binaries/Linux/dm dotmesh-server
-#          docker system prune -fa
-#          "
-
 macos_docker_stable:
     stage: test
     dependencies:

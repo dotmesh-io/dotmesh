@@ -2,8 +2,18 @@
 set -xe
 set -o pipefail
 
+function usage() {
+	echo "usage: $0 path-to-dm-client dotmesh-server-image-name"
+}
+
 # Smoke test to see whether basics still work on e.g. macOS; also tests pushing
 # to the dothub.
+
+if [ -z "$1" ]
+  then
+    usage
+	exit 1
+fi
 
 export DM="$1"
 export NEW_UUID=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1 || true)
@@ -30,6 +40,8 @@ function finish {
     if [ x$SMOKE_TEST_REMOTE != x ]; then
         "$DM" -c "$CONFIG" remote rm "$REMOTE" || true
     fi
+    "$DM" -c "$CONFIG" dot delete -f "$VOL"
+    "$DM" -c "$CONFIG" list"
     rm "$CONFIG" || true
 }
 
