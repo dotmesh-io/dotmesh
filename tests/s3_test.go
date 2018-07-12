@@ -158,10 +158,6 @@ func TestS3Remote(t *testing.T) {
 	})
 
 	t.Run("ClonePushThenDeleteDot", func(t *testing.T) {
-		// todo:
-		// 1. clone an s3 dot
-		// 2. Do some stuff, push it back to s3
-		// 3. Delete it, confirm it doesn't fail
 		fsname := citools.UniqName()
 		citools.RunOnNode(t, node1, "dm clone test-real-s3 test.dotmesh --local-name="+fsname)
 		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/pushed-file.txt")
@@ -171,6 +167,43 @@ func TestS3Remote(t *testing.T) {
 		_, err := citools.RunOnNodeErr(node1, "dm dot delete "+fsname)
 		if err != nil {
 			t.Error("Failed deleting dot after push")
+		}
+	})
+
+	t.Run("CloneSubset", func(t *testing.T) {
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, "mkdir -p subset && echo 'directories' > subset/subdir.txt")
+		citools.RunOnNode(t, node1, s3cmd+" put subset/subdir.txt s3://test.dotmesh/subset/subdir.txt")
+		citools.RunOnNode(t, node1, "dm s3 clone-subset test-real-s3 test.dotmesh subset/ --local-name="+fsname)
+		resp := citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" ls /foo/")
+		if !strings.Contains(resp, "/subset/subdir.txt") {
+			t.Error("Did not find subset dir")
+		}
+		if strings.Contains(resp, "hello-world.txt") {
+			t.Error("Found extra files we should have skipped")
+		}
+		fsname2 := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm s3 clone-subset test-real-s3 test.dotmesh hello- --local-name="+fsname2)
+		resp = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname2)+" ls /foo/")
+		if strings.Contains(resp, "/subset/subdir.txt") {
+			t.Error("Found files which shouldn't be cloned")
+		}
+		if !strings.Contains(resp, "hello-world.txt") {
+			t.Error("Did not clone hello-world.txt")
+		}
+		fsname3 := citools.UniqName()
+		citools.RunOnNode(t, node1, "echo 'new files are cool' > newfile.txt")
+		citools.RunOnNode(t, node1, s3cmd+" put newfile.txt s3://test.dotmesh")
+		citools.RunOnNode(t, node1, "dm s3 clone-subset test-real-s3 test.dotmesh hello-,newfile.txt --local-name="+fsname3)
+		resp = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname3)+" ls /foo/")
+		if strings.Contains(resp, "/subset/subdir.txt") {
+			t.Error("Found files which shouldn't be cloned")
+		}
+		if !strings.Contains(resp, "hello-world.txt") {
+			t.Error("Did not clone hello-world.txt")
+		}
+		if !strings.Contains(resp, "newfile.txt") {
+			t.Error("Did not clone newfile.txt")
 		}
 	})
 }
