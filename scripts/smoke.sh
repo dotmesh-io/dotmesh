@@ -30,9 +30,15 @@ export CONFIG=/tmp/smoke_test_$$.dmconfig
 export REMOTE="smoke_test_`date +%s`"
 
 function delete_lingering_dots() {
-	DOTS=`"$DM" -c "$CONFIG" list | grep "volume" | cut -d ' ' -f 3`
+	platform=`uname`
+	DOTS=`"$DM" -c "$CONFIG" list | grep "volume" | cut -d ' ' -f 3` || true
 	for dot in $DOTS
-    	do echo "deleting $dot" && timeout 10 "$DM" -c "$CONFIG" dot delete -f $dot || true
+	do
+		if [[ $platform == 'Linux' ]]; then
+			echo "deleting $dot" && timeout 10 "$DM" -c "$CONFIG" dot delete -f $dot || true
+		elif [[ $platform == 'Darwin' ]]; then
+			echo "deleting $dot" && gtimeout 10 "$DM" -c "$CONFIG" dot delete -f $dot || true
+		fi
 	done
 }
 
