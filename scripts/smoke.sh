@@ -29,6 +29,15 @@ export DEBUG_MODE=1
 export CONFIG=/tmp/smoke_test_$$.dmconfig
 export REMOTE="smoke_test_`date +%s`"
 
+function delete_lingering_dots() {
+	DOTS=`"$DM" -c "$CONFIG" list | grep "volume" | cut -d ' ' -f 3`
+	for dot in $DOTS
+    	do echo "deleting $dot" && timeout 10 "$DM" -c "$CONFIG" dot delete -f $dot || true
+	done
+}
+
+
+
 # Set traps before we go into the subshells, otherwise they'll never be
 # triggered!
 function finish {
@@ -40,8 +49,10 @@ function finish {
     if [ x$SMOKE_TEST_REMOTE != x ]; then
         "$DM" -c "$CONFIG" remote rm "$REMOTE" || true
     fi
-    "$DM" -c "$CONFIG" dot delete -f "$VOL"
-    "$DM" -c "$CONFIG" list
+
+	"$DM" -c "$CONFIG" dot delete -f $VOL
+	delete_lingering_dots
+	"$DM" -c "$CONFIG" list
     rm "$CONFIG" || true
 }
 
@@ -61,9 +72,9 @@ docker run --rm -i --name smoke -v "$VOL:/foo" --volume-driver dm ubuntu touch /
 
 echo "### Testing list..."
 
-OUT=`"$DM" -c "$CONFIG" list`
+LIST=`"$DM" -c "$CONFIG" list`
 
-if [[ $OUT == *"$VOL"* ]]; then
+if [[ $LIST == *"$VOL"* ]]; then
     echo "String '$VOL' found, yay!"
 else
     echo "String '$VOL' not found, boo :("
@@ -74,6 +85,8 @@ echo "### Testing commit..."
 
 "$DM" -c "$CONFIG" switch "$VOL"
 "$DM" -c "$CONFIG" commit -m 'Test commit'
+
+sleep 5
 
 OUT=`"$DM" -c "$CONFIG" log`
 
