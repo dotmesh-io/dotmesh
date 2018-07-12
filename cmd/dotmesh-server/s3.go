@@ -18,6 +18,8 @@ import (
 // stuff we use for s3 management which likely isn't needed in other situations
 
 func (f *fsMachine) getLastNonMetadataSnapshot() (*snapshot, error) {
+	// for all the snapshots we have, start from the latest, work backwards until we find a snapshot which isn't just a metadata change (i.e a write of a json file about s3 versions)
+	// in theory, we should only ever go back to latest-1, but could potentially go back further if we've had multiple commits slip in there.
 	snaps, err := f.state.snapshotsForCurrentMaster(f.filesystemId)
 	if err != nil {
 		return nil, err
@@ -33,13 +35,27 @@ func (f *fsMachine) getLastNonMetadataSnapshot() (*snapshot, error) {
 	return latestSnap, nil
 }
 
+// these are both kind of generic "take a map, read/write it as json" functions which could probably be used in non-s3 cases.
 func loadS3Meta(filesystemId, latestSnapId string, latestMeta *map[string]string) error {
+	// todo this is the only thing linking it to being s3 metadata, should we refactor this method to look more like the one below?
 	pathToCommitMeta := fmt.Sprintf("%s/dm.s3-versions/%s", mnt(filesystemId), latestSnapId)
 	data, err := ioutil.ReadFile(pathToCommitMeta)
 	if err != nil {
 		return err
 	}
-	err = json.Unmarshal(data, &latestMeta)
+	err = json.Unmarshal(data, latestMeta)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func writeS3Metadata(path string, versions map[string]string) error {
+	data, err := json.Marshal(versions)
+	if err != nil {
+		return err
+	}
+	err = ioutil.WriteFile(path, data, 0600)
 	if err != nil {
 		return err
 	}
@@ -47,6 +63,8 @@ func loadS3Meta(filesystemId, latestSnapId string, latestMeta *map[string]string
 }
 
 func getKeysForDir(parentPath string, subPath string) (map[string]int64, int64, error) {
+	// given a directory, recurse it creating s3 style keys for all the files in it (aka relative paths from that directory)
+	// send back a map of keys -> file sizes, and the whole directory's size
 	path := parentPath
 	if subPath != "" {
 		path += "/" + subPath
@@ -97,6 +115,10 @@ func getS3Client(transferRequest S3TransferRequest) (*s3.S3, error) {
 }
 
 func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string, pollResult *TransferPollResult, currentKeyVersions map[string]string) (bool, map[string]string, error) {
+	// for every version in the bucket
+	// 1. Delete anything locally that's been deleted in S3.
+	// 2. Download new versions of things that have changed
+	// 3. Return a map of object key -> s3 version id, plus an indicator of whether anything actually changed during this process so we know whether to make a snapshot.
 	var bucketChanged bool
 	// TODO refactor this a lil so we can get the folder structure easily
 	fmt.Printf("[downloadS3Bucket] currentVersions: %#v", currentKeyVersions)
@@ -190,14 +212,60 @@ func downloadS3Object(downloader *s3manager.Downloader, key, versionId, bucket, 
 	return nil
 }
 
-func writeS3Metadata(path string, versions map[string]string) error {
-	data, err := json.Marshal(versions)
+func removeOldS3Files(keyToVersionIds map[string]string, paths map[string]int64, bucket string, svc *s3.S3) (map[string]string, error) {
+	// get a list of the objects in s3, if there's anything there that isn't in our list of files in dotmesh, delete it.
+	params := &s3.ListObjectsV2Input{Bucket: aws.String(bucket)}
+	var innerError error
+	err := svc.ListObjectsV2Pages(params, func(output *s3.ListObjectsV2Output, lastPage bool) bool {
+		for _, item := range output.Contents {
+			if _, ok := paths[*item.Key]; !ok {
+				deleteOutput, innerError := svc.DeleteObject(&s3.DeleteObjectInput{
+					Key:    item.Key,
+					Bucket: aws.String(bucket),
+				})
+				if innerError != nil {
+					return false
+				}
+				keyToVersionIds[*item.Key] = *deleteOutput.VersionId
+			}
+		}
+		return !lastPage
+	})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	err = ioutil.WriteFile(path, data, 0600)
-	if err != nil {
-		return err
+	if innerError != nil {
+		return nil, innerError
 	}
-	return nil
+	return keyToVersionIds, nil
+}
+
+func updateS3Files(keyToVersionIds map[string]string, paths map[string]int64, pathToMount, transferRequestId, bucket string, svc *s3.S3, pollResult TransferPollResult) (map[string]string, error) {
+	// push every key up to s3 and then send back a map of object key -> s3 version id
+	uploader := s3manager.NewUploaderWithClient(svc)
+	for key, size := range paths {
+		path := fmt.Sprintf("%s/%s", pathToMount, key)
+		file, err := os.Open(path)
+		pollResult.Index += 1
+
+		if err != nil {
+			return nil, err
+		}
+		output, err := uploader.Upload(&s3manager.UploadInput{
+			Bucket: aws.String(bucket),
+			Key:    aws.String(key),
+			Body:   file,
+		})
+		if err != nil {
+			return nil, err
+		}
+		keyToVersionIds[key] = *output.VersionID
+		pollResult.Sent += size
+		updatePollResult(transferRequestId, pollResult)
+		err = file.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return keyToVersionIds, nil
 }

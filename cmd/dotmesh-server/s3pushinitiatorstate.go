@@ -2,9 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"log"
 	"os"
 )
@@ -67,8 +64,6 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 		pathToMount := fmt.Sprintf("%s/__default__", mountPoint)
 		paths, dirSize, err := getKeysForDir(pathToMount, "")
 		// push everything to s3
-		uploader := s3manager.NewUploaderWithClient(svc)
-		var file *os.File
 		pollResult.Total = len(paths)
 		pollResult.Size = dirSize
 		pollResult.Status = "beginning upload"
@@ -77,58 +72,15 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 			f.sendEvent(&EventArgs{"err": err}, "cant-write-etcd", "")
 			return backoffState
 		}
-		newVersions := make(map[string]string)
-		for key, size := range paths {
-			path := fmt.Sprintf("%s/%s", pathToMount, key)
-			file, err = os.Open(path)
-			pollResult.Index += 1
-
-			if err != nil {
-				f.errorDuringTransfer("couldnt-read-file", err)
-				return backoffState
-			}
-			output, err := uploader.Upload(&s3manager.UploadInput{
-				Bucket: aws.String(transferRequest.RemoteName),
-				Key:    aws.String(key),
-				Body:   file,
-			})
-			if err != nil {
-				f.errorDuringTransfer("failed-upload-to-s3", err)
-				return backoffState
-			}
-			newVersions[key] = *output.VersionID
-			pollResult.Sent += size
-			updatePollResult(transferRequestId, pollResult)
-			err = file.Close()
-			if err != nil {
-				f.errorDuringTransfer("failed-closing-file", err)
-				return backoffState
-			}
-		}
-		params := &s3.ListObjectsV2Input{Bucket: aws.String(transferRequest.RemoteName)}
-		var innerError error
-		err = svc.ListObjectsV2Pages(params, func(output *s3.ListObjectsV2Output, lastPage bool) bool {
-			for _, item := range output.Contents {
-				if _, ok := paths[*item.Key]; !ok {
-					deleteOutput, err := svc.DeleteObject(&s3.DeleteObjectInput{
-						Key:    item.Key,
-						Bucket: aws.String(transferRequest.RemoteName),
-					})
-					if err != nil {
-						innerError = err
-						return false
-					}
-					newVersions[*item.Key] = *deleteOutput.VersionId
-				}
-			}
-			return !lastPage
-		})
+		keyToVersionIds := make(map[string]string)
+		keyToVersionIds, err = updateS3Files(keyToVersionIds, paths, pathToMount, transferRequestId, transferRequest.RemoteName, svc, pollResult)
 		if err != nil {
-			f.errorDuringTransfer("error-during-object-pagination", err)
+			f.errorDuringTransfer("error-updating-s3-objects", err)
 			return backoffState
 		}
-		if innerError != nil {
-			f.errorDuringTransfer("failed-deleting-s3-key", innerError)
+		keyToVersionIds, err = removeOldS3Files(keyToVersionIds, paths, transferRequest.RemoteName, svc)
+		if err != nil {
+			f.errorDuringTransfer("error-during-object-pagination", err)
 			return backoffState
 		}
 		// event, _ = f.unmountSnap(latestSnap.Id)
@@ -140,7 +92,7 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 		// check if there is anything in s3 that isn't in this list - if there is, delete it
 		// create a file under the last commit id in the appropriate place + dump out the new versions to it
 		dirtyPathToS3Meta := fmt.Sprintf("%s/dm.s3-versions/%s", mnt(f.filesystemId), latestSnap.Id)
-		err = writeS3Metadata(dirtyPathToS3Meta, newVersions)
+		err = writeS3Metadata(dirtyPathToS3Meta, keyToVersionIds)
 		if err != nil {
 			f.errorDuringTransfer("couldnt-write-s3-metadata-push", err)
 			return backoffState
