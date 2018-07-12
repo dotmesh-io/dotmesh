@@ -41,7 +41,7 @@ function finish {
         "$DM" -c "$CONFIG" remote rm "$REMOTE" || true
     fi
     "$DM" -c "$CONFIG" dot delete -f "$VOL"
-    "$DM" -c "$CONFIG" list"
+    "$DM" -c "$CONFIG" list
     rm "$CONFIG" || true
 }
 
