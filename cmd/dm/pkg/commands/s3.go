@@ -83,7 +83,7 @@ func NewCmdS3(out io.Writer) *cobra.Command {
 	})
 	subCommand := &cobra.Command{
 		Use:   "clone-subset <remote> <bucket> <prefixes> [--local-name=<dot>]",
-		Short: "Clone an s3 bucket, but only select a subset as dictated by prefixes. (for full bucket clones see dm clone as normal)",
+		Short: "Clone an s3 bucket, but only select a subset as dictated by comma-separated prefixes. (for full bucket clones see dm clone as normal)",
 		// TODO add this to the docs
 		Long: "Online help: https://docs.dotmesh.com/references/cli/#add-a-new-remote-dm-remote-add-name-user-hostname",
 
@@ -94,12 +94,16 @@ func NewCmdS3(out io.Writer) *cobra.Command {
 				if err != nil {
 					return err
 				}
+				peer, filesystemName, branchName, err := resolveTransferArgs(args[:len(args)-1])
+				if err != nil {
+					return err
+				}
 				transferId, err := dm.RequestS3SubsetTransfer(
-					args[0],
-					"pull",
-					cloneLocalVolume,
-					args[2],
+					"pull", peer,
+					localVolumeName, branchName,
+					filesystemName, branchName,
 					prefixes,
+					// TODO also switch to the remote?
 				)
 				if err != nil {
 					return err

@@ -927,83 +927,10 @@ func (dm *DotmeshAPI) RequestTransfer(
 
 	// Let's replace any missing things with defaults.
 	// The defaults depend on whether we're pushing or pulling.
-
-	if direction == "push" {
-		// We are pushing, so if no local filesystem/branch is
-		// specified, take the current one.
-		if localFilesystemName == "" {
-			localFilesystemName, err = dm.Configuration.CurrentVolume()
-			if err != nil {
-				return "", err
-			}
-		}
-
-		if localBranchName == "" {
-			localBranchName, err = dm.Configuration.CurrentBranch()
-			if err != nil {
-				return "", err
-			}
-		}
-	} else if direction == "pull" {
-		// We are pulling, so if no local filesystem/branch is
-		// specified, we take the remote name but strip it of its
-		// namespace. So if we pull "bob/apples", we pull into "apples",
-		// which is really "admin/apples".
-		if localFilesystemName == "" && remoteFilesystemName != "" {
-			_, localFilesystemName, err = ParseNamespacedVolume(remoteFilesystemName)
-			if err != nil {
-				return "", err
-			}
-		}
-	}
-
-	// Split the local volume name's namespace out
-	localNamespace, localVolume, err := ParseNamespacedVolume(localFilesystemName)
+	localNamespace, localVolume, localBranchName, remoteNamespace, remoteVolume, remoteBranchName, err := dm.parseVolumeDetails(remote, peer, direction, localFilesystemName, localBranchName, remoteFilesystemName, remoteBranchName)
 	if err != nil {
 		return "", err
 	}
-
-	// Guess defaults for the remote filesystem
-	var remoteNamespace, remoteVolume string
-	if remoteFilesystemName == "" {
-		// No remote specified. Do we already have a default configured?
-		defaultRemoteNamespace, defaultRemoteVolume, ok := dm.Configuration.DefaultRemoteVolumeFor(peer, localNamespace, localVolume)
-		if ok {
-			// If so, use it
-			remoteNamespace = defaultRemoteNamespace
-			remoteVolume = defaultRemoteVolume
-		} else {
-			// If not, default to the un-namespaced local filesystem name.
-			// This causes it to default into the user's own namespace
-			// when we parse the name, too.
-			remoteNamespace = remote.DefaultNamespace()
-			remoteVolume = localVolume
-		}
-	} else {
-		// Default namespace for remote volume is the username on this remote
-		remoteNamespace, remoteVolume, err = ParseNamespacedVolumeWithDefault(remoteFilesystemName, remote.DefaultNamespace())
-		if err != nil {
-			return "", err
-		}
-	}
-
-	// Remember default remote if there isn't already one
-	_, _, ok := dm.Configuration.DefaultRemoteVolumeFor(peer, localNamespace, localVolume)
-	if !ok {
-		dm.Configuration.SetDefaultRemoteVolumeFor(peer, localNamespace, localVolume, remoteNamespace, remoteVolume)
-	}
-
-	if remoteBranchName == "" {
-		remoteBranchName = localBranchName
-	}
-
-	if remoteBranchName != "" && remoteVolume == "" {
-		return "", fmt.Errorf(
-			"It's dubious to specify a remote branch name " +
-				"without specifying a remote filesystem name.",
-		)
-	}
-
 	if direction == "push" {
 		fmt.Printf("Pushing %s/%s to %s:%s/%s\n",
 			localNamespace, localVolume,
@@ -1088,24 +1015,104 @@ func (dm *DotmeshAPI) RequestTransfer(
 
 }
 
+func (dm *DotmeshAPI) parseVolumeDetails(remote Remote, peer, direction, localFilesystemName, localBranchName, remoteFilesystemName, remoteBranchName string) (string, string, string, string, string, string, error) {
+	var err error
+	if direction == "push" {
+		// We are pushing, so if no local filesystem/branch is
+		// specified, take the current one.
+		if localFilesystemName == "" {
+			localFilesystemName, err = dm.Configuration.CurrentVolume()
+			if err != nil {
+				return "", "", "", "", "", "", err
+			}
+		}
+
+		if localBranchName == "" {
+			localBranchName, err = dm.Configuration.CurrentBranch()
+			if err != nil {
+				return "", "", "", "", "", "", err
+			}
+		}
+	} else if direction == "pull" {
+		// We are pulling, so if no local filesystem/branch is
+		// specified, we take the remote name but strip it of its
+		// namespace. So if we pull "bob/apples", we pull into "apples",
+		// which is really "admin/apples".
+		if localFilesystemName == "" && remoteFilesystemName != "" {
+			_, localFilesystemName, err = ParseNamespacedVolume(remoteFilesystemName)
+			if err != nil {
+				return "", "", "", "", "", "", err
+			}
+		}
+	}
+
+	// Split the local volume name's namespace out
+	localNamespace, localVolume, err := ParseNamespacedVolume(localFilesystemName)
+	if err != nil {
+		return "", "", "", "", "", "", err
+	}
+
+	// Guess defaults for the remote filesystem
+	var remoteNamespace, remoteVolume string
+	if remoteFilesystemName == "" {
+		// No remote specified. Do we already have a default configured?
+		defaultRemoteNamespace, defaultRemoteVolume, ok := dm.Configuration.DefaultRemoteVolumeFor(peer, localNamespace, localVolume)
+		if ok {
+			// If so, use it
+			remoteNamespace = defaultRemoteNamespace
+			remoteVolume = defaultRemoteVolume
+		} else {
+			// If not, default to the un-namespaced local filesystem name.
+			// This causes it to default into the user's own namespace
+			// when we parse the name, too.
+			remoteNamespace = remote.DefaultNamespace()
+			remoteVolume = localVolume
+		}
+	} else {
+		// Default namespace for remote volume is the username on this remote
+		remoteNamespace, remoteVolume, err = ParseNamespacedVolumeWithDefault(remoteFilesystemName, remote.DefaultNamespace())
+		if err != nil {
+			return "", "", "", "", "", "", err
+		}
+	}
+
+	// Remember default remote if there isn't already one
+	_, _, ok := dm.Configuration.DefaultRemoteVolumeFor(peer, localNamespace, localVolume)
+	if !ok {
+		dm.Configuration.SetDefaultRemoteVolumeFor(peer, localNamespace, localVolume, remoteNamespace, remoteVolume)
+	}
+
+	if remoteBranchName == "" {
+		remoteBranchName = localBranchName
+	}
+
+	if remoteBranchName != "" && remoteVolume == "" {
+		return "", "", "", "", "", "", fmt.Errorf(
+			"It's dubious to specify a remote branch name " +
+				"without specifying a remote filesystem name.",
+		)
+	}
+	return localNamespace, localVolume, localBranchName, remoteNamespace, remoteVolume, remoteBranchName, nil
+}
+
 func (dm *DotmeshAPI) RequestS3SubsetTransfer(
-	peer,
-	direction,
-	localFilesystemName,
-	remoteVolume string,
+	direction, peer,
+	localFilesystemName, localBranchName,
+	remoteFilesystemName, remoteBranchName string,
 	prefixes []string,
 ) (string, error) {
 	var transferId string
-	localNamespace, localVolume, err := ParseNamespacedVolume(localFilesystemName)
-	if err != nil {
-		return "", err
-	}
+
 	connectionInitiator := dm.Configuration.CurrentRemote
 	client, err := dm.Configuration.ClusterFromRemote(connectionInitiator, dm.verbose)
 	if err != nil {
 		return "", err
 	}
 	remote, err := dm.Configuration.GetRemote(peer)
+	if err != nil {
+		return "", err
+	}
+	localNamespace, localVolume, localBranchName, _, remoteVolume, _, err := dm.parseVolumeDetails(remote, peer, direction, localFilesystemName, localBranchName, remoteFilesystemName, remoteBranchName)
 	if err != nil {
 		return "", err
 	}
@@ -1120,7 +1127,7 @@ func (dm *DotmeshAPI) RequestS3SubsetTransfer(
 			Direction:       direction,
 			LocalNamespace:  localNamespace,
 			LocalName:       localVolume,
-			LocalBranchName: "",
+			LocalBranchName: localBranchName,
 			RemoteName:      remoteVolume,
 			// TODO add TargetSnapshot here, to support specifying "push to a given
 			// snapshot" rather than just "push all snapshots up to the latest"
