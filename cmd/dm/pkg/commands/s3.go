@@ -1,27 +1,19 @@
 package commands
 
 import (
-	"context"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
-	"sort"
-	"strconv"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/dotmesh-io/dotmesh/cmd/dm/pkg/remotes"
-	"github.com/howeyc/gopass"
-	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 )
 
-var cloneLocalVolume string
+var localVolumeName string
 
 func NewCmdS3(out io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
@@ -97,17 +89,17 @@ func NewCmdS3(out io.Writer) *cobra.Command {
 
 		Run: func(cmd *cobra.Command, args []string) {
 			runHandlingError(func() error {
-				prefixes := strings.Split(args[3], ",")
+				prefixes := strings.Split(args[2], ",")
 				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
 				}
 				transferId, err := dm.RequestS3SubsetTransfer(
 					args[0],
+					"pull",
 					cloneLocalVolume,
 					args[2],
 					prefixes,
-					// TODO also switch to the remote?
 				)
 				if err != nil {
 					return err
@@ -121,7 +113,7 @@ func NewCmdS3(out io.Writer) *cobra.Command {
 			})
 		},
 	}
-	subCommand.PersistentFlags().StringVarP(&cloneLocalVolume, "local-name", "", "",
+	subCommand.PersistentFlags().StringVarP(&localVolumeName, "local-name", "", "",
 		"Local dot name to create")
 	cmd.AddCommand(subCommand)
 	return cmd

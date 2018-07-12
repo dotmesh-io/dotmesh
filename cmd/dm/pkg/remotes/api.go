@@ -1088,9 +1088,10 @@ func (dm *DotmeshAPI) RequestTransfer(
 
 }
 
-func (dm *DotmeshAPI) RequestS3SubTransfer(
-	direction, peer,
-	localFilesystemName, localBranchName,
+func (dm *DotmeshAPI) RequestS3SubsetTransfer(
+	peer,
+	direction,
+	localFilesystemName,
 	remoteVolume string,
 	prefixes []string,
 ) (string, error) {
@@ -1119,7 +1120,7 @@ func (dm *DotmeshAPI) RequestS3SubTransfer(
 			Direction:       direction,
 			LocalNamespace:  localNamespace,
 			LocalName:       localVolume,
-			LocalBranchName: deMasterify(localBranchName),
+			LocalBranchName: "",
 			RemoteName:      remoteVolume,
 			// TODO add TargetSnapshot here, to support specifying "push to a given
 			// snapshot" rather than just "push all snapshots up to the latest"
