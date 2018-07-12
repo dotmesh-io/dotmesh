@@ -176,7 +176,7 @@ func TestS3Remote(t *testing.T) {
 		citools.RunOnNode(t, node1, s3cmd+" put subset/subdir.txt s3://test.dotmesh/subset/subdir.txt")
 		citools.RunOnNode(t, node1, "dm s3 clone-subset test-real-s3 test.dotmesh subset/ --local-name="+fsname)
 		resp := citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" ls /foo/")
-		if !strings.Contains(resp, "/subset/subdir.txt") {
+		if !strings.Contains(resp, "subset") {
 			t.Error("Did not find subset dir")
 		}
 		if strings.Contains(resp, "hello-world.txt") {
@@ -185,7 +185,7 @@ func TestS3Remote(t *testing.T) {
 		fsname2 := citools.UniqName()
 		citools.RunOnNode(t, node1, "dm s3 clone-subset test-real-s3 test.dotmesh hello- --local-name="+fsname2)
 		resp = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname2)+" ls /foo/")
-		if strings.Contains(resp, "/subset/subdir.txt") {
+		if strings.Contains(resp, "subset") {
 			t.Error("Found files which shouldn't be cloned")
 		}
 		if !strings.Contains(resp, "hello-world.txt") {
@@ -196,7 +196,7 @@ func TestS3Remote(t *testing.T) {
 		citools.RunOnNode(t, node1, s3cmd+" put newfile.txt s3://test.dotmesh")
 		citools.RunOnNode(t, node1, "dm s3 clone-subset test-real-s3 test.dotmesh hello-,newfile.txt --local-name="+fsname3)
 		resp = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname3)+" ls /foo/")
-		if strings.Contains(resp, "/subset/subdir.txt") {
+		if strings.Contains(resp, "subset") {
 			t.Error("Found files which shouldn't be cloned")
 		}
 		if !strings.Contains(resp, "hello-world.txt") {
