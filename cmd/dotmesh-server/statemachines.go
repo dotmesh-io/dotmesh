@@ -15,6 +15,8 @@ import (
 	"golang.org/x/net/context"
 )
 
+// core functions used by files ending `state` which I couldn't think of a good place for.
+
 func newFilesystemMachine(filesystemId string, s *InMemoryState) *fsMachine {
 	// initialize the fsMachine with a filesystem struct that has bare minimum
 	// information (just the filesystem id) required to get started
