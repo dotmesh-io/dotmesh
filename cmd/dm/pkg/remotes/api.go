@@ -888,6 +888,7 @@ type TransferRequest struct {
 type S3TransferRequest struct {
 	KeyID           string
 	SecretKey       string
+	Prefixes        []string
 	Endpoint        string
 	Direction       string
 	LocalNamespace  string
@@ -1085,6 +1086,54 @@ func (dm *DotmeshAPI) RequestTransfer(
 	}
 	return transferId, nil
 
+}
+
+func (dm *DotmeshAPI) RequestS3SubTransfer(
+	direction, peer,
+	localFilesystemName, localBranchName,
+	remoteVolume string,
+	prefixes []string,
+) (string, error) {
+	var transferId string
+	localNamespace, localVolume, err := ParseNamespacedVolume(localFilesystemName)
+	if err != nil {
+		return "", err
+	}
+	connectionInitiator := dm.Configuration.CurrentRemote
+	client, err := dm.Configuration.ClusterFromRemote(connectionInitiator, dm.verbose)
+	if err != nil {
+		return "", err
+	}
+	remote, err := dm.Configuration.GetRemote(peer)
+	if err != nil {
+		return "", err
+	}
+	s3Remote, ok := remote.(*S3Remote)
+	if ok {
+
+		transferRequest := S3TransferRequest{
+			KeyID:           s3Remote.KeyID,
+			SecretKey:       s3Remote.SecretKey,
+			Prefixes:        prefixes,
+			Endpoint:        s3Remote.Endpoint,
+			Direction:       direction,
+			LocalNamespace:  localNamespace,
+			LocalName:       localVolume,
+			LocalBranchName: deMasterify(localBranchName),
+			RemoteName:      remoteVolume,
+			// TODO add TargetSnapshot here, to support specifying "push to a given
+			// snapshot" rather than just "push all snapshots up to the latest"
+		}
+
+		err = client.CallRemote(context.Background(),
+			"DotmeshRPC.S3Transfer", transferRequest, &transferId)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		return "", fmt.Errorf("Unknown remote type %#v\n", remote)
+	}
+	return transferId, nil
 }
 
 // FIXME: Put this in a shared library, as it duplicates the copy in

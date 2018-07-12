@@ -21,6 +21,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var cloneLocalVolume string
+
 func NewCmdS3(out io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "s3",
@@ -30,7 +32,8 @@ func NewCmdS3(out io.Writer) *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:   "remote add <remote-name> <key-id:secret-key>[@endpoint]",
 		Short: "Add an S3 remote",
-		Long:  "Online help: https://docs.dotmesh.com/references/cli/#add-a-new-remote-dm-remote-add-name-user-hostname",
+		// TODO update docs
+		Long: "Online help: https://docs.dotmesh.com/references/cli/#add-a-new-remote-dm-remote-add-name-user-hostname",
 
 		Run: func(cmd *cobra.Command, args []string) {
 			runHandlingError(func() error {
@@ -86,5 +89,40 @@ func NewCmdS3(out io.Writer) *cobra.Command {
 			})
 		},
 	})
+	subCommand := &cobra.Command{
+		Use:   "clone-subset <remote> <bucket> <prefixes> [--local-name=<dot>]",
+		Short: "Clone an s3 bucket, but only select a subset as dictated by prefixes. (for full bucket clones see dm clone as normal)",
+		// TODO add this to the docs
+		Long: "Online help: https://docs.dotmesh.com/references/cli/#add-a-new-remote-dm-remote-add-name-user-hostname",
+
+		Run: func(cmd *cobra.Command, args []string) {
+			runHandlingError(func() error {
+				prefixes := strings.Split(args[3], ",")
+				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
+				if err != nil {
+					return err
+				}
+				transferId, err := dm.RequestS3SubsetTransfer(
+					args[0],
+					cloneLocalVolume,
+					args[2],
+					prefixes,
+					// TODO also switch to the remote?
+				)
+				if err != nil {
+					return err
+				}
+				err = dm.PollTransfer(transferId, out)
+				if err != nil {
+					return err
+				}
+
+				return nil
+			})
+		},
+	}
+	subCommand.PersistentFlags().StringVarP(&cloneLocalVolume, "local-name", "", "",
+		"Local dot name to create")
+	cmd.AddCommand(subCommand)
 	return cmd
 }
