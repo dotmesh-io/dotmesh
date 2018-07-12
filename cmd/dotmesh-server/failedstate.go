@@ -1,4 +1,8 @@
-package statemachine
+package main
+
+import (
+	"log"
+)
 
 func failedState(f *fsMachine) stateFn {
 	f.transitionedTo("failed", "never coming back")

@@ -1,4 +1,8 @@
-package statemachine
+package main
+
+import (
+	"log"
+)
 
 func discoveringState(f *fsMachine) stateFn {
 	f.transitionedTo("discovering", "loading")

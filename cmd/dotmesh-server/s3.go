@@ -1,11 +1,18 @@
-package statemachine
+package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"golang.org/x/net/context"
+	"io/ioutil"
+	"log"
+	"os"
+	"strings"
 )
 
 // stuff we use for s3 management which likely isn't needed in other situations

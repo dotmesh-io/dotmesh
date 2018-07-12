@@ -1,4 +1,13 @@
-package statemachine
+package main
+
+import (
+	"fmt"
+	"golang.org/x/net/context"
+	"io"
+	"log"
+	"net/http"
+	"os/exec"
+)
 
 // attempt to pull some snapshots from the master, based on some hint that it
 // might be possible now

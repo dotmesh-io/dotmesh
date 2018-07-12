@@ -1,4 +1,11 @@
-package statemachine
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"golang.org/x/net/context"
+	"log"
+)
 
 // anything to do with passing events and states back from the current state, or telling the user stuff happened
 

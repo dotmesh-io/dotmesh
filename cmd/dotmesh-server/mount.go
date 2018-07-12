@@ -1,4 +1,14 @@
-package statemachine
+package main
+
+import (
+	"fmt"
+	"io/ioutil"
+	"log"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+)
 
 // stuff to do with mounting and unmounting filesystems
 

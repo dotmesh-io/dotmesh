@@ -1,4 +1,10 @@
-package statemachine
+package main
+
+import (
+	"fmt"
+	"log"
+	"time"
+)
 
 func pushPeerState(f *fsMachine) stateFn {
 	// we are responsible for putting something back onto the channel

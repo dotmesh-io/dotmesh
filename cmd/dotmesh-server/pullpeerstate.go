@@ -1,4 +1,4 @@
-package statemachine
+package main
 
 func pullPeerState(f *fsMachine) stateFn {
 	// This is kind-of a boring state. An authenticated user can GET a

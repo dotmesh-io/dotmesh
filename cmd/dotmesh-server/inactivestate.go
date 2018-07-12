@@ -1,4 +1,9 @@
-package statemachine
+package main
+
+import (
+	"fmt"
+	"log"
+)
 
 func inactiveState(f *fsMachine) stateFn {
 	f.transitionedTo("inactive", "waiting")

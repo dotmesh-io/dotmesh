@@ -1,4 +1,9 @@
-package statemachine
+package main
+
+import (
+	"fmt"
+	"log"
+)
 
 // stuff used to do transfers, both for DM and S3
 

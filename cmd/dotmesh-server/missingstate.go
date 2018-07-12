@@ -1,4 +1,10 @@
-package statemachine
+package main
+
+import (
+	"fmt"
+	"log"
+	"os/exec"
+)
 
 func missingState(f *fsMachine) stateFn {
 	f.transitionedTo("missing", "waiting")

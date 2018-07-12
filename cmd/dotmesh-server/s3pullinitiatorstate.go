@@ -1,4 +1,10 @@
-package statemachine
+package main
+
+import (
+	"fmt"
+	"github.com/nu7hatch/gouuid"
+	"os"
+)
 
 func s3PullInitiatorState(f *fsMachine) stateFn {
 	f.transitionedTo("s3PullInitiatorState", "requesting")
@@ -53,10 +59,6 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 		// go back to the one before it until we find one that isn't that type
 		err := loadS3Meta(f.filesystemId, latestSnap.Id, &latestMeta)
 		if err != nil {
-			message := "s3 pull initiator can't read metadata"
-			if os.IsNotExist(err) {
-				message = "Could not read commit s3 metadata - you have changes which have not been pushed to s3."
-			}
 			f.errorDuringTransfer("s3-pull-initiator-cant-read-metadata", err)
 			return backoffState
 		}

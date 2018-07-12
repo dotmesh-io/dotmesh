@@ -1,4 +1,15 @@
-package statemachine
+package main
+
+import (
+	"fmt"
+	"golang.org/x/net/context"
+	"io"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"os/exec"
+	"time"
+)
 
 func pushInitiatorState(f *fsMachine) stateFn {
 	// Deduce the latest snapshot in

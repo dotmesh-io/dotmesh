@@ -1,4 +1,4 @@
-package statemachine
+package main
 
 import (
 	"encoding/json"

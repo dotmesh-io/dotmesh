@@ -1,4 +1,14 @@
-package statemachine
+package main
+
+import (
+	"fmt"
+	"golang.org/x/net/context"
+	"io"
+	"log"
+	"net/http"
+	"os/exec"
+	"time"
+)
 
 func pullInitiatorState(f *fsMachine) stateFn {
 	f.transitionedTo("pullInitiatorState", "requesting")

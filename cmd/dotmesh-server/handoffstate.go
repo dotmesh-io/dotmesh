@@ -1,4 +1,11 @@
-package statemachine
+package main
+
+import (
+	"fmt"
+	"github.com/coreos/etcd/client"
+	"golang.org/x/net/context"
+	"log"
+)
 
 // state functions
 // invariant: whenever a state function receives on the events channel, it

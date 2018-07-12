@@ -1,4 +1,10 @@
-package statemachine
+package main
+
+import (
+	"github.com/nu7hatch/gouuid"
+	"log"
+	"os/exec"
+)
 
 func activeState(f *fsMachine) stateFn {
 	f.transitionedTo("active", "waiting")

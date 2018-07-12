@@ -1,4 +1,13 @@
-package statemachine
+package main
+
+import (
+	"fmt"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"log"
+	"os"
+)
 
 func s3PushInitiatorState(f *fsMachine) stateFn {
 	f.transitionedTo("s3PushInitiatorState", "requesting")

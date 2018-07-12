@@ -1,4 +1,10 @@
-package statemachine
+package main
+
+import (
+	"fmt"
+	"log"
+	"time"
+)
 
 func backoffStateWithReason(reason string) func(f *fsMachine) stateFn {
 	return func(f *fsMachine) stateFn {
