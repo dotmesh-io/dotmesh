@@ -206,4 +206,10 @@ func TestS3Remote(t *testing.T) {
 			t.Error("Did not clone newfile.txt")
 		}
 	})
+
+	t.Run("CloneNoLocalName", func(t *testing.T) {
+		// todo
+		// clone a bucket without specifying a local name
+		// check that the volume locally doesn't end up being some weird dotmesh subdot config/ dots are removed from the local name
+	})
 }
