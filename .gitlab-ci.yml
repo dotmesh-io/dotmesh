@@ -120,11 +120,6 @@ macos_docker_stable_smoke:
     script:
         - gtimeout 5m ./scripts/smoke.sh
     after_script:
-        - echo "DOTMESH LOGS"
-        - docker logs dotmesh-server
-        - echo "DOCKER VERSION"
-        - docker version
-        - which docker
         - docker container prune -f
     only:
         - schedules
@@ -137,11 +132,6 @@ macos_docker_edge_smoke:
     script:
         - gtimeout 5m ./scripts/smoke.sh
     after_script:
-        - echo "DOTMESH LOGS"
-        - docker logs dotmesh-server
-        - echo "DOCKER VERSION"
-        - docker version
-        - which docker
         - docker container prune -f
     only:
         - schedules
@@ -154,11 +144,7 @@ linux_smoke:
     script:
         - timeout 5m ./scripts/smoke.sh
     after_script:
-        - echo "DOTMESH LOGS"
-        - docker logs dotmesh-server
-        - echo "DOCKER VERSION"
-        - docker version
-        - which docker
+        - docker container prune -f
     only:
         - schedules
 

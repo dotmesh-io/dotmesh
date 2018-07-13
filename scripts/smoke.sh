@@ -35,10 +35,16 @@ function delete_lingering_dots() {
 # Set traps before we go into the subshells, otherwise they'll never be
 # triggered!
 function finish {
-    if [ SUCCESS = false ]; then
+	EXIT=$?
+    if [ $EXIT != 0 ]; then
         echo "INTERNAL STATE"
         "$DM" -c "$CONFIG" remote switch local
         "$DM" -c "$CONFIG" debug DotmeshRPC.DumpInternalState
+	    echo "DOTMESH LOGS"
+        docker logs dotmesh-server
+        echo "DOCKER VERSION"
+        docker version
+        which docker
     fi
     if [ x$SMOKE_TEST_REMOTE != x ]; then
         "$DM" -c "$CONFIG" remote rm "$REMOTE" || true
