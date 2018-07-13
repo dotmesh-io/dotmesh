@@ -199,6 +199,7 @@ type fsMachine struct {
 type S3TransferRequest struct {
 	KeyID           string
 	SecretKey       string
+	Prefixes        []string
 	Endpoint        string
 	Direction       string
 	LocalNamespace  string

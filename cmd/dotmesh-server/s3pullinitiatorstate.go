@@ -63,7 +63,7 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 			return backoffState
 		}
 	}
-	bucketChanged, keyVersions, err := downloadS3Bucket(svc, transferRequest.RemoteName, destPath, transferRequestId, &pollResult, latestMeta)
+	bucketChanged, keyVersions, err := downloadS3Bucket(svc, transferRequest.RemoteName, destPath, transferRequestId, transferRequest.Prefixes, &pollResult, latestMeta)
 	if err != nil {
 		f.errorDuringTransfer("cant-pull-from-s3", err)
 		return backoffState

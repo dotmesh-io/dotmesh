@@ -114,17 +114,37 @@ func getS3Client(transferRequest S3TransferRequest) (*s3.S3, error) {
 	return svc, nil
 }
 
-func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string, pollResult *TransferPollResult, currentKeyVersions map[string]string) (bool, map[string]string, error) {
+func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string, prefixes []string, pollResult *TransferPollResult, currentKeyVersions map[string]string) (bool, map[string]string, error) {
+	log.Printf("Prefixes: %#v, len: %d", prefixes, len(prefixes))
+	if len(prefixes) == 0 {
+		return downloadPartialS3Bucket(svc, bucketName, destPath, transferRequestId, "", pollResult, currentKeyVersions)
+	}
+	var changed bool
+	var err error
+	for _, prefix := range prefixes {
+		log.Printf("[downloadS3Bucket] Pulling down objects prefixed %s", prefix)
+		changed, currentKeyVersions, err = downloadPartialS3Bucket(svc, bucketName, destPath, transferRequestId, prefix, pollResult, currentKeyVersions)
+		if err != nil {
+			return false, nil, err
+		}
+	}
+	fmt.Printf("[downloadS3Bucket] currentVersions: %#v", currentKeyVersions)
+	return changed, currentKeyVersions, nil
+}
+
+func downloadPartialS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId, prefix string, pollResult *TransferPollResult, currentKeyVersions map[string]string) (bool, map[string]string, error) {
 	// for every version in the bucket
 	// 1. Delete anything locally that's been deleted in S3.
 	// 2. Download new versions of things that have changed
 	// 3. Return a map of object key -> s3 version id, plus an indicator of whether anything actually changed during this process so we know whether to make a snapshot.
 	var bucketChanged bool
-	// TODO refactor this a lil so we can get the folder structure easily
-	fmt.Printf("[downloadS3Bucket] currentVersions: %#v", currentKeyVersions)
 	params := &s3.ListObjectVersionsInput{
 		Bucket: aws.String(bucketName),
 	}
+	if prefix != "" {
+		params.SetPrefix(prefix)
+	}
+	log.Printf("Params: %#v", *params)
 	downloader := s3manager.NewDownloaderWithClient(svc)
 	var innerError error
 	err := svc.ListObjectVersionsPages(params,
@@ -185,7 +205,7 @@ func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string
 	} else if innerError != nil {
 		return bucketChanged, nil, innerError
 	}
-	fmt.Printf("New key versions: %#v", currentKeyVersions)
+	fmt.Printf("[downloadPartialS3Bucket] New key versions: %#v", currentKeyVersions)
 	return bucketChanged, currentKeyVersions, nil
 }
 

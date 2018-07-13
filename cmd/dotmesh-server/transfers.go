@@ -15,10 +15,16 @@ func s3TransferRequestify(in interface{}) (S3TransferRequest, error) {
 			"Unable to cast %s to map[string]interface{}", in,
 		)
 	}
+	prefixInter, ok := typed["Prefixes"].([]interface{})
+	var prefixes []string
+	for _, pref := range prefixInter {
+		prefixes = append(prefixes, pref.(string))
+	}
 	return S3TransferRequest{
 		KeyID:           typed["KeyID"].(string),
 		SecretKey:       typed["SecretKey"].(string),
 		Endpoint:        typed["Endpoint"].(string),
+		Prefixes:        prefixes,
 		Direction:       typed["Direction"].(string),
 		LocalNamespace:  typed["LocalNamespace"].(string),
 		LocalName:       typed["LocalName"].(string),
