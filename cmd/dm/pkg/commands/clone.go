@@ -42,6 +42,7 @@ Online help: https://docs.dotmesh.com/references/cli/#clone-dm-clone-local-name-
 					"pull", peer,
 					cloneLocalVolume, branchName,
 					filesystemName, branchName,
+					nil,
 					// TODO also switch to the remote?
 				)
 				if err != nil {

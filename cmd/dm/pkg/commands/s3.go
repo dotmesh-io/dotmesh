@@ -24,7 +24,7 @@ func NewCmdS3(out io.Writer) *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:   "remote add <remote-name> <key-id:secret-key>[@endpoint]",
 		Short: "Add an S3 remote",
-		Long:  "Online help: https://docs.dotmesh.com/references/cli/#add-a-new-S3-remote-dm-s3-remote-add-access-key-secret-key-host-port",
+		Long:  "Online help: https://docs.dotmesh.com/references/cli/#add-a-new-s3-remote-dm-s3-remote-add-access-key-secret-key-host-port",
 
 		Run: func(cmd *cobra.Command, args []string) {
 			runHandlingError(func() error {
@@ -96,7 +96,7 @@ func NewCmdS3(out io.Writer) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				transferId, err := dm.RequestS3SubsetTransfer(
+				transferId, err := dm.RequestTransfer(
 					"pull", peer,
 					localVolumeName, branchName,
 					filesystemName, branchName,
