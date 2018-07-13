@@ -19,6 +19,7 @@ func s3TransferRequestify(in interface{}) (S3TransferRequest, error) {
 		KeyID:           typed["KeyID"].(string),
 		SecretKey:       typed["SecretKey"].(string),
 		Endpoint:        typed["Endpoint"].(string),
+		Prefixes:        typed["Prefixes"].([]string),
 		Direction:       typed["Direction"].(string),
 		LocalNamespace:  typed["LocalNamespace"].(string),
 		LocalName:       typed["LocalName"].(string),
