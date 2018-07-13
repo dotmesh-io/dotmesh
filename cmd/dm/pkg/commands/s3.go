@@ -24,8 +24,7 @@ func NewCmdS3(out io.Writer) *cobra.Command {
 	cmd.AddCommand(&cobra.Command{
 		Use:   "remote add <remote-name> <key-id:secret-key>[@endpoint]",
 		Short: "Add an S3 remote",
-		// TODO update docs
-		Long: "Online help: https://docs.dotmesh.com/references/cli/#add-a-new-remote-dm-remote-add-name-user-hostname",
+		Long:  "Online help: https://docs.dotmesh.com/references/cli/#add-a-new-S3-remote-dm-s3-remote-add-access-key-secret-key-host-port",
 
 		Run: func(cmd *cobra.Command, args []string) {
 			runHandlingError(func() error {
@@ -84,8 +83,7 @@ func NewCmdS3(out io.Writer) *cobra.Command {
 	subCommand := &cobra.Command{
 		Use:   "clone-subset <remote> <bucket> <prefixes> [--local-name=<dot>]",
 		Short: "Clone an s3 bucket, but only select a subset as dictated by comma-separated prefixes. (for full bucket clones see dm clone as normal)",
-		// TODO add this to the docs
-		Long: "Online help: https://docs.dotmesh.com/references/cli/#add-a-new-remote-dm-remote-add-name-user-hostname",
+		Long:  "Online help: https://docs.dotmesh.com/references/cli/#clone-a-section-of-an-s3-bucket-dm-s3-clone-subset-remote-bucket-prefixes-local-name-local-dot",
 
 		Run: func(cmd *cobra.Command, args []string) {
 			runHandlingError(func() error {
