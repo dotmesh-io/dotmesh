@@ -93,7 +93,7 @@ func TestS3Remote(t *testing.T) {
 		if !strings.Contains(resp, "hello-world.txt") {
 			t.Error("failed to clone s3 bucket")
 		}
-		makeS3File(node, "newfile.txt", "new file", "test.dotmesh")
+		makeS3File(node1, "newfile.txt", "new file", "test.dotmesh")
 		citools.RunOnNode(t, node1, "dm pull test-real-s3 "+fsname)
 
 		resp = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" ls /foo/")
