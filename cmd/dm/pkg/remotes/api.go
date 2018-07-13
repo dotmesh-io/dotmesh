@@ -1015,6 +1015,13 @@ func (dm *DotmeshAPI) RequestTransfer(
 
 }
 
+func (dm *DotmeshAPI) IsUserPriveledged() bool {
+	if dm.client.User == "admin" {
+		return true
+	}
+	return false
+}
+
 func (dm *DotmeshAPI) parseVolumeDetails(remote Remote, peer, direction, localFilesystemName, localBranchName, remoteFilesystemName, remoteBranchName string) (string, string, string, string, string, string, error) {
 	var err error
 	if direction == "push" {
