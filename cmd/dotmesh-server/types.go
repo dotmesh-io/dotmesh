@@ -2,11 +2,10 @@ package main
 
 import (
 	"fmt"
+	"github.com/dotmesh-io/dotmesh/pkg/user"
 	"reflect"
 	"strings"
 	"sync"
-
-	"github.com/dotmesh-io/dotmesh/pkg/user"
 )
 
 type User struct {
@@ -47,39 +46,10 @@ type CloneWithName struct {
 }
 type ClonesList []CloneWithName
 
-type PathToTopLevelFilesystem struct {
-	TopLevelFilesystemId   string
-	TopLevelFilesystemName VolumeName
-	Clones                 ClonesList
-}
-
-type Clone struct {
-	FilesystemId string
-	Origin       Origin
-}
-
-// refers to a clone's "pointer" to a filesystem id and its snapshot.
-//
-// note that a clone's Origin's FilesystemId may differ from the "top level"
-// filesystemId in the Registry's Clones map if the clone is attributed to a
-// top-level filesystem which is *transitively* its parent but not its direct
-// parent. In this case the Origin FilesystemId will always point to its direct
-// parent.
-
-type Origin struct {
-	FilesystemId string
-	SnapshotId   string
-}
-
 type dirtyInfo struct {
 	Server     string
 	DirtyBytes int64
 	SizeBytes  int64
-}
-
-type containerInfo struct {
-	Server     string
-	Containers []DockerContainer
 }
 
 type PermissionDenied struct {
@@ -108,17 +78,6 @@ type Server struct {
 
 type ByAddress []Server
 
-type DotmeshVolume struct {
-	Id             string
-	Name           VolumeName
-	Branch         string
-	Master         string
-	SizeBytes      int64
-	DirtyBytes     int64
-	CommitCount    int64
-	ServerStatuses map[string]string // serverId => status
-}
-
 type dotmeshVolumeByName []DotmeshVolume
 
 func (v dotmeshVolumeByName) Len() int {
@@ -138,81 +97,6 @@ type DotmeshVolumeAndContainers struct {
 	Containers []DockerContainer
 }
 
-type TransferPollResult struct {
-	TransferRequestId string
-	Peer              string // hostname
-	User              string
-	ApiKey            string
-	Direction         string // "push" or "pull"
-
-	// Hold onto this information, it might become useful for e.g. recursive
-	// receives of clone filesystems.
-	LocalNamespace   string
-	LocalName        string
-	LocalBranchName  string
-	RemoteNamespace  string
-	RemoteName       string
-	RemoteBranchName string
-
-	// Same across both clusters
-	FilesystemId string
-
-	// TODO add clusterIds? probably comes from etcd. in fact, could be the
-	// discovery id (although that is only for bootstrap... hmmm).
-	InitiatorNodeId string
-	PeerNodeId      string
-
-	// XXX a Transfer that spans multiple filesystem ids won't have a unique
-	// starting/target snapshot, so this is in the wrong place right now.
-	// although maybe it makes sense to talk about a target *final* snapshot,
-	// with interim snapshots being an implementation detail.
-	StartingCommit string
-	TargetCommit   string
-
-	Index              int    // i.e. transfer 1/4 (Index=1)
-	Total              int    //                   (Total=4)
-	Status             string // one of "starting", "running", "finished", "error"
-	NanosecondsElapsed int64
-	Size               int64 // size of current segment in bytes
-	Sent               int64 // number of bytes of current segment sent so far
-	Message            string
-}
-
-// A container for some state that is truly global to this process.
-type InMemoryState struct {
-	config                     Config
-	filesystems                map[string]*fsMachine
-	filesystemsLock            *sync.RWMutex
-	myNodeId                   string
-	mastersCache               map[string]string
-	mastersCacheLock           *sync.RWMutex
-	serverAddressesCache       map[string]string
-	serverAddressesCacheLock   *sync.RWMutex
-	globalSnapshotCache        map[string]map[string][]snapshot
-	globalSnapshotCacheLock    *sync.RWMutex
-	globalStateCache           map[string]map[string]map[string]string
-	globalStateCacheLock       *sync.RWMutex
-	globalContainerCache       map[string]containerInfo
-	globalContainerCacheLock   *sync.RWMutex
-	etcdWaitTimestamp          int64
-	etcdWaitState              string
-	etcdWaitTimestampLock      *sync.Mutex
-	localReceiveProgress       *Observer
-	newSnapsOnMaster           *Observer
-	registry                   *Registry
-	containers                 *DockerClient
-	containersLock             *sync.RWMutex
-	fetchRelatedContainersChan chan bool
-	interclusterTransfers      map[string]TransferPollResult
-	interclusterTransfersLock  *sync.RWMutex
-	globalDirtyCacheLock       *sync.RWMutex
-	globalDirtyCache           map[string]dirtyInfo
-	userManager                user.UserManager
-
-	debugPartialFailCreateFilesystem bool
-	versionInfo                      *VersionInfo
-}
-
 type VersionInfo struct {
 	InstalledVersion    string `json:"installed_version"`
 	CurrentVersion      string `json:"current_version"`
@@ -225,8 +109,49 @@ type VersionInfo struct {
 
 // type fsMap map[string]*fsMachine
 
+type transferFn func(
+	f *fsMachine,
+	fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
+	transferRequestId string, pollResult *TransferPollResult,
+	client *JsonRpcClient, transferRequest *TransferRequest,
+) (*Event, stateFn)
+
+// Defaults are specified in main.go
+
+type SafeConfig struct {
+}
+
 // state machinery
 type stateFn func(*fsMachine) stateFn
+
+type Origin struct {
+	FilesystemId string
+	SnapshotId   string
+}
+
+type metadata map[string]string
+type snapshot struct {
+	// exported for json serialization
+	Id       string
+	Metadata *metadata
+	// private (do not serialize)
+	filesystem *filesystem
+}
+
+type Clone struct {
+	FilesystemId string
+	Origin       Origin
+}
+
+type filesystem struct {
+	id        string
+	exists    bool
+	mounted   bool
+	snapshots []*snapshot
+	// support filesystem which is clone of another filesystem, for branching
+	// purposes, with origin e.g. "<fs-uuid-of-actual-origin-snapshot>@<snap-id>"
+	origin Origin
+}
 
 // a "filesystem machine" or "filesystem state machine"
 type fsMachine struct {
@@ -344,24 +269,80 @@ func (e Event) String() string {
 	return fmt.Sprintf("<Event %s: %s>", e.Name, e.Args)
 }
 
-type metadata map[string]string
-type snapshot struct {
-	// exported for json serialization
-	Id       string
-	Metadata *metadata
-	// private (do not serialize)
-	filesystem *filesystem
+type TransferPollResult struct {
+	TransferRequestId string
+	Peer              string // hostname
+	User              string
+	ApiKey            string
+	Direction         string // "push" or "pull"
+
+	// Hold onto this information, it might become useful for e.g. recursive
+	// receives of clone filesystems.
+	LocalNamespace   string
+	LocalName        string
+	LocalBranchName  string
+	RemoteNamespace  string
+	RemoteName       string
+	RemoteBranchName string
+
+	// Same across both clusters
+	FilesystemId string
+
+	// TODO add clusterIds? probably comes from etcd. in fact, could be the
+	// discovery id (although that is only for bootstrap... hmmm).
+	InitiatorNodeId string
+	PeerNodeId      string
+
+	// XXX a Transfer that spans multiple filesystem ids won't have a unique
+	// starting/target snapshot, so this is in the wrong place right now.
+	// although maybe it makes sense to talk about a target *final* snapshot,
+	// with interim snapshots being an implementation detail.
+	StartingCommit string
+	TargetCommit   string
+
+	Index              int    // i.e. transfer 1/4 (Index=1)
+	Total              int    //                   (Total=4)
+	Status             string // one of "starting", "running", "finished", "error"
+	NanosecondsElapsed int64
+	Size               int64 // size of current segment in bytes
+	Sent               int64 // number of bytes of current segment sent so far
+	Message            string
 }
 
-type filesystem struct {
-	id        string
-	exists    bool
-	mounted   bool
-	snapshots []*snapshot
-	// support filesystem which is clone of another filesystem, for branching
-	// purposes, with origin e.g. "<fs-uuid-of-actual-origin-snapshot>@<snap-id>"
-	origin Origin
+type Config struct {
+	FilesystemMetadataTimeout int64
+	UserManager               user.UserManager
 }
+
+type PathToTopLevelFilesystem struct {
+	TopLevelFilesystemId   string
+	TopLevelFilesystemName VolumeName
+	Clones                 ClonesList
+}
+
+type DotmeshVolume struct {
+	Id             string
+	Name           VolumeName
+	Branch         string
+	Master         string
+	SizeBytes      int64
+	DirtyBytes     int64
+	CommitCount    int64
+	ServerStatuses map[string]string // serverId => status
+}
+
+type VolumeName struct {
+	Namespace string
+	Name      string
+}
+
+// refers to a clone's "pointer" to a filesystem id and its snapshot.
+//
+// note that a clone's Origin's FilesystemId may differ from the "top level"
+// filesystemId in the Registry's Clones map if the clone is attributed to a
+// top-level filesystem which is *transitively* its parent but not its direct
+// parent. In this case the Origin FilesystemId will always point to its direct
+// parent.
 
 func castToMetadata(val interface{}) metadata {
 	meta, ok := val.(metadata)
@@ -380,23 +361,7 @@ type Prelude struct {
 	SnapshotProperties []*snapshot
 }
 
-type transferFn func(
-	f *fsMachine,
-	fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
-	transferRequestId string, pollResult *TransferPollResult,
-	client *JsonRpcClient, transferRequest *TransferRequest,
-) (*Event, stateFn)
-
-// Defaults are specified in main.go
-type Config struct {
-	FilesystemMetadataTimeout int64
-	UserManager               user.UserManager
-}
-
-type SafeConfig struct {
-}
-
-type VolumeName struct {
-	Namespace string
-	Name      string
+type containerInfo struct {
+	Server     string
+	Containers []DockerContainer
 }
