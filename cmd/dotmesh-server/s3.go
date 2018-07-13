@@ -114,7 +114,22 @@ func getS3Client(transferRequest S3TransferRequest) (*s3.S3, error) {
 	return svc, nil
 }
 
-func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string, pollResult *TransferPollResult, currentKeyVersions map[string]string) (bool, map[string]string, error) {
+func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string, prefixes []string, pollResult *TransferPollResult, currentKeyVersions map[string]string) (bool, map[string]string, error) {
+	if len(prefixes) == 0 {
+		return downloadPartialS3Bucket(svc, bucketName, destPath, transferRequestId, "", pollResult, currentKeyVersions)
+	}
+	var changed bool
+	var err error
+	for _, prefix := range prefixes {
+		changed, currentKeyVersions, err = downloadPartialS3Bucket(svc, bucketName, destPath, transferRequestId, prefix, pollResult, currentKeyVersions)
+		if err != nil {
+			return false, nil, err
+		}
+	}
+	return changed, currentKeyVersions, nil
+}
+
+func downloadPartialS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId, prefix string, pollResult *TransferPollResult, currentKeyVersions map[string]string) (bool, map[string]string, error) {
 	// for every version in the bucket
 	// 1. Delete anything locally that's been deleted in S3.
 	// 2. Download new versions of things that have changed
@@ -124,6 +139,9 @@ func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string
 	fmt.Printf("[downloadS3Bucket] currentVersions: %#v", currentKeyVersions)
 	params := &s3.ListObjectVersionsInput{
 		Bucket: aws.String(bucketName),
+	}
+	if prefix != "" {
+		params.Prefix = prefix
 	}
 	downloader := s3manager.NewDownloaderWithClient(svc)
 	var innerError error
