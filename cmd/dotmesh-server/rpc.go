@@ -1549,7 +1549,7 @@ func (d *DotmeshRPC) Transfer(
 
 	var localPath, remotePath PathToTopLevelFilesystem
 	if args.Direction == "push" {
-		localPath, err = d.state.registry.deducePathToTopLevelFilesystem(
+		localPath, err = d.state.registry.DeducePathToTopLevelFilesystem(
 			VolumeName{args.LocalNamespace, args.LocalName}, args.LocalBranchName,
 		)
 		if err != nil {
@@ -1982,7 +1982,7 @@ func (d *DotmeshRPC) DeducePathToTopLevelFilesystem(
 		return err
 	}
 
-	res, err := d.state.registry.deducePathToTopLevelFilesystem(
+	res, err := d.state.registry.DeducePathToTopLevelFilesystem(
 		VolumeName{args.RemoteNamespace, args.RemoteFilesystemName}, args.RemoteCloneName,
 	)
 	if err != nil {
@@ -2409,19 +2409,22 @@ func (d *DotmeshRPC) DumpInternalState(
 	go func() {
 		defer recover() // Don't kill the entire server if resultChan is closed because we took too long
 		resultChan <- []string{"registry.TopLevelFilesystems.STARTED", "yes"}
-		s.registry.TopLevelFilesystemsLock.Lock()
-		defer s.registry.TopLevelFilesystemsLock.Unlock()
-		for vn, tlf := range s.registry.TopLevelFilesystems {
-			resultChan <- []string{fmt.Sprintf("registry.TopLevelFilesystems.%s/%s.MasterBranch.id", vn.Namespace, vn.Name), tlf.MasterBranch.Id}
+		// s.registry.TopLevelFilesystemsLock.Lock()
+		// defer s.registry.TopLevelFilesystemsLock.Unlock()
+		tlfs := s.registry.DumpTopLevelFilesystems()
+		// for vn, tlf := range s.registry.TopLevelFilesystems {
+		for _, tlf := range tlfs {
+
+			resultChan <- []string{fmt.Sprintf("registry.TopLevelFilesystems.%s/%s.MasterBranch.id", tlf.MasterBranch.Name.Namespace, tlf.MasterBranch.Name.Name), tlf.MasterBranch.Id}
 			// FIXME: MasterBranch is a DotmeshVolume, with many other fields we could display.
 			for idx, ob := range tlf.OtherBranches {
-				resultChan <- []string{fmt.Sprintf("registry.TopLevelFilesystems.%s/%s.OtherBranches[%d].id", vn.Namespace, vn.Name, idx), ob.Id}
-				resultChan <- []string{fmt.Sprintf("registry.TopLevelFilesystems.%s/%s.OtherBranches[%d].name", vn.Namespace, vn.Name, idx), ob.Branch}
+				resultChan <- []string{fmt.Sprintf("registry.TopLevelFilesystems.%s/%s.OtherBranches[%d].id", tlf.MasterBranch.Name.Namespace, tlf.MasterBranch.Name.Name, idx), ob.Id}
+				resultChan <- []string{fmt.Sprintf("registry.TopLevelFilesystems.%s/%s.OtherBranches[%d].name", tlf.MasterBranch.Name.Namespace, tlf.MasterBranch.Name.Name, idx), ob.Branch}
 				// FIXME: ob is a DotmeshVolume, with many other fields we could display.
 			}
-			resultChan <- []string{fmt.Sprintf("registry.TopLevelFilesystems.%s/%s.Owner", vn.Namespace, vn.Name), toJsonString(tlf.Owner)}
+			resultChan <- []string{fmt.Sprintf("registry.TopLevelFilesystems.%s/%s.Owner", tlf.MasterBranch.Name.Namespace, tlf.MasterBranch.Name.Name), toJsonString(tlf.Owner)}
 			for idx, c := range tlf.Collaborators {
-				resultChan <- []string{fmt.Sprintf("registry.TopLevelFilesystems.%s/%s.Collaborators[%d]", vn.Namespace, vn.Name, idx), toJsonString(c)}
+				resultChan <- []string{fmt.Sprintf("registry.TopLevelFilesystems.%s/%s.Collaborators[%d]", tlf.MasterBranch.Name.Namespace, tlf.MasterBranch.Name.Name, idx), toJsonString(c)}
 			}
 		}
 		resultChan <- []string{"registry.TopLevelFilesystems.DONE", "yes"}
@@ -2430,9 +2433,10 @@ func (d *DotmeshRPC) DumpInternalState(
 	go func() {
 		defer recover() // Don't kill the entire server if resultChan is closed because we took too long
 		resultChan <- []string{"registry.Clones.STARTED", "yes"}
-		s.registry.ClonesLock.Lock()
-		defer s.registry.ClonesLock.Unlock()
-		for fsId, c := range s.registry.Clones {
+		// s.registry.ClonesLock.Lock()
+		// defer s.registry.ClonesLock.Unlock()
+		clones := s.registry.DumpClones()
+		for fsId, c := range clones {
 			for branchName, clone := range c {
 				resultChan <- []string{fmt.Sprintf("registry.Clones.%s.%s.id", fsId, branchName), clone.FilesystemId}
 			}
