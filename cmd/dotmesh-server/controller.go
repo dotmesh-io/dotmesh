@@ -40,7 +40,7 @@ type InMemoryState struct {
 	etcdWaitTimestampLock      *sync.Mutex
 	localReceiveProgress       *Observer
 	newSnapsOnMaster           *Observer
-	registry                   *Registry
+	registry                   Registry
 	containers                 *DockerClient
 	containersLock             *sync.RWMutex
 	fetchRelatedContainersChan chan bool
@@ -106,12 +106,12 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 	}
 	// a registry of names of filesystems and branches (clones) mapping to
 	// their ids
-	s.registry = NewRegistry()
+	s.registry = NewRegistry(config.UserManager)
 	return s
 }
 
 func (s *InMemoryState) resetRegistry() {
-	s.registry = NewRegistry()
+	s.registry = NewRegistry(s.userManager)
 }
 
 func (s *InMemoryState) deleteFilesystem(filesystemId string) error {
