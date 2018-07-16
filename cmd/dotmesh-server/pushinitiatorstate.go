@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
-	"golang.org/x/net/context"
 	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os/exec"
 	"time"
+
+	"golang.org/x/net/context"
 )
 
 func pushInitiatorState(f *fsMachine) stateFn {
@@ -24,7 +25,7 @@ func pushInitiatorState(f *fsMachine) stateFn {
 		transferRequestId,
 		transferRequest,
 	)
-	path, err := f.state.registry.deducePathToTopLevelFilesystem(
+	path, err := f.state.registry.DeducePathToTopLevelFilesystem(
 		VolumeName{transferRequest.LocalNamespace, transferRequest.LocalName},
 		transferRequest.LocalBranchName,
 	)
