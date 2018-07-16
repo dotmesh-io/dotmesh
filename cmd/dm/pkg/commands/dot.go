@@ -344,15 +344,15 @@ func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
 		}
 
 		if scriptingMode {
-			fmt.Fprintf(out, "branch\t%s\n", branch)
+			fmt.Fprintf(out, "branch\t%s\t%s\n", branchDot.Id, branch)
 			for _, c := range containerNames {
 				fmt.Fprintf(out, "container\t%s\t%s\n", branch, c)
 			}
 		} else {
 			if branch == currentBranch {
-				fmt.Fprintf(out, "* %s", branch)
+				fmt.Fprintf(out, "* %s (%s)", branch, branchDot.Id)
 			} else {
-				fmt.Fprintf(out, "  %s", branch)
+				fmt.Fprintf(out, "  %s (%s)", branch, branchDot.Id)
 			}
 			if len(containerNames) == 0 {
 				fmt.Fprintf(out, "\n")
