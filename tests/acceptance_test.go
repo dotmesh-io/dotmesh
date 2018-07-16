@@ -1216,27 +1216,30 @@ func TestTwoNodesSameCluster(t *testing.T) {
 		citools.RunOnNode(t, node1, "dm dot show")
 		citools.RunOnNode(t, node2, "dm dot show")
 
-		time.Sleep(5 * time.Second)
-
 		// Check status of convergence
+		itWorkedInTheEnd := false
 	retryLoop:
 		for try := 1; try < 5; try++ {
 			for _, node := range [...]string{node1, node2} {
+				problemsFound := false
+
 				dotStatus := citools.OutputFromRunOnNode(t, node, "dm dot show")
-				if strings.Contains(dotStatus, "receiving") {
-					// Still replicating!
-					fmt.Printf("Still replicating, give it a second and try again...\n")
-					t.Logf("Still replicating, give it a second and try again... (%d retries)", try)
-					time.Sleep(time.Second)
-					continue retryLoop
+
+				// Check for fatal errors
+				if strings.Contains(dotStatus, "status: failed") {
+					t.Errorf("One or more state machines have failed: %s\n", dotStatus)
+					break retryLoop
 				}
 
+				// Log and continue on things that might get better
 				if !strings.Contains(dotStatus, "DIVERGED") || strings.Contains(dotStatus, "is missing") {
-					t.Errorf("Absence of Divergence branch or incomplete resolution on node: %s\n%s", node, dotStatus)
+					fmt.Printf("Absence of Divergence branch or incomplete resolution on node: %s\n%s\n", node, dotStatus)
+					problemsFound = true
 				}
 				dmLog := citools.OutputFromRunOnNode(t, node, "dm log")
 				if !strings.Contains(dmLog, "First commit") || !strings.Contains(dmLog, "Node1CommitHash") {
-					t.Errorf("Absence of converged commits on  branch master on node :%s\n%s", node, dmLog)
+					fmt.Printf("Absence of converged commits on  branch master on node :%s\n%s", node, dmLog)
+					problemsFound = true
 				}
 
 				dmBranch := citools.OutputFromRunOnNode(t, node, "dm branch | grep DIVERGED")
@@ -1244,11 +1247,24 @@ func TestTwoNodesSameCluster(t *testing.T) {
 
 				dmLog = citools.OutputFromRunOnNode(t, node, "dm log")
 				if !strings.Contains(dmLog, "node2 commit") {
-					t.Errorf("Absence of non-master diverged commits on  branch *DIVERGED on node :%s\n%s", node, dmLog)
+					fmt.Printf("Absence of non-master diverged commits on  branch *DIVERGED on node :%s\n%s", node, dmLog)
+					problemsFound = true
 				}
 
-				break retryLoop
+				if problemsFound {
+					fmt.Printf("Sleeping for 2 seconds then trying again...\n")
+					time.Sleep(2 * time.Second)
+					continue retryLoop
+				} else {
+					// Everything's good!
+					itWorkedInTheEnd = true
+					break retryLoop
+				}
 			}
+		}
+
+		if !itWorkedInTheEnd {
+			t.Error("After several retries, we never got to a good diverged state :-(")
 		}
 	})
 }
