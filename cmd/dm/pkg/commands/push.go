@@ -44,7 +44,7 @@ Online help: https://docs.dotmesh.com/references/cli/#push-dm-push-remote-remote
 					return err
 				}
 				transferId, err := dm.RequestTransfer(
-					"push", peer, filesystemName, branchName, pushRemoteVolume, "",
+					"push", peer, filesystemName, branchName, pushRemoteVolume, "", nil,
 				)
 				if err != nil {
 					return err

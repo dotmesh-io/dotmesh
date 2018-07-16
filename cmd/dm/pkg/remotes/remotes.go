@@ -42,7 +42,7 @@ import (
 
 type Remote interface {
 	DefaultNamespace() string
-	DefaultRemoteVolumeFor(string, string) (VolumeName, bool)
+	DefaultRemoteVolumeFor(string, string) (string, string, bool)
 	SetDefaultRemoteVolumeFor(string, string, string, string)
 }
 
@@ -50,7 +50,7 @@ type S3Remote struct {
 	KeyID                string
 	SecretKey            string
 	Endpoint             string
-	DefaultRemoteVolumes map[string]map[string]VolumeName
+	DefaultRemoteVolumes map[string]map[string]S3VolumeName
 }
 
 type DMRemote struct {
@@ -82,7 +82,7 @@ func (remote *DMRemote) SetDefaultRemoteVolumeFor(localNamespace, localVolume, r
 	remote.DefaultRemoteVolumes[localNamespace][localVolume] = VolumeName{remoteNamespace, remoteVolume}
 }
 
-func (remote *DMRemote) DefaultRemoteVolumeFor(localNamespace, localVolume string) (VolumeName, bool) {
+func (remote *DMRemote) DefaultRemoteVolumeFor(localNamespace, localVolume string) (string, string, bool) {
 	if remote.DefaultRemoteVolumes == nil {
 		remote.DefaultRemoteVolumes = map[string]map[string]VolumeName{}
 	}
@@ -90,28 +90,65 @@ func (remote *DMRemote) DefaultRemoteVolumeFor(localNamespace, localVolume strin
 		remote.DefaultRemoteVolumes[localNamespace] = map[string]VolumeName{}
 	}
 	volName, ok := remote.DefaultRemoteVolumes[localNamespace][localVolume]
-	return volName, ok
+	if ok {
+		return volName.Namespace, volName.Name, ok
+	}
+	return "", "", false
 }
 
 func (remote *S3Remote) SetDefaultRemoteVolumeFor(localNamespace, localVolume, remoteNamespace, remoteVolume string) {
 	if remote.DefaultRemoteVolumes == nil {
-		remote.DefaultRemoteVolumes = map[string]map[string]VolumeName{}
+		remote.DefaultRemoteVolumes = map[string]map[string]S3VolumeName{}
 	}
 	if remote.DefaultRemoteVolumes[localNamespace] == nil {
-		remote.DefaultRemoteVolumes[localNamespace] = map[string]VolumeName{}
+		remote.DefaultRemoteVolumes[localNamespace] = map[string]S3VolumeName{}
 	}
-	remote.DefaultRemoteVolumes[localNamespace][localVolume] = VolumeName{remoteNamespace, remoteVolume}
+	remote.DefaultRemoteVolumes[localNamespace][localVolume] = S3VolumeName{
+		Namespace: remoteNamespace,
+		Name:      remoteVolume,
+	}
 }
 
-func (remote *S3Remote) DefaultRemoteVolumeFor(localNamespace, localVolume string) (VolumeName, bool) {
+func (remote *S3Remote) SetPrefixesFor(localNamespace, localVolume string, prefixes []string) {
 	if remote.DefaultRemoteVolumes == nil {
-		remote.DefaultRemoteVolumes = map[string]map[string]VolumeName{}
+		remote.DefaultRemoteVolumes = map[string]map[string]S3VolumeName{}
 	}
 	if remote.DefaultRemoteVolumes[localNamespace] == nil {
-		remote.DefaultRemoteVolumes[localNamespace] = map[string]VolumeName{}
+		remote.DefaultRemoteVolumes[localNamespace] = map[string]S3VolumeName{}
 	}
 	volName, ok := remote.DefaultRemoteVolumes[localNamespace][localVolume]
-	return volName, ok
+	if ok {
+		volName.Prefixes = prefixes
+		remote.DefaultRemoteVolumes[localNamespace][localVolume] = volName
+	} // todo should we handle setting prefixes before setting the remote namespace? probably not important
+}
+
+func (remote *S3Remote) PrefixesFor(localNamespace, localVolume string) ([]string, bool) {
+	if remote.DefaultRemoteVolumes == nil {
+		remote.DefaultRemoteVolumes = map[string]map[string]S3VolumeName{}
+	}
+	if remote.DefaultRemoteVolumes[localNamespace] == nil {
+		remote.DefaultRemoteVolumes[localNamespace] = map[string]S3VolumeName{}
+	}
+	volName, ok := remote.DefaultRemoteVolumes[localNamespace][localVolume]
+	if ok {
+		return volName.Prefixes, ok
+	}
+	return nil, false
+}
+
+func (remote *S3Remote) DefaultRemoteVolumeFor(localNamespace, localVolume string) (string, string, bool) {
+	if remote.DefaultRemoteVolumes == nil {
+		remote.DefaultRemoteVolumes = map[string]map[string]S3VolumeName{}
+	}
+	if remote.DefaultRemoteVolumes[localNamespace] == nil {
+		remote.DefaultRemoteVolumes[localNamespace] = map[string]S3VolumeName{}
+	}
+	volName, ok := remote.DefaultRemoteVolumes[localNamespace][localVolume]
+	if ok {
+		return volName.Namespace, volName.Name, ok
+	}
+	return "", "", false
 }
 
 func (remote DMRemote) String() string {
@@ -272,12 +309,25 @@ func (c *Configuration) DefaultRemoteVolumeFor(peer, namespace, volume string) (
 		// TODO should we return an error instead of bool? this is getting messy
 		return "", "", false
 	}
-	defaultRemoteVolume, ok := remote.DefaultRemoteVolumeFor(namespace, volume)
-	if ok {
-		return defaultRemoteVolume.Namespace, defaultRemoteVolume.Name, true
-	}
-	return "", "", false
+	return remote.DefaultRemoteVolumeFor(namespace, volume)
 
+}
+
+func (c *Configuration) SetPrefixesFor(peer, namespace, volume string, prefixes []string) error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	remote, err := c.getRemote(peer)
+	if err != nil {
+		return fmt.Errorf(
+			"Unable to find remote '%s'",
+			peer,
+		)
+	}
+	s3Remote, ok := remote.(*S3Remote)
+	if ok {
+		s3Remote.SetPrefixesFor(namespace, volume, prefixes)
+	}
+	return c.save()
 }
 
 func (c *Configuration) SetDefaultRemoteVolumeFor(peer, namespace, volume, remoteNamespace, remoteVolume string) error {

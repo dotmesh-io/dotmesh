@@ -220,23 +220,35 @@ func TestS3Remote(t *testing.T) {
 		}
 	})
 
-	// t.Run("CloneSubsetPushPull", func(t *testing.T) {
-	// 	fsname := citools.UniqName()
-	// 	citools.RunOnNode(t, node1, "dm s3 clone-subset test-real-s3 test.dotmesh subset/ --local-name="+fsname)
-	// 	citools.RunOnNode(t, node1, "dm push test-real-s3 "+fsname)
-	// 	resp := citools.OutputFromRunOnNode(t, node1, s3cmd+" ls s3://test.dotmesh")
-	// 	if !strings.Contains(resp, "hello-world.txt") {
-	// 		citools.RunOnNode(t, node1, s3cmd+" put hello-world.txt s3://test.dotmesh")
-	// 		t.Error("Deleted a file we aren't tracking")
-	// 	}
-	// 	fsname2 := citools.UniqName()
-	// 	citools.RunOnNode(t, node1, "dm s3 clone-subset test-real-s3 test.dotmesh subset/ --local-name="+fsname2)
-	// 	citools.RunOnNode(t, node1, "dm pull test-real-s3 "+fsname)
-	// 	resp = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname2)+" ls /foo/")
-	// 	if strings.Contains(resp, "hello-world.txt") {
-	// 		t.Error("Pulled down a file we aren't tracking")
-	// 	}
-	// })
+	t.Run("CloneSubsetPushPull", func(t *testing.T) {
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm s3 clone-subset test-real-s3 test.dotmesh subset/ --local-name="+fsname)
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/file.txt")
+		citools.TryUntilSucceeds(func() error {
+			output := citools.OutputFromRunOnNode(t, node1, "dm dot show "+fsname+" -H | grep dirty")
+			if strings.Contains(output, "\t0") {
+				return fmt.Errorf("not dirty yet")
+			}
+			return nil
+		}, "waiting for dirty data...")
+		citools.RunOnNode(t, node1, "dm commit -m 'add file to s3'")
+		citools.RunOnNode(t, node1, "dm push test-real-s3 "+fsname)
+		resp := citools.OutputFromRunOnNode(t, node1, s3cmd("ls s3://test.dotmesh"))
+		if !strings.Contains(resp, "hello-world.txt") {
+			citools.RunOnNode(t, node1, s3cmd("put hello-world.txt s3://test.dotmesh"))
+			t.Error("Deleted a file we aren't tracking")
+		}
+		PutBackS3Files(node1)
+		citools.RunOnNode(t, node1, "mkdir -p subset && echo 'directories' > subset/subdir.txt")
+		citools.RunOnNode(t, node1, s3cmd("put subset/subdir.txt s3://test.dotmesh/subset/subdir.txt"))
+		fsname2 := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm s3 clone-subset test-real-s3 test.dotmesh subset/ --local-name="+fsname2)
+		citools.RunOnNode(t, node1, "dm pull test-real-s3 "+fsname2)
+		resp = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname2)+" ls /foo/")
+		if strings.Contains(resp, "hello-world.txt") {
+			t.Error("Pulled down a file we aren't tracking")
+		}
+	})
 
 	t.Run("CloneNoLocalName", func(t *testing.T) {
 		// todo
