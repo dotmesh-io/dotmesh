@@ -45,6 +45,7 @@ func handoffState(f *fsMachine) stateFn {
 	response, _ := f.snapshot(&Event{
 		Name: "snapshot",
 		Args: &EventArgs{"metadata": metadata{
+			"type":   "migration",
 			"author": "system",
 			"message": fmt.Sprintf(
 				"Automatic snapshot during migration from %s to %s.",
