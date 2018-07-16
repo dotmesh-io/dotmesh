@@ -1092,6 +1092,13 @@ func (dm *DotmeshAPI) RequestTransfer(
 
 }
 
+func (dm *DotmeshAPI) IsUserPriveledged() bool {
+	if dm.client.User == "admin" {
+		return true
+	}
+	return false
+}
+
 // FIXME: Put this in a shared library, as it duplicates the copy in
 // dotmesh-server/pkg/main/utils.go (now with a few differences)
 
