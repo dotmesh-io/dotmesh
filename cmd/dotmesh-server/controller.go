@@ -20,6 +20,40 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type InMemoryState struct {
+	config                     Config
+	filesystems                map[string]*fsMachine
+	filesystemsLock            *sync.RWMutex
+	myNodeId                   string
+	mastersCache               map[string]string
+	mastersCacheLock           *sync.RWMutex
+	serverAddressesCache       map[string]string
+	serverAddressesCacheLock   *sync.RWMutex
+	globalSnapshotCache        map[string]map[string][]snapshot
+	globalSnapshotCacheLock    *sync.RWMutex
+	globalStateCache           map[string]map[string]map[string]string
+	globalStateCacheLock       *sync.RWMutex
+	globalContainerCache       map[string]containerInfo
+	globalContainerCacheLock   *sync.RWMutex
+	etcdWaitTimestamp          int64
+	etcdWaitState              string
+	etcdWaitTimestampLock      *sync.Mutex
+	localReceiveProgress       *Observer
+	newSnapsOnMaster           *Observer
+	registry                   *Registry
+	containers                 *DockerClient
+	containersLock             *sync.RWMutex
+	fetchRelatedContainersChan chan bool
+	interclusterTransfers      map[string]TransferPollResult
+	interclusterTransfersLock  *sync.RWMutex
+	globalDirtyCacheLock       *sync.RWMutex
+	globalDirtyCache           map[string]dirtyInfo
+	userManager                user.UserManager
+
+	debugPartialFailCreateFilesystem bool
+	versionInfo                      *VersionInfo
+}
+
 // typically methods on the InMemoryState "god object"
 
 func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
@@ -891,4 +925,17 @@ func (s *InMemoryState) GetListOfVolumes(ctx context.Context) ([]DotmeshVolume, 
 	}
 
 	return result, nil
+}
+
+func (state *InMemoryState) mustCleanupSocket() {
+	if _, err := os.Stat(PLUGINS_DIR); err != nil {
+		if err := os.MkdirAll(PLUGINS_DIR, 0700); err != nil {
+			log.Fatalf("Could not make plugin directory %s: %v", PLUGINS_DIR, err)
+		}
+	}
+	if _, err := os.Stat(DM_SOCKET); err == nil {
+		if err = os.Remove(DM_SOCKET); err != nil {
+			log.Fatalf("Could not clean up existing socket at %s: %v", DM_SOCKET, err)
+		}
+	}
 }

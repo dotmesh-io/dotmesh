@@ -202,19 +202,6 @@ func newContainerMountSymlink(name VolumeName, filesystemId string, subvolume st
 	return result, nil
 }
 
-func (state *InMemoryState) mustCleanupSocket() {
-	if _, err := os.Stat(PLUGINS_DIR); err != nil {
-		if err := os.MkdirAll(PLUGINS_DIR, 0700); err != nil {
-			log.Fatalf("Could not make plugin directory %s: %v", PLUGINS_DIR, err)
-		}
-	}
-	if _, err := os.Stat(DM_SOCKET); err == nil {
-		if err = os.Remove(DM_SOCKET); err != nil {
-			log.Fatalf("Could not clean up existing socket at %s: %v", DM_SOCKET, err)
-		}
-	}
-}
-
 // Annotate a context with admin-level authorization.
 func AdminContext(ctx context.Context) context.Context {
 	return auth.SetUserIDCtx(ctx, ADMIN_USER_UUID)

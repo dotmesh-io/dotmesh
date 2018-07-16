@@ -1,9 +1,7 @@
 package commands
 
 import (
-	"fmt"
 	"io"
-	"os"
 
 	"github.com/dotmesh-io/dotmesh/cmd/dm/pkg/remotes"
 	"github.com/spf13/cobra"
@@ -29,7 +27,7 @@ copy of 'app_billing_postgres' at all yet:
 Online help: https://docs.dotmesh.com/references/cli/#clone-dm-clone-local-name-local-dot-remote-dot-branch
 `,
 		Run: func(cmd *cobra.Command, args []string) {
-			err := func() error {
+			runHandlingError(func() error {
 				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
@@ -55,11 +53,7 @@ Online help: https://docs.dotmesh.com/references/cli/#clone-dm-clone-local-name-
 				}
 
 				return nil
-			}()
-			if err != nil {
-				fmt.Fprintln(os.Stderr, err.Error())
-				os.Exit(1)
-			}
+			})
 		},
 	}
 

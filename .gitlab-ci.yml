@@ -47,6 +47,8 @@ build_client_linux:
         paths:
             - binaries
         expire_in: 1 week
+    except:
+        - schedules
 
 build_client_macos:
     stage: build
@@ -59,6 +61,8 @@ build_client_macos:
         paths:
             - binaries
         expire_in: 1 week
+    except:
+        - schedules
 
 build_yaml:
     stage: build
@@ -71,6 +75,8 @@ build_yaml:
         paths:
             - yaml
         expire_in: 1 week
+    except:
+        - schedules
 
 build_server:
     stage: build
@@ -80,106 +86,65 @@ build_server:
     script:
         # push to the OVH registry.
         - docker login -u $OVH_REGISTRY_USERNAME -p $OVH_REGISTRY_PASSWORD registry.containers.ovh.net
+        - (./rebuild_flexvolume.sh)
+        - (./rebuild_operator.sh)
+        - (./rebuild_provisioner.sh)
         - (./rebuild_server.sh) # also pushes
         - echo "pushed $CI_DOCKER_SERVER_IMAGE"
         - echo "pushed $CI_DOCKER_PROVISIONER_IMAGE"
         - echo "pushed $CI_DOCKER_OPERATOR_IMAGE"
         - echo "pushed $CI_DOCKER_DIND_PROVISIONER_IMAGE"
-        # push to quay.io, by overriding various variables (although notably
-        # not CI_DOCKER_DIND_PROVISIONER_IMAGE because that's test-only
-        # tooling).
+        # push to quay.io, by re-tagging and pushing the images
         - docker login -u $QUAY_USER -p $QUAY_PASSWORD quay.io
-        - (export CI_DOCKER_SERVER_IMAGE=$RELEASE_DOCKER_REGISTRY/dotmesh-server:$CI_COMMIT_SHA; export CI_DOCKER_PROVISIONER_IMAGE=$RELEASE_DOCKER_REGISTRY/dotmesh-dynamic-provisioner:$CI_COMMIT_SHA; export CI_DOCKER_OPERATOR_IMAGE=$RELEASE_DOCKER_REGISTRY/dotmesh-operator:$CI_COMMIT_SHA; ./rebuild_server.sh; echo "pushed $CI_DOCKER_SERVER_IMAGE"; echo "pushed $CI_DOCKER_PROVISIONER_IMAGE"; echo "pushed $CI_DOCKER_OPERATOR_IMAGE")
+        - docker tag $CI_DOCKER_SERVER_IMAGE $RELEASE_DOCKER_REGISTRY/dotmesh-server:$CI_COMMIT_SHA
+        - docker push $RELEASE_DOCKER_REGISTRY/dotmesh-server:$CI_COMMIT_SHA
+        - echo "pushed $RELEASE_DOCKER_REGISTRY/dotmesh-server:$CI_COMMIT_SHA"
+        - docker tag $CI_DOCKER_PROVISIONER_IMAGE $RELEASE_DOCKER_REGISTRY/dotmesh-dynamic-provisioner:$CI_COMMIT_SHA
+        - docker push $RELEASE_DOCKER_REGISTRY/dotmesh-dynamic-provisioner:$CI_COMMIT_SHA
+        - echo $RELEASE_DOCKER_REGISTRY/dotmesh-dynamic-provisioner:$CI_COMMIT_SHA
+        # We need to rebuild the operator rather than just re-tag and push, because the
+        # server image name is built into the operator.
+        - (export CI_DOCKER_SERVER_IMAGE=$RELEASE_DOCKER_REGISTRY/dotmesh-server:$CI_COMMIT_SHA; export CI_DOCKER_OPERATOR_IMAGE=$RELEASE_DOCKER_REGISTRY/dotmesh-operator:$CI_COMMIT_SHA; . build_setup.sh && ./rebuild_operator.sh; echo "pushed $CI_DOCKER_OPERATOR_IMAGE")
     artifacts:
         paths:
             - target
         expire_in: 1 week
+    except:
+        - schedules
 
-# run sanity check that things still work on Windows and macOS
-#windows_docker_stable:
-#    stage: test
-#    tags:
-#        - windows
-#        - docker-stable
-#    before_script:
-#        - |
-#          bash -c "
-#          mkdir -p gopath
-#          export GOPATH=$(pwd)/gopath
-#          cd gopath
-#          mkdir -p src/github.com/dotmesh-io
-#          ln -s `realpath ..` ./src/github.com/dotmesh-io/dotmesh
-#          cd src/github.com/dotmesh-io/dotmesh
-#          "
-#    script:
-#        - |
-#          bash -c "
-#          cd cmd/dotmesh-server;
-#          docker build -t dotmesh-server . || (sleep 30; docker build -t dotmesh-server .)
-#          cd ../..
-#          ./scripts/smoke.sh $(pwd)/binaries/Linux/dm dotmesh-server
-#          docker system prune -fa
-#          "
-
-macos_docker_stable:
+macos_docker_stable_smoke:
     stage: test
-    dependencies:
-        - build_server
-        - build_client_macos
     tags:
         - macos
         - docker-stable
     script:
-        - docker pull $CI_DOCKER_REGISTRY/dotmesh-server:$CI_DOCKER_TAG
-        - gtimeout 5m ./scripts/smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
+        - gtimeout 5m ./scripts/smoke.sh
     after_script:
-        - echo "DOTMESH LOGS"
-        - docker logs dotmesh-server
-        - echo "DOCKER VERSION"
-        - docker version
-        - which docker
         - docker container prune -f
     only:
         - schedules
 
-macos_docker_edge:
+macos_docker_edge_smoke:
     stage: test
-    dependencies:
-        - build_server
-        - build_client_macos
     tags:
         - macos
         - docker-edge
     script:
-        - docker pull $CI_DOCKER_REGISTRY/dotmesh-server:$CI_DOCKER_TAG
-        - gtimeout 5m ./scripts/smoke.sh $(pwd)/binaries/Darwin/dm dotmesh-server
+        - gtimeout 5m ./scripts/smoke.sh
     after_script:
-        - echo "DOTMESH LOGS"
-        - docker logs dotmesh-server
-        - echo "DOCKER VERSION"
-        - docker version
-        - which docker
         - docker container prune -f
     only:
         - schedules
 
 linux_smoke:
     stage: test
-    dependencies:
-        - build_server
-        - build_client_linux
     tags:
         - ubuntu
         - fast
     script:
-        - docker pull $CI_DOCKER_REGISTRY/dotmesh-server:$CI_DOCKER_TAG
-        - timeout 5m ./scripts/smoke.sh $(pwd)/binaries/Linux/dm dotmesh-server
+        - timeout 5m ./scripts/smoke.sh
     after_script:
-        - echo "DOTMESH LOGS"
-        - docker logs dotmesh-server
-        - echo "DOCKER VERSION"
-        - docker version
-        - which docker
+        - docker container prune -f
     only:
         - schedules
 

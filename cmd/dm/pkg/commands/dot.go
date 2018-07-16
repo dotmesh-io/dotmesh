@@ -361,44 +361,46 @@ func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
 			}
 		}
 
-		if !scriptingMode {
-			fmt.Fprintf(out, "   Replication Status:\n")
-		}
+		if dm.IsUserPriveledged() {
+			if !scriptingMode {
+				fmt.Fprintf(out, "   Replication Status:\n")
+			}
 
-		branchInternalName := branch
-		if branchInternalName == "master" {
-			branchInternalName = ""
-		}
+			branchInternalName := branch
+			if branchInternalName == "master" {
+				branchInternalName = ""
+			}
 
-		latency, err := dm.GetReplicationLatencyForBranch(qualifiedDotName, branchInternalName)
-		if err != nil {
-			fmt.Fprintf(out, "unable to fetch replication status (%s), proceeding...\n", err)
-		} else {
-			for server, missingCommits := range latency {
-				serverStatus, ok := branchDot.ServerStatuses[server]
-				if !ok {
-					serverStatus = "unknown"
-				}
-				if scriptingMode {
-					var masterState string
-					if branchDot.Master == server {
-						masterState = "master"
-					} else {
-						masterState = "replica"
+			latency, err := dm.GetReplicationLatencyForBranch(qualifiedDotName, branchInternalName)
+			if err != nil {
+				fmt.Fprintf(out, "unable to fetch replication status (%s), proceeding...\n", err)
+			} else {
+				for server, missingCommits := range latency {
+					serverStatus, ok := branchDot.ServerStatuses[server]
+					if !ok {
+						serverStatus = "unknown"
 					}
-					fmt.Fprintf(out, "latency\t%s\t%s\t%s\t%s\n", server, masterState, serverStatus, strings.Join(missingCommits, "\t"))
-				} else {
-					var masterState string
-					if branchDot.Master == server {
-						masterState = " [MASTER]"
+					if scriptingMode {
+						var masterState string
+						if branchDot.Master == server {
+							masterState = "master"
+						} else {
+							masterState = "replica"
+						}
+						fmt.Fprintf(out, "latency\t%s\t%s\t%s\t%s\n", server, masterState, serverStatus, strings.Join(missingCommits, "\t"))
 					} else {
-						masterState = "         "
-					}
+						var masterState string
+						if branchDot.Master == server {
+							masterState = " [MASTER]"
+						} else {
+							masterState = "         "
+						}
 
-					if len(missingCommits) > 0 {
-						fmt.Fprintf(out, "    server %s%s (status: %s) is missing %+v\n", server, masterState, serverStatus, missingCommits)
-					} else {
-						fmt.Fprintf(out, "    server %s%s (status: %s) is up to date\n", server, masterState, serverStatus)
+						if len(missingCommits) > 0 {
+							fmt.Fprintf(out, "    server %s%s (status: %s) is missing %+v\n", server, masterState, serverStatus, missingCommits)
+						} else {
+							fmt.Fprintf(out, "    server %s%s (status: %s) is up to date\n", server, masterState, serverStatus)
+						}
 					}
 				}
 			}
