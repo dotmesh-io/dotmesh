@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/dotmesh-io/dotmesh/pkg/user"
 	"github.com/gorilla/mux"
 )
 
@@ -39,18 +40,17 @@ func (z ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	master := z.state.masterFor(z.filesystem)
 
+	admin, err := z.state.userManager.Get(&user.Query{Ref: "admin"})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(fmt.Sprintf("Can't establish API key to proxy pull: %+v.\n", err)))
+		log.Printf("[ZFSSender:%s] Can't establish API key to proxy pull: %+v.", z.filesystem, err)
+		return
+	}
+
 	if master != z.state.myNodeId {
 		addresses := z.state.addressesFor(master)
-
-		_, _, apiKey, err := getPasswords("admin")
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(fmt.Sprintf("Can't establish API key to proxy pull: %+v.\n", err)))
-			log.Printf("[ZFSSender:%s] Can't establish API key to proxy pull: %+v.", z.filesystem, err)
-			return
-		}
-
-		url, err := deduceUrl(context.Background(), addresses, "internal", "admin", apiKey) // FIXME, need master->name mapping, see how handover works normally
+		url, err := deduceUrl(context.Background(), addresses, "internal", "admin", admin.ApiKey) // FIXME, need master->name mapping, see how handover works normally
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(fmt.Sprintf("%s", err)))
@@ -73,7 +73,7 @@ func (z ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		req.SetBasicAuth(
 			"admin",
-			apiKey,
+			admin.ApiKey,
 		)
 		postClient := new(http.Client)
 		log.Printf("[ZFSSender:%s] Proxying pull from %s: %s", z.filesystem, master, url)
@@ -212,6 +212,13 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	z.filesystem = vars["filesystem"]
 	_ = make([]byte, BUF_LEN)
 
+	admin, err := z.state.userManager.Get(&user.Query{Ref: "admin"})
+	if err != nil {
+		w.Write([]byte(fmt.Sprintf("Can't establish API key to proxy push: %+v.\n", err)))
+		log.Printf("[ZFSReceiver:ServeHTTP:%s] Can't establish API key to proxy push: %+v", z.filesystem, err)
+		return
+	}
+
 	// TODO: add a coarse grained lock to start with: stop other writers from
 	// writing to this filesystem (unlike readers, this is strictly
 	// one-at-a-time), and also stop us moving this filesystem to another node
@@ -244,15 +251,7 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		addresses := z.state.addressesFor(master)
 
-		_, _, apiKey, err := getPasswords("admin")
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(fmt.Sprintf("Can't establish API key to proxy push: %+v.\n", err)))
-			log.Printf("[ZFSReceiver:ServeHTTP:%s] Can't establish API key to proxy push: %+v", z.filesystem, err)
-			return
-		}
-
-		url, err := deduceUrl(context.Background(), addresses, "internal", "admin", apiKey)
+		url, err := deduceUrl(context.Background(), addresses, "internal", "admin", admin.ApiKey)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(fmt.Sprintf("%s", err)))
@@ -275,7 +274,7 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		req.SetBasicAuth(
 			"admin",
-			apiKey,
+			admin.ApiKey,
 		)
 		postClient := new(http.Client)
 		log.Printf("[ZFSReceiver:%s] Proxying push to %s: %s", z.filesystem, master, url)
