@@ -11,5 +11,5 @@ go_library(
     importmap = "github.com/dotmesh-io/dotmesh/cmd/dm/vendor/github.com/pierrec/lz4",
     importpath = "github.com/pierrec/lz4",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/pierrec/xxHash/xxHash32:go_default_library"],
+    deps = ["//cmd/dm/vendor/github.com/pierrec/xxHash/xxHash32:go_default_library"],
 )

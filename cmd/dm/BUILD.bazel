@@ -6,7 +6,7 @@ go_library(
     importpath = "github.com/dotmesh-io/dotmesh/cmd/dm",
     visibility = ["//visibility:private"],
     deps = [
-        "//pkg/commands:go_default_library",
+        "//cmd/dm/pkg/commands:go_default_library",
         "//vendor/github.com/opentracing/opentracing-go:go_default_library",
         "//vendor/github.com/openzipkin/zipkin-go-opentracing:go_default_library",
     ],

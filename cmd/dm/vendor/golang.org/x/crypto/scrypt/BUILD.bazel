@@ -6,5 +6,5 @@ go_library(
     importmap = "github.com/dotmesh-io/dotmesh/cmd/dm/vendor/golang.org/x/crypto/scrypt",
     importpath = "golang.org/x/crypto/scrypt",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/golang.org/x/crypto/pbkdf2:go_default_library"],
+    deps = ["//cmd/dm/vendor/golang.org/x/crypto/pbkdf2:go_default_library"],
 )

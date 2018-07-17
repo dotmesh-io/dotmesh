@@ -5,5 +5,5 @@ go_library(
     srcs = ["pki.go"],
     importpath = "github.com/dotmesh-io/dotmesh/cmd/dm/pkg/pki",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/cert:go_default_library"],
+    deps = ["//cmd/dm/pkg/cert:go_default_library"],
 )
