@@ -31,26 +31,9 @@ func (e PermissionDenied) Error() string {
 	return "Permission denied."
 }
 
-// type TopLevelFilesystem struct {
-// 	MasterBranch  DotmeshVolume
-// 	OtherBranches []DotmeshVolume
-// 	Owner         SafeUser
-// 	Collaborators []SafeUser
-// }
-
 type TopLevelFilesystem = types.TopLevelFilesystem
 type VolumesAndBranches = types.VolumesAndBranches
 type Server = types.Server
-
-// type VolumesAndBranches struct {
-// 	Dots    []TopLevelFilesystem
-// 	Servers []Server
-// }
-
-// type Server struct {
-// 	Id        string
-// 	Addresses []string
-// }
 
 type ByAddress []Server
 
@@ -100,11 +83,6 @@ type SafeConfig struct {
 // state machinery
 type stateFn func(*fsMachine) stateFn
 
-// type Origin struct {
-// 	FilesystemId string
-// 	SnapshotId   string
-// }
-
 type Origin = types.Origin
 
 type metadata map[string]string
@@ -115,11 +93,6 @@ type snapshot struct {
 	// private (do not serialize)
 	filesystem *filesystem
 }
-
-// type Clone struct {
-// 	FilesystemId string
-// 	Origin       Origin
-// }
 
 type Clone = types.Clone
 
