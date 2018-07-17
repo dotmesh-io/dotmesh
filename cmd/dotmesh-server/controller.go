@@ -15,6 +15,7 @@ import (
 	"github.com/nu7hatch/gouuid"
 	"golang.org/x/net/context"
 
+	"github.com/dotmesh-io/dotmesh/pkg/registry"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 
 	log "github.com/sirupsen/logrus"
@@ -106,7 +107,7 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 	}
 	// a registry of names of filesystems and branches (clones) mapping to
 	// their ids
-	s.registry = NewRegistry(config.UserManager)
+	s.registry = registry.NewRegistry(config.UserManager, config.EtcdClient, ETCD_PREFIX)
 	return s
 }
 
@@ -788,7 +789,7 @@ func (s *InMemoryState) CreateFilesystem(
 	// Proceed to set up master mapping
 	default:
 		// Key already exists
-		var existingEntry registryFilesystem
+		var existingEntry RegistryFilesystem
 
 		err := json.Unmarshal([]byte(re.Node.Value), &existingEntry)
 		if err != nil {

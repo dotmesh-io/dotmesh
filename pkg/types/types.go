@@ -259,3 +259,11 @@ type containerInfo struct {
 	Server     string
 	Containers []DockerContainer
 }
+
+// the type as stored in the json in etcd (intermediate representation wrt
+// DotmeshVolume)
+type RegistryFilesystem struct {
+	Id              string
+	OwnerId         string
+	CollaboratorIds []string
+}

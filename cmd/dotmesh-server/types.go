@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/coreos/etcd/client"
+
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 )
@@ -291,16 +293,19 @@ type TransferPollResult struct {
 type Config struct {
 	FilesystemMetadataTimeout int64
 	UserManager               user.UserManager
+	EtcdClient                client.KeysAPI
 }
 
-type PathToTopLevelFilesystem struct {
-	TopLevelFilesystemId   string
-	TopLevelFilesystemName VolumeName
-	Clones                 ClonesList
-}
+// type PathToTopLevelFilesystem struct {
+// 	TopLevelFilesystemId   string
+// 	TopLevelFilesystemName VolumeName
+// 	Clones                 ClonesList
+// }
 
+type PathToTopLevelFilesystem = types.PathToTopLevelFilesystem
 type DotmeshVolume = types.DotmeshVolume
 type VolumeName = types.VolumeName
+type RegistryFilesystem = types.RegistryFilesystem
 
 // type DotmeshVolume struct {
 // 	Id             string
