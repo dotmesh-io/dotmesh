@@ -47,7 +47,6 @@ type Registry interface {
 	DeleteCloneFromEtcd(name string, topLevelFilesystemId string)
 
 	LookupFilesystem(name VolumeName) (TopLevelFilesystem, error)
-	// LookupFilesystemName(filesystemId string) (name VolumeName, err error)
 	LookupClone(topLevelFilesystemId, cloneName string) (Clone, error)
 	LookupCloneById(filesystemId string) (Clone, error)
 	LookupCloneByIdWithName(filesystemId string) (Clone, string, error)
@@ -327,7 +326,7 @@ func (r *DefaultRegistry) UnregisterFilesystem(name VolumeName) error {
 }
 
 func (r *DefaultRegistry) UpdateCollaborators(
-	ctx context.Context, tlf TopLevelFilesystem, newCollaborators []SafeUser,
+	ctx context.Context, tlf TopLevelFilesystem, newCollaborators []user.SafeUser,
 ) error {
 	collaboratorIds := []string{}
 	for _, u := range newCollaborators {
@@ -441,7 +440,7 @@ func (r *DefaultRegistry) UpdateFilesystemFromEtcd(name VolumeName, rf registryF
 			// the only thing that seems to reasonably construct a
 			// TopLevelFilesystem is rpc's AllVolumesAndClones.
 			MasterBranch:  DotmeshVolume{Id: rf.Id, Name: name},
-			Owner:         safeUser(owner),
+			Owner:         owner.SafeUser(),
 			Collaborators: collaborators,
 		}
 	}
@@ -473,19 +472,6 @@ func (r *DefaultRegistry) LookupFilesystem(name VolumeName) (TopLevelFilesystem,
 	}
 	return r.topLevelFilesystems[name], nil
 }
-
-// XXX naming here is a mess, wrt LookupFilesystem{Id,Name} :/
-// func (r *DefaultRegistry) LookupFilesystemName(filesystemId string) (name VolumeName, err error) {
-// 	r.topLevelFilesystemsLock.RLock()
-// 	defer r.topLevelFilesystemsLock.RUnlock()
-// 	// TODO make a more efficient data structure
-// 	for name, tlf := range r.topLevelFilesystems {
-// 		if tlf.MasterBranch.Id == filesystemId {
-// 			return name, nil
-// 		}
-// 	}
-// 	return VolumeName{Namespace: "", Name: ""}, fmt.Errorf("No such filesystem with id '%s'", filesystemId)
-// }
 
 // Look up a clone. If you want to look up based on filesystem name and clone name, do:
 // fsId := LookupFilesystem(fsName); cloneId := LookupClone(fsId, cloneName)
