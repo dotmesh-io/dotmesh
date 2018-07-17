@@ -17,6 +17,7 @@ func s3cmd(params string) string {
 func PutBackS3Files(node string) {
 	citools.RunOnNodeErr(node, s3cmd("rm s3://test.dotmesh/newfile.txt"))
 	citools.RunOnNodeErr(node, s3cmd("rm s3://test.dotmesh/somedir/hello-world.txt"))
+
 	makeS3File(node, "hello-world.txt", "hello, world", "test.dotmesh")
 }
 
@@ -231,6 +232,7 @@ func TestS3Remote(t *testing.T) {
 			}
 			return nil
 		}, "waiting for dirty data...")
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
 		citools.RunOnNode(t, node1, "dm commit -m 'add file to s3'")
 		citools.RunOnNode(t, node1, "dm push test-real-s3 "+fsname)
 		resp := citools.OutputFromRunOnNode(t, node1, s3cmd("ls s3://test.dotmesh"))
