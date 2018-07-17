@@ -212,66 +212,41 @@ func (d *DotmeshRPC) AuthenticatedUser(
 	return nil
 }
 
-func (d *DotmeshRPC) ResetApiKey(
-	r *http.Request, args *struct{}, result *struct{ ApiKey string },
-) error {
+func (d *DotmeshRPC) ResetApiKey(r *http.Request, args *struct{}, result *struct{ ApiKey string }) error {
 	err := requirePassword(r)
 	if err != nil {
 		return err
 	}
 
-	user, err := GetUserById(auth.GetUserID(r))
-	if err != nil {
-		return err
-	}
+	_, err = d.usersManager.ResetAPIKey(auth.GetUserID(r))
 
-	err = user.ResetApiKey()
-	if err != nil {
-		return err
-	}
-
-	err = user.Save()
-	if err != nil {
-		return err
-	}
-
-	result.ApiKey = user.ApiKey
-
-	err = user.Save()
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
-func (d *DotmeshRPC) GetApiKey(
-	r *http.Request, args *struct{}, result *struct{ ApiKey string },
-) error {
-	user, err := GetUserById(auth.GetUserID(r))
-	if err != nil {
-		return err
-	}
-
+func (d *DotmeshRPC) GetApiKey(r *http.Request, args *struct{}, result *struct{ ApiKey string }) error {
+	user := auth.GetUser(r)
 	result.ApiKey = user.ApiKey
 	return nil
 }
 
 // the user must have authenticated correctly with their old password in order
 // to run this method
-func (d *DotmeshRPC) UpdatePassword(
-	r *http.Request, args *struct{ NewPassword string }, result *SafeUser,
-) error {
-	user, err := GetUserById(auth.GetUserID(r))
+func (d *DotmeshRPC) UpdatePassword(r *http.Request, args *struct{ NewPassword string }, result *SafeUser) error {
+	// user, err := GetUserById(auth.GetUserID(r))
+	// if err != nil {
+	// return err
+	// }
+
+	user, err := d.usersManager.UpdatePassword(auth.GetUserID(r), args.NewPassword)
 	if err != nil {
 		return err
 	}
-	user.UpdatePassword(args.NewPassword)
-	err = user.Save()
-	if err != nil {
-		return err
-	}
-	*result = safeUser(user)
+	// user.UpdatePassword(args.NewPassword)
+	// err = user.Save()
+	// if err != nil {
+	// 	return err
+	// }
+	*result = user.SafeUser()
 	return nil
 }
 
@@ -304,17 +279,13 @@ func (d *DotmeshRPC) RegisterNewUser(
 		return fmt.Errorf("Invalid username.")
 	}
 
-	user, err := NewUser(args.Name, args.Email, args.Password)
+	user, err := d.usersManager.New(args.Name, args.Email, args.Password)
 
 	if err != nil {
 		return fmt.Errorf("[RegistrationServer] Error creating user %v: %v", args.Name, err)
-	} else {
-		err = user.Save()
-		if err != nil {
-			return fmt.Errorf("[RegistrationServer] Error saving user %v: %v", args.Name, err)
-		}
-		*result = safeUser(user)
 	}
+
+	*result = user.SafeUser()
 
 	return nil
 }
@@ -334,16 +305,12 @@ func (d *DotmeshRPC) UpdateUserPassword(
 		return err
 	}
 
-	user, err := GetUserById(args.Id)
+	user, err := d.usersManager.UpdatePassword(args.Id, args.NewPassword)
 	if err != nil {
 		return err
 	}
-	user.UpdatePassword(args.NewPassword)
-	err = user.Save()
-	if err != nil {
-		return err
-	}
-	*result = safeUser(user)
+
+	*result = user.SafeUser()
 	return nil
 }
 
@@ -358,12 +325,12 @@ func (d *DotmeshRPC) UserFromCustomerId(
 	if err != nil {
 		return err
 	}
-	user, err := GetUserByCustomerId(args.CustomerId)
+	user, err := d.usersManager.Get(&user.Query{Selector: fmt.Sprintf("CustomerId=%s", args.CustomerId)})
 	if err != nil {
 		return err
 	}
 
-	*result = safeUser(user)
+	*result = user.SafeUser()
 	return nil
 }
 
@@ -377,12 +344,12 @@ func (d *DotmeshRPC) UserFromEmail(
 	if err != nil {
 		return err
 	}
-	user, err := GetUserByEmail(args.Email)
+	user, err := d.usersManager.Get(&user.Query{Ref: args.Email})
 	if err != nil {
 		return err
 	}
 
-	*result = safeUser(user)
+	*result = user.SafeUser()
 	return nil
 }
 
@@ -396,12 +363,12 @@ func (d *DotmeshRPC) UserFromName(
 	if err != nil {
 		return err
 	}
-	user, err := GetUserByName(args.Name)
+	user, err := d.usersManager.Get(&user.Query{Ref: args.Name})
 	if err != nil {
 		return err
 	}
 
-	*result = safeUser(user)
+	*result = user.SafeUser()
 	return nil
 }
 
@@ -420,18 +387,25 @@ func (d *DotmeshRPC) SetUserMetadataField(
 	if err != nil {
 		return err
 	}
-	user, err := GetUserById(args.Id)
+
+	user, err := d.usersManager.Get(&user.Query{Ref: args.Id})
 	if err != nil {
 		return err
 	}
 
 	user.Metadata[args.Field] = args.Value
 
-	err = user.Save()
+	// err = user.Save()
+	// if err != nil {
+	// 	return err
+	// }
+
+	updated, err := d.usersManager.Update(user)
 	if err != nil {
 		return err
 	}
-	*result = safeUser(user)
+
+	*result = updated.SafeUser()
 	return nil
 }
 
@@ -449,18 +423,22 @@ func (d *DotmeshRPC) SetUserEmail(
 	if err != nil {
 		return err
 	}
-	user, err := GetUserById(args.Id)
+	// user, err := GetUserById(args.Id)
+	// if err != nil {
+	// 	return err
+	// }
+
+	user, err := d.usersManager.Get(&user.Query{Ref: args.Id})
 	if err != nil {
 		return err
 	}
 
-	user.Email = args.Email
-
-	err = user.Save()
+	updated, err := d.usersManager.Update(user)
 	if err != nil {
 		return err
 	}
-	*result = safeUser(user)
+
+	*result = updated.SafeUser()
 	return nil
 }
 
@@ -478,18 +456,19 @@ func (d *DotmeshRPC) DeleteUserMetadataField(
 	if err != nil {
 		return err
 	}
-	user, err := GetUserById(args.Id)
+	user, err := d.usersManager.Get(&user.Query{Ref: args.Id})
 	if err != nil {
 		return err
 	}
 
 	delete(user.Metadata, args.Field)
 
-	err = user.Save()
+	updated, err := d.usersManager.Update(user)
 	if err != nil {
 		return err
 	}
-	*result = safeUser(user)
+
+	*result = updated.SafeUser()
 	return nil
 }
 
@@ -1881,11 +1860,11 @@ func (d *DotmeshRPC) AddCollaborator(
 		)
 	}
 	// add collaborator in registry, re-save.
-	potentialCollaborator, err := GetUserByName(args.Collaborator)
+	potentialCollaborator, err := d.usersManager.Get(&user.Query{Ref: args.Collaborator})
 	if err != nil {
 		return err
 	}
-	newCollaborators := append(crappyTlf.Collaborators, safeUser(potentialCollaborator))
+	newCollaborators := append(crappyTlf.Collaborators, potentialCollaborator.SafeUser())
 	err = d.state.registry.UpdateCollaborators(r.Context(), crappyTlf, newCollaborators)
 	if err != nil {
 		return err
