@@ -35,7 +35,7 @@ function fetch_zfs {
 }
 
 # Find the hostname from the actual host, rather than the container.
-HOSTNAME="`nsenter -t 1 -m -u -n -i hostname`"
+HOSTNAME="`nsenter -t 1 -m -u -n -i hostname || echo unknown`"
 
 # Put the data file inside /var/lib so that we end up on the big
 # partition if we're in a LinuxKit env.
