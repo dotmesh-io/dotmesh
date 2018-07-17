@@ -41,7 +41,7 @@ type InMemoryState struct {
 	etcdWaitTimestampLock      *sync.Mutex
 	localReceiveProgress       *Observer
 	newSnapsOnMaster           *Observer
-	registry                   Registry
+	registry                   registry.Registry
 	containers                 *DockerClient
 	containersLock             *sync.RWMutex
 	fetchRelatedContainersChan chan bool
