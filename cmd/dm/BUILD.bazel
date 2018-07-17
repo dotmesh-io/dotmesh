@@ -6,9 +6,9 @@ go_library(
     importpath = "github.com/dotmesh-io/dotmesh/cmd/dm",
     visibility = ["//visibility:private"],
     deps = [
-        "//cmd/dm/pkg/commands:go_default_library",
-        "//cmd/dm/vendor/github.com/opentracing/opentracing-go:go_default_library",
-        "//cmd/dm/vendor/github.com/openzipkin/zipkin-go-opentracing:go_default_library",
+        "//pkg/commands:go_default_library",
+        "//vendor/github.com/opentracing/opentracing-go:go_default_library",
+        "//vendor/github.com/openzipkin/zipkin-go-opentracing:go_default_library",
     ],
 )
 
@@ -16,4 +16,11 @@ go_binary(
     name = "dm",
     embed = [":go_default_library"],
     visibility = ["//visibility:public"],
+)
+
+load("@bazel_gazelle//:def.bzl", "gazelle")
+
+gazelle(
+    name = "gazelle",
+    prefix = "github.com/dotmesh-io/dotmesh/cmd/dm",
 )

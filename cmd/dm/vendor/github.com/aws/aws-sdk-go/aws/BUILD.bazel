@@ -21,9 +21,9 @@ go_library(
     importpath = "github.com/aws/aws-sdk-go/aws",
     visibility = ["//visibility:public"],
     deps = [
-        "//cmd/dm/vendor/github.com/aws/aws-sdk-go/aws/awserr:go_default_library",
-        "//cmd/dm/vendor/github.com/aws/aws-sdk-go/aws/credentials:go_default_library",
-        "//cmd/dm/vendor/github.com/aws/aws-sdk-go/aws/endpoints:go_default_library",
-        "//cmd/dm/vendor/github.com/aws/aws-sdk-go/internal/sdkio:go_default_library",
+        "//vendor/github.com/aws/aws-sdk-go/aws/awserr:go_default_library",
+        "//vendor/github.com/aws/aws-sdk-go/aws/credentials:go_default_library",
+        "//vendor/github.com/aws/aws-sdk-go/aws/endpoints:go_default_library",
+        "//vendor/github.com/aws/aws-sdk-go/internal/sdkio:go_default_library",
     ],
 )

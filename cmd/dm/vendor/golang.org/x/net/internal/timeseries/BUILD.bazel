@@ -5,5 +5,5 @@ go_library(
     srcs = ["timeseries.go"],
     importmap = "github.com/dotmesh-io/dotmesh/cmd/dm/vendor/golang.org/x/net/internal/timeseries",
     importpath = "golang.org/x/net/internal/timeseries",
-    visibility = ["//cmd/dm/vendor/golang.org/x/net:__subpackages__"],
+    visibility = ["//vendor/golang.org/x/net:__subpackages__"],
 )

@@ -20,5 +20,5 @@ go_library(
     importmap = "github.com/dotmesh-io/dotmesh/cmd/dm/vendor/gopkg.in/cheggaaa/pb.v1",
     importpath = "gopkg.in/cheggaaa/pb.v1",
     visibility = ["//visibility:public"],
-    deps = ["//cmd/dm/vendor/github.com/mattn/go-runewidth:go_default_library"],
+    deps = ["//vendor/github.com/mattn/go-runewidth:go_default_library"],
 )

@@ -12,5 +12,5 @@ go_library(
     importmap = "github.com/dotmesh-io/dotmesh/cmd/dm/vendor/github.com/aws/aws-sdk-go/aws/awsutil",
     importpath = "github.com/aws/aws-sdk-go/aws/awsutil",
     visibility = ["//visibility:public"],
-    deps = ["//cmd/dm/vendor/github.com/jmespath/go-jmespath:go_default_library"],
+    deps = ["//vendor/github.com/jmespath/go-jmespath:go_default_library"],
 )

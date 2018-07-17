@@ -6,5 +6,5 @@ go_library(
     importmap = "github.com/dotmesh-io/dotmesh/cmd/dm/vendor/github.com/eapache/go-xerial-snappy",
     importpath = "github.com/eapache/go-xerial-snappy",
     visibility = ["//visibility:public"],
-    deps = ["//cmd/dm/vendor/github.com/golang/snappy:go_default_library"],
+    deps = ["//vendor/github.com/golang/snappy:go_default_library"],
 )

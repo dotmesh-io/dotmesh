@@ -21,9 +21,9 @@ go_library(
     importpath = "github.com/coreos/etcd/client",
     visibility = ["//visibility:public"],
     deps = [
-        "//cmd/dm/vendor/github.com/coreos/etcd/pkg/pathutil:go_default_library",
-        "//cmd/dm/vendor/github.com/coreos/etcd/pkg/types:go_default_library",
-        "//cmd/dm/vendor/github.com/ugorji/go/codec:go_default_library",
-        "//cmd/dm/vendor/golang.org/x/net/context:go_default_library",
+        "//vendor/github.com/coreos/etcd/pkg/pathutil:go_default_library",
+        "//vendor/github.com/coreos/etcd/pkg/types:go_default_library",
+        "//vendor/github.com/ugorji/go/codec:go_default_library",
+        "//vendor/golang.org/x/net/context:go_default_library",
     ],
 )
