@@ -38,7 +38,7 @@ go_library(
         "//vendor/github.com/openzipkin/zipkin-go-opentracing/types:go_default_library",
         "//vendor/github.com/openzipkin/zipkin-go-opentracing/wire:go_default_library",
         "//vendor/golang.org/x/net/trace:go_default_library",
-        "@com_github_openzipkin_zipkin_go_opentracing//_thrift/gen-go/scribe:go_default_library",
-        "@com_github_openzipkin_zipkin_go_opentracing//_thrift/gen-go/zipkincore:go_default_library",
+        "//vendor/github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/scribe:go_default_library",
+        "//vendor/github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore:go_default_library",
     ],
 )
