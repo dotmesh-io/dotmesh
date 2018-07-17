@@ -1,21 +1,6 @@
 package(default_visibility = ["//visibility:public"])
 
-load(
-    "@io_bazel_rules_go//go:def.bzl",
-    "go_library",
-    "go_test",
-)
-
-go_test(
-    name = "go_default_test",
-    srcs = [
-        "csr_test.go",
-        "pem_test.go",
-    ],
-    data = glob(["testdata/**"]),
-    importpath = "k8s.io/client-go/util/cert",
-    library = ":go_default_library",
-)
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "go_default_library",
@@ -28,6 +13,7 @@ go_library(
     data = [
         "testdata/dontUseThisKey.pem",
     ],
+    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/k8s.io/client-go/util/cert",
     importpath = "k8s.io/client-go/util/cert",
 )
 

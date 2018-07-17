@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["tag.go"],
+    importmap = "github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/golang.org/x/text/internal/tag",
+    importpath = "golang.org/x/text/internal/tag",
+    visibility = ["//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/golang.org/x/text:__subpackages__"],
+)

@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["dotmesh.go"],
+    importpath = "github.com/dotmesh-io/dotmesh/cmd/dm",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//cmd/dm/pkg/commands:go_default_library",
+        "//cmd/dm/vendor/github.com/opentracing/opentracing-go:go_default_library",
+        "//cmd/dm/vendor/github.com/openzipkin/zipkin-go-opentracing:go_default_library",
+    ],
+)
+
+go_binary(
+    name = "dm",
+    embed = [":go_default_library"],
+    visibility = ["//visibility:public"],
+)

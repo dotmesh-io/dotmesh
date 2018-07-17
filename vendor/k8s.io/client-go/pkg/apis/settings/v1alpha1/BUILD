@@ -19,6 +19,8 @@ go_library(
         "zz_generated.deepcopy.go",
         "zz_generated.defaults.go",
     ],
+    importmap = "github.com/dotmesh-io/dotmesh/vendor/k8s.io/client-go/pkg/apis/settings/v1alpha1",
+    importpath = "k8s.io/client-go/pkg/apis/settings/v1alpha1",
     tags = ["automanaged"],
     deps = [
         "//vendor/github.com/gogo/protobuf/proto:go_default_library",

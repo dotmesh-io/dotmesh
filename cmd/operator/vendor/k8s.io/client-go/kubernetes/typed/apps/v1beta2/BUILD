@@ -18,15 +18,16 @@ go_library(
         "scale.go",
         "statefulset.go",
     ],
+    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/k8s.io/client-go/kubernetes/typed/apps/v1beta2",
     importpath = "k8s.io/client-go/kubernetes/typed/apps/v1beta2",
     deps = [
-        "//vendor/k8s.io/api/apps/v1beta2:go_default_library",
-        "//vendor/k8s.io/apimachinery/pkg/apis/meta/v1:go_default_library",
-        "//vendor/k8s.io/apimachinery/pkg/runtime/serializer:go_default_library",
-        "//vendor/k8s.io/apimachinery/pkg/types:go_default_library",
-        "//vendor/k8s.io/apimachinery/pkg/watch:go_default_library",
-        "//vendor/k8s.io/client-go/kubernetes/scheme:go_default_library",
-        "//vendor/k8s.io/client-go/rest:go_default_library",
+        "//cmd/operator/vendor/k8s.io/api/apps/v1beta2:go_default_library",
+        "//cmd/operator/vendor/k8s.io/apimachinery/pkg/apis/meta/v1:go_default_library",
+        "//cmd/operator/vendor/k8s.io/apimachinery/pkg/runtime/serializer:go_default_library",
+        "//cmd/operator/vendor/k8s.io/apimachinery/pkg/types:go_default_library",
+        "//cmd/operator/vendor/k8s.io/apimachinery/pkg/watch:go_default_library",
+        "//cmd/operator/vendor/k8s.io/client-go/kubernetes/scheme:go_default_library",
+        "//cmd/operator/vendor/k8s.io/client-go/rest:go_default_library",
     ],
 )
 

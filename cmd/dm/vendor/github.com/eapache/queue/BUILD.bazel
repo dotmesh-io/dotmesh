@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["queue.go"],
+    importmap = "github.com/dotmesh-io/dotmesh/cmd/dm/vendor/github.com/eapache/queue",
+    importpath = "github.com/eapache/queue",
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,49 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "pass.go",
+        "terminal.go",
+        "terminal_solaris.go",
+    ],
+    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/github.com/howeyc/gopass",
+    importpath = "github.com/howeyc/gopass",
+    visibility = ["//visibility:public"],
+    deps = select({
+        "@io_bazel_rules_go//go/platform:android": [
+            "//cmd/operator/vendor/golang.org/x/crypto/ssh/terminal:go_default_library",
+        ],
+        "@io_bazel_rules_go//go/platform:darwin": [
+            "//cmd/operator/vendor/golang.org/x/crypto/ssh/terminal:go_default_library",
+        ],
+        "@io_bazel_rules_go//go/platform:dragonfly": [
+            "//cmd/operator/vendor/golang.org/x/crypto/ssh/terminal:go_default_library",
+        ],
+        "@io_bazel_rules_go//go/platform:freebsd": [
+            "//cmd/operator/vendor/golang.org/x/crypto/ssh/terminal:go_default_library",
+        ],
+        "@io_bazel_rules_go//go/platform:linux": [
+            "//cmd/operator/vendor/golang.org/x/crypto/ssh/terminal:go_default_library",
+        ],
+        "@io_bazel_rules_go//go/platform:nacl": [
+            "//cmd/operator/vendor/golang.org/x/crypto/ssh/terminal:go_default_library",
+        ],
+        "@io_bazel_rules_go//go/platform:netbsd": [
+            "//cmd/operator/vendor/golang.org/x/crypto/ssh/terminal:go_default_library",
+        ],
+        "@io_bazel_rules_go//go/platform:openbsd": [
+            "//cmd/operator/vendor/golang.org/x/crypto/ssh/terminal:go_default_library",
+        ],
+        "@io_bazel_rules_go//go/platform:plan9": [
+            "//cmd/operator/vendor/golang.org/x/crypto/ssh/terminal:go_default_library",
+        ],
+        "@io_bazel_rules_go//go/platform:solaris": [
+            "//cmd/operator/vendor/golang.org/x/sys/unix:go_default_library",
+        ],
+        "@io_bazel_rules_go//go/platform:windows": [
+            "//cmd/operator/vendor/golang.org/x/crypto/ssh/terminal:go_default_library",
+        ],
+        "//conditions:default": [],
+    }),
+)

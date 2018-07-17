@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["dind-provisioner.go"],
+    importpath = "github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dind-dynamic-provisioning",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/github.com/golang/glog:go_default_library",
+        "//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/github.com/kubernetes-incubator/external-storage/lib/controller:go_default_library",
+        "//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/apimachinery/pkg/apis/meta/v1:go_default_library",
+        "//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/apimachinery/pkg/util/wait:go_default_library",
+        "//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/client-go/kubernetes:go_default_library",
+        "//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/client-go/pkg/api/v1:go_default_library",
+        "//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/client-go/rest:go_default_library",
+    ],
+)
+
+go_binary(
+    name = "dind-dynamic-provisioning",
+    embed = [":go_default_library"],
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,40 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "archive.go",
+        "archive_unix.go",
+        "archive_windows.go",
+        "changes.go",
+        "changes_linux.go",
+        "changes_other.go",
+        "changes_unix.go",
+        "changes_windows.go",
+        "copy.go",
+        "copy_unix.go",
+        "copy_windows.go",
+        "diff.go",
+        "time_linux.go",
+        "time_unsupported.go",
+        "whiteouts.go",
+        "wrap.go",
+    ],
+    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/archive",
+    importpath = "github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/archive",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/github.com/fsouza/go-dockerclient/external/github.com/Sirupsen/logrus:go_default_library",
+        "//vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/fileutils:go_default_library",
+        "//vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/idtools:go_default_library",
+        "//vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/ioutils:go_default_library",
+        "//vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/pools:go_default_library",
+        "//vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/promise:go_default_library",
+        "//vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system:go_default_library",
+    ] + select({
+        "@io_bazel_rules_go//go/platform:windows": [
+            "//vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/longpath:go_default_library",
+        ],
+        "//conditions:default": [],
+    }),
+)

@@ -9,8 +9,9 @@ load(
 go_library(
     name = "go_default_library",
     srcs = ["clientauth.go"],
+    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/k8s.io/client-go/tools/auth",
     importpath = "k8s.io/client-go/tools/auth",
-    deps = ["//vendor/k8s.io/client-go/rest:go_default_library"],
+    deps = ["//cmd/operator/vendor/k8s.io/client-go/rest:go_default_library"],
 )
 
 go_test(

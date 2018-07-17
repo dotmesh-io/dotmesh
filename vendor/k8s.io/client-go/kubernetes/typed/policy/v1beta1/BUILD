@@ -17,6 +17,8 @@ go_library(
         "poddisruptionbudget.go",
         "policy_client.go",
     ],
+    importmap = "github.com/dotmesh-io/dotmesh/vendor/k8s.io/client-go/kubernetes/typed/policy/v1beta1",
+    importpath = "k8s.io/client-go/kubernetes/typed/policy/v1beta1",
     tags = ["automanaged"],
     deps = [
         "//vendor/k8s.io/apimachinery/pkg/apis/meta/v1:go_default_library",

@@ -5,4 +5,3 @@ gazelle(
     # you project name here!
     prefix = "github.com/dotmesh-io/dotmesh",
 )
-  
