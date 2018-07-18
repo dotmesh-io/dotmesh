@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os/exec"
+	"strings"
 	"time"
 )
 
@@ -206,6 +207,7 @@ func (f *fsMachine) push(
 	}
 
 	// proceed to do real send
+	logZFSCommand(filesystemId, fmt.Sprintf("zfs %s", strings.Join(realArgs, " ")))
 	cmd = exec.Command("zfs", realArgs...)
 	pipeReader, pipeWriter := io.Pipe()
 

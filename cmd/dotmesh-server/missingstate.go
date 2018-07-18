@@ -122,7 +122,7 @@ func missingState(f *fsMachine) stateFn {
 				}
 				return backoffState
 			} else if f.lastS3TransferRequest.Direction == "pull" {
-				log.Printf("%s %s %s", ZFS, "create", fq(f.filesystemId))
+				logZFSCommand(f.filesystemId, fmt.Sprintf("%s %s %s", ZFS, "create", fq(f.filesystemId)))
 				out, err := exec.Command(ZFS, "create", fq(f.filesystemId)).CombinedOutput()
 				if err != nil {
 					log.Printf("%v while trying to create %s", err, fq(f.filesystemId))
@@ -187,7 +187,7 @@ func missingState(f *fsMachine) stateFn {
 			f.transitionedTo("missing", "creating")
 			// ah - we are going to be created on this node, rather than
 			// received into from a master...
-			log.Printf("%s %s %s", ZFS, "create", fq(f.filesystemId))
+			logZFSCommand(f.filesystemId, fmt.Sprintf("%s %s %s", ZFS, "create", fq(f.filesystemId)))
 			out, err := exec.Command(ZFS, "create", fq(f.filesystemId)).CombinedOutput()
 			if err != nil {
 				log.Printf("%v while trying to create %s", err, fq(f.filesystemId))

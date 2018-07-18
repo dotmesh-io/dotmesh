@@ -414,6 +414,7 @@ docker run -i $rm_opt --pid=host --privileged --name=$DOTMESH_INNER_SERVER_NAME 
     -e "POOL=$POOL" \
     -e "YOUR_IPV4_ADDRS=$YOUR_IPV4_ADDRS" \
     -e "TRACE_ADDR=$TRACE_ADDR" \
+    -e "POOL_LOGFILE=$OUTER_DIR/dotmesh_pool_log" \
     -e "DOTMESH_ETCD_ENDPOINT=$DOTMESH_ETCD_ENDPOINT" $INHERIT_ENVIRONMENT_ARGS \
     $secret \
     $log_opts \
