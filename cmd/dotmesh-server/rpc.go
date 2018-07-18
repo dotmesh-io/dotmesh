@@ -218,7 +218,12 @@ func (d *DotmeshRPC) ResetApiKey(r *http.Request, args *struct{}, result *struct
 		return err
 	}
 
-	_, err = d.usersManager.ResetAPIKey(auth.GetUserID(r))
+	updated, err := d.usersManager.ResetAPIKey(auth.GetUserID(r))
+	if err != nil {
+		return err
+	}
+
+	result.ApiKey = updated.ApiKey
 
 	return err
 }
