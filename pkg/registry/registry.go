@@ -599,13 +599,30 @@ func (r *DefaultRegistry) MaybeCloneFilesystemId(name types.VolumeName, cloneNam
 func (r *DefaultRegistry) DumpTopLevelFilesystems() []*types.TopLevelFilesystem {
 	r.topLevelFilesystemsLock.RLock()
 	defer r.topLevelFilesystemsLock.RUnlock()
-	tlfs := make([]*types.TopLevelFilesystem, len(r.topLevelFilesystems))
+	result := make([]*types.TopLevelFilesystem, len(r.topLevelFilesystems))
 	for _, tlf := range r.topLevelFilesystems {
-		tlfs = append(tlfs, &tlf)
+		var tlfCopy *types.TopLevelFilesystem
+		*tlfCopy = tlf
+		copy(tlfCopy.OtherBranches, tlf.OtherBranches)
+		copy(tlfCopy.Collaborators, tlf.Collaborators)
+		result = append(result, tlfCopy)
 	}
-	return tlfs
+	return result
 }
 
 func (r *DefaultRegistry) DumpClones() map[string]map[string]types.Clone {
+	r.clonesLock.RLock()
+	defer r.clonesLock.RUnlock()
+	result := make(map[string]map[string]types.Clone, len(r.clones))
+
+	for id, v := range r.clones {
+
+		if _, ok := result[id]; !ok {
+			result[id] = make(map[string]types.Clone)
+		}
+		for k, c := range v {
+			result[id][k] = c
+		}
+	}
 	return r.clones
 }
