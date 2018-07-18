@@ -148,7 +148,7 @@ linux_smoke:
     only:
         - schedules
 
-server_unit_tests:
+dotmesh_unit_tests:
     stage: test
     tags:
         - ubuntu

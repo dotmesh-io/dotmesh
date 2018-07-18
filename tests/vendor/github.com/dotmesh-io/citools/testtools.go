@@ -191,6 +191,7 @@ func TestMarkForCleanup(f Federation) {
 			}
 		}
 	}
+
 	// Attempt log extraction only after we've safely touched all those CLEAN_ME_UP files, *phew*.
 	for _, c := range f {
 		for _, n := range c.GetNodes() {
@@ -202,7 +203,7 @@ func TestMarkForCleanup(f Federation) {
 					"%s/%s-%s.log",
 					logDir, container, node,
 				)
-				err := System(
+				err := SilentSystem(
 					"bash", "-c",
 					fmt.Sprintf(
 						"mkdir -p %s && touch %s && chmod -R a+rwX %s && "+
