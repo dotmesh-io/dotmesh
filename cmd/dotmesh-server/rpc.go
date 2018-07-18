@@ -183,12 +183,10 @@ func requirePassword(r *http.Request) error {
 	}
 }
 
-func (d *DotmeshRPC) CurrentUser(
-	r *http.Request, args *struct{}, result *SafeUser,
-) error {
-	user, err := GetUserById(auth.GetUserID(r))
-	if err != nil {
-		return err
+func (d *DotmeshRPC) CurrentUser(r *http.Request, args *struct{}, result *SafeUser) error {
+	user := auth.GetUser(r)
+	if user == nil {
+		return fmt.Errorf("user not found in the request ctx")
 	}
 
 	*result = user.SafeUser()
@@ -203,9 +201,9 @@ func (d *DotmeshRPC) AuthenticatedUser(
 		return err
 	}
 
-	user, err := GetUserById(auth.GetUserID(r))
-	if err != nil {
-		return err
+	user := auth.GetUser(r)
+	if user == nil {
+		return fmt.Errorf("user not found in the request ctx")
 	}
 
 	*result = user.SafeUser()
@@ -1906,12 +1904,10 @@ func (d *DotmeshRPC) RemoveCollaborator(
 		)
 	}
 
-	authenticatedUserId := auth.GetUserID(r)
+	authenticatedUser := auth.GetUser(r)
 
-	authenticatedUser, err := GetUserById(authenticatedUserId)
-
-	if err != nil {
-		return err
+	if authenticatedUser == nil {
+		return fmt.Errorf("user not found in the request ctx")
 	}
 
 	if authenticatedUser.Name == args.Collaborator {
