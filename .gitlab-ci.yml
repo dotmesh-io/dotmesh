@@ -1,5 +1,4 @@
 variables:
-
     SERVER_NAME: dotmesh-server
     PROVISIONER_NAME: dotmesh-dynamic-provisioner
 
@@ -35,6 +34,8 @@ before_script:
     - git checkout master && git pull --ff-only origin master
     - git checkout $CI_COMMIT_REF_NAME && git reset --hard $CI_COMMIT_SHA
     - while [ -f /dotmesh-test-cleanup.lock ]; do echo "waiting for test cleanup..."; sleep 1; done
+    # for containerised bazel
+    - pip3 install dazel==0.15.0
 
 build_client_linux:
     stage: build
