@@ -142,9 +142,10 @@ deb-src http://ftp.us.debian.org/debian/ stretch-updates main contrib
 Run (as root):
 ```
 apt-get update
-apt-get -y install zfsutils-linux jq golang moreutils
+apt-get -y install zfsutils-linux jq golang moreutils python3-pip
 echo 'vm.max_map_count=262144' >> /etc/sysctl.conf
 sysctl vm.max_map_count=262144
+pip3 install dazel==0.0.36
 ```
 
 [Install Docker Compose](https://docs.docker.com/compose/install/).
