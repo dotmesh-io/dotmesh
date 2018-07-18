@@ -276,10 +276,6 @@ type registryFilesystem struct {
 
 // update a filesystem, including updating etcd and our local state
 func (r *DefaultRegistry) RegisterFilesystem(ctx context.Context, name types.VolumeName, filesystemId string) error {
-	// kapi, err := getEtcdKeysApi()
-	// if err != nil {
-	// 	return err
-	// }
 	authenticatedUserId := auth.GetUserIDFromCtx(ctx)
 	if authenticatedUserId == "" {
 		return fmt.Errorf("No user found in request context.")
@@ -313,10 +309,6 @@ func (r *DefaultRegistry) RegisterFilesystem(ctx context.Context, name types.Vol
 
 // Remove a filesystem from the registry
 func (r *DefaultRegistry) UnregisterFilesystem(name types.VolumeName) error {
-	// kapi, err := getEtcdKeysApi()
-	// if err != nil {
-	// 	return err
-	// }
 	_, err := r.etcdClient.Delete(
 		context.Background(),
 		// (0)/(1)dotmesh.io/(2)registry/(3)filesystems/(4)<namespace>/(5)<name> =>
@@ -327,9 +319,8 @@ func (r *DefaultRegistry) UnregisterFilesystem(name types.VolumeName) error {
 	return err
 }
 
-func (r *DefaultRegistry) UpdateCollaborators(
-	ctx context.Context, tlf types.TopLevelFilesystem, newCollaborators []user.SafeUser,
-) error {
+func (r *DefaultRegistry) UpdateCollaborators(ctx context.Context, tlf types.TopLevelFilesystem, newCollaborators []user.SafeUser) error {
+
 	collaboratorIds := []string{}
 	for _, u := range newCollaborators {
 		collaboratorIds = append(collaboratorIds, u.Id)
@@ -345,10 +336,7 @@ func (r *DefaultRegistry) UpdateCollaborators(
 	if err != nil {
 		return err
 	}
-	// kapi, err := getEtcdKeysApi()
-	// if err != nil {
-	// 	return err
-	// }
+
 	_, err = r.etcdClient.Set(
 		context.Background(),
 		// (0)/(1)dotmesh.io/(2)registry/(3)filesystems/(4)<namespace>/(5)<name> =>
@@ -359,10 +347,16 @@ func (r *DefaultRegistry) UpdateCollaborators(
 		&client.SetOptions{PrevExist: client.PrevExist},
 	)
 	if err != nil {
+		log.WithFields(log.Fields{
+			"path:": fmt.Sprintf("%s/registry/filesystems/%s/%s", r.prefix, tlf.MasterBranch.Name.Namespace, tlf.MasterBranch.Name.Name),
+			"error": err,
+		}).Error("failed to update registry filesystems")
 		return err
 	}
 	// Only update our local belief system once the write to etcd has been
 	// successful!
+
+	log.Infof("updating after adding collab: %v", newCollaborators)
 	return r.UpdateFilesystemFromEtcd(tlf.MasterBranch.Name, rf)
 }
 
@@ -432,10 +426,9 @@ func (r *DefaultRegistry) UpdateFilesystemFromEtcd(name types.VolumeName, rf typ
 
 		collaborators := []user.SafeUser{}
 		for _, c := range rf.CollaboratorIds {
-			// user, ok := umap[c]
 			cUser, err := r.userManager.Get(&user.Query{Ref: c})
 			if err != nil {
-				return fmt.Errorf("Unable to locate collaborator.")
+				return fmt.Errorf("Unable to locate collaborator: %s", err)
 			}
 			collaborators = append(collaborators, cUser.SafeUser())
 		}
