@@ -34,9 +34,6 @@ before_script:
     - git checkout master && git pull --ff-only origin master
     - git checkout $CI_COMMIT_REF_NAME && git reset --hard $CI_COMMIT_SHA
     - while [ -f /dotmesh-test-cleanup.lock ]; do echo "waiting for test cleanup..."; sleep 1; done
-    - sudo apt-get install python3-pip
-    # for containerised bazel
-    - pip install dazel==0.15.0
 
 build_client_linux:
     stage: build
