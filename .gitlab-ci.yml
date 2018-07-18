@@ -41,7 +41,7 @@ build_client_linux:
         - ubuntu
         - fast
     script:
-        - (cd cmd/dm && ./rebuild.sh Linux)
+        - ./rebuild_client.sh Linux
     artifacts:
         paths:
             - binaries
@@ -55,7 +55,7 @@ build_client_macos:
         - ubuntu
         - fast
     script:
-        - (cd cmd/dm && ./rebuild.sh Darwin)
+        - ./rebuild_client.sh Darwin
     artifacts:
         paths:
             - binaries
