@@ -12,6 +12,8 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 )
 
+const DEFAULT_BRANCH = "master"
+
 type dirtyInfo struct {
 	Server     string
 	DirtyBytes int64
@@ -299,4 +301,12 @@ type Prelude struct {
 type containerInfo struct {
 	Server     string
 	Containers []DockerContainer
+}
+
+type NoSuchClone struct {
+	filesystemId string
+}
+
+func (n NoSuchClone) Error() string {
+	return fmt.Sprintf("No clone with filesystem id '%s'", n.filesystemId)
 }

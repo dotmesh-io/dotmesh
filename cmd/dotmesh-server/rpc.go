@@ -191,7 +191,7 @@ func (d *DotmeshRPC) CurrentUser(
 		return err
 	}
 
-	*result = safeUser(user)
+	*result = user.SafeUser()
 	return nil
 }
 
@@ -208,7 +208,7 @@ func (d *DotmeshRPC) AuthenticatedUser(
 		return err
 	}
 
-	*result = safeUser(user)
+	*result = user.SafeUser()
 	return nil
 }
 
