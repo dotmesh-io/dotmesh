@@ -1,5 +1,8 @@
-dazel build //cmd/dm:dm
-dazel build //cmd/dotmesh-server:dotmesh-server
-dazel build //cmd/dynamic-provisioner:dynamic-provisioner
-dazel build //cmd/flexvolume:flexvolume
-dazel build //cmd/operator:operator
+
+location=$(realpath .)/bazel-bin/cmd
+echo "Output path inside dazel will be $location"
+./rebuild_client.sh $1
+./rebuild_server.sh
+./rebuild_provisioner.sh
+./rebuild_flexvolume.sh
+./rebuild_operator.sh
