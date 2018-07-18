@@ -112,7 +112,7 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 }
 
 func (s *InMemoryState) resetRegistry() {
-	s.registry = NewRegistry(s.userManager)
+	s.registry = registry.NewRegistry(s.userManager, s.config.EtcdClient, ETCD_PREFIX)
 }
 
 func (s *InMemoryState) deleteFilesystem(filesystemId string) error {
