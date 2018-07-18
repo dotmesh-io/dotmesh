@@ -53,8 +53,11 @@ func GetAuthenticationType(r *http.Request) user.AuthenticationType {
 
 // SetAuthenticationDetails sets user details for this request
 func SetAuthenticationDetails(r *http.Request, user *user.User, authenticationType user.AuthenticationType) *http.Request {
-	ctx := context.WithValue(r.Context(), authenticationUserIDContextKey, user.Id)
+	return r.WithContext(SetAuthenticationDetailsCtx(r.Context(), user, authenticationType))
+}
+
+func SetAuthenticationDetailsCtx(ctx context.Context, user *user.User, authenticationType user.AuthenticationType) context.Context {
+	ctx = context.WithValue(ctx, authenticationUserIDContextKey, user.Id)
 	ctx = context.WithValue(ctx, authenticationUserObjectContextKey, user)
-	ctx = context.WithValue(ctx, authenticationPasswordAuthContextKey, authenticationType)
-	return r.WithContext(ctx)
+	return context.WithValue(ctx, authenticationPasswordAuthContextKey, authenticationType)
 }
