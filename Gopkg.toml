@@ -30,10 +30,6 @@ ignored = ["github.com/dotmesh-io/cmd/dotmesh-server/pkg*", "github.com/dotmesh-
   branch = "master"
   name = "github.com/nu7hatch/gouuid"
 
-[[constraint]]
-  name = "github.com/apache/thrift"
-  revision = "84d6af4cf903571319e0ebddd7beb12bc93fb752"
-
 [prune]
   go-tests = true
   unused-packages = true
