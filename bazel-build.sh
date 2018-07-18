@@ -1,5 +1,5 @@
-bazel build //cmd/dm:dm
-bazel build //cmd/dotmesh-server:dotmesh-server
-bazel build //cmd/dynamic-provisioner:dynamic-provisioner
-bazel build //cmd/flexvolume:flexvolume
-bazel build //cmd/operator:operator
+dazel build //cmd/dm:dm
+dazel build //cmd/dotmesh-server:dotmesh-server
+dazel build //cmd/dynamic-provisioner:dynamic-provisioner
+dazel build //cmd/flexvolume:flexvolume
+dazel build //cmd/operator:operator
