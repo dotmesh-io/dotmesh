@@ -3,11 +3,13 @@ set -xe
 
 . build_setup.sh
 
-(cd cmd/dm && ./rebuild.sh Linux)
+location=$(realpath .)/bazel-bin/cmd
+echo "Output path inside dazel will be $location"
+./rebuild_client.sh $1
 if [ -z "${SKIP_K8S}" ]; then
+    ./rebuild_provisioner.sh
     ./rebuild_flexvolume.sh
     ./rebuild_operator.sh
-    ./rebuild_provisioner.sh
 fi
 ./rebuild_server.sh
 (cd kubernetes && ./rebuild.sh)
