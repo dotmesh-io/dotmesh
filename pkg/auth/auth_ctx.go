@@ -27,6 +27,7 @@ func GetUserIDFromCtx(ctx context.Context) string {
 	return ""
 }
 
+// GetUserFromCtx- get user from given context
 func GetUserFromCtx(ctx context.Context) *user.User {
 	if u := ctx.Value(authenticationUserObjectContextKey); u != nil {
 		return u.(*user.User)
@@ -44,6 +45,7 @@ func GetUser(r *http.Request) *user.User {
 	return GetUserFromCtx(r.Context())
 }
 
+// GetAuthenticationType - get authentication type
 func GetAuthenticationType(r *http.Request) user.AuthenticationType {
 	if at := r.Context().Value(authenticationPasswordAuthContextKey); at != nil {
 		return at.(user.AuthenticationType)
@@ -56,6 +58,7 @@ func SetAuthenticationDetails(r *http.Request, user *user.User, authenticationTy
 	return r.WithContext(SetAuthenticationDetailsCtx(r.Context(), user, authenticationType))
 }
 
+// SetAuthenticationDetailsCtx set user details to the given context and return a new ctx
 func SetAuthenticationDetailsCtx(ctx context.Context, user *user.User, authenticationType user.AuthenticationType) context.Context {
 	ctx = context.WithValue(ctx, authenticationUserIDContextKey, user.Id)
 	ctx = context.WithValue(ctx, authenticationUserObjectContextKey, user)
