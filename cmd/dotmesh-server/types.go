@@ -12,12 +12,6 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 )
 
-type User = user.User
-type SafeUser = user.SafeUser
-
-type CloneWithName = types.CloneWithName
-type ClonesList = types.ClonesList
-
 type dirtyInfo struct {
 	Server     string
 	DirtyBytes int64
@@ -31,9 +25,19 @@ func (e PermissionDenied) Error() string {
 	return "Permission denied."
 }
 
+// Aliases
+type User = user.User
+type SafeUser = user.SafeUser
+type CloneWithName = types.CloneWithName
+type ClonesList = types.ClonesList
 type TopLevelFilesystem = types.TopLevelFilesystem
 type VolumesAndBranches = types.VolumesAndBranches
 type Server = types.Server
+type Origin = types.Origin
+type PathToTopLevelFilesystem = types.PathToTopLevelFilesystem
+type DotmeshVolume = types.DotmeshVolume
+type VolumeName = types.VolumeName
+type RegistryFilesystem = types.RegistryFilesystem
 
 type ByAddress []Server
 
@@ -82,8 +86,6 @@ type SafeConfig struct {
 
 // state machinery
 type stateFn func(*fsMachine) stateFn
-
-type Origin = types.Origin
 
 type metadata map[string]string
 type snapshot struct {
@@ -268,33 +270,6 @@ type Config struct {
 	UserManager               user.UserManager
 	EtcdClient                client.KeysAPI
 }
-
-// type PathToTopLevelFilesystem struct {
-// 	TopLevelFilesystemId   string
-// 	TopLevelFilesystemName VolumeName
-// 	Clones                 ClonesList
-// }
-
-type PathToTopLevelFilesystem = types.PathToTopLevelFilesystem
-type DotmeshVolume = types.DotmeshVolume
-type VolumeName = types.VolumeName
-type RegistryFilesystem = types.RegistryFilesystem
-
-// type DotmeshVolume struct {
-// 	Id             string
-// 	Name           VolumeName
-// 	Branch         string
-// 	Master         string
-// 	SizeBytes      int64
-// 	DirtyBytes     int64
-// 	CommitCount    int64
-// 	ServerStatuses map[string]string // serverId => status
-// }
-
-// type VolumeName struct {
-// 	Namespace string
-// 	Name      string
-// }
 
 // refers to a clone's "pointer" to a filesystem id and its snapshot.
 //
