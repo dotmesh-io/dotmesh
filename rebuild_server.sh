@@ -20,27 +20,21 @@ docker rm -f dotmesh-builder-docker-$ARTEFACT_CONTAINER
 
 # skip rebuilding Kubernetes components if not using them
 if [ -z "${SKIP_K8S}" ]; then
-    # test tooling, built but not released:
-
-    # dind-flexvolume
-    bazel run //cmd/dotmesh-server/pkg/dind-flexvolume/:dind-flexvolume
-    echo "copy binary: /target/dind-flexvolume"
-    cp $location/dotmesh-server/pkg/dind-flexvolume/linux_amd64_stripped/dind-flexvolume target/
-
     # dind-provisioner (builds a container)
-    bazel run //cmd/dotmesh-server/pkg/dind-dynamic-provisioning/:dind-dynamic-provisioning
+    bazel build //cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioning
 fi
 
 # dotmesh-server
 echo "creating container: dotmesh-builder-server-$ARTEFACT_CONTAINER"
 docker rm -f dotmesh-builder-server-$ARTEFACT_CONTAINER || true
-docker run \
-    --name dotmesh-builder-server-$ARTEFACT_CONTAINER \
-    -v dotmesh_build_cache_server:/gocache \
-    -e GOPATH=/go -e GOCACHE=/gocache \
-    -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server \
-    dotmesh-builder:$ARTEFACT_CONTAINER \
-    go build -pkgdir /go/pkg -ldflags "-X main.serverVersion=${VERSION}" -o /target/dotmesh-server
+bazel build //cmd/dotmesh-server:dotmesh-server
+# docker run \
+#     --name dotmesh-builder-server-$ARTEFACT_CONTAINER \
+#     -v dotmesh_build_cache_server:/gocache \
+#     -e GOPATH=/go -e GOCACHE=/gocache \
+#     -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server \
+#     dotmesh-builder:$ARTEFACT_CONTAINER \
+#     go build -pkgdir /go/pkg -ldflags "-X main.serverVersion=${VERSION}" -o /target/dotmesh-server
 echo "copy binary: /target/dotmesh-server"
 docker cp dotmesh-builder-server-$ARTEFACT_CONTAINER:/target/dotmesh-server target/
 docker rm -f dotmesh-builder-server-$ARTEFACT_CONTAINER
@@ -51,7 +45,7 @@ docker build -f cmd/dotmesh-server/Dockerfile -t "${CI_DOCKER_SERVER_IMAGE}" .
 # allow disabling of registry push
 if [ -z "${NO_PUSH}" ]; then
     echo "pushing images"
-    docker push ${CI_DOCKER_SERVER_IMAGE}
+    bazel run //cmd/dotmesh-server:dotmesh-server_push 
     if [ -z "${SKIP_K8S}" ]; then
         echo "pushing dind provisioner"
         bazel run //cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind_push

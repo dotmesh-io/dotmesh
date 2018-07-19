@@ -76,10 +76,19 @@ go_library(
     ],
 )
 
-go_binary(
+go_image(
     name = "dotmesh-server",
-    embed = [":go_default_library"],
+    embed = [":go_default_library","//cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioning"],
     visibility = ["//visibility:public"],
+)
+
+docker_push(
+   name = "dotmesh-server_push",
+   image = ":dotmesh-server",
+   registry = "{CI_REGISTRY}",
+   repository = "dotmesh/dotmesh-server",
+   tag = "{DOCKERTAG}",
+   stamp = True,
 )
 
 go_test(
