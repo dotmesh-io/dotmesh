@@ -4,8 +4,7 @@
 
 dazel build //cmd/dynamic-provisioner:dynamic-provisioner
 
-# todo push using bazel
 if [ -z "${NO_PUSH}" ]; then
     echo "pushing image"
-    dazel run //cmd/dynamic-provisioner:provisioner_push
+    dazel run //cmd/dynamic-provisioner:provisioner_push --workspace_status_command ./version_status.sh
 fi

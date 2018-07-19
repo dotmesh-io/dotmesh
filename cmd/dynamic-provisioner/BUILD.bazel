@@ -30,7 +30,8 @@ container_push(
    name = "provisioner_push",
    image = ":provisioner",
    format = "Docker",
-   registry = "quay.io",
+   registry = "{CI_REGISTRY}",
    repository = "dotmesh/provisioner",
-   tag = "dev",
+   tag = "{DOCKERTAG}",
+   stamp = True,
 )

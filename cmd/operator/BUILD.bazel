@@ -41,7 +41,8 @@ container_push(
    name = "operator_push",
    image = ":operator",
    format = "Docker",
-   registry = "quay.io",
+   registry = "{CI_REGISTRY}",
    repository = "dotmesh/operator",
-   tag = "dev",
+   tag = "{DOCKERTAG}",
+   stamp = True,
 )
