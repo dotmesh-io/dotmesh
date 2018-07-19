@@ -16,8 +16,22 @@ go_library(
     ],
 )
 
-go_binary(
+go_image(
+    importpath = "github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dind-dynamic-provisioning",
     name = "dind-dynamic-provisioning",
     embed = [":go_default_library"],
     visibility = ["//visibility:public"],
+    goarch = "amd64",
+    goos = "linux",
+    pure = "on",
+)
+
+container_push(
+   name = "dind_push",
+   image = ":dind-dynamic-provisioning",
+   format = "Docker",
+   registry = "{CI_REGISTRY}",
+   repository = "dotmesh/dind-dynamic-provisioning",
+   tag = "{DOCKERTAG}",
+   stamp = True,
 )

@@ -37,22 +37,7 @@ if [ -z "${SKIP_K8S}" ]; then
     docker rm -f dotmesh-builder-dind-flexvolume-$ARTEFACT_CONTAINER
 
     # dind-provisioner
-    echo "creating container: dotmesh-builder-dind-provisioner-$ARTEFACT_CONTAINER"
-    docker rm -f dotmesh-builder-dind-provisioner-$ARTEFACT_CONTAINER || true
-    docker run \
-        --name dotmesh-builder-dind-provisioner-$ARTEFACT_CONTAINER \
-        -v dotmesh_build_cache_dind_provisioner:/gocache \
-        -e GOPATH=/go -e GOCACHE=/gocache \
-        -e CGO_ENABLED=0 \
-        -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dind-dynamic-provisioning \
-        dotmesh-builder:$ARTEFACT_CONTAINER \
-        go build -pkgdir /go/pkg -ldflags '-extldflags "-static"' -o /target/dind-provisioner .
-    echo "copy binary: /target/dind-provisioner"
-    docker cp dotmesh-builder-dind-provisioner-$ARTEFACT_CONTAINER:/target/dind-provisioner target/
-    docker rm -f dotmesh-builder-dind-provisioner-$ARTEFACT_CONTAINER
-
-    echo "building image: ${CI_DOCKER_DIND_PROVISIONER_IMAGE}"
-    docker build -f cmd/dotmesh-server/pkg/dind-dynamic-provisioning/Dockerfile -t "${CI_DOCKER_DIND_PROVISIONER_IMAGE}" .
+    dazel run //cmd/dotmesh-server/pkg/dind-dynamic-provisioning/:dind-dynamic-provisioning
 fi
 
 # dotmesh-server
@@ -78,6 +63,6 @@ if [ -z "${NO_PUSH}" ]; then
     docker push ${CI_DOCKER_SERVER_IMAGE}
     if [ -z "${SKIP_K8S}" ]; then
         echo "pushing dind provisioner"
-        docker push ${CI_DOCKER_DIND_PROVISIONER_IMAGE}
+        dazel run //cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind_push
     fi
 fi
