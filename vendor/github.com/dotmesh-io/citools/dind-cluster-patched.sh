@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 set -o errexit
 set -o nounset
 set -o pipefail
@@ -51,7 +50,7 @@ if [[ $(uname) == Linux && -z ${DOCKER_HOST:-} ]]; then
     using_linuxdocker=1
 fi
 
-EMBEDDED_CONFIG=y;DIND_IMAGE=quay.io/dotmesh/kubeadm-dind-cluster:v1.10
+EMBEDDED_CONFIG=y;DIND_IMAGE=mirantis/kubeadm-dind-cluster:v1.10
 
 IP_MODE="${IP_MODE:-ipv4}"  # ipv4, ipv6, (future) dualstack
 if [[ ! ${EMBEDDED_CONFIG:-} ]]; then
@@ -60,7 +59,8 @@ fi
 
 CNI_PLUGIN="${CNI_PLUGIN:-bridge}"
 ETCD_HOST="${ETCD_HOST:-127.0.0.1}"
-GCE_HOSTED="${GCE_HOSTED:-false}"
+GCE_HOSTED="${GCE_HOSTED:-}"
+DIND_ALLOW_AAAA_USE="${DIND_ALLOW_AAAA_USE:-}"  # Default is to use DNS64 always for IPv6 mode
 if [[ ${IP_MODE} = "ipv6" ]]; then
     DIND_SUBNET="${DIND_SUBNET:-fd00:10::}"
     dind_ip_base="${DIND_SUBNET}"
@@ -75,7 +75,11 @@ if [[ ${IP_MODE} = "ipv6" ]]; then
     DNS64_PREFIX_CIDR="${DNS64_PREFIX}/${DNS64_PREFIX_SIZE}"
     dns_server="${dind_ip_base}100"
     DEFAULT_POD_NETWORK_CIDR="fd00:10:20::/72"
-    USE_HAIRPIN="${USE_HAIRPIN:-true}"  # defaults on
+    USE_HAIRPIN="${USE_HAIRPIN:-true}"  # Default is to use hairpin for IPv6
+    if [[ ${DIND_ALLOW_AAAA_USE} && ${GCE_HOSTED} ]]; then
+	echo "ERROR! GCE does not support use of IPv6 for external addresses - aborting."
+	exit 1
+    fi
 else
     DIND_SUBNET="${DIND_SUBNET:-10.192.0.0}"
     dind_ip_base="$(echo "${DIND_SUBNET}" | sed 's/0$//')"
@@ -84,7 +88,11 @@ else
     DIND_SUBNET_SIZE="${DIND_SUBNET_SIZE:-16}"
     dns_server="${REMOTE_DNS64_V4SERVER:-8.8.8.8}"
     DEFAULT_POD_NETWORK_CIDR="10.244.0.0/16"
-    USE_HAIRPIN="${USE_HAIRPIN:-false}"  # Defaults off for V4, as issue with Virtlet networking
+    USE_HAIRPIN="${USE_HAIRPIN:-false}"  # Disabled for IPv4, as issue with Virtlet networking
+    if [[ ${DIND_ALLOW_AAAA_USE} ]]; then
+	echo "WARNING! The DIND_ALLOW_AAAA_USE option is for IPv6 mode - ignoring setting."
+	DIND_ALLOW_AAAA_USE=
+    fi
     if [[ ${CNI_PLUGIN} = "calico" || ${CNI_PLUGIN} = "calico-kdd" ]]; then
 	DEFAULT_POD_NETWORK_CIDR="192.168.0.0/16"
     fi
@@ -158,6 +166,10 @@ DIND_NO_PROXY="${DIND_NO_PROXY:-}"
 DIND_DAEMON_JSON_FILE="${DIND_DAEMON_JSON_FILE:-/etc/docker/daemon.json}"  # can be set to /dev/null
 DIND_REGISTRY_MIRROR="${DIND_REGISTRY_MIRROR:-}"  # plain string format
 DIND_INSECURE_REGISTRIES="${DIND_INSECURE_REGISTRIES:-}"  # json list format
+
+FEATURE_GATES="${FEATURE_GATES:-MountPropagation=true}"
+# you can set special value 'none' not to set any kubelet's feature gates.
+KUBELET_FEATURE_GATES="${KUBELET_FEATURE_GATES:-MountPropagation=true,DynamicKubeletConfig=true}"
 
 if [[ ! ${LOCAL_KUBECTL_VERSION:-} && ${DIND_IMAGE:-} =~ :(v[0-9]+\.[0-9]+)$ ]]; then
   LOCAL_KUBECTL_VERSION="${BASH_REMATCH[1]}"
@@ -385,19 +397,24 @@ function dind::ensure-downloaded-kubectl {
 
   case "${LOCAL_KUBECTL_VERSION}" in
     v1.8)
-      full_kubectl_version=v1.8.11
-      kubectl_sha1_linux=6a089bec1802611ad9f5120c486a6e0e00095279
-      kubectl_sha1_darwin=d0b4c54e65b66e106758a84cddb6a5528527b017
+      full_kubectl_version=v1.8.15
+      kubectl_sha1_linux=52a1ee321e1e8c0ecfd6e83c38bf972c2c60adf2
+      kubectl_sha1_darwin=ac3f823d7aa104237929a1e35ea400c6aa3cc356
       ;;
     v1.9)
-      full_kubectl_version=v1.9.7
-      kubectl_sha1_linux=7425dbf67007cee328b85da3bf5155d01d3939e2
-      kubectl_sha1_darwin=b9f6122fe29dd29fff01194cc00a40a5451581fd
+      full_kubectl_version=v1.9.9
+      kubectl_sha1_linux=c8163a6360119c56d163fbd8cef8727e9841e712
+      kubectl_sha1_darwin=09585552eb7616954481789489ec382c633a0162
       ;;
     v1.10)
-      full_kubectl_version=v1.10.1
-      kubectl_sha1_linux=a5c8e589bed21ec471e8c582885a8c9972a84da1
-      kubectl_sha1_darwin=e869ab8298bd92056b23568343ebd4a6c84f9817
+      full_kubectl_version=v1.10.5
+      kubectl_sha1_linux=dbe431b2684f8ff4188335b3b3cea185d5a9ec44
+      kubectl_sha1_darwin=08e58440949c71053b45bfadf80532ea3d752d12
+      ;;
+    v1.11)
+      full_kubectl_version=v1.11.0
+      kubectl_sha1_linux=e23f251ca0cb848802f3cb0f69a4ba297d07bfc6
+      kubectl_sha1_darwin=6eff29a328c4bc00879fd6a0c8b33690c6f75908
       ;;
     "")
       return 0
@@ -426,7 +443,7 @@ function dind::ensure-downloaded-kubectl {
   if [[ ! -f "${path}" ]]; then
     mkdir -p "${KUBECTL_DIR}"
     curl -sSLo "${path}" "https://storage.googleapis.com/kubernetes-release/release/${full_kubectl_version}/bin/${kubectl_os}/amd64/kubectl"
-    echo "${kubectl_sha1} ${path}" | sha1sum -c
+    echo "${kubectl_sha1}  ${path}" | sha1sum -c
     chmod +x "${path}"
   fi
 
@@ -498,6 +515,15 @@ function dind::ensure-dns {
 	    local bind9_path=/tmp/bind9
 	    rm -rf ${bind9_path}
 	    mkdir -p ${bind9_path}/conf ${bind9_path}/cache
+	    local force_dns64_for=""
+	    if [[ ! ${DIND_ALLOW_AAAA_USE} ]]; then
+		# Normally, if have an AAAA record, it is used. This clause tells
+		# bind9 to do ignore AAAA records for the specified networks
+		# and/or addresses and lookup A records and synthesize new AAAA
+		# records. In this case, we select "any" networks that have AAAA
+		# records meaning we ALWAYS use A records and do NAT64.
+	        force_dns64_for="exclude { any; };"
+	    fi
 	    cat >${bind9_path}/conf/named.conf <<BIND9_EOF
 options {
     directory "/var/bind";
@@ -508,11 +534,11 @@ options {
     auth-nxdomain no;    # conform to RFC1035
     listen-on-v6 { any; };
     dns64 ${DNS64_PREFIX_CIDR} {
-        exclude { any; };
+        ${force_dns64_for}
     };
 };
 BIND9_EOF
-	    if [[ "${GCE_HOSTED}" = true ]]; then
+	    if [[ ${GCE_HOSTED} ]]; then
 		# TODO: Have bind9 create config file, and pass in variables via Env vars.
 		docker-machine scp ${bind9_path}/conf/named.conf k8s-dind:bind9-named.conf
 		docker-machine ssh k8s-dind sudo rm -rf ${bind-path}
@@ -542,12 +568,12 @@ function dind::ensure-nat {
 	    # Need to check/create, as "clean" may remove route
 	    local route="$(ip route | egrep "^172.18.0.128/25")"
 	    if [[ -z "${route}" ]]; then
-		if [[ "${GCE_HOSTED}" = true ]]; then
+		if [[ ${GCE_HOSTED} ]]; then
 		    docker-machine ssh k8s-dind sudo ip route add 172.18.0.128/25 via 172.18.0.200
     elif [[ -z ${using_linuxdocker} ]]; then
         :
 		else
-		    docker run --net=host --rm --privileged busybox ip route add 172.18.0.128/25 via 172.18.0.200
+		    docker run --net=host --rm --privileged ${busybox_image} ip route add 172.18.0.128/25 via 172.18.0.200
 		fi
 	    fi
 	fi
@@ -658,7 +684,8 @@ function dind::kubeadm {
   status=0
   # See image/bare/wrapkubeadm.
   # Capturing output is necessary to grab flags for 'kubeadm join'
-  if ! docker exec "${container_id}" wrapkubeadm "$@" 2>&1 | tee /dev/fd/2; then
+  kubelet_feature_gates="-e KUBELET_FEATURE_GATES=${KUBELET_FEATURE_GATES}"
+  if ! docker exec ${kubelet_feature_gates} "${container_id}" /usr/local/bin/wrapkubeadm "$@" 2>&1 | tee /dev/fd/2; then
     echo "*** kubeadm failed" >&2
     return 1
   fi
@@ -682,7 +709,7 @@ function dind::configure-kubectl {
   if [[ ${IP_MODE} = "ipv6" ]]; then
       host="[${host}]"
   fi
-  if [[ "${GCE_HOSTED}" = true || ${DOCKER_HOST:-} =~ ^tcp: || ${using_linuxkit} || -n ${using_linuxdocker} ]]; then
+  if [[ ${GCE_HOSTED} || ${DOCKER_HOST:-} =~ ^tcp: || ${using_linuxkit} || -n ${using_linuxdocker} ]]; then
     if [[ "${IP_MODE}" = "ipv4" ]]; then
       host="localhost"
     else
@@ -743,6 +770,18 @@ function dind::deploy-dashboard {
   dind::retry dind::ensure-dashboard-clusterrolebinding
 }
 
+function dind::kubeadm-version {
+  if [[ ${use_k8s_source} ]]; then
+    (cluster/kubectl.sh version --short 2>/dev/null || true) |
+      grep Client |
+      sed 's/^.*: v\([0-9.]*\).*/\1/'
+  else
+    docker exec kube-master \
+           /bin/bash -c 'kubeadm version -o json | jq -r .clientVersion.gitVersion' |
+      sed 's/^v\([0-9.]*\).*/\1/'
+  fi
+}
+
 function dind::init {
   local -a opts
   dind::set-master-opts
@@ -775,21 +814,60 @@ function dind::init {
     docker exec --privileged -i kube-master touch /v6-mode
   fi
 
-  docker exec --privileged -i kube-master bash <<EOF
-sed -e "s|{{ADV_ADDR}}|${kube_master_ip}|" \
+  feature_gates="{}"
+  if [[ ${DNS_SERVICE} == "coredns" ]]; then
+    # can't just use 'CoreDNS: false' because
+    # it'll break k8s 1.8. FIXME: simplify
+    # after 1.8 support is removed
+    feature_gates="{CoreDNS: true}"
+  elif docker exec kube-master kubeadm init --help 2>&1 | grep -q CoreDNS; then
+    # FIXME: CoreDNS should be the default in 1.11
+    feature_gates="{CoreDNS: false}"
+  fi
+
+  component_feature_gates=""
+  if [ "${FEATURE_GATES}" != "none" ]; then
+    component_feature_gates="feature-gates: \\\"${FEATURE_GATES}\\\""
+  fi
+
+  apiserver_extra_args=""
+  for e in $(set -o posix ; set | grep -E "^APISERVER_[a-z_]+=" | cut -d'=' -f 1); do
+    opt_name=$(echo ${e#APISERVER_} | sed 's/_/-/g')
+    apiserver_extra_args+="  ${opt_name}: \\\"$(eval echo \$$e)\\\"\\n"
+  done
+
+  controller_manager_extra_args=""
+  for e in $(set -o posix ; set | grep -E "^CONTROLLER_MANAGER_[a-z_]+=" | cut -d'=' -f 1); do
+    opt_name=$(echo ${e#CONTROLLER_MANAGER_} | sed 's/_/-/g')
+    controller_manager_extra_args+="  ${opt_name}: \\\"$(eval echo \$$e)\\\"\\n"
+  done
+
+  scheduler_extra_args=""
+  for e in $(set -o posix ; set | grep -E "^SCHEDULER_[a-z_]+=" | cut -d'=' -f 1); do
+    opt_name=$(echo ${e#SCHEDULER_} | sed 's/_/-/g')
+    scheduler_extra_args+="  ${opt_name}: \\\"$(eval echo \$$e)\\\"\\n"
+  done
+
+  kubeadm_version="$(dind::kubeadm-version)"
+  api_version="kubeadm.k8s.io/v1alpha2"
+  if [[ ${kubeadm_version} =~ 1\.(8|9|10)\. ]]; then
+    api_version="kubeadm.k8s.io/v1alpha1"
+  fi
+  docker exec -i kube-master bash <<EOF
+sed -e "s|{{API_VERSION}}|${api_version}|" \
+    -e "s|{{ADV_ADDR}}|${kube_master_ip}|" \
     -e "s|{{POD_SUBNET_DISABLE}}|${pod_subnet_disable}|" \
     -e "s|{{POD_NETWORK_CIDR}}|${POD_NETWORK_CIDR}|" \
     -e "s|{{SVC_SUBNET}}|${SERVICE_CIDR}|" \
     -e "s|{{BIND_ADDR}}|${bind_address}|" \
+    -e "s|{{FEATURE_GATES}}|${feature_gates}|" \
+    -e "s|{{KUBEADM_VERSION}}|${kubeadm_version}|" \
+    -e "s|{{COMPONENT_FEATURE_GATES}}|${component_feature_gates}|" \
+    -e "s|{{APISERVER_EXTRA_ARGS}}|${apiserver_extra_args}|" \
+    -e "s|{{CONTROLLER_MANAGER_EXTRA_ARGS}}|${controller_manager_extra_args}|" \
+    -e "s|{{SCHEDULER_EXTRA_ARGS}}|${scheduler_extra_args}|" \
     /etc/kubeadm.conf.tmpl > /etc/kubeadm.conf
 EOF
-  if [[ ${DNS_SERVICE} == "coredns" ]]; then
-    docker exec -i kube-master /bin/sh -c "cat >>/etc/kubeadm.conf" <<EOF
-featureGates:
-  CoreDNS: true 
-
-EOF
-  fi
   # TODO: --skip-preflight-checks needs to be replaced with
   # --ignore-preflight-errors=all for k8s 1.10+
   # (need to check k8s 1.9)
@@ -893,18 +971,62 @@ function dind::create-static-routes-for-bridge {
       if [[ ${IP_MODE} = "ipv4" ]]; then
 	# Assuming pod subnets will all be /24
         dest="${POD_NET_PREFIX}${id}.0/24"
-        gw=`docker exec ${dest_node} ifconfig eth0 | grep "inet addr" | cut -f 2 -d: | cut -f 1 -d' '`
+        gw=`docker exec ${dest_node} ip addr show eth0 | grep -w inet | awk '{ print $2 }' | sed 's,/.*,,'`
       else
 	instance=$(printf "%02x" ${id})
 	if [[ $((${POD_NET_SIZE} % 16)) -ne 0 ]]; then
 	  instance+="00" # Move node ID to upper byte
 	fi
 	dest="${POD_NET_PREFIX}${instance}::/${POD_NET_SIZE}"
-        gw=`docker exec ${dest_node} ifconfig eth0 | grep "inet6" | grep -i global | awk '{ print $3 }' | cut -f 1 -d/`
+        gw=`docker exec ${dest_node} ip addr show eth0 | grep -w inet6 | grep -i global | head -1 | awk '{ print $2 }' | sed 's,/.*,,'`
       fi
       docker exec ${node} ip route add ${dest} via ${gw}
     done
   done
+}
+
+# If we are allowing AAAA record use, then provide SNAT for IPv6 packets from
+# node containers, and forward packets to bridge used for kubeadm-dind-net.
+# This gives pods access to external IPv6 sites, when using IPv6 addresses.
+function dind::setup_external_access_on_host {
+  if [[ ! ${DIND_ALLOW_AAAA_USE} ]]; then
+    return
+  fi
+  local main_if=`ip route | grep default | awk '{print $5}'`
+  local bridge_if=`ip route | grep 172.18.0.0 | awk '{print $3}'`
+  docker run --entrypoint /sbin/ip6tables --net=host --rm --privileged ${DIND_IMAGE} -t nat -A POSTROUTING -o $main_if -j MASQUERADE
+  if [[ -n "$bridge_if" ]]; then
+    docker run --entrypoint /sbin/ip6tables --net=host --rm --privileged ${DIND_IMAGE} -A FORWARD -i $bridge_if -j ACCEPT
+  else
+    echo "WARNING! No kubeadm-dind-net bridge - unable to setup forwarding/SNAT"
+  fi
+}
+
+# Remove ip6tables rules for SNAT and forwarding, if they exist.
+function dind::remove_external_access_on_host {
+  if [[ ! ${DIND_ALLOW_AAAA_USE} ]]; then
+    return
+  fi
+  local have_rule
+  local main_if="$(ip route | grep default | awk '{print $5}')"
+  local bridge_if="$(ip route | grep 172.18.0.0 | awk '{print $3}')"
+
+  have_rule="$(docker run --entrypoint /sbin/ip6tables --net=host --rm --privileged ${DIND_IMAGE} -S -t nat | grep "\-o $main_if" || true)"
+  if [[ -n "$have_rule" ]]; then
+    docker run --entrypoint /sbin/ip6tables --net=host --rm --privileged ${DIND_IMAGE} -t nat -D POSTROUTING -o $main_if -j MASQUERADE
+  else
+    echo "Skipping delete of ip6tables rule for SNAT, as rule non-existent"
+  fi
+  if [[ -n "$bridge_if" ]]; then
+    have_rule="$(docker run --entrypoint /sbin/ip6tables --net=host --rm --privileged ${DIND_IMAGE} -S | grep "\-i $bridge_if" || true)"
+    if [[ -n "$have_rule" ]]; then
+      docker run --entrypoint /sbin/ip6tables --net=host --rm --privileged ${DIND_IMAGE} -D FORWARD -i $bridge_if -j ACCEPT
+    else
+      echo "Skipping delete of ip6tables rule for forwarding, as rule non-existent"
+    fi
+  else
+    echo "Skipping delete of ip6tables rule for forwarding, as no bridge interface"
+  fi
 }
 
 function dind::wait-for-ready {
@@ -1009,6 +1131,7 @@ function dind::up {
   case "${CNI_PLUGIN}" in
     bridge)
       dind::create-static-routes-for-bridge
+      dind::setup_external_access_on_host
       ;;
     flannel)
       # without --validate=false this will fail on older k8s versions
@@ -1053,7 +1176,7 @@ function dind::fix-mounts {
     if [[ ${BUILD_KUBEADM} || ${BUILD_HYPERKUBE} ]]; then
       docker exec "${node_name}" mount --make-shared /k8s
     fi
-    docker exec "${node_name}" mount --make-shared /sys/kernel/debug
+    # docker exec "${node_name}" mount --make-shared /sys/kernel/debug
   done
 }
 
@@ -1111,6 +1234,7 @@ function dind::restore {
   done
   if [[ "${CNI_PLUGIN}" = "bridge" ]]; then
     dind::create-static-routes-for-bridge
+    dind::setup_external_access_on_host
   fi
   dind::fix-mounts
   # Recheck kubectl config. It's possible that the cluster was started
@@ -1124,6 +1248,9 @@ function dind::down {
     dind::step "Removing container:" "${container_id}"
     docker rm -fv "${container_id}"
   done
+  if [[ "${CNI_PLUGIN}" = "bridge" ]]; then
+    dind::remove_external_access_on_host
+  fi
 }
 
 function dind::remove-volumes {
@@ -1153,7 +1280,7 @@ function dind::do-run-e2e {
   if [[ "${IP_MODE}" = "ipv6" ]]; then
     host="[$host]"
   fi
-  if [[ "${GCE_HOSTED}" = true || ${DOCKER_HOST:-} =~ ^tcp: || -n ${using_linuxdocker} ]]; then
+  if [[ ${GCE_HOSTED} || ${DOCKER_HOST:-} =~ ^tcp: || -n ${using_linuxdocker} ]]; then
     if [[ "${IP_MODE}" = "ipv4" ]]; then
       host="localhost"
     else
@@ -1210,7 +1337,7 @@ function dind::clean {
 
 function dind::copy-image {
   local image="${2:-}"
-  local image_path="/tmp/save_${image/\//_}"
+  local image_path="/tmp/save_${image//\//_}"
   if [[ -f "${image_path}" ]]; then
     rm -fr "${image_path}"
   fi
@@ -1376,7 +1503,7 @@ function dind::custom-docker-opts {
 
 case "${1:-}" in
   up)
-    if [[ ! ( ${DIND_IMAGE} =~ local ) ]]; then
+    if [[ ! ( ${DIND_IMAGE} =~ local ) && ! ${DIND_SKIP_PULL:-} ]]; then
       dind::step "Making sure DIND image is up to date"
       docker pull "${DIND_IMAGE}" >&2
     fi
