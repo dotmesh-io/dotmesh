@@ -7,7 +7,7 @@
 set -xe
 
 . build_setup.sh
-
+location=$(realpath .)/bazel-bin/cmd
 # docker
 echo "creating container: dotmesh-builder-docker-$ARTEFACT_CONTAINER"
 docker rm -f dotmesh-builder-docker-$ARTEFACT_CONTAINER || true
@@ -23,20 +23,11 @@ if [ -z "${SKIP_K8S}" ]; then
     # test tooling, built but not released:
 
     # dind-flexvolume
-    echo "creating container: dotmesh-builder-dind-flexvolume-$ARTEFACT_CONTAINER"
-    docker rm -f dotmesh-builder-dind-flexvolume-$ARTEFACT_CONTAINER || true
-    docker run \
-        --name dotmesh-builder-dind-flexvolume-$ARTEFACT_CONTAINER \
-        -v dotmesh_build_cache_dind_flexvolume:/gocache \
-        -e GOPATH=/go -e GOCACHE=/gocache \
-        -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dind-flexvolume \
-        dotmesh-builder:$ARTEFACT_CONTAINER \
-        go build -pkgdir /go/pkg -o /target/dind-flexvolume
+    dazel run //cmd/dotmesh-server/pkg/dind-flexvolume/:dind-flexvolume
     echo "copy binary: /target/dind-flexvolume"
-    docker cp dotmesh-builder-dind-flexvolume-$ARTEFACT_CONTAINER:/target/dind-flexvolume target/
-    docker rm -f dotmesh-builder-dind-flexvolume-$ARTEFACT_CONTAINER
+    docker cp dazel:$location/dotmesh-server/pkg/dind-flexvolume/linux_amd64_stripped/dind-flexvolume target/
 
-    # dind-provisioner
+    # dind-provisioner (builds a container)
     dazel run //cmd/dotmesh-server/pkg/dind-dynamic-provisioning/:dind-dynamic-provisioning
 fi
 

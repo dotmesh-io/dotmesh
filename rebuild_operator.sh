@@ -2,7 +2,7 @@
 
 . build_setup.sh
 
-# operator
+# operator (builds container)
 dazel build //cmd/operator:operator
 
 if [ -z "${NO_PUSH}" ]; then
