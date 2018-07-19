@@ -16,8 +16,12 @@ go_library(
     ],
 )
 
-go_binary(
+go_image(
     name = "dynamic-provisioner",
+    importpath = "github.com/dotmesh-io/dotmesh/cmd/operator",
     embed = [":go_default_library"],
     visibility = ["//visibility:public"],
+    goarch = "amd64",
+    goos = "linux",
+    pure = "on",
 )
