@@ -17,11 +17,20 @@ go_library(
 )
 
 go_image(
-    name = "dynamic-provisioner",
-    importpath = "github.com/dotmesh-io/dotmesh/cmd/operator",
+    name = "provisioner",
+    importpath = "github.com/dotmesh-io/dotmesh/cmd/dynamic-provisioner",
     embed = [":go_default_library"],
     visibility = ["//visibility:public"],
     goarch = "amd64",
     goos = "linux",
     pure = "on",
+)
+
+container_push(
+   name = "provisioner_push",
+   image = ":provisioner",
+   format = "Docker",
+   registry = "quay.io",
+   repository = "dotmesh/provisioner",
+   tag = "dev",
 )

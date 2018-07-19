@@ -36,3 +36,12 @@ go_image(
     goos = "linux",
     pure = "on",
 )
+
+container_push(
+   name = "operator_push",
+   image = ":operator",
+   format = "Docker",
+   registry = "quay.io",
+   repository = "dotmesh/operator",
+   tag = "dev",
+)

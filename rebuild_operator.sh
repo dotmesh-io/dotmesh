@@ -4,10 +4,9 @@
 
 # operator
 dazel build //cmd/operator:operator
-docker cp dazel:$location/operator/linux_amd64_stripped/operator target/
 
-# TODO push using bazel
+# TODO tagging?
 if [ -z "${NO_PUSH}" ]; then
     echo "pushing image"
-    docker push ${CI_DOCKER_OPERATOR_IMAGE}
+    dazel run //cmd/operator:operator_push
 fi
