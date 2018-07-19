@@ -275,7 +275,7 @@ NUM_NODES=${NUM_NODES:-2}
 # KUBEADM_DIND_LOCAL=
 
 # Use prebuilt DIND image
-DIND_IMAGE="${DIND_IMAGE:-mirantis/kubeadm-dind-cluster:v1.10}"
+DIND_IMAGE="${DIND_IMAGE:-quay.io/dotmesh/kubeadm-dind-cluster:v1.10}"
 
 # Set to non-empty string to enable building kubeadm
 # BUILD_KUBEADM=y
@@ -345,13 +345,8 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 				}
 			}
 
-			hostname, err := os.Hostname()
-			if err != nil {
-				panic(err)
-			}
-
 			// XXX the following only works if overlay is working
-			err = System("bash", "-c", fmt.Sprintf(`
+			err := System("bash", "-c", fmt.Sprintf(`
 			set -xe
 			mkdir -p /dotmesh-test-pools
 			MOUNTPOINT=/dotmesh-test-pools
@@ -373,8 +368,9 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 				mount --make-shared /lib/modules/
 				mount --make-shared /run
 			    echo "%s '$(hostname)'.local" >> /etc/hosts
-				mkdir -p /etc/docker
-				echo "{\"insecure-registries\" : [\"%s.local:80\"]}" > /etc/docker/daemon.json
+				sed -i "s/rundocker/rundocker \
+					--insecure-registry '$(hostname)'.local:80/" \
+					/etc/systemd/system/docker.service.d/20-fs.conf
 				systemctl daemon-reload
 				systemctl restart docker
 			'
@@ -387,15 +383,14 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 				docker exec -t $NODE bash -c '
 					set -xe
 					echo "%s '$(hostname)'.local" >> /etc/hosts
-					mkdir -p /etc/docker
-					echo "{\"insecure-registries\" : [\"%s.local:80\"]}" > /etc/docker/daemon.json
+					sed -i "s/rundocker/rundocker \
+						--insecure-registry '$(hostname)'.local:80/" \
+						/etc/systemd/system/docker.service.d/20-fs.conf
 					systemctl daemon-reload
 					systemctl restart docker
 				'
 			fi
-			`, node, runScriptDir, mountDockerAuth,
-				dindClusterScriptName, c.RunArgs(i, j), HOST_IP_FROM_CONTAINER,
-				hostname, HOST_IP_FROM_CONTAINER, hostname))
+			`, node, runScriptDir, mountDockerAuth, dindClusterScriptName, c.RunArgs(i, j), HOST_IP_FROM_CONTAINER, HOST_IP_FROM_CONTAINER))
 			if err != nil {
 				return err
 			}
