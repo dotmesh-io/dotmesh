@@ -3,9 +3,9 @@
 . build_setup.sh
 
 # operator (builds container)
-dazel build //cmd/operator:operator
+bazel build //cmd/operator:operator
 
 if [ -z "${NO_PUSH}" ]; then
     echo "pushing image"
-    dazel run //cmd/operator:operator_push --workspace_status_command ./version_status.sh
+    bazel run //cmd/operator:operator_push --workspace_status_command ./version_status.sh
 fi

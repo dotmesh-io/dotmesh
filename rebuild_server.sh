@@ -23,12 +23,12 @@ if [ -z "${SKIP_K8S}" ]; then
     # test tooling, built but not released:
 
     # dind-flexvolume
-    dazel run //cmd/dotmesh-server/pkg/dind-flexvolume/:dind-flexvolume
+    bazel run //cmd/dotmesh-server/pkg/dind-flexvolume/:dind-flexvolume
     echo "copy binary: /target/dind-flexvolume"
-    docker cp dazel:$location/dotmesh-server/pkg/dind-flexvolume/linux_amd64_stripped/dind-flexvolume target/
+    cp $location/dotmesh-server/pkg/dind-flexvolume/linux_amd64_stripped/dind-flexvolume target/
 
     # dind-provisioner (builds a container)
-    dazel run //cmd/dotmesh-server/pkg/dind-dynamic-provisioning/:dind-dynamic-provisioning
+    bazel run //cmd/dotmesh-server/pkg/dind-dynamic-provisioning/:dind-dynamic-provisioning
 fi
 
 # dotmesh-server
@@ -54,6 +54,6 @@ if [ -z "${NO_PUSH}" ]; then
     docker push ${CI_DOCKER_SERVER_IMAGE}
     if [ -z "${SKIP_K8S}" ]; then
         echo "pushing dind provisioner"
-        dazel run //cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind_push
+        bazel run //cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind_push
     fi
 fi

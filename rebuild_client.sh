@@ -24,5 +24,5 @@ fi
 
 
 location=$(realpath .)/bazel-bin/cmd
-dazel build //cmd/dm:dm --platforms=@io_bazel_rules_go//go/toolchain:$platform --workspace_status_command=//version_status.sh
-docker cp dazel:${location}/dm/$output_dir/dm target/$OS/
+bazel build //cmd/dm:dm --platforms=@io_bazel_rules_go//go/toolchain:$platform --workspace_status_command=//version_status.sh
+cp ${location}/dm/$output_dir/dm target/$OS/
