@@ -2,10 +2,7 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-
-	"github.com/coreos/etcd/client"
 
 	"github.com/dotmesh-io/dotmesh/pkg/auth"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
@@ -31,52 +28,6 @@ const HASH_BYTES = 32
 const SCRYPT_N = 32768
 const SCRYPT_R = 8
 const SCRYPT_P = 1
-
-func AllUsers() ([]User, error) {
-	users := []User{}
-
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		return users, err
-	}
-
-	// TODO perhaps it would be better to store users in memory rather than
-	// fetching the entire list every time.
-	allUsers, err := kapi.Get(
-		context.Background(),
-		fmt.Sprintf("%s/users", ETCD_PREFIX),
-		&client.GetOptions{Recursive: true},
-	)
-
-	// If there's no record of any users, there are no users.
-	if allUsers == nil {
-		return users, nil
-	}
-
-	for _, u := range allUsers.Node.Nodes {
-		this := User{}
-		err := json.Unmarshal([]byte(u.Value), &this)
-		if err != nil {
-			return users, err
-		}
-		users = append(users, this)
-	}
-	return users, nil
-}
-
-func GetUserById(id string) (User, error) {
-	// naive
-	us, err := AllUsers()
-	if err != nil {
-		return User{}, err
-	}
-	for _, u := range us {
-		if u.Id == id {
-			return u, nil
-		}
-	}
-	return User{}, fmt.Errorf("User id=%v not found", id)
-}
 
 func UserIsNamespaceAdministrator(user *user.User, namespace string) (bool, error) {
 	// Admin gets to administer every namespace
