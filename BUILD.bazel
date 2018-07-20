@@ -1,6 +1,9 @@
 load("@bazel_gazelle//:def.bzl", "gazelle")
 
+
 gazelle(
     name = "gazelle",
     prefix = "github.com/dotmesh-io/dotmesh",
 )
+
+exports_files(["dotmesh-base.tar"])

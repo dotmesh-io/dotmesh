@@ -22,4 +22,4 @@ cmd/dotmesh-server/pkg/dynamic-provisioning/dm-provisioner
 LAST_IMAGE_BUILD
 tests/config.sh
 bazel-*
-.dazel_run
+.vs_code

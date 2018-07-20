@@ -29,11 +29,6 @@ setup-env() {
 
 }
 
-setup-container() {
-    echo "building image: dotmesh-builder:$ARTEFACT_CONTAINER"
-    docker build --build-arg VERSION="${VERSION}" -f Dockerfile.build -t dotmesh-builder:$ARTEFACT_CONTAINER .
-}
-
 build-client() {
     OS=$1
     if [ $OS = "Linux" ]; then 
@@ -66,17 +61,9 @@ build-client() {
 }
 
 build-server() {
-    setup-container
-    # docker
-    echo "creating container: dotmesh-builder-docker-$ARTEFACT_CONTAINER"
-    docker rm -f dotmesh-builder-docker-$ARTEFACT_CONTAINER || true
-    docker create \
-        --name dotmesh-builder-docker-$ARTEFACT_CONTAINER \
-        dotmesh-builder:$ARTEFACT_CONTAINER
-    echo "copy binary: /target/docker"
-    docker cp dotmesh-builder-docker-$ARTEFACT_CONTAINER:/target/docker target/
-    ls target
-    docker rm -f dotmesh-builder-docker-$ARTEFACT_CONTAINER
+    # downloading docker and putting zfs into place is hard in bazel, so cheating using docker :(
+    docker build -f cmd/dotmesh-server/Dockerfile -t "base-image-dotmesh" .
+    docker save base-image-dotmesh > dotmesh-base.tar
 
     # skip rebuilding Kubernetes components if not using them
     if [ -z "${SKIP_K8S}" ]; then
