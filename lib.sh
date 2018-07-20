@@ -66,7 +66,6 @@ build-client() {
 }
 
 build-server() {
-    location=$(realpath .)/bazel-bin/cmd
     setup-container
     # docker
     echo "creating container: dotmesh-builder-docker-$ARTEFACT_CONTAINER"
@@ -76,6 +75,7 @@ build-server() {
         dotmesh-builder:$ARTEFACT_CONTAINER
     echo "copy binary: /target/docker"
     docker cp dotmesh-builder-docker-$ARTEFACT_CONTAINER:/target/docker target/
+    ls target
     docker rm -f dotmesh-builder-docker-$ARTEFACT_CONTAINER
 
     # skip rebuilding Kubernetes components if not using them
