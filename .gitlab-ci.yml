@@ -20,6 +20,7 @@ variables:
 stages:
     - build
     - test
+    - deploy_images
     - deploy
     - manual_deploy
     - notify
@@ -94,17 +95,6 @@ build_server:
         - echo "pushed $CI_DOCKER_PROVISIONER_IMAGE"
         - echo "pushed $CI_DOCKER_OPERATOR_IMAGE"
         - echo "pushed $CI_DOCKER_DIND_PROVISIONER_IMAGE"
-        # push to quay.io, by re-tagging and pushing the images
-        - docker login -u $QUAY_USER -p $QUAY_PASSWORD quay.io
-        - docker tag $CI_DOCKER_SERVER_IMAGE $RELEASE_DOCKER_REGISTRY/dotmesh-server:$CI_COMMIT_SHA
-        - docker push $RELEASE_DOCKER_REGISTRY/dotmesh-server:$CI_COMMIT_SHA
-        - echo "pushed $RELEASE_DOCKER_REGISTRY/dotmesh-server:$CI_COMMIT_SHA"
-        - docker tag $CI_DOCKER_PROVISIONER_IMAGE $RELEASE_DOCKER_REGISTRY/dotmesh-dynamic-provisioner:$CI_COMMIT_SHA
-        - docker push $RELEASE_DOCKER_REGISTRY/dotmesh-dynamic-provisioner:$CI_COMMIT_SHA
-        - echo $RELEASE_DOCKER_REGISTRY/dotmesh-dynamic-provisioner:$CI_COMMIT_SHA
-        # We need to rebuild the operator rather than just re-tag and push, because the
-        # server image name is built into the operator.
-        - (export CI_DOCKER_SERVER_IMAGE=$RELEASE_DOCKER_REGISTRY/dotmesh-server:$CI_COMMIT_SHA; export CI_DOCKER_OPERATOR_IMAGE=$RELEASE_DOCKER_REGISTRY/dotmesh-operator:$CI_COMMIT_SHA; . build_setup.sh && ./rebuild_operator.sh; echo "pushed $CI_DOCKER_OPERATOR_IMAGE")
     artifacts:
         paths:
             - target
@@ -466,6 +456,28 @@ linux_stress_handover:
     except:
         - schedules
 
+publish_images:
+    stage: deploy_images
+    dependencies:
+        - build_client_linux
+        - build_client_macos
+        - build_yaml
+    tags:
+        - ubuntu
+        - fast
+    script:
+        # push to quay.io, by re-tagging and pushing the images
+        - docker login -u $QUAY_USER -p $QUAY_PASSWORD quay.io
+        - docker tag $CI_DOCKER_SERVER_IMAGE $RELEASE_DOCKER_REGISTRY/dotmesh-server:$CI_COMMIT_SHA
+        - docker push $RELEASE_DOCKER_REGISTRY/dotmesh-server:$CI_COMMIT_SHA
+        - echo "pushed $RELEASE_DOCKER_REGISTRY/dotmesh-server:$CI_COMMIT_SHA"
+        - docker tag $CI_DOCKER_PROVISIONER_IMAGE $RELEASE_DOCKER_REGISTRY/dotmesh-dynamic-provisioner:$CI_COMMIT_SHA
+        - docker push $RELEASE_DOCKER_REGISTRY/dotmesh-dynamic-provisioner:$CI_COMMIT_SHA
+        - echo $RELEASE_DOCKER_REGISTRY/dotmesh-dynamic-provisioner:$CI_COMMIT_SHA
+        # We need to rebuild the operator rather than just re-tag and push, because the
+        # server image name is built into the operator.
+        - (export CI_DOCKER_SERVER_IMAGE=$RELEASE_DOCKER_REGISTRY/dotmesh-server:$CI_COMMIT_SHA; export CI_DOCKER_OPERATOR_IMAGE=$RELEASE_DOCKER_REGISTRY/dotmesh-operator:$CI_COMMIT_SHA; . build_setup.sh && ./rebuild_operator.sh; echo "pushed $CI_DOCKER_OPERATOR_IMAGE")
+
 trigger_e2e_test:
     stage: deploy
     tags:
@@ -485,6 +497,7 @@ deploy_unstable_build:
         - build_client_linux
         - build_client_macos
         - build_yaml
+        - publish_images
     tags:
         - ubuntu
         - fast
@@ -502,6 +515,7 @@ deploy_release_build:
         - build_client_linux
         - build_client_macos
         - build_yaml
+        - publish_images
     tags:
         - ubuntu
         - fast

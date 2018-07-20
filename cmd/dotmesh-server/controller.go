@@ -185,7 +185,7 @@ func (s *InMemoryState) alignMountStateWithMasters(filesystemId string) error {
 			return nil, false, fmt.Errorf("cannot find %v in fsMachines", filesystemId)
 		}
 		log.Printf(
-			"[alignMountStateWithMasters] called for %v; masterFor=%v, myNodeId=%v; mounted=%b",
+			"[alignMountStateWithMasters] called for %v; masterFor=%v, myNodeId=%v; mounted=%t",
 			filesystemId,
 			s.masterFor(filesystemId),
 			s.myNodeId,
