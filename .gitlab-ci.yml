@@ -79,7 +79,21 @@ build_yaml:
     except:
         - schedules
 
-build_server:
+build_flexvolume:
+    stage: build
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - (./rebuild_flexvolume.sh)
+    artifacts:
+        paths:
+            - target
+        expire_in: 1 week
+    except:
+        - schedules
+
+build_operator:
     stage: build
     tags:
         - ubuntu
@@ -87,13 +101,44 @@ build_server:
     script:
         # push to the OVH registry.
         - docker login -u $OVH_REGISTRY_USERNAME -p $OVH_REGISTRY_PASSWORD registry.containers.ovh.net
-        - (./rebuild_flexvolume.sh)
-        - (./rebuild_operator.sh)
-        - (./rebuild_provisioner.sh)
+        - (./rebuild_operator.sh) # also pushes
+        - echo "pushed $CI_DOCKER_OPERATOR_IMAGE"
+    artifacts:
+        paths:
+            - target
+        expire_in: 1 week
+    except:
+        - schedules
+
+build_provisioner:
+    stage: build
+    tags:
+        - ubuntu
+        - fast
+    script:
+        # push to the OVH registry.
+        - docker login -u $OVH_REGISTRY_USERNAME -p $OVH_REGISTRY_PASSWORD registry.containers.ovh.net
+        - (./rebuild_provisioner.sh) # also pushes
+        - echo "pushed $CI_DOCKER_PROVISIONER_IMAGE"
+    artifacts:
+        paths:
+            - target
+        expire_in: 1 week
+    except:
+        - schedules
+
+build_server:
+    stage: build
+    dependencies:
+      - build_flexvolume
+    tags:
+        - ubuntu
+        - fast
+    script:
+        # push to the OVH registry.
+        - docker login -u $OVH_REGISTRY_USERNAME -p $OVH_REGISTRY_PASSWORD registry.containers.ovh.net
         - (./rebuild_server.sh) # also pushes
         - echo "pushed $CI_DOCKER_SERVER_IMAGE"
-        - echo "pushed $CI_DOCKER_PROVISIONER_IMAGE"
-        - echo "pushed $CI_DOCKER_OPERATOR_IMAGE"
         - echo "pushed $CI_DOCKER_DIND_PROVISIONER_IMAGE"
     artifacts:
         paths:
