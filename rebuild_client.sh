@@ -7,7 +7,7 @@ if [ $OS = "Linux" ]; then
     platform="linux_amd64"
     output_dir=${platform}_stripped
 elif [ $OS = "Darwin" ]; then 
-    platform="darwin" 
+    platform="darwin_amd64" 
     output_dir=${platform}_stripped
 else
     echo "Please enter Linux or Darwin as the first arg"
