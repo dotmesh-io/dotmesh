@@ -46,8 +46,8 @@ build-client() {
     fi
 
     output_dir=${platform}_stripped
-    rm -rf target/$OS || true
-    mkdir -p target/$OS/
+    rm -rf binaries/$OS || true
+    mkdir -p binaries/$OS/
 
     if [ x$CI_DOCKER_TAG == x ]
     then
@@ -61,12 +61,13 @@ build-client() {
     if [ ! -d "${location}/dm/${output_dir}" ]; then
         output_dir=${platform}_pure_stripped
     fi
-    cp ${location}/dm/$output_dir/dm target/$OS/
+    cp ${location}/dm/$output_dir/dm binaries/$OS/
     return 0
 }
 
 build-server() {
     location=$(realpath .)/bazel-bin/cmd
+    setup-container
     # docker
     echo "creating container: dotmesh-builder-docker-$ARTEFACT_CONTAINER"
     docker rm -f dotmesh-builder-docker-$ARTEFACT_CONTAINER || true
