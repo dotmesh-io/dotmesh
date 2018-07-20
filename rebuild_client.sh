@@ -14,6 +14,7 @@ fi
 
 location=$(realpath .)/bazel-bin/cmd
 output_dir=${platform}_stripped
+rm -rf target/$OS || true
 mkdir -p target/$OS/
 
 if [ x$CI_DOCKER_TAG == x ]
