@@ -201,10 +201,9 @@
   version = "v2.6.2"
 
 [[projects]]
-  branch = "master"
   name = "github.com/dotmesh-io/citools"
   packages = ["."]
-  revision = "dcdeda8d8f8c06976132ec4402187d2cc13d2d2c"
+  revision = "34e1ea116678a0930c80604f2e8dd4b0556cdb65"
 
 [[projects]]
   branch = "master"
@@ -986,6 +985,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "451a62954ae215121a4a4c1eb97265daa2eaa101f5e95f849f3d23551dbbc8d5"
+  inputs-digest = "420cfdd3d378ae4d380e80bc49605876eaf7978ce5774e657ed9f875b661ec59"
   solver-name = "gps-cdcl"
   solver-version = 1
