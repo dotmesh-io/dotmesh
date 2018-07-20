@@ -19,7 +19,7 @@ go_library(
 )
 
 go_image(
-    name = "provisioner",
+    name = "dynamic-provisioner",
     importpath = "github.com/dotmesh-io/dotmesh/cmd/dynamic-provisioner",
     embed = [":go_default_library"],
     visibility = ["//visibility:public"],
