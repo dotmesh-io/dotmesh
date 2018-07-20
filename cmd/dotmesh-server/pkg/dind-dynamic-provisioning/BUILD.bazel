@@ -1,5 +1,6 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 load("@io_bazel_rules_docker//go:image.bzl", "go_image")
+load("@io_bazel_rules_docker//docker:docker.bzl", "docker_push")
 
 go_library(
     name = "go_default_library",
@@ -27,12 +28,11 @@ go_image(
     pure = "on",
 )
 
-container_push(
+docker_push(
    name = "dind_push",
    image = ":dind-dynamic-provisioning",
-   format = "Docker",
    registry = "{CI_REGISTRY}",
-   repository = "dotmesh/dind-dynamic-provisioning",
+   repository = "dotmesh/dotmesh-dind-dynamic-provisioner",
    tag = "{DOCKERTAG}",
    stamp = True,
 )
