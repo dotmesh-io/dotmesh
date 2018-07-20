@@ -30,7 +30,7 @@ type Registry interface {
 	Filesystems() []types.VolumeName
 	IdFromName(name types.VolumeName) (string, error)
 	GetByName(name types.VolumeName) (types.TopLevelFilesystem, error)
-	FilesystemIds() []string
+	// FilesystemIds() []string
 	FilesystemIdsIncludingClones() []string
 	DeducePathToTopLevelFilesystem(name types.VolumeName, cloneName string) (types.PathToTopLevelFilesystem, error)
 
@@ -202,17 +202,17 @@ func (r *DefaultRegistry) GetByName(name types.VolumeName) (types.TopLevelFilesy
 	return tlf, nil
 }
 
-// list of top-level filesystem ids
-func (r *DefaultRegistry) FilesystemIds() []string {
-	r.topLevelFilesystemsLock.RLock()
-	defer r.topLevelFilesystemsLock.RUnlock()
-	filesystemIds := []string{}
-	for _, tlf := range r.topLevelFilesystems {
-		filesystemIds = append(filesystemIds, tlf.MasterBranch.Id)
-	}
-	sort.Strings(filesystemIds)
-	return filesystemIds
-}
+// // list of top-level filesystem ids
+// func (r *DefaultRegistry) FilesystemIds() []string {
+// 	r.topLevelFilesystemsLock.RLock()
+// 	defer r.topLevelFilesystemsLock.RUnlock()
+// 	filesystemIds := []string{}
+// 	for _, tlf := range r.topLevelFilesystems {
+// 		filesystemIds = append(filesystemIds, tlf.MasterBranch.Id)
+// 	}
+// 	sort.Strings(filesystemIds)
+// 	return filesystemIds
+// }
 
 func (r *DefaultRegistry) FilesystemIdsIncludingClones() []string {
 	filesystemIds := []string{}
@@ -599,9 +599,9 @@ func (r *DefaultRegistry) MaybeCloneFilesystemId(name types.VolumeName, cloneNam
 func (r *DefaultRegistry) DumpTopLevelFilesystems() []*types.TopLevelFilesystem {
 	r.topLevelFilesystemsLock.RLock()
 	defer r.topLevelFilesystemsLock.RUnlock()
-	result := make([]*types.TopLevelFilesystem, len(r.topLevelFilesystems))
+	result := []*types.TopLevelFilesystem{}
 	for _, tlf := range r.topLevelFilesystems {
-		var tlfCopy *types.TopLevelFilesystem
+		tlfCopy := new(types.TopLevelFilesystem)
 		*tlfCopy = tlf
 		copy(tlfCopy.OtherBranches, tlf.OtherBranches)
 		copy(tlfCopy.Collaborators, tlf.Collaborators)
