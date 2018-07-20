@@ -384,7 +384,6 @@ func (s *InMemoryState) insertInitialAdminPassword() error {
 		os.Getenv("INITIAL_ADMIN_API_KEY"),
 	)
 	if err != nil {
-
 		return err
 	}
 

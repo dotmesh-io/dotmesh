@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/dotmesh-io/dotmesh/pkg/registry"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 )
 
@@ -68,7 +69,7 @@ func receivingState(f *fsMachine) stateFn {
 		clone, err := f.state.registry.LookupCloneById(f.filesystemId)
 		if err != nil {
 			switch err := err.(type) {
-			case NoSuchClone:
+			case registry.NoSuchClone:
 				// Normal case for non-clone filesystems, continue.
 			default:
 				return backoffStateWithReason(fmt.Sprintf("receivingState: Error trying to lookup clone by id: %+v", err))

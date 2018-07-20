@@ -14,12 +14,6 @@ type CloneWithName struct {
 }
 type ClonesList []CloneWithName
 
-type dirtyInfo struct {
-	Server     string
-	DirtyBytes int64
-	SizeBytes  int64
-}
-
 type PermissionDenied struct {
 }
 
@@ -38,20 +32,6 @@ type Server struct {
 }
 
 type ByAddress []Server
-
-type dotmeshVolumeByName []DotmeshVolume
-
-func (v dotmeshVolumeByName) Len() int {
-	return len(v)
-}
-
-func (v dotmeshVolumeByName) Swap(i, j int) {
-	v[i], v[j] = v[j], v[i]
-}
-
-func (v dotmeshVolumeByName) Less(i, j int) bool {
-	return v[i].Name.Name < v[j].Name.Name
-}
 
 type DotmeshVolumeAndContainers struct {
 	Volume     DotmeshVolume
@@ -81,28 +61,9 @@ type Origin struct {
 	SnapshotId   string
 }
 
-type metadata map[string]string
-type snapshot struct {
-	// exported for json serialization
-	Id       string
-	Metadata *metadata
-	// private (do not serialize)
-	filesystem *filesystem
-}
-
 type Clone struct {
 	FilesystemId string
 	Origin       Origin
-}
-
-type filesystem struct {
-	id        string
-	exists    bool
-	mounted   bool
-	snapshots []*snapshot
-	// support filesystem which is clone of another filesystem, for branching
-	// purposes, with origin e.g. "<fs-uuid-of-actual-origin-snapshot>@<snap-id>"
-	origin Origin
 }
 
 type S3TransferRequest struct {
@@ -228,36 +189,6 @@ type PathToTopLevelFilesystem struct {
 	TopLevelFilesystemId   string
 	TopLevelFilesystemName VolumeName
 	Clones                 ClonesList
-}
-
-// refers to a clone's "pointer" to a filesystem id and its snapshot.
-//
-// note that a clone's Origin's FilesystemId may differ from the "top level"
-// filesystemId in the Registry's Clones map if the clone is attributed to a
-// top-level filesystem which is *transitively* its parent but not its direct
-// parent. In this case the Origin FilesystemId will always point to its direct
-// parent.
-
-func castToMetadata(val interface{}) metadata {
-	meta, ok := val.(metadata)
-	if !ok {
-		meta = metadata{}
-		// massage the data into the right type
-		cast := val.(map[string]interface{})
-		for k, v := range cast {
-			meta[k] = v.(string)
-		}
-	}
-	return meta
-}
-
-type Prelude struct {
-	SnapshotProperties []*snapshot
-}
-
-type containerInfo struct {
-	Server     string
-	Containers []DockerContainer
 }
 
 // the type as stored in the json in etcd (intermediate representation wrt

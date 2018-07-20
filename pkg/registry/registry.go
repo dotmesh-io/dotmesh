@@ -488,14 +488,6 @@ func (r *DefaultRegistry) LookupClone(topLevelFilesystemId, cloneName string) (t
 	return r.clones[topLevelFilesystemId][cloneName], nil
 }
 
-type NoSuchClone struct {
-	filesystemId string
-}
-
-func (n NoSuchClone) Error() string {
-	return fmt.Sprintf("No clone with filesystem id '%s'", n.filesystemId)
-}
-
 // XXX make this more efficient
 func (r *DefaultRegistry) LookupCloneById(filesystemId string) (types.Clone, error) {
 	c, _, err := r.LookupCloneByIdWithName(filesystemId)
