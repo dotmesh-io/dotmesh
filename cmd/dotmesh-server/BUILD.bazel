@@ -94,7 +94,7 @@ container_image(
         "//cmd/dotmesh-server/pkg/dind-flexvolume:dind-flexvolume", 
         "require_zfs.sh", 
         # TODO since this file is vendored during the rebuild_server bash script this is a bit hacky - would like to pull this in so that bazel will download this for us
-        "target/docker"
+        "../../target/docker"
     ],
     visibility = ["//visibility:public"],
 )
