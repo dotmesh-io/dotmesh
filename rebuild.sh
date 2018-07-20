@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
 set -xe
 
-. build_setup.sh
+source lib.sh
 
-location=$(realpath .)/bazel-bin/cmd
-echo "Output path inside dazel will be $location"
-./rebuild_client.sh $1
-if [ -z "${SKIP_K8S}" ]; then
-    ./rebuild_provisioner.sh
-    ./rebuild_flexvolume.sh
-    ./rebuild_operator.sh
-fi
-./rebuild_server.sh
-(cd kubernetes && ./rebuild.sh)
+main() {
+    setup-env
+    build-client $1
+    if [ -z "${SKIP_K8S}" ]; then
+        build-provisioner
+        build-flexvolume
+        build-operator
+    fi
+    build-server
+    (cd kubernetes && ./rebuild.sh)
+}
+
+
+main $@
+

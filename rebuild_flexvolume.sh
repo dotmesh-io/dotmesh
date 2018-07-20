@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 
-. build_setup.sh
+set -ex
 
-# flexvolume
-location=$(realpath .)/bazel-bin/cmd
-bazel build //cmd/flexvolume:flexvolume
-cp $location/flexvolume/linux_amd64_stripped/flexvolume target/
+source lib.sh
+
+main() {
+    setup-env
+    build-flexvolume
+}
+
+
+main()

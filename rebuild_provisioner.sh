@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 
-. build_setup.sh
+set -ex
 
-bazel build //cmd/dynamic-provisioner:dynamic-provisioner
+source lib.sh
 
-if [ -z "${NO_PUSH}" ]; then
-    echo "pushing image"
-    bazel run //cmd/dynamic-provisioner:provisioner_push --workspace_status_command=$(realpath ./version_status.sh)
-fi
+main() {
+    setup-env
+    build-provisioner
+}
+
+
+main

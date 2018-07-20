@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 
-. build_setup.sh
+set -ex
 
-# operator (builds container)
-bazel build //cmd/operator:operator
+source lib.sh
 
-if [ -z "${NO_PUSH}" ]; then
-    echo "pushing image"
-    bazel run //cmd/operator:operator_push --workspace_status_command=$(realpath ./version_status.sh)
-fi
+main() {
+    setup-env
+    build-operator
+}
+
+
+main
