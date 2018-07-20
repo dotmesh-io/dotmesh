@@ -30,9 +30,9 @@ go_image(
 
 docker_push(
    name = "provisioner_push",
-   image = ":provisioner",
+   image = ":dynamic-provisioner",
    registry = "{CI_REGISTRY}",
-   repository = "dotmesh/provisioner",
+   repository = "dotmesh/dotmesh-dynamic-provisioner",
    tag = "{DOCKERTAG}",
    stamp = True,
 )
