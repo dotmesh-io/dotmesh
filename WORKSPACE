@@ -25,6 +25,24 @@ load(
 )
 
 _go_image_repos()
+
+load(
+    "@io_bazel_rules_docker//container:container.bzl",
+    "container_pull",
+    container_repositories = "repositories",
+)
+
+# This is NOT needed when going through the language lang_image
+# "repositories" function(s).
+container_repositories()
+
+container_pull(
+  name = "go_base",
+  registry = "gcr.io",
+  repository = "distroless/base",
+  # 'tag' is also supported, but digest is encouraged for reproducibility.
+  digest = "sha256:4b5f2a19a3cb56058265e400662df44c13352d0cb78a21f4c652b6b4d0159bb8",
+)
 load("@io_bazel_rules_go//go:def.bzl", "go_rules_dependencies", "go_register_toolchains")
 
 go_rules_dependencies()

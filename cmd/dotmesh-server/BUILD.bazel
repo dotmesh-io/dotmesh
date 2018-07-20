@@ -1,5 +1,7 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
-
+load("@io_bazel_rules_docker//go:image.bzl", "go_image")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_binary", "go_test")
+load("@io_bazel_rules_docker//docker:docker.bzl", "docker_push")
+load("@io_bazel_rules_docker//container:container.bzl", "container_image")
 go_library(
     name = "go_default_library",
     srcs = [
@@ -76,19 +78,28 @@ go_library(
     ],
 )
 
-go_image(
-    name = "dotmesh-server",
-    embed = [":go_default_library","//cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioning"],
+go_binary(
+    name = "server-bin",
+    embed = [":go_default_library"],
+    goarch = "amd64",
+    goos = "linux",
+    pure = "on",
+)
+
+container_image(
+    name = "dotmesh-server-img",
+    base = "@go_base//image",
+    files = ["//cmd/dotmesh-server:server-bin", "//cmd/dotmesh-server/pkg/dind-flexvolume:dind-flexvolume", "require_zfs.sh", "target/docker"],
     visibility = ["//visibility:public"],
 )
 
 docker_push(
    name = "dotmesh-server_push",
-   image = ":dotmesh-server",
+   image = ":dotmesh-server-img",
    registry = "{CI_REGISTRY}",
    repository = "dotmesh/dotmesh-server",
    tag = "{DOCKERTAG}",
-   stamp = True,
+   stamp = 1,
 )
 
 go_test(

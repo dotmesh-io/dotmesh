@@ -34,5 +34,5 @@ docker_push(
    registry = "{CI_REGISTRY}",
    repository = "dotmesh/dotmesh-dynamic-provisioner",
    tag = "{DOCKERTAG}",
-   stamp = True,
+   stamp = 1,
 )

@@ -21,34 +21,21 @@ docker rm -f dotmesh-builder-docker-$ARTEFACT_CONTAINER
 # skip rebuilding Kubernetes components if not using them
 if [ -z "${SKIP_K8S}" ]; then
     # dind-provisioner (builds a container)
-    bazel build //cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioning
+    echo "building dind-provisioner container"
+    bazel build //cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioning --platforms=@io_bazel_rules_go//go/toolchain:linux_amd64
 fi
 
 # dotmesh-server
-echo "creating container: dotmesh-builder-server-$ARTEFACT_CONTAINER"
-docker rm -f dotmesh-builder-server-$ARTEFACT_CONTAINER || true
+echo "Building dotmesh-server container"
 # TODO serverVersion?
-bazel build //cmd/dotmesh-server:dotmesh-server
-# docker run \
-#     --name dotmesh-builder-server-$ARTEFACT_CONTAINER \
-#     -v dotmesh_build_cache_server:/gocache \
-#     -e GOPATH=/go -e GOCACHE=/gocache \
-#     -w /go/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server \
-#     dotmesh-builder:$ARTEFACT_CONTAINER \
+bazel build //cmd/dotmesh-server:dotmesh-server-img --platforms=@io_bazel_rules_go//go/toolchain:linux_amd64
 #     go build -pkgdir /go/pkg -ldflags "-X main.serverVersion=${VERSION}" -o /target/dotmesh-server
-echo "copy binary: /target/dotmesh-server"
-docker cp dotmesh-builder-server-$ARTEFACT_CONTAINER:/target/dotmesh-server target/
-docker rm -f dotmesh-builder-server-$ARTEFACT_CONTAINER
-echo "building image: ${CI_DOCKER_SERVER_IMAGE}"
-
-docker build -f cmd/dotmesh-server/Dockerfile -t "${CI_DOCKER_SERVER_IMAGE}" .
-
 # allow disabling of registry push
 if [ -z "${NO_PUSH}" ]; then
     echo "pushing images"
-    bazel run //cmd/dotmesh-server:dotmesh-server_push 
+    bazel run //cmd/dotmesh-server:dotmesh-server_push  --platforms=@io_bazel_rules_go//go/toolchain:linux_amd64 --workspace_status_command=$(realpath ./version_status.sh)
     if [ -z "${SKIP_K8S}" ]; then
         echo "pushing dind provisioner"
-        bazel run //cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind_push
+        bazel run //cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind_push --workspace_status_command=$(realpath ./version_status.sh) --platforms=@io_bazel_rules_go//go/toolchain:linux_amd64
     fi
 fi
