@@ -27,6 +27,7 @@ fi
 # dotmesh-server
 echo "creating container: dotmesh-builder-server-$ARTEFACT_CONTAINER"
 docker rm -f dotmesh-builder-server-$ARTEFACT_CONTAINER || true
+# TODO serverVersion?
 bazel build //cmd/dotmesh-server:dotmesh-server
 # docker run \
 #     --name dotmesh-builder-server-$ARTEFACT_CONTAINER \
