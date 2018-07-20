@@ -1083,8 +1083,9 @@ func poolId(now int64, i, j int) string {
 func NodeFromNodeName(t *testing.T, now int64, i, j int, clusterName string) Node {
 	nodeIP := strings.TrimSpace(OutputFromRunOnNode(t,
 		nodeName(now, i, j),
-		`ifconfig eth0 | grep "inet addr" | cut -d ':' -f 2 | cut -d ' ' -f 1`,
+		`ifconfig eth0 | grep -v "inet6" | grep "inet" | cut -d " " -f 10`,
 	))
+
 	dotmeshConfig, err := docker(
 		nodeName(now, i, j),
 		"cat /root/.dotmesh/config",
