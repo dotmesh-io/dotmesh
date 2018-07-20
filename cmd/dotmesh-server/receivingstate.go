@@ -92,7 +92,7 @@ func receivingState(f *fsMachine) stateFn {
 
 	admin, err := f.state.userManager.Get(&user.Query{Ref: "admin"})
 	if err != nil {
-		return backoffStateWithReason(fmt.Sprintf("receivingState: Attempting to pull %s got %+v", f.filesystemId, err))
+		return backoffStateWithReason(fmt.Sprintf("receivingState: Attempting to pull %s, failed to get admin user, error: %s", f.filesystemId, err))
 	}
 
 	url, err := deduceUrl(context.Background(), addresses, "internal", "admin", admin.ApiKey)
