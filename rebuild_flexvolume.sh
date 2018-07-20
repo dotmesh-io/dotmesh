@@ -10,4 +10,4 @@ main() {
 }
 
 
-main()
+main
