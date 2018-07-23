@@ -80,7 +80,7 @@ go_library(
 )
 
 go_binary(
-    name = "server-bin",
+    name = "dotmesh-server",
     embed = [":go_default_library"],
     goarch = "amd64",
     goos = "linux",
@@ -93,7 +93,7 @@ container_image(
     name = "dotmesh-server-img",
     base = "//:dotmesh-base.tar",
     files = [
-        "//cmd/dotmesh-server:server-bin",
+        "//cmd/dotmesh-server:dotmesh-server",
         "//cmd/dotmesh-server/pkg/dind-flexvolume",
         "//cmd/flexvolume",
     ],
