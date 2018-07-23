@@ -10,25 +10,6 @@ bazel-with-workspace() {
     bazel $cmd $cmd_path --platforms=@io_bazel_rules_go//go/toolchain:$platform --workspace_status_command=$(realpath ./version_status.sh)
 }
 
-setup-env() {
-    export VERSION="$(cd cmd/versioner && go run versioner.go)"
-
-    if [ -z "$CI_DOCKER_TAG" ]; then
-        # Non-CI build
-        export ARTEFACT_CONTAINER=$VERSION
-    else
-        export ARTEFACT_CONTAINER="${CI_DOCKER_TAG}_${CI_JOB_ID}"
-    fi
-
-    mkdir -p target
-
-    export CI_DOCKER_SERVER_IMAGE=${CI_DOCKER_SERVER_IMAGE:=$(hostname).local:80/dotmesh/dotmesh-server:latest}
-    export CI_DOCKER_PROVISIONER_IMAGE=${CI_DOCKER_PROVISIONER_IMAGE:=$(hostname).local:80/dotmesh/dotmesh-dynamic-provisioner:latest}
-    export CI_DOCKER_DIND_PROVISIONER_IMAGE=${CI_DOCKER_DIND_PROVISIONER_IMAGE:=$(hostname).local:80/dotmesh/dind-dynamic-provisioner:latest}
-    export CI_DOCKER_OPERATOR_IMAGE=${CI_DOCKER_OPERATOR_IMAGE:=$(hostname).local:80/dotmesh/dotmesh-operator:latest}
-
-}
-
 build-client() {
     OS=$1
     if [ $OS = "Linux" ]; then 

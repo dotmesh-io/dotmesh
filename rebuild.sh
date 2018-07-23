@@ -4,7 +4,6 @@ set -xe
 source lib.sh
 
 main() {
-    setup-env
     build-client $1
     if [ -z "${SKIP_K8S}" ]; then
         build-provisioner
