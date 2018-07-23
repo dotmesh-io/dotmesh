@@ -15,7 +15,7 @@ setup-target-dir() {
 }
 
 build-client() {
-    OS=$1
+    OS=${1:-Linux}
     if [ $OS = "Linux" ]; then 
         platform="linux_amd64"
     elif [ $OS = "Darwin" ]; then 

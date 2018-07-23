@@ -5,9 +5,12 @@ VERSION=$(cd cmd/versioner && go run versioner.go)
 echo VERSION ${VERSION}
 if [ -z "$CI_DOCKER_TAG" ]; then
     # Non-CI build
-    echo DOCKERTAG $VERSION
+    DOCKERTAG=$VERSION
 else
-    echo DOCKERTAG $CI_DOCKER_TAG
+    DOCKERTAG=$CI_DOCKER_TAG
 fi
 
-echo CI_REGISTRY ${CI_DOCKER_REGISTRY:-$(hostname).local:80}
+CI_DOCKER_REGISTRY=${CI_DOCKER_REGISTRY:-$(hostname).local:80}
+echo DOCKERTAG ${DOCKERTAG}
+echo CI_REGISTRY ${CI_DOCKER_REGISTRY}
+echo DOTMESH_SERVER_IMAGE ${CI_DOCKER_REGISTRY}/dotmesh/dotmesh-server:${DOCKERTAG}
