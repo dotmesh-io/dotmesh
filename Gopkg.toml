@@ -27,10 +27,6 @@ ignored = ["github.com/dotmesh-io/cmd/dotmesh-server/pkg*", "github.com/dotmesh-
   branch = "master"
   name = "github.com/nu7hatch/gouuid"
 
-[[constraint]]
-   name = "github.com/dotmesh-io/citools"
-   revision = "34e1ea116678a0930c80604f2e8dd4b0556cdb65"
-
 [prune]
   go-tests = true
   unused-packages = true

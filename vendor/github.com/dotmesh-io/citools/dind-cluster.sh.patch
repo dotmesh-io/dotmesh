@@ -1,15 +1,6 @@
---- dind-cluster-original.sh	2018-05-30 13:45:06.000000000 +0100
-+++ dind-cluster-patched.sh	2018-05-30 16:24:31.000000000 +0100
-@@ -51,7 +51,7 @@
-     using_linuxdocker=1
- fi
- 
--EMBEDDED_CONFIG=y;DIND_IMAGE=mirantis/kubeadm-dind-cluster:v1.10
-+EMBEDDED_CONFIG=y;DIND_IMAGE=quay.io/dotmesh/kubeadm-dind-cluster:v1.10
- 
- IP_MODE="${IP_MODE:-ipv4}"  # ipv4, ipv6, (future) dualstack
- if [[ ! ${EMBEDDED_CONFIG:-} ]]; then
-@@ -242,9 +242,9 @@
+--- dind-cluster-original.sh	2018-07-20 09:54:37.370416165 +0000
++++ dind-cluster-patched.sh	2018-07-20 10:27:10.553216533 +0000
+@@ -261,9 +261,9 @@
  function dind::prepare-sys-mounts {
    if [[ ! ${using_linuxkit} ]]; then
      sys_volume_args=()
@@ -22,7 +13,7 @@
      if [[ -d /lib/modules ]]; then
        sys_volume_args+=(-v /lib/modules:/lib/modules)
      fi
-@@ -622,7 +622,7 @@
+@@ -657,7 +657,7 @@
    dind::step "Starting DIND container:" "${container_name}"
  
    if [[ ! ${using_linuxkit} ]]; then
@@ -30,16 +21,16 @@
 +    opts+=(-v /lib/modules:/lib/modules)
    fi
  
-   volume_name="kubeadm-dind-${container_name}"
-@@ -645,6 +645,7 @@
+   local volume_name="kubeadm-dind-${container_name}"
+@@ -680,6 +680,7 @@
           --hostname "${container_name}" \
-          -l mirantis.kubeadm_dind_cluster \
-          -v ${volume_name}:/dind \
-+	 ${EXTRA_DOCKER_ARGS:-} \
+          -l "${DIND_LABEL}" \
+          -v "${volume_name}:/dind" \
++         ${EXTRA_DOCKER_ARGS:-} \
           ${opts[@]+"${opts[@]}"} \
           "${DIND_IMAGE}" \
           ${args[@]+"${args[@]}"}
-@@ -664,16 +665,16 @@
+@@ -700,16 +701,16 @@
    return ${status}
  }
  
@@ -66,7 +57,7 @@
  
  function dind::configure-kubectl {
    dind::step "Setting cluster config"
-@@ -1420,10 +1421,10 @@
+@@ -1614,10 +1615,10 @@
      dind::ensure-kubectl
      dind::join "$(dind::create-node-container)" "$@"
      ;;
