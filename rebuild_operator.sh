@@ -2,7 +2,7 @@
 
 set -ex
 
-source lib.sh
+source build-lib.sh
 
 main() {
     build-operator
