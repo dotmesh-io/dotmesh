@@ -25,6 +25,7 @@ go_image(
     goos = "linux",
     importpath = "github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dind-dynamic-provisioning",
     pure = "on",
+    static = "on",
     visibility = ["//visibility:public"],
 )
 

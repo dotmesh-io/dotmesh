@@ -86,6 +86,7 @@ go_binary(
     goos = "linux",
     pure = "on",
     visibility = ["//visibility:public"],
+    x_defs = {"main.serverVersion": "{VERSION}"}
 )
 
 container_image(
