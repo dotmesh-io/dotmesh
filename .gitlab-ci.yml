@@ -89,10 +89,6 @@ build_server:
         - (./rebuild_operator.sh)
         - (./rebuild_provisioner.sh)
         - (./rebuild_server.sh) # also pushes
-        - echo "pushed $CI_DOCKER_SERVER_IMAGE"
-        - echo "pushed $CI_DOCKER_PROVISIONER_IMAGE"
-        - echo "pushed $CI_DOCKER_OPERATOR_IMAGE"
-        - echo "pushed $CI_DOCKER_DIND_PROVISIONER_IMAGE"
         # push to quay.io, by re-tagging and pushing the images
         - docker login -u $QUAY_USER -p $QUAY_PASSWORD quay.io
         - docker tag $CI_DOCKER_SERVER_IMAGE $RELEASE_DOCKER_REGISTRY/dotmesh-server:$CI_COMMIT_SHA
