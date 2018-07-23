@@ -85,7 +85,6 @@ build_server:
     script:
         # push to the OVH registry.
         - docker login -u $OVH_REGISTRY_USERNAME -p $OVH_REGISTRY_PASSWORD registry.containers.ovh.net
-        - (./rebuild_flexvolume.sh)
         - (./rebuild_operator.sh)
         - (./rebuild_provisioner.sh)
         - (./rebuild_server.sh) # also pushes

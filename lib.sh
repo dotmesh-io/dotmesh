@@ -10,6 +10,10 @@ bazel-with-workspace() {
     bazel $cmd $cmd_path --platforms=@io_bazel_rules_go//go/toolchain:$platform --workspace_status_command=$(realpath ./version_status.sh)
 }
 
+setup-target-dir() {
+    mkdir -p target/
+}
+
 build-client() {
     OS=$1
     if [ $OS = "Linux" ]; then 
@@ -76,11 +80,6 @@ build-provisioner() {
         echo "pushing image"
         bazel-with-workspace run //cmd/dynamic-provisioner:provisioner_push
     fi
-}
-
-build-flexvolume() {
-    bazel-with-workspace build //cmd/flexvolume:flexvolume
-    cp $location/flexvolume/linux_amd64_stripped/flexvolume target/
 }
 
 build-operator() {

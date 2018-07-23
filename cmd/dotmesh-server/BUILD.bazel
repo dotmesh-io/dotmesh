@@ -92,6 +92,7 @@ container_image(
     files = [
         "//cmd/dotmesh-server:server-bin", 
         "//cmd/dotmesh-server/pkg/dind-flexvolume:dind-flexvolume", 
+        "//cmd/flexvolume:flexvolume"
     ],
     visibility = ["//visibility:public"],
 )

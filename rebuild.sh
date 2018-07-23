@@ -7,7 +7,6 @@ main() {
     build-client $1
     if [ -z "${SKIP_K8S}" ]; then
         build-provisioner
-        build-flexvolume
         build-operator
     fi
     build-server
