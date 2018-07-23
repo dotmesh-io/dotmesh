@@ -20,6 +20,8 @@ go_library(
         "subjectaccessreview.go",
         "subjectaccessreview_expansion.go",
     ],
+    importmap = "github.com/dotmesh-io/dotmesh/vendor/k8s.io/client-go/kubernetes/typed/authorization/v1beta1",
+    importpath = "k8s.io/client-go/kubernetes/typed/authorization/v1beta1",
     tags = ["automanaged"],
     deps = [
         "//vendor/k8s.io/apimachinery/pkg/runtime/serializer:go_default_library",

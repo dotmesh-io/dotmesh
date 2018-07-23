@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["thirdpartyresource.go"],
+    importmap = "github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/kubernetes/pkg/client/informers/informers_generated/externalversions/extensions/v1beta1",
+    importpath = "k8s.io/kubernetes/pkg/client/informers/informers_generated/externalversions/extensions/v1beta1",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/apimachinery/pkg/apis/meta/v1:go_default_library",
+        "//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/apimachinery/pkg/runtime:go_default_library",
+        "//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/apimachinery/pkg/watch:go_default_library",
+        "//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/client-go/tools/cache:go_default_library",
+        "//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/kubernetes/pkg/client/listers/extensions/v1beta1:go_default_library",
+        "@io_k8s_kubernetes//pkg/apis/extensions/v1beta1:go_default_library",
+        "@io_k8s_kubernetes//pkg/client/clientset_generated/clientset:go_default_library",
+        "@io_k8s_kubernetes//pkg/client/informers/informers_generated/externalversions/internalinterfaces:go_default_library",
+    ],
+)

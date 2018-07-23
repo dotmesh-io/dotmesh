@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["leaderelection.go"],
+    importmap = "github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/github.com/kubernetes-incubator/external-storage/lib/leaderelection",
+    importpath = "github.com/kubernetes-incubator/external-storage/lib/leaderelection",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/github.com/golang/glog:go_default_library",
+        "//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/github.com/kubernetes-incubator/external-storage/lib/leaderelection/resourcelock:go_default_library",
+        "//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/apimachinery/pkg/api/errors:go_default_library",
+        "//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/apimachinery/pkg/apis/meta/v1:go_default_library",
+        "//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/apimachinery/pkg/util/runtime:go_default_library",
+        "//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/apimachinery/pkg/util/wait:go_default_library",
+    ],
+)

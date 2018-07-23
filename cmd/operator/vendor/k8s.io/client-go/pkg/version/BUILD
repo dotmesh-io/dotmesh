@@ -12,8 +12,9 @@ go_library(
         "doc.go",
         "version.go",
     ],
+    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/k8s.io/client-go/pkg/version",
     importpath = "k8s.io/client-go/pkg/version",
-    deps = ["//vendor/k8s.io/apimachinery/pkg/version:go_default_library"],
+    deps = ["//cmd/operator/vendor/k8s.io/apimachinery/pkg/version:go_default_library"],
 )
 
 filegroup(

@@ -16,6 +16,8 @@ go_library(
         "tokenreview.go",
         "tokenreview_expansion.go",
     ],
+    importmap = "github.com/dotmesh-io/dotmesh/vendor/k8s.io/client-go/kubernetes/typed/authentication/v1beta1",
+    importpath = "k8s.io/client-go/kubernetes/typed/authentication/v1beta1",
     tags = ["automanaged"],
     deps = [
         "//vendor/k8s.io/apimachinery/pkg/runtime/serializer:go_default_library",

@@ -8,14 +8,15 @@ load(
 go_library(
     name = "go_default_library",
     srcs = ["latest.go"],
+    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/k8s.io/client-go/tools/clientcmd/api/latest",
     importpath = "k8s.io/client-go/tools/clientcmd/api/latest",
     deps = [
-        "//vendor/k8s.io/apimachinery/pkg/runtime:go_default_library",
-        "//vendor/k8s.io/apimachinery/pkg/runtime/schema:go_default_library",
-        "//vendor/k8s.io/apimachinery/pkg/runtime/serializer/json:go_default_library",
-        "//vendor/k8s.io/apimachinery/pkg/runtime/serializer/versioning:go_default_library",
-        "//vendor/k8s.io/client-go/tools/clientcmd/api:go_default_library",
-        "//vendor/k8s.io/client-go/tools/clientcmd/api/v1:go_default_library",
+        "//cmd/operator/vendor/k8s.io/apimachinery/pkg/runtime:go_default_library",
+        "//cmd/operator/vendor/k8s.io/apimachinery/pkg/runtime/schema:go_default_library",
+        "//cmd/operator/vendor/k8s.io/apimachinery/pkg/runtime/serializer/json:go_default_library",
+        "//cmd/operator/vendor/k8s.io/apimachinery/pkg/runtime/serializer/versioning:go_default_library",
+        "//cmd/operator/vendor/k8s.io/client-go/tools/clientcmd/api:go_default_library",
+        "//cmd/operator/vendor/k8s.io/client-go/tools/clientcmd/api/v1:go_default_library",
     ],
 )
 

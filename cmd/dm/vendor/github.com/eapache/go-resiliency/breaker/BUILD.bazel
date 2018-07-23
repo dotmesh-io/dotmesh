@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["breaker.go"],
+    importmap = "github.com/dotmesh-io/dotmesh/cmd/dm/vendor/github.com/eapache/go-resiliency/breaker",
+    importpath = "github.com/eapache/go-resiliency/breaker",
+    visibility = ["//visibility:public"],
+)

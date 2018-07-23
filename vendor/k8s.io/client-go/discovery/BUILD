@@ -16,6 +16,8 @@ go_library(
         "restmapper.go",
         "unstructured.go",
     ],
+    importmap = "github.com/dotmesh-io/dotmesh/vendor/k8s.io/client-go/discovery",
+    importpath = "k8s.io/client-go/discovery",
     tags = ["automanaged"],
     deps = [
         "//vendor/github.com/emicklei/go-restful-swagger12:go_default_library",
