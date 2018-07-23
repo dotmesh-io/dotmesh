@@ -36,7 +36,7 @@ go_image(
     importpath = "github.com/dotmesh-io/dotmesh/cmd/operator",
     pure = "on",
     x_defs = {"main.DOTMESH_VERSION": "{VERSION}",
-    "main.DOTMESH_SERVER_VERSION": "{CI_DOCKER_SERVER_IMAGE}"},
+    "main.DOTMESH_SERVER": "{CI_DOCKER_SERVER_IMAGE}"},
     visibility = ["//visibility:public"],
 )
 
