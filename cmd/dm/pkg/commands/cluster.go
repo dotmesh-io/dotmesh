@@ -327,6 +327,7 @@ func clusterUpgrade(cmd *cobra.Command, args []string, out io.Writer) error {
 			"docker", "pull", dotmeshDockerImage,
 		).CombinedOutput()
 		if err != nil {
+			fmt.Printf("Image: %s\n", dotmeshDockerImage)
 			fmt.Printf("response: %s\n", resp)
 			return err
 		}
