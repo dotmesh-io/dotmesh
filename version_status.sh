@@ -10,7 +10,7 @@ else
     DOCKERTAG=$CI_DOCKER_TAG
 fi
 
-REGISTRY=${CI_DOCKER_REGISTRY:-$(hostname).local:80}
+REGISTRY=${CI_REGISTRY:-$(hostname).local:80}
 echo DOCKERTAG ${DOCKERTAG}
 echo CI_REGISTRY ${REGISTRY}
 echo DOTMESH_SERVER_IMAGE ${REGISTRY}/dotmesh/dotmesh-server:${DOCKERTAG}
