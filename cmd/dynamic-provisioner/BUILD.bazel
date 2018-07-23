@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load("@io_bazel_rules_docker//docker:docker.bzl", "docker_push")
 load("@io_bazel_rules_docker//go:image.bzl", "go_image")
 
@@ -20,19 +20,19 @@ go_library(
 
 go_image(
     name = "dynamic-provisioner",
-    importpath = "github.com/dotmesh-io/dotmesh/cmd/dynamic-provisioner",
     embed = [":go_default_library"],
-    visibility = ["//visibility:public"],
     goarch = "amd64",
     goos = "linux",
+    importpath = "github.com/dotmesh-io/dotmesh/cmd/dynamic-provisioner",
     pure = "on",
+    visibility = ["//visibility:public"],
 )
 
 docker_push(
-   name = "provisioner_push",
-   image = ":dynamic-provisioner",
-   registry = "{CI_REGISTRY}",
-   repository = "dotmesh/dotmesh-dynamic-provisioner",
-   tag = "{DOCKERTAG}",
-   stamp = 1,
+    name = "provisioner_push",
+    image = ":dynamic-provisioner",
+    registry = "{CI_REGISTRY}",
+    repository = "dotmesh/dotmesh-dynamic-provisioner",
+    stamp = 1,
+    tag = "{DOCKERTAG}",
 )

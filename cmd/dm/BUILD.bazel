@@ -16,7 +16,7 @@ go_binary(
     name = "dm",
     embed = [":go_default_library"],
     visibility = ["//visibility:public"],
-    x_defs = {"github.com/dotmesh-io/dotmesh/dm.Version": "{VERSION}"}
+    x_defs = {"github.com/dotmesh-io/dotmesh/dm.Version": "{VERSION}"},
 )
 
 load("@bazel_gazelle//:def.bzl", "gazelle")

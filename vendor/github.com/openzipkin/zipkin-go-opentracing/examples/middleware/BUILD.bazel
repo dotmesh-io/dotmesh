@@ -9,6 +9,6 @@ go_library(
     deps = [
         "//vendor/github.com/opentracing/opentracing-go:go_default_library",
         "//vendor/github.com/opentracing/opentracing-go/ext:go_default_library",
-        "//vendor/github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore:go_default_library",
+        "@com_github_openzipkin_zipkin_go_opentracing//_thrift/gen-go/zipkincore:go_default_library",
     ],
 )

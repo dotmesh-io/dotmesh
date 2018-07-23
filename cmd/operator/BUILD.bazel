@@ -1,6 +1,7 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load("@io_bazel_rules_docker//go:image.bzl", "go_image")
 load("@io_bazel_rules_docker//docker:docker.bzl", "docker_push")
+
 go_library(
     name = "go_default_library",
     srcs = ["main.go"],
@@ -29,19 +30,19 @@ go_library(
 
 go_image(
     name = "operator",
-    importpath = "github.com/dotmesh-io/dotmesh/cmd/operator",
     embed = [":go_default_library"],
-    visibility = ["//visibility:public"],
     goarch = "amd64",
     goos = "linux",
+    importpath = "github.com/dotmesh-io/dotmesh/cmd/operator",
     pure = "on",
+    visibility = ["//visibility:public"],
 )
 
 docker_push(
-   name = "operator_push",
-   image = ":operator",
-   registry = "{CI_REGISTRY}",
-   repository = "dotmesh/operator",
-   tag = "{DOCKERTAG}",
-   stamp = True,
+    name = "operator_push",
+    image = ":operator",
+    registry = "{CI_REGISTRY}",
+    repository = "dotmesh/operator",
+    stamp = True,
+    tag = "{DOCKERTAG}",
 )
