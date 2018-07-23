@@ -86,7 +86,7 @@ go_binary(
     goos = "linux",
     pure = "on",
     visibility = ["//visibility:public"],
-    x_defs = {"main.serverVersion": "{VERSION}"}
+    x_defs = {"main.serverVersion": "{VERSION}"},
 )
 
 container_image(
@@ -97,7 +97,7 @@ container_image(
         "//cmd/dotmesh-server/pkg/dind-flexvolume",
         "//cmd/flexvolume",
     ],
-    directory = "/usr/local/bin"
+    directory = "/usr/local/bin",
     visibility = ["//visibility:public"],
 )
 
