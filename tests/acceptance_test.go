@@ -55,6 +55,7 @@ func TestDefaultDot(t *testing.T) {
 		citools.RunOnNode(t, node1, "dm commit -m 'Commit without selecting a dot first'")
 
 		// Clean up
+		checkTestContainerExits(t, node1)
 		citools.RunOnNode(t, node1, "dm dot delete -f "+fsname)
 	})
 
@@ -1088,6 +1089,8 @@ func TestDeletionComplex(t *testing.T) {
 	t.Run("DeleteBranchesQuickly", func(t *testing.T) {
 		fsname := citools.UniqName()
 		setupBranchesForDeletion(t, fsname, node1, node2)
+		checkTestContainerExits(t, node1)
+		checkTestContainerExits(t, node2)
 
 		// Now kill the lot, right?
 		citools.RunOnNode(t, node1, "dm dot delete -f "+fsname)
@@ -1101,6 +1104,8 @@ func TestDeletionComplex(t *testing.T) {
 
 		fsname := citools.UniqName()
 		setupBranchesForDeletion(t, fsname, node1, node2)
+		checkTestContainerExits(t, node1)
+		checkTestContainerExits(t, node2)
 
 		// Now kill the lot, right?
 		citools.RunOnNode(t, node1, "dm dot delete -f "+fsname)
