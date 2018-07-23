@@ -54,6 +54,31 @@ func TestCreateWithIndexGetByName(t *testing.T) {
 	}
 }
 
+func TestCreateWithIndexGetThroughIndex(t *testing.T) {
+	client, teardown, err := testutil.GetEtcdClient()
+	if err != nil {
+		t.Fatalf("failed to get etcd client: %s", err)
+	}
+	defer teardown()
+
+	kv := New(client, testutil.GetTestPrefix())
+	id := "d2a8c37c-0290-446a-8d2e-3c904cb8b0f8"
+
+	_, err = kv.CreateWithIndex("users", id, "namehere", "bar")
+	if err != nil {
+		t.Errorf("failed to Put kv: %s", err)
+	}
+	// getting it by name
+	idxID, err := kv.idxFindID("users", "namehere")
+	if err != nil {
+		t.Fatalf("failed to get key, error: %s", err)
+	}
+
+	if idxID != id {
+		t.Errorf("unexpected ID: %s", idxID)
+	}
+}
+
 func TestCreateWithIndexGetByID(t *testing.T) {
 	client, teardown, err := testutil.GetEtcdClient()
 	if err != nil {

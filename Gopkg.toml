@@ -6,10 +6,7 @@
 # required = ["github.com/user/thing/cmd/thing"]
 # ignored = ["github.com/user/project/pkgX", "bitbucket.org/user/project/pkgA/pkgY"]
 #
-# [[constraint]]
-#   name = "github.com/user/project"
-#   version = "1.0.0"
-#
+
 # [[constraint]]
 #   name = "github.com/user/project2"
 #   branch = "dev"
@@ -31,8 +28,8 @@ ignored = ["github.com/dotmesh-io/cmd/dotmesh-server/pkg*", "github.com/dotmesh-
   name = "github.com/nu7hatch/gouuid"
 
 [[constraint]]
-  name = "github.com/apache/thrift"
-  revision = "84d6af4cf903571319e0ebddd7beb12bc93fb752"
+   name = "github.com/dotmesh-io/citools"
+   revision = "34e1ea116678a0930c80604f2e8dd4b0556cdb65"
 
 [prune]
   go-tests = true

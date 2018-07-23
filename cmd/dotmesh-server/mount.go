@@ -42,6 +42,7 @@ func (f *fsMachine) mountSnap(snapId string, readonly bool) (responseEvent *Even
 		if readonly {
 			options += ",ro"
 		}
+		logZFSCommand(fullId, fmt.Sprintf("mount.zfs -o %s %s %s", options, zfsPath, mountPath))
 		out, err := exec.Command("mount.zfs", "-o", options,
 			zfsPath, mountPath).CombinedOutput()
 		if err != nil {
@@ -94,6 +95,7 @@ func (f *fsMachine) mountSnap(snapId string, readonly bool) (responseEvent *Even
 					"[mount:%s] attempting recovery-unmount in ns %s after %v/%v",
 					fullId, firstPidNSToUnmount, err, string(out),
 				)
+				logZFSCommand(fullId, fmt.Sprintf("nsenter -t %s -m -u -n -i umount %s", firstPidNSToUnmount, mountPath))
 				rout, rerr := exec.Command(
 					"nsenter", "-t", firstPidNSToUnmount, "-m", "-u", "-n", "-i",
 					"umount", mountPath,
@@ -160,6 +162,7 @@ func (f *fsMachine) unmountSnap(snapId string) (responseEvent *Event, nextState 
 		}, backoffState
 	}
 	if mounted {
+		logZFSCommand(fsPoint, fmt.Sprintf("umount %s", mnt(fsPoint)))
 		out, err := exec.Command("umount", mnt(fsPoint)).CombinedOutput()
 		if err != nil {
 			log.Printf("%v while trying to unmount %s", err, fq(fsPoint))

@@ -73,12 +73,12 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 			return backoffState
 		}
 		keyToVersionIds := make(map[string]string)
-		keyToVersionIds, err = updateS3Files(keyToVersionIds, paths, pathToMount, transferRequestId, transferRequest.RemoteName, svc, pollResult)
+		keyToVersionIds, err = updateS3Files(keyToVersionIds, paths, pathToMount, transferRequestId, transferRequest.RemoteName, transferRequest.Prefixes, svc, pollResult)
 		if err != nil {
 			f.errorDuringTransfer("error-updating-s3-objects", err)
 			return backoffState
 		}
-		keyToVersionIds, err = removeOldS3Files(keyToVersionIds, paths, transferRequest.RemoteName, svc)
+		keyToVersionIds, err = removeOldS3Files(keyToVersionIds, paths, transferRequest.RemoteName, transferRequest.Prefixes, svc)
 		if err != nil {
 			f.errorDuringTransfer("error-during-object-pagination", err)
 			return backoffState

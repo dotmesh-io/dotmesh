@@ -35,7 +35,7 @@ function fetch_zfs {
 }
 
 # Find the hostname from the actual host, rather than the container.
-HOSTNAME="`nsenter -t 1 -m -u -n -i hostname`"
+HOSTNAME="`nsenter -t 1 -m -u -n -i hostname || echo unknown`"
 
 # Put the data file inside /var/lib so that we end up on the big
 # partition if we're in a LinuxKit env.
@@ -414,6 +414,7 @@ docker run -i $rm_opt --pid=host --privileged --name=$DOTMESH_INNER_SERVER_NAME 
     -e "POOL=$POOL" \
     -e "YOUR_IPV4_ADDRS=$YOUR_IPV4_ADDRS" \
     -e "TRACE_ADDR=$TRACE_ADDR" \
+    -e "POOL_LOGFILE=$OUTER_DIR/dotmesh_pool_log" \
     -e "DOTMESH_ETCD_ENDPOINT=$DOTMESH_ETCD_ENDPOINT" $INHERIT_ENVIRONMENT_ARGS \
     $secret \
     $log_opts \

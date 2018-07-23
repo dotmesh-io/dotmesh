@@ -33,7 +33,6 @@
 [[projects]]
   name = "github.com/aws/aws-sdk-go"
   packages = [
-    ".",
     "aws",
     "aws/awserr",
     "aws/awsutil",
@@ -202,10 +201,9 @@
   version = "v2.6.2"
 
 [[projects]]
-  branch = "master"
   name = "github.com/dotmesh-io/citools"
   packages = ["."]
-  revision = "a433f673376c905b8e2f5b8c219a813dd3346c99"
+  revision = "34e1ea116678a0930c80604f2e8dd4b0556cdb65"
 
 [[projects]]
   branch = "master"
@@ -987,6 +985,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "5c9f72e2e4f6e67d9923156e63d771c32c09791e8b6ca53ab0d8509b77d9fa80"
+  inputs-digest = "420cfdd3d378ae4d380e80bc49605876eaf7978ce5774e657ed9f875b661ec59"
   solver-name = "gps-cdcl"
   solver-version = 1

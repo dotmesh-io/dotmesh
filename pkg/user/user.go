@@ -1,8 +1,10 @@
 package user
 
 import (
+	"crypto/md5"
 	"encoding/json"
 	"fmt"
+	"io"
 	"reflect"
 
 	"github.com/nu7hatch/gouuid"
@@ -32,6 +34,28 @@ type User struct {
 	Password []byte
 	ApiKey   string
 	Metadata map[string]string
+}
+
+type SafeUser struct {
+	Id        string
+	Name      string
+	Email     string
+	EmailHash string
+	Metadata  map[string]string
+}
+
+// SafeUser - returns safe user by hashing email, removing password and APIKey fields
+func (u User) SafeUser() SafeUser {
+	h := md5.New()
+	io.WriteString(h, u.Email)
+	emailHash := fmt.Sprintf("%x", h.Sum(nil))
+	return SafeUser{
+		Id:        u.Id,
+		Name:      u.Name,
+		Email:     u.Email,
+		EmailHash: emailHash,
+		Metadata:  u.Metadata,
+	}
 }
 
 func (user User) String() string {

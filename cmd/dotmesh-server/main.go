@@ -142,6 +142,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Unable to get Etcd client: '%s'", err)
 	}
+	config.EtcdClient = etcdClient
+
 	kvClient := kv.New(etcdClient, ETCD_PREFIX)
 	config.UserManager = user.New(kvClient)
 

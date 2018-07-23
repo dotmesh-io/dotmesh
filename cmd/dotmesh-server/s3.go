@@ -232,9 +232,25 @@ func downloadS3Object(downloader *s3manager.Downloader, key, versionId, bucket, 
 	return nil
 }
 
-func removeOldS3Files(keyToVersionIds map[string]string, paths map[string]int64, bucket string, svc *s3.S3) (map[string]string, error) {
+func removeOldS3Files(keyToVersionIds map[string]string, paths map[string]int64, bucket string, prefixes []string, svc *s3.S3) (map[string]string, error) {
+	if len(prefixes) == 0 {
+		return removeOldPrefixedS3Files(keyToVersionIds, paths, bucket, "", svc)
+	}
+	var err error
+	for _, prefix := range prefixes {
+		keyToVersionIds, err = removeOldPrefixedS3Files(keyToVersionIds, paths, bucket, prefix, svc)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return keyToVersionIds, nil
+}
+func removeOldPrefixedS3Files(keyToVersionIds map[string]string, paths map[string]int64, bucket, prefix string, svc *s3.S3) (map[string]string, error) {
 	// get a list of the objects in s3, if there's anything there that isn't in our list of files in dotmesh, delete it.
 	params := &s3.ListObjectsV2Input{Bucket: aws.String(bucket)}
+	if prefix != "" {
+		params.SetPrefix(prefix)
+	}
 	var innerError error
 	err := svc.ListObjectsV2Pages(params, func(output *s3.ListObjectsV2Output, lastPage bool) bool {
 		for _, item := range output.Contents {
@@ -260,10 +276,19 @@ func removeOldS3Files(keyToVersionIds map[string]string, paths map[string]int64,
 	return keyToVersionIds, nil
 }
 
-func updateS3Files(keyToVersionIds map[string]string, paths map[string]int64, pathToMount, transferRequestId, bucket string, svc *s3.S3, pollResult TransferPollResult) (map[string]string, error) {
+func updateS3Files(keyToVersionIds map[string]string, paths map[string]int64, pathToMount, transferRequestId, bucket string, prefixes []string, svc *s3.S3, pollResult TransferPollResult) (map[string]string, error) {
 	// push every key up to s3 and then send back a map of object key -> s3 version id
 	uploader := s3manager.NewUploaderWithClient(svc)
-	for key, size := range paths {
+	// filter out any paths we don't care about in an S3 remote
+	filtered := make(map[string]int64)
+	for _, elem := range prefixes {
+		for key, size := range paths {
+			if strings.HasPrefix(key, elem) {
+				filtered[key] = size
+			}
+		}
+	}
+	for key, size := range filtered {
 		path := fmt.Sprintf("%s/%s", pathToMount, key)
 		file, err := os.Open(path)
 		pollResult.Index += 1

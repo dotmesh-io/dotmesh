@@ -2,49 +2,17 @@ package main
 
 import (
 	"fmt"
-	"github.com/dotmesh-io/dotmesh/pkg/user"
 	"reflect"
 	"strings"
 	"sync"
+
+	"github.com/coreos/etcd/client"
+
+	"github.com/dotmesh-io/dotmesh/pkg/types"
+	"github.com/dotmesh-io/dotmesh/pkg/user"
 )
 
-type User struct {
-	Id       string
-	Name     string
-	Email    string
-	Salt     []byte
-	Password []byte
-	ApiKey   string
-	Metadata map[string]string
-}
-
-func (user User) String() string {
-	v := reflect.ValueOf(user)
-	toString := ""
-	for i := 0; i < v.NumField(); i++ {
-		fieldName := v.Type().Field(i).Name
-		if fieldName == "ApiKey" {
-			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, "****")
-		} else {
-			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, v.Field(i).Interface())
-		}
-	}
-	return toString
-}
-
-type SafeUser struct {
-	Id        string
-	Name      string
-	Email     string
-	EmailHash string
-	Metadata  map[string]string
-}
-
-type CloneWithName struct {
-	Name  string
-	Clone Clone
-}
-type ClonesList []CloneWithName
+const DEFAULT_BRANCH = "master"
 
 type dirtyInfo struct {
 	Server     string
@@ -59,22 +27,19 @@ func (e PermissionDenied) Error() string {
 	return "Permission denied."
 }
 
-type TopLevelFilesystem struct {
-	MasterBranch  DotmeshVolume
-	OtherBranches []DotmeshVolume
-	Owner         SafeUser
-	Collaborators []SafeUser
-}
-
-type VolumesAndBranches struct {
-	Dots    []TopLevelFilesystem
-	Servers []Server
-}
-
-type Server struct {
-	Id        string
-	Addresses []string
-}
+// Aliases
+type User = user.User
+type SafeUser = user.SafeUser
+type CloneWithName = types.CloneWithName
+type ClonesList = types.ClonesList
+type TopLevelFilesystem = types.TopLevelFilesystem
+type VolumesAndBranches = types.VolumesAndBranches
+type Server = types.Server
+type Origin = types.Origin
+type PathToTopLevelFilesystem = types.PathToTopLevelFilesystem
+type DotmeshVolume = types.DotmeshVolume
+type VolumeName = types.VolumeName
+type RegistryFilesystem = types.RegistryFilesystem
 
 type ByAddress []Server
 
@@ -124,11 +89,6 @@ type SafeConfig struct {
 // state machinery
 type stateFn func(*fsMachine) stateFn
 
-type Origin struct {
-	FilesystemId string
-	SnapshotId   string
-}
-
 type metadata map[string]string
 type snapshot struct {
 	// exported for json serialization
@@ -138,10 +98,7 @@ type snapshot struct {
 	filesystem *filesystem
 }
 
-type Clone struct {
-	FilesystemId string
-	Origin       Origin
-}
+type Clone = types.Clone
 
 type filesystem struct {
 	id        string
@@ -313,28 +270,7 @@ type TransferPollResult struct {
 type Config struct {
 	FilesystemMetadataTimeout int64
 	UserManager               user.UserManager
-}
-
-type PathToTopLevelFilesystem struct {
-	TopLevelFilesystemId   string
-	TopLevelFilesystemName VolumeName
-	Clones                 ClonesList
-}
-
-type DotmeshVolume struct {
-	Id             string
-	Name           VolumeName
-	Branch         string
-	Master         string
-	SizeBytes      int64
-	DirtyBytes     int64
-	CommitCount    int64
-	ServerStatuses map[string]string // serverId => status
-}
-
-type VolumeName struct {
-	Namespace string
-	Name      string
+	EtcdClient                client.KeysAPI
 }
 
 // refers to a clone's "pointer" to a filesystem id and its snapshot.

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/nu7hatch/gouuid"
 	"log"
 	"os/exec"
@@ -169,6 +170,7 @@ func activeState(f *fsMachine) stateFn {
 				}
 				return backoffState
 			}
+			logZFSCommand(f.filesystemId, fmt.Sprintf("%s rollback -r %s@%s", ZFS, fq(f.filesystemId), rollbackTo))
 			out, err := exec.Command(ZFS, "rollback",
 				"-r", fq(f.filesystemId)+"@"+rollbackTo).CombinedOutput()
 			if err != nil {
@@ -235,6 +237,7 @@ func activeState(f *fsMachine) stateFn {
 			}
 			newCloneFilesystemId := uuid.String()
 
+			logZFSCommand(f.filesystemId, fmt.Sprintf("%s clone %s@%s %s", ZFS, fq(f.filesystemId), originSnapshotId, fq(newCloneFilesystemId)))
 			out, err := exec.Command(
 				ZFS, "clone",
 				fq(f.filesystemId)+"@"+originSnapshotId,

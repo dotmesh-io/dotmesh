@@ -15,6 +15,7 @@ import (
 	"github.com/nu7hatch/gouuid"
 	"golang.org/x/net/context"
 
+	"github.com/dotmesh-io/dotmesh/pkg/registry"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 
 	log "github.com/sirupsen/logrus"
@@ -40,7 +41,7 @@ type InMemoryState struct {
 	etcdWaitTimestampLock      *sync.Mutex
 	localReceiveProgress       *Observer
 	newSnapsOnMaster           *Observer
-	registry                   *Registry
+	registry                   registry.Registry
 	containers                 *DockerClient
 	containersLock             *sync.RWMutex
 	fetchRelatedContainersChan chan bool
@@ -106,12 +107,12 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 	}
 	// a registry of names of filesystems and branches (clones) mapping to
 	// their ids
-	s.registry = NewRegistry(s)
+	s.registry = registry.NewRegistry(config.UserManager, config.EtcdClient, ETCD_PREFIX)
 	return s
 }
 
 func (s *InMemoryState) resetRegistry() {
-	s.registry = NewRegistry(s)
+	s.registry = registry.NewRegistry(s.userManager, s.config.EtcdClient, ETCD_PREFIX)
 }
 
 func (s *InMemoryState) deleteFilesystem(filesystemId string) error {
@@ -184,7 +185,7 @@ func (s *InMemoryState) alignMountStateWithMasters(filesystemId string) error {
 			return nil, false, fmt.Errorf("cannot find %v in fsMachines", filesystemId)
 		}
 		log.Printf(
-			"[alignMountStateWithMasters] called for %v; masterFor=%v, myNodeId=%v; mounted=%b",
+			"[alignMountStateWithMasters] called for %v; masterFor=%v, myNodeId=%v; mounted=%t",
 			filesystemId,
 			s.masterFor(filesystemId),
 			s.myNodeId,
@@ -383,7 +384,6 @@ func (s *InMemoryState) insertInitialAdminPassword() error {
 		os.Getenv("INITIAL_ADMIN_API_KEY"),
 	)
 	if err != nil {
-
 		return err
 	}
 
@@ -788,7 +788,7 @@ func (s *InMemoryState) CreateFilesystem(
 	// Proceed to set up master mapping
 	default:
 		// Key already exists
-		var existingEntry registryFilesystem
+		var existingEntry RegistryFilesystem
 
 		err := json.Unmarshal([]byte(re.Node.Value), &existingEntry)
 		if err != nil {

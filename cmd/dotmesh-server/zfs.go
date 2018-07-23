@@ -6,12 +6,30 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
 )
 
 // functions which relate to interacting directly with zfs
+
+// Log a ZFS command was run. This is used to recreate ZFS states when
+// investigating bugs.
+
+func logZFSCommand(filesystemId, command string) {
+	// Disabled by default; we need to change the code and recompile to enable this.
+	if false {
+		f, err := os.OpenFile(os.Getenv("POOL_LOGFILE"), os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+		if err != nil {
+			panic(err)
+		}
+
+		defer f.Close()
+
+		fmt.Fprintf(f, "%s # %s\n", command, filesystemId)
+	}
+}
 
 // how many bytes has a filesystem diverged from its latest snapshot?
 // also how many bytes does the filesystem take up on disk in total?
@@ -170,6 +188,7 @@ func doSimpleZFSCommand(cmd *exec.Cmd, description string) error {
 }
 
 func deleteFilesystemInZFS(fs string) error {
+	logZFSCommand(fs, fmt.Sprintf("zfs destroy -r %s", fq(fs)))
 	cmd := exec.Command(ZFS, "destroy", "-r", fq(fs))
 	err := doSimpleZFSCommand(cmd, fmt.Sprintf("delete filesystem %s (full name: %s)", fs, fq(fs)))
 	return err
@@ -224,6 +243,7 @@ func deleteFilesystemInZFS(fs string) error {
 // # zfs promote foo
 
 func stashBranch(existingFs string, newFs string, rollbackTo string) error {
+	logZFSCommand(existingFs, fmt.Sprintf("zfs rename %s %s", fq(existingFs), fq(newFs)))
 	err := doSimpleZFSCommand(exec.Command(ZFS, "rename", fq(existingFs), fq(newFs)),
 		fmt.Sprintf("rename filesystem %s (%s) to %s (%s) for retroBranch",
 			existingFs, fq(existingFs),
@@ -233,6 +253,8 @@ func stashBranch(existingFs string, newFs string, rollbackTo string) error {
 	if err != nil {
 		return err
 	}
+
+	logZFSCommand(existingFs, fmt.Sprintf("zfs clone %s@%s %s", fq(newFs), rollbackTo, fq(existingFs)))
 	err = doSimpleZFSCommand(exec.Command(ZFS, "clone", fq(newFs)+"@"+rollbackTo, fq(existingFs)),
 		fmt.Sprintf("clone snapshot %s of filesystem %s (%s) to %s (%s) for retroBranch",
 			rollbackTo, newFs, fq(newFs)+"@"+rollbackTo,
@@ -242,8 +264,10 @@ func stashBranch(existingFs string, newFs string, rollbackTo string) error {
 	if err != nil {
 		return err
 	}
+
+	logZFSCommand(existingFs, fmt.Sprintf("zfs promote %s", fq(existingFs)))
 	err = doSimpleZFSCommand(exec.Command(ZFS, "promote", fq(existingFs)),
-		fmt.Sprintf("promots filesystem %s (%s) for retroBranch",
+		fmt.Sprintf("promote filesystem %s (%s) for retroBranch",
 			existingFs, fq(existingFs),
 		),
 	)

@@ -2,7 +2,6 @@ package kv
 
 import (
 	"encoding/json"
-	"fmt"
 )
 
 const (
@@ -16,7 +15,7 @@ type NameIndex struct {
 }
 
 func (k *EtcdKV) idxFindID(prefix, name string) (id string, err error) {
-	resp, err := k.get(NameIndexAPIPrefix, name)
+	resp, err := k.get(k.prefix+" /"+NameIndexAPIPrefix, name)
 	if err != nil {
 		return
 	}
@@ -41,12 +40,12 @@ func (k *EtcdKV) idxAdd(prefix, name, id string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("index %s added for ID %s \n", name, id)
-	_, err = k.Set(NameIndexAPIPrefix, name, string(bts))
+	// fmt.Printf("index %s added for ID %s \n", name, id)
+	_, err = k.Set(k.prefix+" /"+NameIndexAPIPrefix, name, string(bts))
 
 	return err
 }
 
 func (k *EtcdKV) idxDelete(prefix, name string) error {
-	return k.Delete(NameIndexAPIPrefix, name, false)
+	return k.Delete(k.prefix+" /"+NameIndexAPIPrefix, name, false)
 }

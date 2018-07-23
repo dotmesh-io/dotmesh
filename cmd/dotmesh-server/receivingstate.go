@@ -2,11 +2,15 @@ package main
 
 import (
 	"fmt"
-	"golang.org/x/net/context"
 	"io"
 	"log"
 	"net/http"
 	"os/exec"
+
+	"golang.org/x/net/context"
+
+	"github.com/dotmesh-io/dotmesh/pkg/registry"
+	"github.com/dotmesh-io/dotmesh/pkg/user"
 )
 
 // attempt to pull some snapshots from the master, based on some hint that it
@@ -65,7 +69,7 @@ func receivingState(f *fsMachine) stateFn {
 		clone, err := f.state.registry.LookupCloneById(f.filesystemId)
 		if err != nil {
 			switch err := err.(type) {
-			case NoSuchClone:
+			case registry.NoSuchClone:
 				// Normal case for non-clone filesystems, continue.
 			default:
 				return backoffStateWithReason(fmt.Sprintf("receivingState: Error trying to lookup clone by id: %+v", err))
@@ -86,12 +90,13 @@ func receivingState(f *fsMachine) stateFn {
 	if len(addresses) == 0 {
 		return backoffStateWithReason(fmt.Sprintf("receivingState: No known address for current master of %s", f.filesystemId))
 	}
-	_, _, apiKey, err := getPasswords("admin")
+
+	admin, err := f.state.userManager.Get(&user.Query{Ref: "admin"})
 	if err != nil {
-		return backoffStateWithReason(fmt.Sprintf("receivingState: Attempting to pull %s got %+v", f.filesystemId, err))
+		return backoffStateWithReason(fmt.Sprintf("receivingState: Attempting to pull %s, failed to get admin user, error: %s", f.filesystemId, err))
 	}
 
-	url, err := deduceUrl(context.Background(), addresses, "internal", "admin", apiKey)
+	url, err := deduceUrl(context.Background(), addresses, "internal", "admin", admin.ApiKey)
 	if err != nil {
 		return backoffStateWithReason(fmt.Sprintf("receivingState: deduceUrl failed with %+v", err))
 	}
@@ -109,7 +114,7 @@ func receivingState(f *fsMachine) stateFn {
 	if err != nil {
 		return backoffStateWithReason(fmt.Sprintf("receivingState: Attempting to pull %s got %+v", f.filesystemId, err))
 	}
-	req.SetBasicAuth("admin", apiKey)
+	req.SetBasicAuth("admin", admin.ApiKey)
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -122,6 +127,7 @@ func receivingState(f *fsMachine) stateFn {
 	)
 
 	f.transitionedTo("receiving", "starting")
+	logZFSCommand(f.filesystemId, fmt.Sprintf("zfs recv %s", fq(f.filesystemId)))
 	cmd := exec.Command("zfs", "recv", fq(f.filesystemId))
 	pipeReader, pipeWriter := io.Pipe()
 	defer pipeReader.Close()

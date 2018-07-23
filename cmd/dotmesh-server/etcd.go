@@ -968,7 +968,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 	updateFilesystemRegistry := func(node *client.Node) error {
 		pieces := strings.Split(node.Key, "/")
 		name := VolumeName{Namespace: pieces[4], Name: pieces[5]}
-		rf := registryFilesystem{}
+		rf := RegistryFilesystem{}
 		if node.Value == "" {
 			// Deletion: the empty registryFilesystem will indicate that.
 			return s.registry.UpdateFilesystemFromEtcd(name, rf)
