@@ -926,7 +926,11 @@ func TestDeletionSimple(t *testing.T) {
 		fsname := citools.UniqName()
 
 		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		defer func() {
+			cancel()
+			testContainer := citools.OutputFromRunOnNode(t, node1, "docker ps | grep busybox | cut -d ' ' -f 1")
+			citools.RunOnNode(t, node1, fmt.Sprintf("docker kill %s", testContainer))
+		}()
 		go func() {
 			citools.RunOnNodeContext(ctx, t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO; tail -f /dev/null'")
 		}()
@@ -940,11 +944,13 @@ func TestDeletionSimple(t *testing.T) {
 		if !strings.Contains(st, "cannot delete the volume") {
 			t.Error(fmt.Sprintf("The presence of a running container failed to suppress volume deletion"))
 		}
+
 	})
 
 	t.Run("DeleteInstantly", func(t *testing.T) {
 		fsname := citools.UniqName()
 		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO'")
+		checkTestContainerExits(t, node1)
 		citools.RunOnNode(t, node1, "dm dot delete -f "+fsname)
 
 		st := citools.OutputFromRunOnNode(t, node1, "dm list")
@@ -976,6 +982,7 @@ func TestDeletionSimple(t *testing.T) {
 	t.Run("DeleteQuickly", func(t *testing.T) {
 		fsname := citools.UniqName()
 		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO'")
+		checkTestContainerExits(t, node1)
 		citools.RunOnNode(t, node1, "dm dot delete -f "+fsname)
 
 		// Ensure the initial delete has happened, but the metadata is
@@ -990,6 +997,7 @@ func TestDeletionSimple(t *testing.T) {
 	t.Run("DeleteSlowly", func(t *testing.T) {
 		fsname := citools.UniqName()
 		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO'")
+		checkTestContainerExits(t, node1)
 		citools.RunOnNode(t, node1, "dm dot delete -f "+fsname)
 
 		// Ensure the delete has happened completely This is twice the
@@ -1007,6 +1015,7 @@ func TestDeletionSimple(t *testing.T) {
 
 		fsname := citools.UniqName()
 		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO'")
+		checkTestContainerExits(t, node1)
 		citools.RunOnNode(t, node2, "dm dot delete -f "+fsname)
 
 		// Ensure the initial delete has happened, but the metadata is
@@ -1018,6 +1027,16 @@ func TestDeletionSimple(t *testing.T) {
 		checkDeletionWorked(t, fsname, 2*time.Second, node1, node2)
 	})
 
+}
+
+func checkTestContainerExits(t *testing.T, node string) {
+	citools.TryUntilSucceeds(func() error {
+		result := citools.OutputFromRunOnNode(t, node, "docker ps")
+		if strings.Contains(result, "busybox") {
+			return fmt.Errorf("container still active")
+		}
+		return nil
+	}, "waiting for container to quit")
 }
 
 func setupBranchesForDeletion(t *testing.T, fsname string, node1 string, node2 string) {
