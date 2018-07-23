@@ -86,6 +86,7 @@ func TestDefaultDot(t *testing.T) {
 		}
 
 		// Clean up
+		checkTestContainerExits(t, node1)
 		citools.RunOnNode(t, node1, "dm dot delete -f "+fsname1)
 		citools.RunOnNode(t, node1, "dm dot delete -f "+fsname2)
 	})
@@ -2879,6 +2880,7 @@ func TestStressLotsOfCommits(t *testing.T) {
 		if st != fmt.Sprintf("%d\n", NUMBER_OF_COMMITS) {
 			t.Errorf("We didn't see the right number of commits: Got '%s', wanted %d", st, NUMBER_OF_COMMITS)
 		}
+		checkTestContainerExits(t, node1)
 		citools.RunOnNode(t, cluster1.Container, fmt.Sprintf("dm dot delete -f %s", fsname))
 	})
 }
