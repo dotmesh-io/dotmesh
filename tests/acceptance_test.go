@@ -2880,7 +2880,7 @@ func TestStressLotsOfCommits(t *testing.T) {
 		if st != fmt.Sprintf("%d\n", NUMBER_OF_COMMITS) {
 			t.Errorf("We didn't see the right number of commits: Got '%s', wanted %d", st, NUMBER_OF_COMMITS)
 		}
-		checkTestContainerExits(t, node1)
+		checkTestContainerExits(t, cluster1.Container)
 		citools.RunOnNode(t, cluster1.Container, fmt.Sprintf("dm dot delete -f %s", fsname))
 	})
 }
