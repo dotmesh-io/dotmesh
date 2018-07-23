@@ -96,6 +96,7 @@ container_image(
         "//cmd/dotmesh-server/pkg/dind-flexvolume",
         "//cmd/flexvolume",
     ],
+    directory = "/usr/local/bin"
     visibility = ["//visibility:public"],
 )
 
