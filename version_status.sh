@@ -5,7 +5,7 @@ VERSION=$(cd cmd/versioner && go run versioner.go)
 echo VERSION ${VERSION}
 if [ -z "$CI_DOCKER_TAG" ]; then
     # Non-CI build
-    DOCKERTAG=$VERSION
+    DOCKERTAG=latest
 else
     DOCKERTAG=$CI_DOCKER_TAG
 fi
