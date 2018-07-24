@@ -1534,8 +1534,10 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		// test incremental push
 		citools.RunOnNode(t, node2, "dm commit -m 'again'")
 		result := citools.OutputFromRunOnNode(t, node2, "dm push cluster_0 || true") // an error code is ok
-
-		if !strings.Contains(result, "uncommitted changes on volume where data would be written") {
+		// Pushing on dirty state can error out either at the zfs level or checks that dotmesh-server does in the RPC.
+		// Asynchronous behaviour means we would have to check for either or wait until the dirty state poller to catch up.
+		if !strings.Contains(result, "uncommitted changes on volume where data would be written") &&
+			!strings.Contains(result, "has been modified\nsince most recent snapshot") {
 			t.Errorf(
 				"pushing didn't fail when there were known uncommited changes on the peer. Got unexpected response %v on push\n", result)
 		}
