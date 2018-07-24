@@ -4,11 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"regexp"
 	"runtime"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/dotmesh-io/dotmesh/pkg/validator"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -38,45 +39,6 @@ func NewDotmeshRPC(state *InMemoryState, um user.UserManager) *DotmeshRPC {
 	return &DotmeshRPC{state: state, usersManager: um}
 }
 
-var reNamespaceName = regexp.MustCompile(`^[a-zA-Z0-9_\-]{1,64}$`)
-var reVolumeName = regexp.MustCompile(`^[a-zA-Z0-9_\-]{1,64}$`)
-var reBranchName = regexp.MustCompile(`^[a-zA-Z0-9_\-]{1,64}$`)
-var reSubdotName = regexp.MustCompile(`^[a-zA-Z0-9_\-]{1,64}$`)
-
-func requireValidVolumeName(name VolumeName) error {
-	// Reject the request with an error if the volume name is invalid
-	// This function allows only pure volume names - no volume@branch$subvolume or similar!
-
-	if !reNamespaceName.MatchString(name.Namespace) {
-		return fmt.Errorf("Invalid namespace name %v", name.Namespace)
-	}
-
-	if !reVolumeName.MatchString(name.Name) {
-		return fmt.Errorf("Invalid dot name %v", name.Name)
-	}
-
-	return nil
-}
-
-func requireValidBranchName(name string) error {
-	// "" is a special case indicating the master branch, so we check
-	// it here rather than allow it in the regexp.
-
-	if name != "" && !reBranchName.MatchString(name) {
-		return fmt.Errorf("Invalid branch name %v", name)
-	}
-
-	return nil
-}
-
-func requireValidSubdotName(name string) error {
-	if !reSubdotName.MatchString(name) {
-		return fmt.Errorf("Invalid subdot name %v", name)
-	}
-
-	return nil
-}
-
 func requireValidVolumeNameWithBranch(name VolumeName) error {
 	// Reject the request with an error if the volume name is invalid.
 
@@ -91,13 +53,24 @@ func requireValidVolumeNameWithBranch(name VolumeName) error {
 		shrapnel := strings.Split(name.Name, "@")
 		name.Name = shrapnel[0]
 
-		err := requireValidBranchName(shrapnel[1])
+		err := validator.IsValidBranchName(shrapnel[1])
+		if err != nil {
+			return err
+		}
+
+		err = validator.IsValidVolumeName(shrapnel[0])
+		if err != nil {
+			return err
+		}
+
+	} else {
+		err := validator.IsValidVolumeName(name.Name)
 		if err != nil {
 			return err
 		}
 	}
 
-	return requireValidVolumeName(name)
+	return validator.IsValidVolumeNamespace(name.Namespace)
 }
 
 func ensureAdminUser(r *http.Request) error {
@@ -137,7 +110,7 @@ func (d *DotmeshRPC) Procure(
 		return err
 	}
 
-	err = requireValidSubdotName(args.Subdot)
+	err = validator.IsValidSubdotName(args.Subdot)
 	if err != nil {
 		return err
 	}
@@ -558,7 +531,7 @@ func (d *DotmeshRPC) ListWithContainers(
 func (d *DotmeshRPC) Create(
 	r *http.Request, filesystemName *VolumeName, result *bool) error {
 
-	err := requireValidVolumeName(*filesystemName)
+	err := validator.IsValidVolume(filesystemName.Namespace, filesystemName.Name)
 	if err != nil {
 		return err
 	}
@@ -595,12 +568,12 @@ func (d *DotmeshRPC) SwitchContainers(
 		return err
 	}
 
-	err = requireValidVolumeName(VolumeName{args.Namespace, args.Name})
+	err = validator.IsValidVolume(args.Namespace, args.Name)
 	if err != nil {
 		return err
 	}
 
-	err = requireValidBranchName(args.NewBranchName)
+	err = validator.IsValidBranchName(args.NewBranchName)
 	if err != nil {
 		return err
 	}
@@ -649,12 +622,12 @@ func (d *DotmeshRPC) Containers(
 ) error {
 	log.Printf("[Containers] called with %+v", *args)
 
-	err := requireValidVolumeName(VolumeName{args.Namespace, args.Name})
+	err := validator.IsValidVolume(args.Namespace, args.Name)
 	if err != nil {
 		return err
 	}
 
-	err = requireValidBranchName(args.Branch)
+	err = validator.IsValidBranchName(args.Branch)
 	if err != nil {
 		return err
 	}
@@ -703,12 +676,12 @@ func (d *DotmeshRPC) Exists(
 	args *struct{ Namespace, Name, Branch string },
 	result *string,
 ) error {
-	err := requireValidVolumeName(VolumeName{args.Namespace, args.Name})
+	err := validator.IsValidVolume(args.Namespace, args.Name)
 	if err != nil {
 		return err
 	}
 
-	err = requireValidBranchName(args.Branch)
+	err = validator.IsValidBranchName(args.Branch)
 	if err != nil {
 		return err
 	}
@@ -732,12 +705,12 @@ func (d *DotmeshRPC) Lookup(
 	args *struct{ Namespace, Name, Branch string },
 	result *string,
 ) error {
-	err := requireValidVolumeName(VolumeName{args.Namespace, args.Name})
+	err := validator.IsValidVolume(args.Namespace, args.Name)
 	if err != nil {
 		return err
 	}
 
-	err = requireValidBranchName(args.Branch)
+	err = validator.IsValidBranchName(args.Branch)
 	if err != nil {
 		return err
 	}
@@ -768,12 +741,12 @@ func (d *DotmeshRPC) Commits(
 	args *struct{ Namespace, Name, Branch string },
 	result *[]snapshot,
 ) error {
-	err := requireValidVolumeName(VolumeName{args.Namespace, args.Name})
+	err := validator.IsValidVolume(args.Namespace, args.Name)
 	if err != nil {
 		return err
 	}
 
-	err = requireValidBranchName(args.Branch)
+	err = validator.IsValidBranchName(args.Branch)
 	if err != nil {
 		return err
 	}
@@ -838,12 +811,12 @@ func (d *DotmeshRPC) Commit(
 			}
 	*/
 
-	err := requireValidVolumeName(VolumeName{args.Namespace, args.Name})
+	err := validator.IsValidVolume(args.Namespace, args.Name)
 	if err != nil {
 		return err
 	}
 
-	err = requireValidBranchName(args.Branch)
+	err = validator.IsValidBranchName(args.Branch)
 	if err != nil {
 		return err
 	}
@@ -905,12 +878,12 @@ func (d *DotmeshRPC) Rollback(
 		return err
 	}
 
-	err = requireValidVolumeName(VolumeName{args.Namespace, args.Name})
+	err = validator.IsValidVolume(args.Namespace, args.Name)
 	if err != nil {
 		return err
 	}
 
-	err = requireValidBranchName(args.Branch)
+	err = validator.IsValidBranchName(args.Branch)
 	if err != nil {
 		return err
 	}
@@ -964,7 +937,7 @@ func maybeError(e *Event) error {
 
 // Return a list of clone names attributed to a given top-level filesystem name
 func (d *DotmeshRPC) Branches(r *http.Request, filesystemName *VolumeName, result *[]string) error {
-	err := requireValidVolumeName(*filesystemName)
+	err := validator.IsValidVolume(filesystemName.Namespace, filesystemName.Name)
 	if err != nil {
 		return err
 	}
@@ -999,17 +972,17 @@ func (d *DotmeshRPC) Branch(
 	// topLevelFilesystemId. You could rename it though, I suppose. That's
 	// probably fine. We could fix this later by allowing promotions.
 
-	err := requireValidVolumeName(VolumeName{args.Namespace, args.Name})
+	err := validator.IsValidVolume(args.Namespace, args.Name)
 	if err != nil {
 		return err
 	}
 
-	err = requireValidBranchName(args.SourceBranch)
+	err = validator.IsValidBranchName(args.SourceBranch)
 	if err != nil {
 		return err
 	}
 
-	err = requireValidBranchName(args.NewBranchName)
+	err = validator.IsValidBranchName(args.NewBranchName)
 	if err != nil {
 		return err
 	}
@@ -1228,12 +1201,12 @@ func (d *DotmeshRPC) RegisterFilesystem(
 			args.Namespace)
 	}
 
-	err = requireValidVolumeName(VolumeName{args.Namespace, args.TopLevelFilesystemName})
+	err = validator.IsValidVolume(args.Namespace, args.TopLevelFilesystemName)
 	if err != nil {
 		return err
 	}
 
-	err = requireValidBranchName(args.CloneName)
+	err = validator.IsValidBranchName(args.CloneName)
 	if err != nil {
 		return err
 	}
@@ -1274,11 +1247,11 @@ func (d *DotmeshRPC) S3Transfer(
 ) error {
 	localVolumeName := VolumeName{args.LocalNamespace, args.LocalName}
 	// Remote name is welcome to be invalid, that's the far end's problem
-	err := requireValidVolumeName(VolumeName{args.LocalNamespace, args.LocalName})
+	err := validator.IsValidVolume(args.LocalNamespace, args.LocalName)
 	if err != nil {
 		return err
 	}
-	err = requireValidBranchName(args.LocalBranchName)
+	err = validator.IsValidBranchName(args.LocalBranchName)
 	if err != nil {
 		return err
 	}
@@ -1403,11 +1376,11 @@ func (d *DotmeshRPC) RegisterTransfer(
 
 	// We are the "remote" here. Local name is welcome to be invalid,
 	// that's the far end's problem
-	err := requireValidVolumeName(VolumeName{args.RemoteNamespace, args.RemoteName})
+	err := validator.IsValidVolume(args.RemoteNamespace, args.RemoteName)
 	if err != nil {
 		return err
 	}
-	err = requireValidBranchName(args.RemoteBranchName)
+	err = validator.IsValidBranchName(args.RemoteBranchName)
 	if err != nil {
 		return err
 	}
@@ -1492,11 +1465,11 @@ func (d *DotmeshRPC) Transfer(
 	log.Printf("[Transfer] starting with %+v", safeArgs(*args))
 
 	// Remote name is welcome to be invalid, that's the far end's problem
-	err := requireValidVolumeName(VolumeName{args.LocalNamespace, args.LocalName})
+	err := validator.IsValidVolume(args.LocalNamespace, args.LocalName)
 	if err != nil {
 		return err
 	}
-	err = requireValidBranchName(args.LocalBranchName)
+	err = validator.IsValidBranchName(args.LocalBranchName)
 	if err != nil {
 		return err
 	}
@@ -1953,11 +1926,11 @@ func (d *DotmeshRPC) DeducePathToTopLevelFilesystem(
 ) error {
 	log.Printf("[DeducePathToTopLevelFilesystem] called with args: %+v", args)
 
-	err := requireValidVolumeName(VolumeName{args.RemoteNamespace, args.RemoteFilesystemName})
+	err := validator.IsValidVolume(args.RemoteNamespace, args.RemoteFilesystemName)
 	if err != nil {
 		return err
 	}
-	err = requireValidBranchName(args.RemoteCloneName)
+	err = validator.IsValidBranchName(args.RemoteCloneName)
 	if err != nil {
 		return err
 	}
@@ -2033,7 +2006,7 @@ func sortFilesystemsInDeletionOrder(in []string, rootId string, origins map[stri
 func (d *DotmeshRPC) Delete(r *http.Request, args *VolumeName, result *bool) error {
 	*result = false
 
-	err := requireValidVolumeName(*args)
+	err := validator.IsValidVolume(args.Namespace, args.Name)
 	if err != nil {
 		return err
 	}
@@ -2700,11 +2673,11 @@ func (d *DotmeshRPC) GetReplicationLatencyForBranch(
 		return err
 	}
 
-	err = requireValidVolumeName(VolumeName{args.Namespace, args.Name})
+	err = validator.IsValidVolume(args.Namespace, args.Name)
 	if err != nil {
 		return err
 	}
-	err = requireValidBranchName(args.Branch)
+	err = validator.IsValidBranchName(args.Branch)
 	if err != nil {
 		return err
 	}
@@ -2766,13 +2739,13 @@ func (d *DotmeshRPC) CheckNameIsValid(
 	args *struct{ Namespace, Name, Branch string },
 	result *string,
 ) error {
-	err := requireValidVolumeName(VolumeName{args.Namespace, args.Name})
+	err := validator.IsValidVolume(args.Namespace, args.Name)
 	if err != nil {
 		*result = fmt.Sprintf("%s", err)
 		return nil
 	}
 
-	err = requireValidBranchName(args.Branch)
+	err = validator.IsValidBranchName(args.Branch)
 	if err != nil {
 		*result = fmt.Sprintf("%s", err)
 		return nil
