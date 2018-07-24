@@ -85,8 +85,7 @@ build_without_bazel:
         - ubuntu
         - fast
     script:
-        - export PUSH=YES
-        - ./rebuild_in_container_without_bazel.sh Linux
+        - ./rebuild_in_container_without_bazel.sh --push Linux
     artifacts:
         paths:
             - target

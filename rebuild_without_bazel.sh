@@ -4,6 +4,12 @@
 
 set -ex
 
+if [ x$1 == x--push ]
+then
+    PUSH=YES
+    shift
+fi
+
 OS=Linux
 if [ -n "$1" ]
 then
