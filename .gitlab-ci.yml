@@ -85,6 +85,7 @@ build_without_bazel:
         - ubuntu
         - fast
     script:
+        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
         - ./rebuild_in_container_without_bazel.sh --push Linux
     artifacts:
         paths:

@@ -29,7 +29,17 @@ docker build -f $WORKDIR/Dockerfile.build -t $BUILDER_IMAGE $WORKDIR
 
 rm -rf $WORKDIR
 
-docker run -v /var/run:/var/run -v `pwd`:/root/go/src/github.com/dotmesh-io/dotmesh -w /root/go/src/github.com/dotmesh-io/dotmesh $BUILDER_IMAGE ./rebuild_without_bazel.sh "$@"
+docker run \
+       -v /var/run:/var/run \
+       -v `pwd`:/root/go/src/github.com/dotmesh-io/dotmesh \
+       -w /root/go/src/github.com/dotmesh-io/dotmesh \
+       -e "CI_DOCKER_TAG=$CI_DOCKER_TAG" \
+       -e "CI_DOCKER_SERVER_IMAGE=$CI_DOCKER_SERVER_IMAGE" \
+       -e "CI_DOCKER_PROVISIONER_IMAGE=$CI_DOCKER_PROVISIONER_IMAGE" \
+       -e "CI_DOCKER_DIND_PROVISIONER_IMAGE=$CI_DOCKER_DIND_PROVISIONER_IMAGE" \
+       -e "CI_DOCKER_OPERATOR_IMAGE=$CI_DOCKER_OPERATOR_IMAGE" \
+       $BUILDER_IMAGE \
+       ./rebuild_without_bazel.sh "$@"
 
 # Docker builds leave stuff owned by root
 sudo chown -R `id -u` .
