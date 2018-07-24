@@ -115,6 +115,9 @@ type UserManager interface {
 	Get(q *Query) (*User, error)
 	Update(user *User) (*User, error)
 
+	// Import user without hashing password or generating API key
+	Import(user *User) error
+
 	UpdatePassword(id string, password string) (*User, error)
 	ResetAPIKey(id string) (*User, error)
 
@@ -224,6 +227,39 @@ func (m *DefaultManager) Update(user *User) (*User, error) {
 		return nil, err
 	}
 	return user, nil
+}
+
+// Import - imports user without generating password, API key
+func (m *DefaultManager) Import(user *User) error {
+
+	if user.Id == "" {
+		return fmt.Errorf("user ID not set")
+	}
+
+	if user.Name == "" {
+		return fmt.Errorf("user name not set")
+	}
+
+	if len(user.Password) == 0 {
+		return fmt.Errorf("user password not set")
+	}
+
+	if len(user.Salt) == 0 {
+		return fmt.Errorf("user password salt not set")
+	}
+
+	bts, err := json.Marshal(user)
+	if err != nil {
+		return err
+	}
+	_, err = m.kv.Set(UsersPrefix, user.Id, string(bts))
+	if err != nil {
+		return err
+	}
+
+	m.kv.AddToIndex(UsersPrefix, user.Name, user.Id)
+
+	return nil
 }
 
 func (m *DefaultManager) UpdatePassword(username string, password string) (*User, error) {
