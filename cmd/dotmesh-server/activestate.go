@@ -123,7 +123,7 @@ func activeState(f *fsMachine) stateFn {
 				return backoffState
 			}
 			if len(containers) > 0 {
-				log.Printf("[activeState:%s] Can't move filesystem when containers are using it. %s", f.filesystemId)
+				log.Printf("[activeState:%s] Can't move filesystem when containers are using it.", f.filesystemId)
 				f.innerResponses <- &Event{
 					Name: "cannot-move-while-containers-running",
 					Args: &EventArgs{"containers": containers},
@@ -183,14 +183,14 @@ func activeState(f *fsMachine) stateFn {
 			}
 			if sliceIndex > 0 {
 				log.Printf("found index %d", sliceIndex)
-				log.Printf("snapshots before %s", f.filesystem.snapshots)
+				log.Printf("snapshots before %+v", f.filesystem.snapshots)
 				func() {
 					f.snapshotsLock.Lock()
 					defer f.snapshotsLock.Unlock()
 					f.filesystem.snapshots = f.filesystem.snapshots[:sliceIndex]
 				}()
 				f.snapshotsModified <- true
-				log.Printf("snapshots after %s", f.filesystem.snapshots)
+				log.Printf("snapshots after %+v", f.filesystem.snapshots)
 			} else {
 				f.innerResponses <- &Event{
 					Name: "no-such-snapshot",

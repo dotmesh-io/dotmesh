@@ -165,7 +165,7 @@ func pushPeerState(f *fsMachine) stateFn {
 		case s := <-newSnapsOnMaster:
 			sn := s.(snapshot)
 			log.Printf(
-				"[pushPeerState] got snapshot %s while waiting for one to arrive", sn,
+				"[pushPeerState] got snapshot %+v while waiting for one to arrive", sn,
 			)
 			if sn.Id == targetSnapshot {
 				log.Printf(
@@ -190,13 +190,13 @@ func pushPeerState(f *fsMachine) stateFn {
 					responseEvent, nextState := f.mount()
 					if responseEvent.Name == "mounted" {
 						log.Printf(
-							"[pushPeerState:%s] unmounted case, returning nextState %s on snap %s",
+							"[pushPeerState:%s] unmounted case, returning nextState %+v on snap %s",
 							f.filesystemId, nextState, sn.Id,
 						)
 						return nextState
 					} else {
 						log.Printf(
-							"[pushPeerState:%s] unmounted case, returning nextState %s as mount failed: %+v",
+							"[pushPeerState:%s] unmounted case, returning nextState %+v as mount failed: %+v",
 							f.filesystemId, nextState, responseEvent,
 						)
 						return nextState

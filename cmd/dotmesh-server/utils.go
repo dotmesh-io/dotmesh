@@ -102,7 +102,7 @@ func consumePrelude(r io.Reader) (Prelude, error) {
 // apply the instructions encoded in the prelude to the system
 func applyPrelude(prelude Prelude, fqfs string) error {
 	// iterate over it setting zfs user properties accordingly.
-	log.Printf("[applyPrelude] Got prelude: %s", prelude)
+	log.Printf("[applyPrelude] Got prelude: %+v", prelude)
 	for _, j := range prelude.SnapshotProperties {
 		metadataEncoded, err := encodeMetadata(*j.Metadata)
 		if err != nil {
@@ -340,7 +340,7 @@ func (s *InMemoryState) waitForFilesystemDeath(filesystemId string) {
 		if ok {
 			log.Printf("[waitForFilesystemDeath:%s] state: %s, status: %s", filesystemId, fs.currentState, fs.status)
 		} else {
-			log.Printf("[waitForFilesystemDeath:%s] no fsMachine")
+			log.Printf("[waitForFilesystemDeath:%s] no fsMachine", filesystemId)
 		}
 		if !ok {
 			// filesystem is already gone!
@@ -455,6 +455,7 @@ func pipe(
 			fmt.Sprintf(
 				"Unsupported compression mode %s, choose one of 'compress', "+
 					"'decompress' or 'none'",
+				compressMode,
 			), r, w, r, w,
 		)
 		return
@@ -480,7 +481,7 @@ func pipe(
 			data := buffer[0:nr]
 			nw, wErr := writer.Write(data)
 			if nw != nr {
-				handleErr(fmt.Sprintf("short write %s (read) != %s (written)", nr, nw), reader, writer, r, w)
+				handleErr(fmt.Sprintf("short write %d (read) != %d (written)", nr, nw), reader, writer, r, w)
 				return
 			}
 			if f, ok := writer.(http.Flusher); ok {
@@ -567,7 +568,7 @@ func restrictSnapshots(localSnaps []*snapshot, toSnapshotId string) ([]*snapshot
 				return newLocalSnaps, nil
 			}
 		}
-		return newLocalSnaps, fmt.Errorf("Unable to find %s in %s", toSnapshotId, localSnaps)
+		return newLocalSnaps, fmt.Errorf("Unable to find %s in %+v", toSnapshotId, localSnaps)
 	}
 	return localSnaps, nil
 }

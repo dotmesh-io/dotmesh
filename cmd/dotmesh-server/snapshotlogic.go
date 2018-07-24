@@ -160,7 +160,7 @@ type NoCommonSnapshots struct {
 }
 
 func (e *NoCommonSnapshots) Error() string {
-	return fmt.Sprintf("no common snapshots from %s to %s", e.fromSnaps, e.toSnaps)
+	return fmt.Sprintf("no common snapshots from %+v to %+v", e.fromSnaps, e.toSnaps)
 }
 
 type ToSnapsDiverged struct {
@@ -169,7 +169,7 @@ type ToSnapsDiverged struct {
 
 func (e *ToSnapsDiverged) Error() string {
 	return fmt.Sprintf(
-		"toSnaps diverged (latest common snapshot=%s)",
+		"toSnaps diverged (latest common snapshot=%+v)",
 		e.latestCommonSnapshot,
 	)
 }

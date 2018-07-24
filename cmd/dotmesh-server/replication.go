@@ -86,7 +86,7 @@ func (z ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		finished := make(chan bool)
-		log.Printf("[ZFSSender:ServeHTTP] Got HTTP response +v", resp.StatusCode)
+		log.Printf("[ZFSSender:ServeHTTP] Got HTTP response %+v", resp.StatusCode)
 		w.WriteHeader(resp.StatusCode)
 		go pipe(resp.Body, url,
 			w, "proxied pull recipient",
@@ -289,7 +289,7 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		finished := make(chan bool)
-		log.Printf("[ZFSReceiver:%s] Got HTTP response +v", z.filesystem, resp.StatusCode)
+		log.Printf("[ZFSReceiver:%s] Got HTTP response %+v", z.filesystem, resp.StatusCode)
 		w.WriteHeader(resp.StatusCode)
 		go pipe(resp.Body, url,
 			w, "proxied push recipient",
