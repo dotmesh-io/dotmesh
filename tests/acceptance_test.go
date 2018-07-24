@@ -1032,13 +1032,34 @@ func TestDeletionSimple(t *testing.T) {
 }
 
 func checkTestContainerExits(t *testing.T, node string) {
-	citools.TryUntilSucceeds(func() error {
+	err := citools.TryUntilSucceeds(func() error {
 		result := citools.OutputFromRunOnNode(t, node, "docker ps")
 		if strings.Contains(result, "busybox") {
 			return fmt.Errorf("container still active")
 		}
 		return nil
 	}, "waiting for container to quit")
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func waitForDirtyState(t *testing.T, node string, fsname string) {
+	err := citools.TryUntilSucceeds(func() error {
+		uncommitedBytes, err := strconv.Atoi(strings.TrimSpace(citools.OutputFromRunOnNode(t, node, "dm list -H |grep "+fsname+" |cut -f 7")))
+		if err != nil {
+			t.Error(err)
+		}
+
+		if uncommitedBytes == 0 {
+			return fmt.Errorf("uncommited changes not detected on node, got uncommited bytes %v\n", uncommitedBytes)
+		}
+		return nil
+	}, "waiting for dirty state to show up")
+
+	if err != nil {
+		t.Error(err)
+	}
 }
 
 func setupBranchesForDeletion(t *testing.T, fsname string, node1 string, node2 string) {
@@ -1480,20 +1501,8 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		}
 		// now dirty the filesystem on node1 w/1MB before it can be received into
 		citools.RunOnNode(t, node1, citools.DockerRun(""+fsname+"")+" dd if=/dev/urandom of=/foo/Y bs=1024 count=1024")
-
-		for i := 0; i < 10; i++ {
-			dirty, err := strconv.Atoi(strings.TrimSpace(
-				citools.OutputFromRunOnNode(t, node1, "dm list -H |grep "+fsname+" |cut -f 7"),
-			))
-			if err != nil {
-				t.Error(err)
-			}
-			if dirty > 0 {
-				break
-			}
-			fmt.Printf("Not dirty yet, waiting...\n")
-			time.Sleep(time.Duration(i) * time.Second)
-		}
+		checkTestContainerExits(t, node1)
+		waitForDirtyState(t, node1, fsname)
 
 		// test incremental push
 		citools.RunOnNode(t, node2, "dm commit -m 'again'")
@@ -1519,18 +1528,7 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		// now dirty the filesystem on node1 w/1MB before it can be received into
 		citools.RunOnNode(t, node1, citools.DockerRun(""+fsname+"")+" dd if=/dev/urandom of=/foo/Y bs=1024 count=1024")
 		checkTestContainerExits(t, node1)
-		err = citools.TryUntilSucceeds(func() error {
-			uncommitedBytes := citools.OutputFromRunOnNode(t, node1, "dm list -H | cut -d $'\t' -f 7")
-			if uncommitedBytes == "0\n" {
-				return fmt.Errorf("uncommited changes not detected on node, got uncommited bytes %v\n", uncommitedBytes)
-			}
-			return nil
-		}, "looking for uncommited changes")
-
-		if err != nil {
-			t.Error(err)
-		}
-
+		waitForDirtyState(t, node1, fsname)
 		// test incremental push
 		citools.RunOnNode(t, node2, "dm commit -m 'again'")
 		result := citools.OutputFromRunOnNode(t, node2, "dm push cluster_0 || true") // an error code is ok
