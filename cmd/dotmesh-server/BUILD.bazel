@@ -55,6 +55,7 @@ go_library(
         "//pkg/registry:go_default_library",
         "//pkg/types:go_default_library",
         "//pkg/user:go_default_library",
+        "//pkg/validator:go_default_library",
         "//vendor/github.com/aws/aws-sdk-go/aws:go_default_library",
         "//vendor/github.com/aws/aws-sdk-go/aws/credentials:go_default_library",
         "//vendor/github.com/aws/aws-sdk-go/aws/session:go_default_library",

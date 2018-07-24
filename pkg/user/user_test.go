@@ -1,10 +1,13 @@
 package user
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/dotmesh-io/dotmesh/pkg/kv"
 	"github.com/dotmesh-io/dotmesh/pkg/testutil"
+
+	"github.com/nu7hatch/gouuid"
 )
 
 func TestCreateUser(t *testing.T) {
@@ -35,6 +38,58 @@ func TestCreateUser(t *testing.T) {
 		t.Errorf("APIKey not generated")
 	}
 
+}
+
+func TestImportUser(t *testing.T) {
+	etcdClient, teardown, err := testutil.GetEtcdClient()
+	if err != nil {
+		t.Fatalf("failed to get etcd client: %s", err)
+	}
+	defer teardown()
+
+	kvClient := kv.New(etcdClient, "usertests")
+
+	um := New(kvClient)
+
+	id, _ := uuid.NewV4()
+
+	immigrant := &User{
+		Id:       id.String(),
+		ApiKey:   "very_s3cr3t",
+		Salt:     []byte("black sea salt"),
+		Password: []byte("not sure why I am of type byte"),
+		Name:     "name here",
+		Email:    "casual@email.com",
+	}
+
+	err = um.Import(immigrant)
+	if err != nil {
+		t.Fatalf("didn't expect import to fail: %s", err)
+	}
+
+	stored, err := um.Get(&Query{
+		Ref: immigrant.Name,
+	})
+	if err != nil {
+		t.Errorf("failed to get imported user: %s", err)
+	}
+
+	if stored.Name != immigrant.Name {
+		t.Errorf("unexpected name: %s", stored.Name)
+	}
+	if stored.Id != immigrant.Id {
+		t.Errorf("unexpected id: %s", stored.Id)
+	}
+	if stored.ApiKey != immigrant.ApiKey {
+		t.Errorf("unexpected ApiKey: %s", stored.ApiKey)
+	}
+
+	if !bytes.Equal(stored.Password, immigrant.Password) {
+		t.Errorf("password doesn't match")
+	}
+	if !bytes.Equal(stored.Salt, immigrant.Salt) {
+		t.Errorf("salt doesn't match")
+	}
 }
 
 func TestGetWithIndex(t *testing.T) {
