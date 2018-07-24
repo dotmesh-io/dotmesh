@@ -36,6 +36,7 @@ docker run \
        -v $HOME/.docker:/root/.docker \
        -v /var/run:/var/run \
        -v `pwd`:/root/go/src/github.com/dotmesh-io/dotmesh \
+       -v dotmesh-go-cache:/root/go/src/github.com/dotmesh-io/dotmesh/.gocache \
        -w /root/go/src/github.com/dotmesh-io/dotmesh \
        -e "CI_DOCKER_TAG=$CI_DOCKER_TAG" \
        -e "CI_DOCKER_SERVER_IMAGE=$CI_DOCKER_SERVER_IMAGE" \
