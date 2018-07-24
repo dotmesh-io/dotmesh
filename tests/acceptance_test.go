@@ -1514,7 +1514,7 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		resp := citools.OutputFromRunOnNode(t, node1, "dm log")
 
 		if !strings.Contains(resp, "hello") {
-			t.Error("unable to find commit message remote's log output")
+			t.Errorf("unable to find commit message remote's log output, instead got %v\n", resp)
 		}
 		// now dirty the filesystem on node1 w/1MB before it can be received into
 		citools.RunOnNode(t, node1, citools.DockerRun(""+fsname+"")+" dd if=/dev/urandom of=/foo/Y bs=1024 count=1024")
@@ -1522,7 +1522,7 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		err = citools.TryUntilSucceeds(func() error {
 			uncommitedBytes := citools.OutputFromRunOnNode(t, node1, "dm list -H | cut -d $'\t' -f 7")
 			if uncommitedBytes == "0\n" {
-				return fmt.Errorf("uncommited changes not detected on node")
+				return fmt.Errorf("uncommited changes not detected on node, got uncommited bytes %v\n", uncommitedBytes)
 			}
 			return nil
 		}, "looking for uncommited changes")
@@ -1536,9 +1536,8 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		result := citools.OutputFromRunOnNode(t, node2, "dm push cluster_0 || true") // an error code is ok
 
 		if !strings.Contains(result, "uncommitted changes on volume where data would be written") {
-			t.Error(
-				"pushing didn't fail when there were known uncommited changes on the peer",
-			)
+			t.Errorf(
+				"pushing didn't fail when there were known uncommited changes on the peer. Got unexpected response %v on push\n", result)
 		}
 	})
 	t.Run("Diverged", func(t *testing.T) {
