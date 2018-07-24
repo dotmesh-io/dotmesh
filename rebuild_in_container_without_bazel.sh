@@ -29,6 +29,9 @@ docker build -f $WORKDIR/Dockerfile.build -t $BUILDER_IMAGE $WORKDIR
 
 rm -rf $WORKDIR
 
+# Docker builds leave stuff owned by root
+trap "sudo chown -R `id -u` ." EXIT
+
 docker run \
        -v $HOME/.docker:/root/.docker \
        -v /var/run:/var/run \
@@ -41,6 +44,3 @@ docker run \
        -e "CI_DOCKER_OPERATOR_IMAGE=$CI_DOCKER_OPERATOR_IMAGE" \
        $BUILDER_IMAGE \
        ./rebuild_without_bazel.sh "$@"
-
-# Docker builds leave stuff owned by root
-sudo chown -R `id -u` .

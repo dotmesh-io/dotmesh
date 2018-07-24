@@ -94,7 +94,7 @@ build_without_bazel:
     except:
         - schedules
 
-.build_operator:
+build_operator:
     stage: build
     tags:
         - ubuntu
