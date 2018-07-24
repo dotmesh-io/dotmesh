@@ -5,6 +5,10 @@
 set -ex
 
 OS=Linux
+if [ -n "$1" ]
+then
+    OS=$1
+fi
 
 if [ x$CI_DOCKER_TAG == x ]
 then

@@ -312,7 +312,7 @@ func (f *fsMachine) pull(
 			Args: &EventArgs{"err": err},
 		}, backoffState
 	}
-	log.Printf("Successfully received %s => %s for %s", fromSnapshotId, toSnapshotId)
+	log.Printf("Successfully received %s => %s for %s", fromSnapshotId, toSnapshotId, toFilesystemId)
 	return &Event{
 		Name: "finished-pull",
 	}, discoveringState
@@ -351,7 +351,7 @@ func (f *fsMachine) retryPull(
 		toSnapshotId = remoteSnaps[len(remoteSnaps)-1].Id
 	}
 	log.Printf(
-		"[retryPull] from (%s, %s) to (%s, %s), pollResult: %s",
+		"[retryPull] from (%s, %s) to (%s, %s), pollResult: %+v",
 		fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId, pollResult,
 	)
 
@@ -450,14 +450,14 @@ func (f *fsMachine) retryPull(
 		)
 		log.Printf(
 			"[retry attempt %d] squashing and retrying in %ds because we "+
-				"got a %s (which tried to put us into %s)...",
+				"got a %s (which tried to put us into %+v)...",
 			retry, retry, responseEvent, nextState,
 		)
 		time.Sleep(time.Duration(retry) * time.Second)
 	}
 	log.Printf(
 		"[actualPull] Maximum retry attempts exceeded, "+
-			"returning latest error: %s (to move into state %s)",
+			"returning latest error: %s (to move into state %+v)",
 		responseEvent, nextState,
 	)
 	return &Event{

@@ -343,7 +343,7 @@ func (f *fsMachine) transitionedTo(state string, status string) {
 		nil,
 	)
 	if err != nil {
-		log.Printf("error updating etcd: %s", update, err)
+		log.Printf("error updating etcd %+v: %+v", update, err)
 		return
 	}
 	// we don't hear our own echo, so set it locally too.
@@ -410,7 +410,7 @@ func (f *fsMachine) snapshot(e *Event) (responseEvent *Event, nextState stateFn)
 	func() {
 		f.snapshotsLock.Lock()
 		defer f.snapshotsLock.Unlock()
-		log.Printf("[snapshot] Succeeded snapshotting (out: '%s'), saving: %s", out, &snapshot{
+		log.Printf("[snapshot] Succeeded snapshotting (out: '%s'), saving: %+v", out, &snapshot{
 			Id: snapshotId, Metadata: &meta,
 		})
 		f.filesystem.snapshots = append(f.filesystem.snapshots,

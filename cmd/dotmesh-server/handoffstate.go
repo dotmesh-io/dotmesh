@@ -107,7 +107,7 @@ waitingForSlaveSnapshot:
 		apply, err := canApply(snaps, pointers(slaveSnapshots))
 		f.transitionedTo(
 			"handoff",
-			fmt.Sprintf("canApply returned %s, %s", apply, err),
+			fmt.Sprintf("canApply returned %+v, %v", apply, err),
 		)
 		if err != nil {
 			switch err.(type) {

@@ -180,7 +180,7 @@ func receivingState(f *fsMachine) stateFn {
 			err, f.filesystemId,
 		))
 	} else {
-		log.Printf("Successfully received %s => %s for %s", fromSnap, snapRange.toSnap.Id)
+		log.Printf("Successfully received %s => %s for %s", fromSnap, snapRange.toSnap.Id, f.filesystemId)
 	}
 	log.Printf("[pull] about to start applying prelude on %v", pipeReader)
 	err = applyPrelude(prelude, fq(f.filesystemId))

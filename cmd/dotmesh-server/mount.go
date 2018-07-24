@@ -66,6 +66,7 @@ func (f *fsMachine) mountSnap(snapId string, readonly bool) (responseEvent *Even
 							// pids can disappear between globbing and reading
 							log.Printf(
 								"[mount:%s] ignoring error reading pid mount table %v: %v",
+								fullId,
 								mountTable, err,
 							)
 							continue

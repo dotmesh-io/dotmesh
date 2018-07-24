@@ -29,4 +29,4 @@ docker build -f $WORKDIR/Dockerfile.build -t $BUILDER_IMAGE $WORKDIR
 
 rm -rf $WORKDIR
 
-docker run -v /var/run:/var/run -v `pwd`:/root/go/src/github.com/dotmesh-io/dotmesh -w /root/go/src/github.com/dotmesh-io/dotmesh $BUILDER_IMAGE ./rebuild_without_bazel.sh
+docker run -v /var/run:/var/run -v `pwd`:/root/go/src/github.com/dotmesh-io/dotmesh -w /root/go/src/github.com/dotmesh-io/dotmesh $BUILDER_IMAGE ./rebuild_without_bazel.sh "$@"

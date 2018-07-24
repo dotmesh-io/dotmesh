@@ -260,7 +260,7 @@ func (f *fsMachine) push(
 	)
 	postClient := new(http.Client)
 
-	log.Printf("[actualPush:%s] About to postClient.Do with req %s", filesystemId, req)
+	log.Printf("[actualPush:%s] About to postClient.Do with req %+v", filesystemId, req)
 
 	// postClient.Do will block trying to read the first byte of the request
 	// body. But, we won't be able to provide the first byte until we start
@@ -300,7 +300,7 @@ func (f *fsMachine) push(
 			log.Printf("[actualPush:%s] error closing pipeWriter: %s", filesystemId, err)
 		}
 		log.Printf(
-			"[actualPush:%s] Writing to errch",
+			"[actualPush:%s] Writing to errch: %+v",
 			filesystemId,
 			runErr,
 		)
@@ -439,7 +439,7 @@ func (f *fsMachine) retryPush(
 				toSnapshotId = snaps[len(snaps)-1].Id
 			}
 			log.Printf(
-				"[retryPush] from (%s, %s) to (%s, %s), pollResult: %s",
+				"[retryPush] from (%s, %s) to (%s, %s), pollResult: %+v",
 				fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId, pollResult,
 			)
 			var remoteSnaps []*snapshot
@@ -562,14 +562,14 @@ func (f *fsMachine) retryPush(
 		)
 		log.Printf(
 			"[retry attempt %d] squashing and retrying in %ds because we "+
-				"got a %s (which tried to put us into %s)...",
+				"got a %s (which tried to put us into state %p)...",
 			retry, retry, responseEvent, nextState,
 		)
 		time.Sleep(time.Duration(retry) * time.Second)
 	}
 	log.Printf(
 		"[actualPush] Maximum retry attempts exceeded, "+
-			"returning latest error: %s (to move into state %s)",
+			"returning latest error: %s (to move into state %p)",
 		responseEvent, nextState,
 	)
 	return responseEvent, nextState
