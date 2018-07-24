@@ -30,7 +30,7 @@ var (
 // errors
 var (
 	ErrEmptyName            = errors.New("name cannot be empty")
-	ErrInvalidVolumeName    = fmt.Errorf("invalid volume name, should match pattern: %s", VolumeNamePattern)
+	ErrInvalidVolumeName    = fmt.Errorf("invalid dot name, should match pattern: %s", VolumeNamePattern)
 	ErrInvalidNamespaceName = fmt.Errorf("invalid namespace name, should match pattern: %s", VolumeNamespacePattern)
 	ErrInvalidBranchName    = fmt.Errorf("invalid branch name, should match pattern: %s", BranchPattern)
 	ErrInvalidSubdotName    = fmt.Errorf("invalid subdot name, should match pattern: %s", SubDotPattern)
@@ -93,11 +93,7 @@ func IsValidVolumeNamespace(str string) error {
 }
 
 func IsValidBranchName(str string) error {
-	if str == "" {
-		return ErrEmptyName
-	}
-
-	if !rxBranch.MatchString(str) {
+	if str != "" && !rxBranch.MatchString(str) {
 		return ErrInvalidBranchName
 	}
 

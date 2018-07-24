@@ -57,20 +57,10 @@ func requireValidVolumeNameWithBranch(name VolumeName) error {
 		if err != nil {
 			return err
 		}
-
-		err = validator.IsValidVolumeName(shrapnel[0])
-		if err != nil {
-			return err
-		}
-
-	} else {
-		err := validator.IsValidVolumeName(name.Name)
-		if err != nil {
-			return err
-		}
+		return validator.IsValidVolume(name.Namespace, shrapnel[0])
 	}
 
-	return validator.IsValidVolumeNamespace(name.Namespace)
+	return validator.IsValidVolume(name.Namespace, name.Name)
 }
 
 func ensureAdminUser(r *http.Request) error {

@@ -56,7 +56,7 @@ func TestIsValidBranchName(t *testing.T) {
 		{
 			name:    "empty",
 			args:    args{str: ""},
-			wantErr: ErrEmptyName,
+			wantErr: nil,
 		},
 		{
 			name:    "funny characters shouldn't be valid",
