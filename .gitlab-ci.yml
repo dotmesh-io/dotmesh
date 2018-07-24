@@ -79,7 +79,21 @@ build_yaml:
     except:
         - schedules
 
-build_operator:
+build_without_bazel:
+    stage: build
+    tags:
+        - ubuntu
+        - fast
+    script:
+        - PUSH=YES ./rebuild_in_container_without_bazel.sh Linux
+    artifacts:
+        paths:
+            - target
+        expire_in: 1 week
+    except:
+        - schedules
+
+.build_operator:
     stage: build
     tags:
         - ubuntu
