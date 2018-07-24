@@ -399,6 +399,8 @@ func (d *DotmeshRPC) SetUserEmail(
 		return err
 	}
 
+	user.Email = args.Email
+
 	updated, err := d.usersManager.Update(user)
 	if err != nil {
 		return err
