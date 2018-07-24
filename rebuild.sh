@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 set -xe
 
-. build_setup.sh
+source build-lib.sh
 
-(cd cmd/dm && ./rebuild.sh Linux)
-if [ -z "${SKIP_K8S}" ]; then
-    ./rebuild_flexvolume.sh
-    ./rebuild_operator.sh
-    ./rebuild_provisioner.sh
-fi
-./rebuild_server.sh
-(cd kubernetes && ./rebuild.sh)
+main() {
+    build-client $1
+    if [ -z "${SKIP_K8S}" ]; then
+        build-provisioner
+        build-operator
+    fi
+    build-server
+    (cd kubernetes && ./rebuild.sh)
+}
+
+
+main $@
+

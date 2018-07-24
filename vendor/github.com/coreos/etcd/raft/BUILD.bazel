@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "doc.go",
+        "log.go",
+        "log_unstable.go",
+        "logger.go",
+        "node.go",
+        "progress.go",
+        "raft.go",
+        "rawnode.go",
+        "read_only.go",
+        "status.go",
+        "storage.go",
+        "util.go",
+    ],
+    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/coreos/etcd/raft",
+    importpath = "github.com/coreos/etcd/raft",
+    visibility = ["//visibility:public"],
+    deps = ["//vendor/github.com/coreos/etcd/raft/raftpb:go_default_library"],
+)

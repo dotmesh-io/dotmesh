@@ -29,12 +29,13 @@ go_library(
         "service_expansion.go",
         "serviceaccount.go",
     ],
+    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/k8s.io/client-go/listers/core/v1",
     importpath = "k8s.io/client-go/listers/core/v1",
     deps = [
-        "//vendor/k8s.io/api/core/v1:go_default_library",
-        "//vendor/k8s.io/apimachinery/pkg/api/errors:go_default_library",
-        "//vendor/k8s.io/apimachinery/pkg/labels:go_default_library",
-        "//vendor/k8s.io/client-go/tools/cache:go_default_library",
+        "//cmd/operator/vendor/k8s.io/api/core/v1:go_default_library",
+        "//cmd/operator/vendor/k8s.io/apimachinery/pkg/api/errors:go_default_library",
+        "//cmd/operator/vendor/k8s.io/apimachinery/pkg/labels:go_default_library",
+        "//cmd/operator/vendor/k8s.io/client-go/tools/cache:go_default_library",
     ],
 )
 

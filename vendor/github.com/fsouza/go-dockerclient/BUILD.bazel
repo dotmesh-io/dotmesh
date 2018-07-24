@@ -1,0 +1,32 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "auth.go",
+        "change.go",
+        "client.go",
+        "container.go",
+        "env.go",
+        "event.go",
+        "exec.go",
+        "image.go",
+        "misc.go",
+        "network.go",
+        "signal.go",
+        "tar.go",
+        "tls.go",
+        "volume.go",
+    ],
+    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/fsouza/go-dockerclient",
+    importpath = "github.com/fsouza/go-dockerclient",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/opts:go_default_library",
+        "//vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/archive:go_default_library",
+        "//vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/fileutils:go_default_library",
+        "//vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/homedir:go_default_library",
+        "//vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/stdcopy:go_default_library",
+        "//vendor/github.com/fsouza/go-dockerclient/external/github.com/hashicorp/go-cleanhttp:go_default_library",
+    ],
+)

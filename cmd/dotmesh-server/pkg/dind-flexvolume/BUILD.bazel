@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["flexvolume.go"],
+    importpath = "github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dind-flexvolume",
+    visibility = ["//visibility:private"],
+)
+
+go_binary(
+    name = "dind-flexvolume",
+    embed = [":go_default_library"],
+    goarch = "amd64",
+    goos = "linux",
+    pure = "on",
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["context.go"],
+    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/fsouza/go-dockerclient/external/golang.org/x/net/context",
+    importpath = "github.com/fsouza/go-dockerclient/external/golang.org/x/net/context",
+    visibility = ["//visibility:public"],
+)

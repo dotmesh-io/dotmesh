@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "canonical.go",
+        "compress.go",
+        "cors.go",
+        "doc.go",
+        "handlers.go",
+        "handlers_go18.go",
+        "handlers_pre18.go",
+        "proxy_headers.go",
+        "recovery.go",
+    ],
+    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/gorilla/handlers",
+    importpath = "github.com/gorilla/handlers",
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,10 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "acceptance_test.go",
+        "s3_test.go",
+    ],
+    deps = ["//vendor/github.com/dotmesh-io/citools:go_default_library"],
+)

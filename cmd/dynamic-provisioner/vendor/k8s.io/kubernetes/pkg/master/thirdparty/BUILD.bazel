@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["thirdparty.go"],
+    importmap = "github.com/dotmesh-io/dotmesh/cmd/dynamic-provisioner/vendor/k8s.io/kubernetes/pkg/master/thirdparty",
+    importpath = "k8s.io/kubernetes/pkg/master/thirdparty",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//cmd/dynamic-provisioner/vendor/github.com/golang/glog:go_default_library",
+        "//cmd/dynamic-provisioner/vendor/k8s.io/apimachinery/pkg/api/meta:go_default_library",
+        "//cmd/dynamic-provisioner/vendor/k8s.io/apimachinery/pkg/apis/meta/v1:go_default_library",
+        "//cmd/dynamic-provisioner/vendor/k8s.io/apimachinery/pkg/runtime:go_default_library",
+        "//cmd/dynamic-provisioner/vendor/k8s.io/apimachinery/pkg/runtime/schema:go_default_library",
+        "//cmd/dynamic-provisioner/vendor/k8s.io/kubernetes/pkg/registry/extensions/rest:go_default_library",
+        "@io_k8s_apiserver//pkg/endpoints:go_default_library",
+        "@io_k8s_apiserver//pkg/endpoints/handlers:go_default_library",
+        "@io_k8s_apiserver//pkg/endpoints/request:go_default_library",
+        "@io_k8s_apiserver//pkg/registry/generic:go_default_library",
+        "@io_k8s_apiserver//pkg/registry/rest:go_default_library",
+        "@io_k8s_apiserver//pkg/server:go_default_library",
+        "@io_k8s_apiserver//pkg/server/storage:go_default_library",
+        "@io_k8s_apiserver//pkg/storage/storagebackend:go_default_library",
+        "@io_k8s_kubernetes//pkg/api:go_default_library",
+        "@io_k8s_kubernetes//pkg/apis/extensions:go_default_library",
+        "@io_k8s_kubernetes//pkg/registry/extensions/thirdpartyresourcedata:go_default_library",
+        "@io_k8s_kubernetes//pkg/registry/extensions/thirdpartyresourcedata/storage:go_default_library",
+    ],
+)

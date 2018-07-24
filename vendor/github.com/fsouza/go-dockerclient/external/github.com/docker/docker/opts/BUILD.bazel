@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "envfile.go",
+        "hosts.go",
+        "hosts_unix.go",
+        "hosts_windows.go",
+        "ip.go",
+        "opts.go",
+        "opts_unix.go",
+        "opts_windows.go",
+    ],
+    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/opts",
+    importpath = "github.com/fsouza/go-dockerclient/external/github.com/docker/docker/opts",
+    visibility = ["//visibility:public"],
+)

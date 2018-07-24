@@ -23,6 +23,8 @@ go_library(
         "scale_expansion.go",
         "thirdpartyresource.go",
     ],
+    importmap = "github.com/dotmesh-io/dotmesh/vendor/k8s.io/client-go/kubernetes/typed/extensions/v1beta1",
+    importpath = "k8s.io/client-go/kubernetes/typed/extensions/v1beta1",
     tags = ["automanaged"],
     deps = [
         "//vendor/k8s.io/apimachinery/pkg/api/meta:go_default_library",

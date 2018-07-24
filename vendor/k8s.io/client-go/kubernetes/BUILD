@@ -13,6 +13,8 @@ go_library(
         "clientset.go",
         "doc.go",
     ],
+    importmap = "github.com/dotmesh-io/dotmesh/vendor/k8s.io/client-go/kubernetes",
+    importpath = "k8s.io/client-go/kubernetes",
     tags = ["automanaged"],
     deps = [
         "//vendor/github.com/golang/glog:go_default_library",

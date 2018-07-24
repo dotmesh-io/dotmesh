@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "tlf.go",
+        "types.go",
+        "volumes.go",
+    ],
+    importpath = "github.com/dotmesh-io/dotmesh/pkg/types",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/auth:go_default_library",
+        "//pkg/user:go_default_library",
+    ],
+)

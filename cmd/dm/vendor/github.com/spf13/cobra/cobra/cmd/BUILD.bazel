@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["licenses.go"],
+    importmap = "github.com/dotmesh-io/dotmesh/cmd/dm/vendor/github.com/spf13/cobra/cobra/cmd",
+    importpath = "github.com/spf13/cobra/cobra/cmd",
+    visibility = ["//visibility:public"],
+)
