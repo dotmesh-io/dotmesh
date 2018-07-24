@@ -1518,12 +1518,24 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		}
 		// now dirty the filesystem on node1 w/1MB before it can be received into
 		citools.RunOnNode(t, node1, citools.DockerRun(""+fsname+"")+" dd if=/dev/urandom of=/foo/Y bs=1024 count=1024")
+		checkTestContainerExits(t, node1)
+		err = citools.TryUntilSucceeds(func() error {
+			uncommitedBytes := citools.OutputFromRunOnNode(t, node1, "dm list -H | cut -d $'\t' -f 7")
+			if uncommitedBytes == "0\n" {
+				return fmt.Errorf("uncommited changes not detected on node")
+			}
+			return nil
+		}, "looking for uncommited changes")
+
+		if err != nil {
+			t.Error(err)
+		}
 
 		// test incremental push
 		citools.RunOnNode(t, node2, "dm commit -m 'again'")
 		result := citools.OutputFromRunOnNode(t, node2, "dm push cluster_0 || true") // an error code is ok
 
-		if !strings.Contains(result, "has been modified") {
+		if !strings.Contains(result, "uncommitted changes on volume where data would be written") {
 			t.Error(
 				"pushing didn't fail when there were known uncommited changes on the peer",
 			)
