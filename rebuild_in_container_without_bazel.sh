@@ -30,6 +30,7 @@ docker build -f $WORKDIR/Dockerfile.build -t $BUILDER_IMAGE $WORKDIR
 rm -rf $WORKDIR
 
 docker run \
+       -v $HOME/.docker:/root/.docker \
        -v /var/run:/var/run \
        -v `pwd`:/root/go/src/github.com/dotmesh-io/dotmesh \
        -w /root/go/src/github.com/dotmesh-io/dotmesh \
