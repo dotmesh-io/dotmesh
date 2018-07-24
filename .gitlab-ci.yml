@@ -80,7 +80,7 @@ build_yaml:
     except:
         - schedules
 
-build_without_bazel:
+.build_without_bazel:
     stage: build
     tags:
         - ubuntu
