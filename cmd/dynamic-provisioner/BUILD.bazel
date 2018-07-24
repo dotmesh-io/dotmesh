@@ -32,7 +32,7 @@ docker_push(
     name = "provisioner_push",
     image = ":dynamic-provisioner",
     registry = "{CI_REGISTRY}",
-    repository = "dotmesh/dotmesh-dynamic-provisioner",
+    repository = "{CI_REPOSITORY}/dotmesh-dynamic-provisioner",
     stamp = 1,
     tag = "{DOCKERTAG}",
 )

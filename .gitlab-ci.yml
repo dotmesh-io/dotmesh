@@ -3,8 +3,10 @@ variables:
     PROVISIONER_NAME: dotmesh-dynamic-provisioner
 
     CI_REGISTRY: registry.gitlab.dotmesh.com
-    CI_DOCKER_REGISTRY: registry.gitlab.dotmesh.com/dotmesh/dotmesh-sync
+    CI_REPOSITORY: dotmesh/dotmesh-sync
+    CI_DOCKER_REGISTRY: $CI_REGISTRY/$CI_REPOSITORY
     RELEASE_DOCKER_REGISTRY: quay.io
+    RELEASE_DOCKER_REPOSITORY: dotmesh
 
     CI_DOCKER_TAG: $CI_COMMIT_SHA
 
@@ -512,7 +514,7 @@ publish_images:
     script:
         # push to quay.io, by re-tagging and pushing the images
         - docker login -u $QUAY_USER -p $QUAY_PASSWORD $RELEASE_DOCKER_REGISTRY
-        - ./release-images.sh $RELEASE_DOCKER_REGISTRY
+        - ./release-images.sh $RELEASE_DOCKER_REGISTRY $RELEASE_DOCKER_REPOSITORY
     except:
         - schedules
 

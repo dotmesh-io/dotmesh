@@ -44,7 +44,7 @@ docker_push(
     name = "operator_push",
     image = ":operator",
     registry = "{CI_REGISTRY}",
-    repository = "dotmesh/operator",
+    repository = "{CI_REPOSITORY}/operator",
     stamp = True,
     tag = "{DOCKERTAG}",
 )

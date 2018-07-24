@@ -105,7 +105,7 @@ docker_push(
     name = "dotmesh-server_push",
     image = ":dotmesh-server-img",
     registry = "{CI_REGISTRY}",
-    repository = "dotmesh/dotmesh-server",
+    repository = "{CI_REPOSITORY}/dotmesh-server",
     stamp = 1,
     tag = "{DOCKERTAG}",
 )

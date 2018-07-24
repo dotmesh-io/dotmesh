@@ -33,7 +33,7 @@ docker_push(
     name = "dind_push",
     image = ":dind-dynamic-provisioning",
     registry = "{CI_REGISTRY}",
-    repository = "dotmesh/dotmesh-dind-dynamic-provisioner",
+    repository = "{CI_REPOSITORY}/dotmesh-dind-dynamic-provisioner",
     stamp = 1,
     tag = "{DOCKERTAG}",
 )
