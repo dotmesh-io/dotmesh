@@ -2,8 +2,8 @@ variables:
     SERVER_NAME: dotmesh-server
     PROVISIONER_NAME: dotmesh-dynamic-provisioner
 
-    CI_REGISTRY: registry.containers.ovh.net
-    CI_DOCKER_REGISTRY: registry.containers.ovh.net/dotmesh
+    CI_REGISTRY: registry.gitlab.dotmesh.com
+    CI_DOCKER_REGISTRY: registry.gitlab.dotmesh.com/dotmesh
     RELEASE_DOCKER_REGISTRY: quay.io
 
     CI_DOCKER_TAG: $CI_COMMIT_SHA
@@ -85,8 +85,8 @@ build_operator:
         - ubuntu
         - fast
     script:
-        # push to the OVH registry.
-        - docker login -u $OVH_REGISTRY_USERNAME -p $OVH_REGISTRY_PASSWORD registry.containers.ovh.net
+        # push to the CI registry
+        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
         - (./rebuild_operator.sh) # also pushes
         - echo "pushed $CI_DOCKER_OPERATOR_IMAGE"
     artifacts:
@@ -102,8 +102,8 @@ build_provisioner:
         - ubuntu
         - fast
     script:
-        # push to the OVH registry.
-        - docker login -u $OVH_REGISTRY_USERNAME -p $OVH_REGISTRY_PASSWORD registry.containers.ovh.net
+        # push to the CI registry
+        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
         - (./rebuild_provisioner.sh) # also pushes
         - echo "pushed $CI_DOCKER_PROVISIONER_IMAGE"
     artifacts:
@@ -119,8 +119,8 @@ build_server:
         - ubuntu
         - fast
     script:
-        # push to the OVH registry.
-        - docker login -u $OVH_REGISTRY_USERNAME -p $OVH_REGISTRY_PASSWORD registry.containers.ovh.net
+        # push to the CI registry
+        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
         - (./rebuild_server.sh) # also pushes
         - echo "pushed $CI_DOCKER_SERVER_IMAGE"
         - echo "pushed $CI_DOCKER_DIND_PROVISIONER_IMAGE"
@@ -496,7 +496,7 @@ publish_images:
         - fast
     script:
         # push to quay.io, by re-tagging and pushing the images
-        - docker login -u $QUAY_USER -p $QUAY_PASSWORD quay.io
+        - docker login -u $QUAY_USER -p $QUAY_PASSWORD $RELEASE_DOCKER_REGISTRY
         - ./release-images.sh $RELEASE_DOCKER_REGISTRY
     except:
         - schedules
