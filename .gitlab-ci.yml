@@ -3,7 +3,7 @@ variables:
     PROVISIONER_NAME: dotmesh-dynamic-provisioner
 
     CI_REGISTRY: registry.gitlab.dotmesh.com
-    CI_DOCKER_REGISTRY: registry.gitlab.dotmesh.com/dotmesh
+    CI_DOCKER_REGISTRY: registry.gitlab.dotmesh.com/dotmesh/dotmesh-sync
     RELEASE_DOCKER_REGISTRY: quay.io
 
     CI_DOCKER_TAG: $CI_COMMIT_SHA
