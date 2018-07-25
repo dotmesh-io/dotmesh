@@ -114,10 +114,9 @@ container_image(
 container_image(
     base = ":docker-bin",
     name = "dotmesh-server-img",
-    files = ["//cmd/dotmesh-server:dotmesh-server",
+    files = [":dotmesh-server",
         "//cmd/dotmesh-server/pkg/dind-flexvolume",
-        "//cmd/flexvolume",
-        "require_zfs.sh"
+        "//cmd/flexvolume"
         ],
     directory = "/usr/local/bin",
     stamp = True
