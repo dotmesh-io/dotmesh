@@ -21,7 +21,7 @@
 #   go-tests = true
 #   unused-packages = true
 
-ignored = ["github.com/dotmesh-io/cmd/dotmesh-server/pkg*", "github.com/dotmesh-io/cmd/dm", "github.com/dotmesh-io/tests"]
+ignored = ["github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg*", "github.com/dotmesh-io/dotmesh/cmd/dm", "github.com/dotmesh-io/dotmesh/tests"]
 
 [[constraint]]
   branch = "master"
