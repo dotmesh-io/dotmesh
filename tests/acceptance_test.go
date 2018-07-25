@@ -1680,7 +1680,7 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 	t.Run("VolumeNameValidityChecking", func(t *testing.T) {
 		// 1) dm init
 		resp := citools.OutputFromRunOnNode(t, node1, "if dm init @; then false; else true; fi ")
-		if !strings.Contains(resp, "Invalid dot name") {
+		if !strings.Contains(resp, "invalid dot name") {
 			t.Errorf("Didn't get an error when attempting to dm init an invalid volume name: %s", resp)
 		}
 
@@ -1693,18 +1693,18 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 
 		resp = citools.OutputFromRunOnNode(t, node1, "if dm clone cluster_0 "+fsname+" --local-name @; then false; else true; fi ")
 
-		if !strings.Contains(resp, "Invalid dot name") {
+		if !strings.Contains(resp, "invalid dot name") {
 			t.Errorf("Didn't get an error when attempting to dm clone to an invalid volume name: %s", resp)
 		}
 
 		resp = citools.OutputFromRunOnNode(t, node1, "if dm pull cluster_0 @ --remote-name "+fsname+"; then false; else true; fi ")
-		if !strings.Contains(resp, "Invalid dot name") {
+		if !strings.Contains(resp, "invalid dot name") {
 			t.Errorf("Didn't get an error when attempting to dm pull to an invalid volume name: %s", resp)
 		}
 
 		// 3) push it
 		resp = citools.OutputFromRunOnNode(t, node2, "if dm push cluster_0 "+fsname+" --remote-name @; then false; else true; fi ")
-		if !strings.Contains(resp, "Invalid dot name") {
+		if !strings.Contains(resp, "invalid dot name") {
 			t.Errorf("Didn't get an error when attempting to dm push to an invalid volume name: %s", resp)
 		}
 	})
