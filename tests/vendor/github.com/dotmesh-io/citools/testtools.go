@@ -1529,6 +1529,9 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 	// Set node labels, for testing the operator.
 	// Node N should have labels "clusterSize-X=yes" for X in N..(max-1)
 	// so we can limit a pod to "clusterSize-5=yes" to make it only run on 5 nodes.
+
+	// Also, if we're running in CI, set up the docker pull secrets so we
+	// can access the CI images.
 	time.Sleep(5 * time.Second) // Sleep to let kubelets all get started properly
 	for j := 0; j < c.DesiredNodeCount; j++ {
 		for k := j; k < c.DesiredNodeCount; k++ {
@@ -1539,6 +1542,18 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			), nil)
 			if err != nil {
 				return err
+			}
+
+			registry := os.Getenv("CI_REGISTRY")
+			token := os.Getenv("CI_BUILD_TOKEN")
+			if registry != "" && token != "" {
+				_, err = docker(nodeName(now, i, 0), fmt.Sprintf(
+					"kubectl create secret docker-registry regcred --docker-server=%s --docker-username=gitlab-ci-token --docker-password=%s",
+					registry,
+					token), nil)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
