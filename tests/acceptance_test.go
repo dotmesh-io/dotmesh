@@ -1285,16 +1285,19 @@ func TestTwoNodesSameCluster(t *testing.T) {
 				}
 				dmLog := citools.OutputFromRunOnNode(t, node, "dm log")
 				if !strings.Contains(dmLog, "First commit") || !strings.Contains(dmLog, "Node1CommitHash") {
-					fmt.Printf("Absence of converged commits on  branch master on node :%s\n%s", node, dmLog)
+					fmt.Printf("Absence of converged commits on branch master on node: %s\n%s", node, dmLog)
 					problemsFound = true
 				}
 
 				dmBranch := citools.OutputFromRunOnNode(t, node, "dm branch | grep DIVERGED")
-				citools.RunOnNode(t, node, fmt.Sprintf("dm checkout %s", strings.TrimSpace(dmBranch)))
+				citools.RunOnNode(
+					t, node,
+					fmt.Sprintf("dm checkout %s", strings.TrimSpace(strings.Replace(dmBranch, "*", "", -1))),
+				)
 
 				dmLog = citools.OutputFromRunOnNode(t, node, "dm log")
 				if !strings.Contains(dmLog, "node2 commit") {
-					fmt.Printf("Absence of non-master diverged commits on  branch *DIVERGED on node :%s\n%s", node, dmLog)
+					fmt.Printf("Absence of non-master diverged commits on branch *DIVERGED on node: %s\n%s", node, dmLog)
 					problemsFound = true
 				}
 
