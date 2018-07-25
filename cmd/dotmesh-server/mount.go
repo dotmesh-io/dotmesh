@@ -47,7 +47,7 @@ func (f *fsMachine) mountSnap(snapId string, readonly bool) (responseEvent *Even
 		if err != nil {
 			return &Event{
 				Name: "failed-settings-canmount-noauto",
-				Args: &EventArgs{"err": err, "out": out, "zfsPath", zfsPath},
+				Args: &EventArgs{"err": err, "out": out, "zfsPath": zfsPath},
 			}, backoffState
 		}
 		logZFSCommand(fullId, fmt.Sprintf("mount.zfs -o %s %s %s", options, zfsPath, mountPath))
