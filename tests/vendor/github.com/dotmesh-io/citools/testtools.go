@@ -1436,11 +1436,17 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 	err := System("bash", "-c",
 		fmt.Sprintf(
 			`MASTER=%s
+echo ABS TEST 1
 			docker exec $MASTER mkdir /dotmesh-kube-yaml
+echo ABS TEST 2
 			for X in ../kubernetes/*.yaml; do docker cp $X $MASTER:/dotmesh-kube-yaml/; done
+echo ABS TEST 3
 			docker exec $MASTER sed -i 's/quay.io\/dotmesh\/dotmesh-operator:DOCKER_TAG/%s/' /dotmesh-kube-yaml/dotmesh.yaml
+echo ABS TEST 4
 			docker exec $MASTER sed -i 's/quay.io\/dotmesh\/dotmesh-dynamic-provisioner:DOCKER_TAG/%s/' /dotmesh-kube-yaml/dotmesh.yaml
+echo ABS TEST 4
 			docker exec $MASTER sed -i 's/size: 3/size: 1/' /dotmesh-kube-yaml/dotmesh-etcd-cluster.yaml
+echo ABS TEST 6
 			`,
 			nodeName(now, i, 0),
 			strings.Replace(LocalImage("dotmesh-operator"), "/", "\\/", -1),
@@ -1450,6 +1456,8 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 	if err != nil {
 		return err
 	}
+
+	fmt.Printf("ABS TEST 7\n")
 
 	st, err := docker(
 		nodeName(now, i, 0),
