@@ -1218,106 +1218,108 @@ func TestTwoNodesSameCluster(t *testing.T) {
 		}
 	})
 
-	// This test is disabled until we fix https://github.com/dotmesh-io/dotmesh/issues/493 :-(
-	t.Run("Divergence", func(t *testing.T) {
-		fsname := citools.UniqName()
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO'")
-		citools.RunOnNode(t, node1, "dm switch "+fsname)
-		citools.RunOnNode(t, node1, "dm commit -m 'First commit'")
-		ensureDotIsFullyReplicated(t, node1, fsname)
-		ensureDotIsFullyReplicated(t, node2, fsname)
-		time.Sleep(3 * time.Second)
+	if true {
+		// This test is disabled until we fix https://github.com/dotmesh-io/dotmesh/issues/493 :-(
+		t.Run("Divergence", func(t *testing.T) {
+			fsname := citools.UniqName()
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO'")
+			citools.RunOnNode(t, node1, "dm switch "+fsname)
+			citools.RunOnNode(t, node1, "dm commit -m 'First commit'")
+			ensureDotIsFullyReplicated(t, node1, fsname)
+			ensureDotIsFullyReplicated(t, node2, fsname)
+			time.Sleep(3 * time.Second)
 
-		fsId := strings.TrimSpace(citools.OutputFromRunOnNode(t, node1, "dm dot show -H | grep masterBranchId | cut -f 2"))
+			fsId := strings.TrimSpace(citools.OutputFromRunOnNode(t, node1, "dm dot show -H | grep masterBranchId | cut -f 2"))
 
-		// Kill node1
-		stopContainers(t, node1)
+			// Kill node1
+			stopContainers(t, node1)
 
-		// Commit on node2
-		citools.RunOnNode(t, node2, "dm dot smash-branch-master "+fsname+" master")
-		citools.RunOnNode(t, node2, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO2'")
-		citools.RunOnNode(t, node2, "dm switch "+fsname)
-		citools.RunOnNode(t, node2, "dm commit -m 'node2 commit'")
-		citools.RunOnNode(t, node2, "dm dot show")
+			// Commit on node2
+			citools.RunOnNode(t, node2, "dm dot smash-branch-master "+fsname+" master")
+			citools.RunOnNode(t, node2, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO2'")
+			citools.RunOnNode(t, node2, "dm switch "+fsname)
+			citools.RunOnNode(t, node2, "dm commit -m 'node2 commit'")
+			citools.RunOnNode(t, node2, "dm dot show")
 
-		// Kill node2
-		stopContainers(t, node2)
+			// Kill node2
+			stopContainers(t, node2)
 
-		// Start node1
-		startContainers(t, node1)
+			// Start node1
+			startContainers(t, node1)
 
-		// Commit on node1
-		citools.RunOnNode(t, node1, "dm dot smash-branch-master "+fsname+" master")
+			// Commit on node1
+			citools.RunOnNode(t, node1, "dm dot smash-branch-master "+fsname+" master")
 
-		zfsPath := strings.Replace(node1, "cluster", "testpool", -1) + "/dmfs/" + fsId + "@Node1CommitHash"
+			zfsPath := strings.Replace(node1, "cluster", "testpool", -1) + "/dmfs/" + fsId + "@Node1CommitHash"
 
-		// Manual ZFS snapshot to circumvent etcd
-		citools.RunOnNode(t, node1, "docker exec -t dotmesh-server-inner zfs snapshot "+zfsPath)
+			// Manual ZFS snapshot to circumvent etcd
+			citools.RunOnNode(t, node1, "docker exec -t dotmesh-server-inner zfs snapshot "+zfsPath)
 
-		stopContainers(t, node1)
-		startContainers(t, node1)
-		citools.RunOnNode(t, node1, "dm dot show")
+			stopContainers(t, node1)
+			startContainers(t, node1)
+			citools.RunOnNode(t, node1, "dm dot show")
 
-		// Start node2 and enjoy the diverged state
-		startContainers(t, node2)
-		citools.RunOnNode(t, node1, "dm dot show")
-		citools.RunOnNode(t, node2, "dm dot show")
+			// Start node2 and enjoy the diverged state
+			startContainers(t, node2)
+			citools.RunOnNode(t, node1, "dm dot show")
+			citools.RunOnNode(t, node2, "dm dot show")
 
-		// Check status of convergence
-		var try int64
-		itWorkedInTheEnd := false
-	retryLoop:
-		for try = 1; try < 5; try++ {
-			for _, node := range [...]string{node1, node2} {
-				problemsFound := false
+			// Check status of convergence
+			var try int64
+			itWorkedInTheEnd := false
+		retryLoop:
+			for try = 1; try < 15; try++ {
+				for _, node := range [...]string{node1, node2} {
+					problemsFound := false
 
-				dotStatus := citools.OutputFromRunOnNode(t, node, "dm dot show")
+					dotStatus := citools.OutputFromRunOnNode(t, node, "dm dot show")
 
-				// Check for fatal errors
-				if strings.Contains(dotStatus, "status: failed") {
-					t.Errorf("One or more state machines have failed: %s\n", dotStatus)
-					break retryLoop
-				}
+					// Check for fatal errors
+					if strings.Contains(dotStatus, "status: failed") {
+						t.Errorf("One or more state machines have failed: %s\n", dotStatus)
+						break retryLoop
+					}
 
-				// Log and continue on things that might get better
-				if !strings.Contains(dotStatus, "DIVERGED") || strings.Contains(dotStatus, "is missing") {
-					fmt.Printf("Absence of Divergence branch or incomplete resolution on node: %s\n%s\n", node, dotStatus)
-					problemsFound = true
-				}
-				dmLog := citools.OutputFromRunOnNode(t, node, "dm log")
-				if !strings.Contains(dmLog, "First commit") || !strings.Contains(dmLog, "Node1CommitHash") {
-					fmt.Printf("Absence of converged commits on branch master on node: %s\n%s", node, dmLog)
-					problemsFound = true
-				}
+					// Log and continue on things that might get better
+					if !strings.Contains(dotStatus, "DIVERGED") || strings.Contains(dotStatus, "is missing") {
+						fmt.Printf("Absence of Divergence branch or incomplete resolution on node: %s\n%s\n", node, dotStatus)
+						problemsFound = true
+					}
+					dmLog := citools.OutputFromRunOnNode(t, node, "dm log")
+					if !strings.Contains(dmLog, "First commit") || !strings.Contains(dmLog, "Node1CommitHash") {
+						fmt.Printf("Absence of converged commits on branch master on node: %s\n%s", node, dmLog)
+						problemsFound = true
+					}
 
-				dmBranch := citools.OutputFromRunOnNode(t, node, "dm branch | grep DIVERGED")
-				citools.RunOnNode(
-					t, node,
-					fmt.Sprintf("dm checkout %s", strings.TrimSpace(strings.Replace(dmBranch, "*", "", -1))),
-				)
+					dmBranch := citools.OutputFromRunOnNode(t, node, "dm branch | grep DIVERGED")
+					citools.RunOnNode(
+						t, node,
+						fmt.Sprintf("dm checkout %s", strings.TrimSpace(strings.Replace(dmBranch, "*", "", -1))),
+					)
 
-				dmLog = citools.OutputFromRunOnNode(t, node, "dm log")
-				if !strings.Contains(dmLog, "node2 commit") {
-					fmt.Printf("Absence of non-master diverged commits on branch *DIVERGED on node: %s\n%s", node, dmLog)
-					problemsFound = true
-				}
+					dmLog = citools.OutputFromRunOnNode(t, node, "dm log")
+					if !strings.Contains(dmLog, "node2 commit") {
+						fmt.Printf("Absence of non-master diverged commits on branch *DIVERGED on node: %s\n%s", node, dmLog)
+						problemsFound = true
+					}
 
-				if problemsFound {
-					fmt.Printf("Sleeping for %d seconds then trying again...\n", 2*try)
-					time.Sleep(2 * time.Duration(try) * time.Second)
-					continue retryLoop
-				} else {
-					// Everything's good!
-					itWorkedInTheEnd = true
-					break retryLoop
+					if problemsFound {
+						fmt.Printf("Sleeping for %d seconds then trying again...\n", 2*try)
+						time.Sleep(2 * time.Duration(try) * time.Second)
+						continue retryLoop
+					} else {
+						// Everything's good!
+						itWorkedInTheEnd = true
+						break retryLoop
+					}
 				}
 			}
-		}
 
-		if !itWorkedInTheEnd {
-			t.Errorf("After %d retries, we never got to a good diverged state :-(", try)
-		}
-	})
+			if !itWorkedInTheEnd {
+				t.Errorf("After %d retries, we never got to a good diverged state :-(", try)
+			}
+		})
+	}
 }
 
 func TestTwoDoubleNodeClusters(t *testing.T) {
