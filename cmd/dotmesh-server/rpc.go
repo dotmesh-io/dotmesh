@@ -51,6 +51,9 @@ func requireValidVolumeNameWithBranch(name VolumeName) error {
 
 	if strings.Contains(name.Name, "@") {
 		shrapnel := strings.Split(name.Name, "@")
+		if len(shrapnel) != 2 {
+			return fmt.Errorf("invalid volume name: %s", name.Name)
+		}
 		name.Name = shrapnel[0]
 
 		err := validator.IsValidBranchName(shrapnel[1])
