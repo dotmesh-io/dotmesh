@@ -2,7 +2,13 @@ load("@io_bazel_rules_docker//go:image.bzl", "go_image")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_binary", "go_test")
 load("@io_bazel_rules_docker//docker:docker.bzl", "docker_push")
 load("@io_bazel_rules_docker//container:container.bzl", "container_image")
-
+filegroup(
+    name = "require_zfs",
+    srcs = [
+        "require_zfs.sh",
+    ],
+    visibility = ["//visibility:private"]
+)
 go_library(
     name = "go_default_library",
     srcs = [
@@ -91,15 +97,30 @@ go_binary(
 )
 
 container_image(
+    base = "@ubuntu_base//image",
+    name = "zfs",
+    cmd = ["apt-get -y update && apt-get -y install zfsutils-linux iproute kmod curl"],
+    files = [":require_zfs"],
+    directory = "/"
+)
+
+container_image(
+    base = ":zfs",
+    name = "docker-bin",
+    files = ["@docker//:docker"],
+    directory = "/usr/local/bin"
+)
+
+container_image(
+    base = ":docker-bin",
     name = "dotmesh-server-img",
-    base = "//:dotmesh-base.tar",
-    files = [
-        "//cmd/dotmesh-server:dotmesh-server",
+    files = ["//cmd/dotmesh-server:dotmesh-server",
         "//cmd/dotmesh-server/pkg/dind-flexvolume",
         "//cmd/flexvolume",
-    ],
+        "require_zfs.sh"
+        ],
     directory = "/usr/local/bin",
-    visibility = ["//visibility:public"],
+    stamp = True
 )
 
 docker_push(

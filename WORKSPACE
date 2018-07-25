@@ -1,11 +1,11 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
-
 http_archive(
     name = "io_bazel_rules_docker",
     sha256 = "6dede2c65ce86289969b907f343a1382d33c14fbce5e30dd17bb59bb55bb6593",
     strip_prefix = "rules_docker-0.4.0",
     urls = ["https://github.com/bazelbuild/rules_docker/archive/v0.4.0.tar.gz"],
 )
+
 
 http_archive(
     name = "io_bazel_rules_go",
@@ -19,6 +19,12 @@ http_archive(
     sha256 = "bc653d3e058964a5a26dcad02b6c72d7d63e6bb88d94704990b908a1445b8758",
 )
 
+new_http_archive(
+    name = "docker",
+    url = "https://download.docker.com/linux/static/edge/x86_64/docker-17.10.0-ce.tgz",
+    build_file = "docker-binary-build.bazel"
+)
+
 load(
     "@io_bazel_rules_docker//go:image.bzl",
     _go_image_repos = "repositories",
@@ -30,6 +36,13 @@ load(
     "@io_bazel_rules_docker//container:container.bzl",
     "container_pull",
     container_repositories = "repositories",
+)
+
+container_pull(
+  name = "ubuntu_base",
+  registry = "index.docker.io",
+  repository = "library/ubuntu",
+    tag = "artful",
 )
 
 # This is NOT needed when going through the language lang_image

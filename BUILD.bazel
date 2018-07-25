@@ -4,5 +4,3 @@ gazelle(
     name = "gazelle",
     prefix = "github.com/dotmesh-io/dotmesh",
 )
-
-exports_files(["dotmesh-base.tar"])

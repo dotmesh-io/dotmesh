@@ -1,0 +1,7 @@
+filegroup(
+    name = "docker",
+    srcs = [
+        "docker/docker",
+    ],
+    visibility = ["//visibility:public"]
+)
