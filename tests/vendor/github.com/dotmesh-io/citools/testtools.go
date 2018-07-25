@@ -363,7 +363,7 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 				mount --make-shared $MOUNTPOINT;
 			fi
 			(cd %s
-				EXTRA_DOCKER_ARGS="-v /dotmesh-test-pools:/dotmesh-test-pools:rshared -v /var/run/docker.sock:/hostdocker.sock %s " \
+				EXTRA_DOCKER_ARGS="-v $HOME/.docker:/root/.docker -v /dotmesh-test-pools:/dotmesh-test-pools:rshared -v /var/run/docker.sock:/hostdocker.sock %s " \
 				CNI_PLUGIN=weave %s bare $NODE %s)
 			sleep 1
 			echo "About to run docker exec on $NODE"
