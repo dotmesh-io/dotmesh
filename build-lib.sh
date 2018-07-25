@@ -61,6 +61,10 @@ build-server() {
     echo "Building dotmesh-server container"
     # TODO serverVersion?
     bazel-with-workspace build //cmd/dotmesh-server:dotmesh-server-img
+    if [ -z "${GENERATE_LOCAL_DOCKER_IMAGE}" ]; then
+        # set this variable if you need the generated image to show up in docker images
+        bazel-with-workspace run //cmd/dotmesh-server:dotmesh-server-img
+    fi
     #     go build -pkgdir /go/pkg -ldflags "-X main.serverVersion=${VERSION}" -o /target/dotmesh-server
     # allow disabling of registry push
     if [ -z "${NO_PUSH}" ]; then
