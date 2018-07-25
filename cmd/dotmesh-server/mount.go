@@ -42,6 +42,14 @@ func (f *fsMachine) mountSnap(snapId string, readonly bool) (responseEvent *Even
 		if readonly {
 			options += ",ro"
 		}
+		logZFSCommand(fullId, fmt.Sprintf("zfs set canmount=noauto %s", zfsPath))
+		out, err := exec.Command("zfs", "set", "canmount=noauto", zfsPath).CombinedOutput()
+		if err != nil {
+			return &Event{
+				Name: "failed-settings-canmount-noauto",
+				Args: &EventArgs{"err": err, "out": out, "zfsPath", zfsPath},
+			}
+		}
 		logZFSCommand(fullId, fmt.Sprintf("mount.zfs -o %s %s %s", options, zfsPath, mountPath))
 		out, err := exec.Command("mount.zfs", "-o", options,
 			zfsPath, mountPath).CombinedOutput()
