@@ -47,7 +47,7 @@ build-client() {
 
 build-server() {
     # downloading docker and putting zfs into place is hard in bazel, so cheating using docker :(
-    docker build -f cmd/dotmesh-server/Dockerfile -t "base-image-dotmesh" .
+    docker build -f cmd/dotmesh-server/Dockerfile -t "base-image-dotmesh" cmd/dotmesh-server
     docker save base-image-dotmesh > dotmesh-base.tar
 
     # skip rebuilding Kubernetes components if not using them

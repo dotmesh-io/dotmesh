@@ -11,4 +11,4 @@ RUN mkdir /tmp/d && \
     cp /tmp/d/docker/docker /usr/local/bin && \
     chmod +x /usr/local/bin/docker && \
     rm -rf /tmp/d
-ADD cmd/dotmesh-server/require_zfs.sh /require_zfs.sh
+ADD require_zfs.sh /require_zfs.sh
