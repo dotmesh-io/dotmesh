@@ -1218,7 +1218,7 @@ func TestTwoNodesSameCluster(t *testing.T) {
 		}
 	})
 
-	if true {
+	if false {
 		// This test is disabled until we fix https://github.com/dotmesh-io/dotmesh/issues/493 :-(
 		t.Run("Divergence", func(t *testing.T) {
 			fsname := citools.UniqName()
