@@ -1265,9 +1265,10 @@ func TestTwoNodesSameCluster(t *testing.T) {
 			citools.RunOnNode(t, node2, "dm dot show")
 
 			// Check status of convergence
+			var try int64
 			itWorkedInTheEnd := false
 		retryLoop:
-			for try := 1; try < 5; try++ {
+			for try = 1; try < 15; try++ {
 				for _, node := range [...]string{node1, node2} {
 					problemsFound := false
 
@@ -1286,22 +1287,25 @@ func TestTwoNodesSameCluster(t *testing.T) {
 					}
 					dmLog := citools.OutputFromRunOnNode(t, node, "dm log")
 					if !strings.Contains(dmLog, "First commit") || !strings.Contains(dmLog, "Node1CommitHash") {
-						fmt.Printf("Absence of converged commits on  branch master on node :%s\n%s", node, dmLog)
+						fmt.Printf("Absence of converged commits on branch master on node: %s\n%s", node, dmLog)
 						problemsFound = true
 					}
 
 					dmBranch := citools.OutputFromRunOnNode(t, node, "dm branch | grep DIVERGED")
-					citools.RunOnNode(t, node, fmt.Sprintf("dm checkout %s", strings.TrimSpace(dmBranch)))
+					citools.RunOnNode(
+						t, node,
+						fmt.Sprintf("dm checkout %s", strings.TrimSpace(strings.Replace(dmBranch, "*", "", -1))),
+					)
 
 					dmLog = citools.OutputFromRunOnNode(t, node, "dm log")
 					if !strings.Contains(dmLog, "node2 commit") {
-						fmt.Printf("Absence of non-master diverged commits on  branch *DIVERGED on node :%s\n%s", node, dmLog)
+						fmt.Printf("Absence of non-master diverged commits on branch *DIVERGED on node: %s\n%s", node, dmLog)
 						problemsFound = true
 					}
 
 					if problemsFound {
-						fmt.Printf("Sleeping for 2 seconds then trying again...\n")
-						time.Sleep(2 * time.Second)
+						fmt.Printf("Sleeping for %d seconds then trying again...\n", 2*try)
+						time.Sleep(2 * time.Duration(try) * time.Second)
 						continue retryLoop
 					} else {
 						// Everything's good!
@@ -1312,7 +1316,7 @@ func TestTwoNodesSameCluster(t *testing.T) {
 			}
 
 			if !itWorkedInTheEnd {
-				t.Error("After several retries, we never got to a good diverged state :-(")
+				t.Errorf("After %d retries, we never got to a good diverged state :-(", try)
 			}
 		})
 	}
