@@ -1303,7 +1303,7 @@ func TestTwoNodesSameCluster(t *testing.T) {
 
 				if problemsFound {
 					fmt.Printf("Sleeping for %d seconds then trying again...\n", 2*try)
-					time.Sleep(2 * time.Second * try)
+					time.Sleep(2 * time.Duration(try) * time.Second)
 					continue retryLoop
 				} else {
 					// Everything's good!
