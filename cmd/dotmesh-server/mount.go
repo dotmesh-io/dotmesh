@@ -42,7 +42,7 @@ func (f *fsMachine) mountSnap(snapId string, readonly bool) (responseEvent *Even
 		if readonly {
 			options += ",ro"
 		}
-		if snapId != "" {
+		if snapId == "" {
 			logZFSCommand(fullId, fmt.Sprintf("zfs set canmount=noauto %s", zfsPath))
 			out, err := exec.Command("zfs", "set", "canmount=noauto", zfsPath).CombinedOutput()
 			if err != nil {
