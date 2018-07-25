@@ -1302,8 +1302,8 @@ func TestTwoNodesSameCluster(t *testing.T) {
 				}
 
 				if problemsFound {
-					fmt.Printf("Sleeping for 2 seconds then trying again...\n")
-					time.Sleep(2 * time.Second)
+					fmt.Printf("Sleeping for %d seconds then trying again...\n", 2*try)
+					time.Sleep(2 * time.Second * try)
 					continue retryLoop
 				} else {
 					// Everything's good!
@@ -1314,7 +1314,7 @@ func TestTwoNodesSameCluster(t *testing.T) {
 		}
 
 		if !itWorkedInTheEnd {
-			t.Error("After several retries, we never got to a good diverged state :-(")
+			t.Errorf("After %d retries, we never got to a good diverged state :-(", try)
 		}
 	})
 }
