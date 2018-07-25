@@ -1462,9 +1462,13 @@ echo ABS TEST 6
 	st, err := docker(
 		nodeName(now, i, 0),
 		"touch /dind/flexvolume_driver && "+
+			"echo ABS TEST 8 && "+
 			"systemctl start kubelet && "+
+			"echo ABS TEST 9 && "+
 			"wrapkubeadm init --ignore-preflight-errors=all && "+
+			"echo ABS TEST 10 && "+
 			"mkdir /root/.kube && cp /etc/kubernetes/admin.conf /root/.kube/config && "+
+			"echo ABS TEST 11 && "+
 			// Make kube-dns faster; trick copied from dind-cluster-v1.7.sh
 			"kubectl get deployment kube-dns -n kube-system -o json | jq '.spec.template.spec.containers[0].readinessProbe.initialDelaySeconds = 3|.spec.template.spec.containers[0].readinessProbe.periodSeconds = 3' | kubectl apply --force -f -",
 		nil,
@@ -1472,6 +1476,8 @@ echo ABS TEST 6
 	if err != nil {
 		return err
 	}
+
+	fmt.Printf("ABS TEST 12\n")
 
 	lines := strings.Split(st, "\n")
 
