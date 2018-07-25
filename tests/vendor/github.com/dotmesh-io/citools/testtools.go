@@ -887,7 +887,7 @@ func OutputFromRunOnNode(t *testing.T, node string, cmd string) string {
 func LocalImage(service string) string {
 	var registry string
 	// See .gitlab-ci.yml in the dotmesh repo for where these are set up
-	if reg := os.Getenv("CI_DOCKER_REGISTRY"); reg != "" {
+	if reg := os.Getenv("CI_REGISTRY"); reg != "" {
 		registry = reg + "/" + os.Getenv("CI_REPOSITORY")
 	} else {
 		hostname, err := os.Hostname()
