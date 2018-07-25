@@ -1264,9 +1264,10 @@ func TestTwoNodesSameCluster(t *testing.T) {
 		citools.RunOnNode(t, node2, "dm dot show")
 
 		// Check status of convergence
+		var try int64
 		itWorkedInTheEnd := false
 	retryLoop:
-		for try := 1; try < 5; try++ {
+		for try = 1; try < 5; try++ {
 			for _, node := range [...]string{node1, node2} {
 				problemsFound := false
 
