@@ -215,7 +215,6 @@ linux_default_dot:
         - ubuntu
         - fast
     script:
-        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
         - ./test.sh -run TestDefaultDot
     artifacts:
         paths:
@@ -233,7 +232,6 @@ linux_single_node:
         - ubuntu
         - fast
     script:
-        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
         - ./test.sh -run TestSingleNode
     artifacts:
         paths:
@@ -251,7 +249,6 @@ linux_recover_from_unmounted_dot_on_master:
         - ubuntu
         - fast
     script:
-        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
         - ./test.sh -run TestRecoverFromUnmountedDotOnMaster
     artifacts:
         paths:
@@ -269,7 +266,6 @@ linux_two_nodes_same_cluster:
         - ubuntu
         - fast
     script:
-        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
         - ./test.sh -run TestTwoNodesSameCluster
     artifacts:
         paths:
@@ -287,7 +283,6 @@ linux_kubernetes_volumes:
         - ubuntu
         - fast
     script:
-        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
         - ./test.sh -run TestKubernetesVolumes
     artifacts:
         paths:
@@ -306,7 +301,6 @@ linux_kubernetes_operator_dynamic_provisioning:
         - ubuntu
         - fast
     script:
-        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
         - ./test.sh -run TestKubernetesOperator/DynamicProvisioning
     artifacts:
         paths:
@@ -324,7 +318,6 @@ linux_kubernetes_operator_PVC:
         - ubuntu
         - fast
     script:
-        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
         - ./test.sh -run TestKubernetesOperator/PVC*
     artifacts:
         paths:
@@ -343,7 +336,6 @@ linux_deletion_simple:
         - ubuntu
         - fast
     script:
-        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
         - ./test.sh -run TestDeletionSimple
     artifacts:
         paths:
@@ -361,7 +353,6 @@ linux_deletion_complex:
         - ubuntu
         - fast
     script:
-        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
         - ./test.sh -run TestDeletionComplex
     artifacts:
         paths:
@@ -379,7 +370,6 @@ linux_backup_and_restore_two_single_node_clusters:
         - ubuntu
         - fast
     script:
-        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
         - ./test.sh -run TestBackupAndRestoreTwoSingleNodeClusters
     artifacts:
         paths:
@@ -397,7 +387,6 @@ linux_two_single_node_clusters:
         - ubuntu
         - fast
     script:
-        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
         - ./test.sh -run TestTwoSingleNodeClusters
     artifacts:
         paths:
@@ -415,7 +404,6 @@ linux_three_single_node_clusters:
         - ubuntu
         - fast
     script:
-        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
         - ./test.sh -run TestThreeSingleNodeClusters
     artifacts:
         paths:
@@ -433,7 +421,6 @@ linux_two_double_node_clusters:
         - ubuntu
         - fast
     script:
-        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
         - ./test.sh -run TestTwoDoubleNodeClusters
     artifacts:
         paths:
@@ -451,7 +438,6 @@ linux_s3:
         - ubuntu
         - fast
     script:
-        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
         - ./test.sh -run TestS3Remote
     artifacts:
         paths:
@@ -470,7 +456,6 @@ linux_s3:
         - ubuntu
         - fast
     script:
-        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
         - ./test.sh -run TestKubernetesTestTooling
     artifacts:
         paths:
@@ -488,7 +473,6 @@ linux_stress_lots_of_commits:
         - ubuntu
         - fast
     script:
-        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
         - ./test.sh -timeout 30m -run TestStressLotsOfCommits
     artifacts:
         paths:
@@ -507,7 +491,6 @@ linux_stress_handover:
         - ubuntu
         - fast
     script:
-        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
         - ./test.sh -timeout 30m -run TestStressHandover
     artifacts:
         paths:
