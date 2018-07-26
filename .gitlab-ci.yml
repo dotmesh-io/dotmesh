@@ -158,8 +158,6 @@ macos_docker_stable_smoke:
         - gtimeout 5m ./scripts/smoke.sh
     after_script:
         - docker container prune -f
-    only:
-        - schedules
 
 macos_docker_edge_smoke:
     stage: test
@@ -170,8 +168,6 @@ macos_docker_edge_smoke:
         - gtimeout 5m ./scripts/smoke.sh
     after_script:
         - docker container prune -f
-    only:
-        - schedules
 
 linux_smoke:
     stage: test
@@ -182,8 +178,6 @@ linux_smoke:
         - timeout 5m ./scripts/smoke.sh
     after_script:
         - docker container prune -f
-    only:
-        - schedules
 
 dotmesh_unit_tests:
     stage: test
