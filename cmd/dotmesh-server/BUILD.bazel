@@ -95,7 +95,6 @@ container_image(
     base = "//:dotmesh-base.tar",
     files = [
         "//cmd/dotmesh-server:dotmesh-server",
-        "//cmd/dotmesh-server/pkg/dind-flexvolume",
         "//cmd/flexvolume",
     ],
     directory = "/usr/local/bin",
