@@ -25,6 +25,7 @@ stages:
     - test
     - deploy_images
     - deploy
+    - smoke
     - manual_deploy
     - notify
 
@@ -150,7 +151,7 @@ build_server:
         - schedules
 
 macos_docker_stable_smoke:
-    stage: test
+    stage: smoke
     tags:
         - macos
         - docker-stable
@@ -160,7 +161,7 @@ macos_docker_stable_smoke:
         - docker container prune -f
 
 macos_docker_edge_smoke:
-    stage: test
+    stage: smoke
     tags:
         - macos
         - docker-edge
@@ -170,7 +171,7 @@ macos_docker_edge_smoke:
         - docker container prune -f
 
 linux_smoke:
-    stage: test
+    stage: smoke
     tags:
         - ubuntu-bionic
         - fast
