@@ -1085,6 +1085,13 @@ func NodeFromNodeName(t *testing.T, now int64, i, j int, clusterName string) Nod
 		nodeName(now, i, j),
 		`ifconfig eth0 | grep -v "inet6" | grep "inet" | cut -d " " -f 10`,
 	))
+	if strings.TrimSpace(nodeIP) == "" {
+		// Try the way that works on newbuntu (18.04) :-S
+		nodeIP := strings.TrimSpace(OutputFromRunOnNode(t,
+			nodeName(now, i, j),
+			`ifconfig eth0 | grep -v "inet6" | grep "inet" | cut -d " " -f 12 |cut -d ":" -f 2`,
+		))
+	}
 
 	dotmeshConfig, err := docker(
 		nodeName(now, i, j),
@@ -1959,6 +1966,8 @@ func DoRPC(hostname, user, apiKey, method string, args interface{}, result inter
 
 func DoSetDebugFlag(hostname, user, apikey, flag, value string) (string, error) {
 	var result string
+
+	fmt.Printf("Attempting to DoSetDebugFlag: %v %v %v %v %v\n", hostname, user, apikey, flag, value)
 
 	err := DoRPC(hostname, user, apikey,
 		"DotmeshRPC.SetDebugFlag",
