@@ -178,7 +178,7 @@ func CreatePKIAssets(pkiPath string, cfg *Configuration) (*rsa.PrivateKey, *x509
 		}
 		caKeyCasted, ok := caKeyInterface.(*rsa.PrivateKey)
 		if !ok {
-			return nil, nil, fmt.Errorf("Unable to cast %s (from %s) to *rsa.PrivateKey", caKey, prv)
+			return nil, nil, fmt.Errorf("Unable to cast %v (from %v) to *rsa.PrivateKey", caKey, prv)
 		}
 		caKey = caKeyCasted
 	}
