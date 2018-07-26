@@ -108,7 +108,7 @@ build_operator:
         - (./rebuild_operator.sh) # also pushes
         - echo "pushed $CI_DOCKER_OPERATOR_IMAGE"
         - echo "ABS TEST:"
-        - cat /tmp/EAGH
+        - cat /tmp/EARGH
         - echo "END TEST DUMP"
     artifacts:
         paths:
