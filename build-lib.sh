@@ -61,7 +61,7 @@ build-server() {
     echo "Building dotmesh-server container"
     # TODO serverVersion?
     bazel-with-workspace build //cmd/dotmesh-server:dotmesh-server-img
-    if [ -z "${GENERATE_LOCAL_DOCKER_IMAGE}" ]; then
+    if [ -n "${GENERATE_LOCAL_DOCKER_IMAGE}" ]; then
         # set this variable if you need the generated image to show up in docker images
         bazel-with-workspace run //cmd/dotmesh-server:dotmesh-server-img
     fi
