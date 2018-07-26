@@ -12,4 +12,4 @@ main() {
     bazel-with-workspace run //cmd/dynamic-provisioner:provisioner_push
 }
 
-main
+main $@
