@@ -113,6 +113,13 @@ cat <<EOF >> /etc/hosts
 EOF
 ```
 
+Install bazel:
+```
+apt-get -y install pkg-config zip g++ zlib1g-dev unzip python git-core
+curl -L -o bazel-installer.sh https://github.com/bazelbuild/bazel/releases/download/0.15.2/bazel-0.15.2-installer-linux-x86_64.sh
+chmod +x bazel-installer.sh && ./bazel-installer.sh --user
+```
+
 ## Setup - debian
 
 [Install Docker](https://docs.docker.com/engine/installation/linux/docker-ce/debian/), then put the following docker config in /etc/docker/daemon.json:

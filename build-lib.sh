@@ -76,6 +76,9 @@ build-server() {
         fi
     fi
 
+    bazel-with-workspace build //cmd/dotmesh-server/pkg/dind-flexvolume:dind-flexvolume
+    mkdir -p ./target
+    cp bazel-bin/cmd/dotmesh-server/pkg/dind-flexvolume/linux_amd64_pure_stripped/dind-flexvolume ./target/dind-flexvolume
 }
 
 build-provisioner() {

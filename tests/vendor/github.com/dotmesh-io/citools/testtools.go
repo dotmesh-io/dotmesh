@@ -1436,17 +1436,11 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 	err := System("bash", "-c",
 		fmt.Sprintf(
 			`MASTER=%s
-echo ABS TEST 1
 			docker exec $MASTER mkdir /dotmesh-kube-yaml
-echo ABS TEST 2
 			for X in ../kubernetes/*.yaml; do docker cp $X $MASTER:/dotmesh-kube-yaml/; done
-echo ABS TEST 3
 			docker exec $MASTER sed -i 's/quay.io\/dotmesh\/dotmesh-operator:DOCKER_TAG/%s/' /dotmesh-kube-yaml/dotmesh.yaml
-echo ABS TEST 4
 			docker exec $MASTER sed -i 's/quay.io\/dotmesh\/dotmesh-dynamic-provisioner:DOCKER_TAG/%s/' /dotmesh-kube-yaml/dotmesh.yaml
-echo ABS TEST 4
 			docker exec $MASTER sed -i 's/size: 3/size: 1/' /dotmesh-kube-yaml/dotmesh-etcd-cluster.yaml
-echo ABS TEST 6
 			`,
 			nodeName(now, i, 0),
 			strings.Replace(LocalImage("dotmesh-operator"), "/", "\\/", -1),
@@ -1457,18 +1451,12 @@ echo ABS TEST 6
 		return err
 	}
 
-	fmt.Printf("ABS TEST 7\n")
-
 	st, err := docker(
 		nodeName(now, i, 0),
 		"touch /dind/flexvolume_driver && "+
-			"echo ABS TEST 8 && "+
 			"systemctl start kubelet && "+
-			"echo ABS TEST 9 && "+
 			"wrapkubeadm init --ignore-preflight-errors=all && "+
-			"echo ABS TEST 10 && "+
 			"mkdir /root/.kube && cp /etc/kubernetes/admin.conf /root/.kube/config && "+
-			"echo ABS TEST 11 && "+
 			// Make kube-dns faster; trick copied from dind-cluster-v1.7.sh
 			"kubectl get deployment kube-dns -n kube-system -o json | jq '.spec.template.spec.containers[0].readinessProbe.initialDelaySeconds = 3|.spec.template.spec.containers[0].readinessProbe.periodSeconds = 3' | kubectl apply --force -f -",
 		nil,
@@ -1476,8 +1464,6 @@ echo ABS TEST 6
 	if err != nil {
 		return err
 	}
-
-	fmt.Printf("ABS TEST 12\n")
 
 	lines := strings.Split(st, "\n")
 
