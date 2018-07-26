@@ -6,7 +6,7 @@ source build-lib.sh
 pull-then-push() {
     img=$1
     docker pull $OLD_REG/$OLD_REPO/$img:$CI_DOCKER_TAG
-    docker tag $img:$CI_DOCKER_TAG $CI_REGISTRY/$CI_REPOSITORY/$img:$CI_DOCKER_TAG 
+    docker tag $OLD_REG/$OLD_REPO/$img:$CI_DOCKER_TAG $CI_REGISTRY/$CI_REPOSITORY/$img:$CI_DOCKER_TAG 
     docker push $CI_REGISTRY/$CI_REPOSITORY/$img:$CI_DOCKER_TAG 
 }
 main() {
