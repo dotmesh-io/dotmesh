@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -xe
 
-source lib.sh
+source build-lib.sh
 
 main() {
     export CI_REGISTRY=$1
