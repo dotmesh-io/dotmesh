@@ -77,10 +77,7 @@ build-server() {
     fi
 
     bazel-with-workspace build //cmd/dotmesh-server/pkg/dind-flexvolume:dind-flexvolume
-    echo "ABS TEST:"
-    find bazel-bin/cmd/dotmesh-server
-    echo "END OF DEBUG DUMP"
-    cp bazel-bin/cmd/dotmesh-server/pkg/dind-flexvolume/dind-flexvolume ./target
+    cp bazel-bin/cmd/dotmesh-server/pkg/dind-flexvolume/linux_amd64_pure_stripped/dind-flexvolume ./target
 }
 
 build-provisioner() {
