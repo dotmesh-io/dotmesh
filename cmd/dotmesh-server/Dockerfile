@@ -1,4 +1,4 @@
-FROM ubuntu:artful
+FROM ubuntu:bionic
 ENV SECURITY_UPDATES 2018-01-19
 RUN apt-get -y update && apt-get -y install zfsutils-linux iproute kmod curl
 # Merge kernel module search paths from CentOS and Ubuntu :-O
