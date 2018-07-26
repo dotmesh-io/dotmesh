@@ -145,6 +145,7 @@ build_server:
     artifacts:
         paths:
             - target
+            - dotmesh-base.tar
         expire_in: 1 week
     except:
         - schedules
