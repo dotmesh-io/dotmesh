@@ -748,7 +748,6 @@ func (c *dotmeshController) process() error {
 	return nil
 }
 
-//priya
 func (c *dotmeshController) createDotmeshPods(undottedNodes map[string]struct{}, suspendedNodes map[string]struct{}, unusedPVCs map[string]struct{}) {
 	// FIXME: This hardcodes the name of the Deployment to be the
 	// ownerRef of created pods. It would be nicer to use an API to
@@ -890,27 +889,25 @@ nodeLoop:
 			// Configure the pod to use PV storage
 
 			podName = fmt.Sprintf("server-%s-node-%s", pvc, node)
-
-			volumeMounts = append(volumeMounts,
-				v1.VolumeMount{
-					Name:      "backend-pv",
-					MountPath: "/backend-pv",
-				})
-			volumes = append(volumes,
-				v1.Volume{
-					Name: "backend-pv",
-					VolumeSource: v1.VolumeSource{
-						PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-							ClaimName: pvc,
-							ReadOnly:  false,
-						},
+			pvVolumeMounts := v1.VolumeMount{
+				Name:      "backend-pv",
+				MountPath: "/backend-pv",
+			}
+			volumeMounts = append(volumeMounts, pvVolumeMounts)
+			pvVolumes := v1.Volume{
+				Name: "backend-pv",
+				VolumeSource: v1.VolumeSource{
+					PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+						ClaimName: pvc,
+						ReadOnly:  false,
 					},
-				})
-			env = append(env,
-				v1.EnvVar{
-					Name:  "CONTAINER_POOL_MNT",
-					Value: "/backend-pv",
 				},
+			}
+			volumes = append(volumes, pvVolumes)
+			pvEnvs := []v1.EnvVar{v1.EnvVar{
+				Name:  "CONTAINER_POOL_MNT",
+				Value: "/backend-pv",
+			},
 				v1.EnvVar{
 					Name:  "CONTAINER_POOL_PVC_NAME",
 					Value: pvc,
@@ -935,108 +932,114 @@ nodeLoop:
 					// best to ask require_zfs.sh to ask df how much space
 					// is really available in the FS once it's mounted.
 					Value: "AUTO",
-				},
-			)
+				}}
+			env = append(env, pvEnvs...)
 		default:
 			glog.Errorf("Unsupported %s: %s", CONFIG_MODE, c.config.Data[CONFIG_MODE])
 			continue nodeLoop
 		}
 
-		// Create a dotmesh pod (with local storage for now) assigned to this node
-		privileged := true
-		terminationGracePeriodSeconds := int64(500)
+		c.createDotmeshServerPod(podName, node, env, volumeMounts, volumes)
 
-		newDotmesh := v1.Pod{
-			ObjectMeta: meta_v1.ObjectMeta{
-				Name:      podName,
-				Namespace: "dotmesh",
-				Labels: map[string]string{
-					DOTMESH_ROLE_LABEL: DOTMESH_ROLE_SERVER,
-				},
-				Annotations: map[string]string{},
+	}
+}
+
+func (c *dotmeshController) createDotmeshServerPod(podName string, node string, env []v1.EnvVar, volumeMounts []v1.VolumeMount, volumes []v1.Volume) {
+	// Create a dotmesh pod (with local storage for now) assigned to this node
+	privileged := true
+	terminationGracePeriodSeconds := int64(500)
+
+	newDotmesh := v1.Pod{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name:      podName,
+			Namespace: "dotmesh",
+			Labels: map[string]string{
+				DOTMESH_ROLE_LABEL: DOTMESH_ROLE_SERVER,
 			},
-			Spec: v1.PodSpec{
-				HostPID: true,
-				// This is what binds the pod to a specific node
-				NodeSelector: map[string]string{
-					DOTMESH_NODE_LABEL: node,
-				},
-				Tolerations: []v1.Toleration{
-					v1.Toleration{
-						Effect:   v1.TaintEffectNoSchedule,
-						Operator: v1.TolerationOpExists,
-					}},
-				InitContainers: []v1.Container{},
-				Containers: []v1.Container{
-					v1.Container{
-						Name:  "dotmesh-outer",
-						Image: DOTMESH_IMAGE,
-						Command: []string{
-							"/require_zfs.sh",
-							"dotmesh-server",
+			Annotations: map[string]string{},
+		},
+		Spec: v1.PodSpec{
+			HostPID: true,
+			// This is what binds the pod to a specific node
+			NodeSelector: map[string]string{
+				DOTMESH_NODE_LABEL: node,
+			},
+			Tolerations: []v1.Toleration{
+				v1.Toleration{
+					Effect:   v1.TaintEffectNoSchedule,
+					Operator: v1.TolerationOpExists,
+				}},
+			InitContainers: []v1.Container{},
+			Containers: []v1.Container{
+				v1.Container{
+					Name:  "dotmesh-outer",
+					Image: DOTMESH_IMAGE,
+					Command: []string{
+						"/require_zfs.sh",
+						"dotmesh-server",
+					},
+					SecurityContext: &v1.SecurityContext{
+						Privileged: &privileged,
+					},
+					Ports: []v1.ContainerPort{
+						{
+							Name:          "dotmesh-api",
+							ContainerPort: int32(32607),
+							Protocol:      v1.ProtocolTCP,
 						},
-						SecurityContext: &v1.SecurityContext{
-							Privileged: &privileged,
+						{
+							Name:          "dotmesh-live",
+							ContainerPort: int32(32608),
+							Protocol:      v1.ProtocolTCP,
 						},
-						Ports: []v1.ContainerPort{
-							{
-								Name:          "dotmesh-api",
-								ContainerPort: int32(32607),
-								Protocol:      v1.ProtocolTCP,
-							},
-							{
-								Name:          "dotmesh-live",
-								ContainerPort: int32(32608),
-								Protocol:      v1.ProtocolTCP,
-							},
-						},
-						VolumeMounts: volumeMounts,
-						Lifecycle: &v1.Lifecycle{
-							PreStop: &v1.Handler{
-								Exec: &v1.ExecAction{
-									Command: []string{"docker", "rm", "-f", "dotmesh-server-inner"},
-								},
-							},
-						},
-						Env:             env,
-						ImagePullPolicy: v1.PullAlways,
-						LivenessProbe: &v1.Probe{
-							Handler: v1.Handler{
-								HTTPGet: &v1.HTTPGetAction{
-									Path: "/check",
-									Port: intstr.FromInt(32608),
-								},
-							},
-							InitialDelaySeconds: int32(30),
-						},
-						ReadinessProbe: &v1.Probe{
-							Handler: v1.Handler{
-								HTTPGet: &v1.HTTPGetAction{
-									Path: "/check",
-									Port: intstr.FromInt(32607),
-								},
-							},
-							InitialDelaySeconds: int32(30),
-						},
-						Resources: v1.ResourceRequirements{
-							Requests: v1.ResourceList{
-								v1.ResourceCPU: resource.MustParse("10m"),
+					},
+					VolumeMounts: volumeMounts,
+					Lifecycle: &v1.Lifecycle{
+						PreStop: &v1.Handler{
+							Exec: &v1.ExecAction{
+								Command: []string{"docker", "rm", "-f", "dotmesh-server-inner"},
 							},
 						},
 					},
+					Env:             env,
+					ImagePullPolicy: v1.PullAlways,
+					LivenessProbe: &v1.Probe{
+						Handler: v1.Handler{
+							HTTPGet: &v1.HTTPGetAction{
+								Path: "/check",
+								Port: intstr.FromInt(32608),
+							},
+						},
+						InitialDelaySeconds: int32(30),
+					},
+					ReadinessProbe: &v1.Probe{
+						Handler: v1.Handler{
+							HTTPGet: &v1.HTTPGetAction{
+								Path: "/check",
+								Port: intstr.FromInt(32607),
+							},
+						},
+						InitialDelaySeconds: int32(30),
+					},
+					Resources: v1.ResourceRequirements{
+						Requests: v1.ResourceList{
+							v1.ResourceCPU: resource.MustParse("10m"),
+						},
+					},
 				},
-				RestartPolicy:                 v1.RestartPolicyNever,
-				TerminationGracePeriodSeconds: &terminationGracePeriodSeconds,
-				ServiceAccountName:            "dotmesh",
-				Volumes:                       volumes,
 			},
-		}
-
-		glog.Infof("Creating pod %s running %s on node %s", newDotmesh.ObjectMeta.Name, DOTMESH_IMAGE, node)
-		_, err := c.client.Core().Pods(DOTMESH_NAMESPACE).Create(&newDotmesh)
-		if err != nil {
-			// Do not abort in error case, just keep pressing on
-			glog.Error(err)
-		}
+			RestartPolicy:                 v1.RestartPolicyNever,
+			TerminationGracePeriodSeconds: &terminationGracePeriodSeconds,
+			ServiceAccountName:            "dotmesh",
+			Volumes:                       volumes,
+		},
 	}
+
+	glog.Infof("Creating pod %s running %s on node %s", newDotmesh.ObjectMeta.Name, DOTMESH_IMAGE, node)
+	_, err := c.client.Core().Pods(DOTMESH_NAMESPACE).Create(&newDotmesh)
+	if err != nil {
+		// Do not abort in error case, just keep pressing on
+		glog.Error(err)
+	}
+
 }
