@@ -2,6 +2,8 @@ load("@io_bazel_rules_docker//go:image.bzl", "go_image")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_binary", "go_test")
 load("@io_bazel_rules_docker//docker:docker.bzl", "docker_push")
 load("@io_bazel_rules_docker//container:container.bzl", "container_image")
+load("@io_base_images_docker//package_managers:download_pkgs.bzl", "download_pkgs")
+
 filegroup(
     name = "require_zfs",
     srcs = [
@@ -96,12 +98,20 @@ go_binary(
     x_defs = {"main.serverVersion": "{VERSION}"},
 )
 
+
+
 container_image(
     base = "@ubuntu_base//image",
     name = "zfs",
-    cmd = ["apt-get -y update && apt-get -y install zfsutils-linux iproute kmod curl"],
     files = [":require_zfs"],
+    tars = [":apt-install"],
     directory = "/"
+)
+
+download_pkgs(
+    name = "apt-install",
+    packages = ["zfsutils-linux", "iproute", "kmod", "curl"],
+    image_tar = ":zfs"
 )
 
 container_image(

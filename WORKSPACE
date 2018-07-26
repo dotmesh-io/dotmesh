@@ -8,6 +8,12 @@ http_archive(
 
 
 http_archive(
+    name = "io_base_images_docker",
+    urls = ["https://github.com/GoogleContainerTools/base-images-docker/releases/download/release-2018-04-05/release-2018-04-05.tar.gz"],
+    sha256 = "ba79c532ac400cefd1859cbc8a9829346aa69e3b99482cd5a54432092cbc3933",
+)
+
+http_archive(
     name = "io_bazel_rules_go",
     urls = ["https://github.com/bazelbuild/rules_go/releases/download/0.13.0/rules_go-0.13.0.tar.gz"],
     sha256 = "ba79c532ac400cefd1859cbc8a9829346aa69e3b99482cd5a54432092cbc3933",
