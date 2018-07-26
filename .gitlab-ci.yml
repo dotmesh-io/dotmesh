@@ -506,6 +506,7 @@ publish_images:
     dependencies:
         - build_client_linux
         - build_client_macos
+        - build_server
         - build_yaml
     tags:
         - ubuntu
