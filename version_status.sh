@@ -12,6 +12,13 @@ fi
 
 REGISTRY=${CI_REGISTRY:-$(hostname).local:80}
 REPOSITORY=${CI_REPOSITORY:-dotmesh}
+
+
+if [ -z "$CI_DOCKER_SERVER_IMAGE" ]; then
+    # Non-CI build
+    CI_DOCKER_SERVER_IMAGE=${REGISTRY}/${REPOSITORY}/dotmesh-server:${DOCKERTAG}
+fi
+
 echo DOCKERTAG ${DOCKERTAG}
 echo CI_REGISTRY ${REGISTRY}
 echo CI_REPOSITORY ${REPOSITORY}
