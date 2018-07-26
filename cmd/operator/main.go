@@ -374,7 +374,7 @@ func (c *dotmeshController) scheduleUpdate() {
 }
 
 func (c *dotmeshController) Run(stopCh chan struct{}) {
-	glog.Infof("Starting Dotmesh Operator version %s", DOTMESH_VERSION)
+	glog.Infof("Starting Dotmesh Operator version %s, installing Dotmesh Server image %s", DOTMESH_VERSION, DOTMESH_IMAGE)
 
 	go c.nodeInformer.Run(stopCh)
 	go c.podInformer.Run(stopCh)
