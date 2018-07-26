@@ -1,6 +1,6 @@
 FROM ubuntu:bionic
 ENV SECURITY_UPDATES 2018-01-19
-RUN apt-get -y update && apt-get -y install zfsutils-linux iproute kmod curl
+RUN apt-get -y update && apt-get -y install zfsutils-linux iproute2 kmod curl
 # Merge kernel module search paths from CentOS and Ubuntu :-O
 RUN echo 'search updates extra ubuntu built-in weak-updates' > /etc/depmod.d/ubuntu.conf
 RUN mkdir /tmp/d && \
