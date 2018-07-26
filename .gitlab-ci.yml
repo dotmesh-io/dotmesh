@@ -107,6 +107,7 @@ build_operator:
         - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
         - (./rebuild_operator.sh) # also pushes
         - echo "pushed $CI_DOCKER_OPERATOR_IMAGE"
+        - echo "ABS TEST: `cat /tmp/EARGH`"
     artifacts:
         paths:
             - target
