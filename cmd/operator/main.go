@@ -803,6 +803,11 @@ nodeLoop:
 		}
 
 		var podName string
+		var sentinelName string
+		var provisionSentinel bool
+		var pvVolumes []v1.Volume
+		var pvEnvs []v1.EnvVar
+		var pvVolumeMounts []v1.VolumeMount
 
 		switch c.config.Data[CONFIG_MODE] {
 		case CONFIG_MODE_LOCAL:
@@ -889,6 +894,8 @@ nodeLoop:
 			// Configure the pod to use PV storage
 
 			podName = fmt.Sprintf("server-%s-node-%s", pvc, node)
+			provisionSentinel = false // Flag to integrate
+			sentinelName = fmt.Sprintf("sentinel-server-%s-node-%s", pvc, node)
 			pvVolumeMounts := v1.VolumeMount{
 				Name:      "backend-pv",
 				MountPath: "/backend-pv",
@@ -939,17 +946,19 @@ nodeLoop:
 			continue nodeLoop
 		}
 
-		c.createDotmeshServerPod(podName, node, env, volumeMounts, volumes)
+		c.createServerPod(podName, node, env, volumeMounts, volumes)
 
+		if provisionSentinel {
+			c.createSentinelPod(sentinelName, node, pvEnvs, pvVolumeMounts, pvVolumes)
+		}
 	}
 }
 
-func (c *dotmeshController) createDotmeshServerPod(podName string, node string, env []v1.EnvVar, volumeMounts []v1.VolumeMount, volumes []v1.Volume) {
-	// Create a dotmesh pod (with local storage for now) assigned to this node
+func (c *dotmeshController) createServerPod(podName string, node string, env []v1.EnvVar, volumeMounts []v1.VolumeMount, volumes []v1.Volume) {
 	privileged := true
 	terminationGracePeriodSeconds := int64(500)
 
-	newDotmesh := v1.Pod{
+	dotmeshServer := v1.Pod{
 		ObjectMeta: meta_v1.ObjectMeta{
 			Name:      podName,
 			Namespace: "dotmesh",
@@ -1035,11 +1044,70 @@ func (c *dotmeshController) createDotmeshServerPod(podName string, node string, 
 		},
 	}
 
-	glog.Infof("Creating pod %s running %s on node %s", newDotmesh.ObjectMeta.Name, DOTMESH_IMAGE, node)
-	_, err := c.client.Core().Pods(DOTMESH_NAMESPACE).Create(&newDotmesh)
+	c.createResource(dotmeshServer, node)
+}
+func (c *dotmeshController) createSentinelPod(podName string, node string, env []v1.EnvVar, volumeMounts []v1.VolumeMount, volumes []v1.Volume) {
+	privileged := true
+	terminationGracePeriodSeconds := int64(500)
+
+	sentinel := v1.Pod{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name:      podName,
+			Namespace: "dotmesh",
+			Labels: map[string]string{
+				DOTMESH_ROLE_LABEL: DOTMESH_ROLE_SERVER,
+			},
+			Annotations: map[string]string{},
+		},
+		Spec: v1.PodSpec{
+			HostPID: true,
+			// This is what binds the pod to a specific node
+			NodeSelector: map[string]string{
+				DOTMESH_NODE_LABEL: node,
+			},
+			Tolerations: []v1.Toleration{
+				v1.Toleration{
+					Effect:   v1.TaintEffectNoSchedule,
+					Operator: v1.TolerationOpExists,
+				}},
+			InitContainers: []v1.Container{},
+			Containers: []v1.Container{
+				v1.Container{
+					Name:  "dotmesh-outer",
+					Image: DOTMESH_IMAGE,
+					Command: []string{
+						"tail",
+						"-f",
+						"/dev/null",
+					},
+					SecurityContext: &v1.SecurityContext{
+						Privileged: &privileged,
+					},
+					VolumeMounts:    volumeMounts,
+					Env:             env,
+					ImagePullPolicy: v1.PullAlways,
+					Resources: v1.ResourceRequirements{
+						Requests: v1.ResourceList{
+							v1.ResourceCPU: resource.MustParse("10m"),
+						},
+					},
+				},
+			},
+			RestartPolicy:                 v1.RestartPolicyNever,
+			TerminationGracePeriodSeconds: &terminationGracePeriodSeconds,
+			ServiceAccountName:            "dotmesh",
+			Volumes:                       volumes,
+		},
+	}
+
+	c.createResource(sentinel, node)
+}
+
+func (c *dotmeshController) createResource(pod v1.Pod, node string) {
+	glog.Infof("Creating pod %s running %s on node %s", pod.ObjectMeta.Name, DOTMESH_IMAGE, node)
+	_, err := c.client.Core().Pods(DOTMESH_NAMESPACE).Create(&pod)
 	if err != nil {
 		// Do not abort in error case, just keep pressing on
 		glog.Error(err)
 	}
-
 }
