@@ -291,7 +291,6 @@ linux_kubernetes_volumes:
         when: always
     except:
         - schedules
-    allow_failure: true
 
 linux_kubernetes_operator_dynamic_provisioning:
     stage: test
@@ -326,7 +325,6 @@ linux_kubernetes_operator_PVC:
         when: always
     except:
         - schedules
-    allow_failure: true
 
 linux_deletion_simple:
     stage: test
