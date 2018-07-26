@@ -1087,7 +1087,7 @@ func NodeFromNodeName(t *testing.T, now int64, i, j int, clusterName string) Nod
 	))
 	if strings.TrimSpace(nodeIP) == "" {
 		// Try the way that works on newbuntu (18.04) :-S
-		nodeIP := strings.TrimSpace(OutputFromRunOnNode(t,
+		nodeIP = strings.TrimSpace(OutputFromRunOnNode(t,
 			nodeName(now, i, j),
 			`ifconfig eth0 | grep -v "inet6" | grep "inet" | cut -d " " -f 12 |cut -d ":" -f 2`,
 		))
