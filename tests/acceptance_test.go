@@ -291,6 +291,7 @@ func TestSingleNode(t *testing.T) {
 		var validRemote = regexp.MustCompile(`^Current remote: `)
 
 		serverResponse := citools.OutputFromRunOnNode(t, node1, "dm version")
+		fmt.Sprintf("Server response: %s\n", serverResponse)
 
 		lines := strings.Split(serverResponse, "\n")
 
