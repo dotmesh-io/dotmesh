@@ -42,9 +42,9 @@ var dindStorageRoot = ""
 func System(cmd string, args ...string) error {
 	logger.Printf("[system] running %s %s", cmd, args)
 	c := exec.Command(cmd, args...)
-	c.Stdout = os.Stdout
-	c.Stderr = os.Stderr
-	return c.Run()
+	out, err := c.CombinedOutput()
+	logger.Printf("[system] result: %v, %s", err, out)
+	return err
 }
 
 func init() {
@@ -100,7 +100,7 @@ func (d *FlexVolumeDriver) mount(targetMountDir, jsonOptions string) (map[string
 	// if not - then make it!
 	_, err = os.Stat(sourceFile)
 	if os.IsNotExist(err) {
-		// FIXME: Pull the requested size from the opts, must be "NNNk" to NNN kilobytes etc.
+		// Pull the requested size from the opts, must be "NNNk" to NNN kilobytes etc.
 		err = System("mkfs.ext4", sourceFile, fmt.Sprintf("%dk", (sizeBytes+1023)/1024))
 		if err != nil {
 			logger.Printf("MOUNT: mkfs err for %s: %v", sourceFile, err)
@@ -110,7 +110,12 @@ func (d *FlexVolumeDriver) mount(targetMountDir, jsonOptions string) (map[string
 
 	logger.Printf("MOUNT: Procured source file %s", sourceFile)
 
-	// FIXME: Mount sourceFile at targetMountDir, -o loop
+	// Mount sourceFile at targetMountDir, -o loop
+	err = os.MkdirAll(targetMountDir, 0777)
+	if err != nil {
+		logger.Printf("MOUNT: MkdirAll err for %s: %v", targetMountDir, err)
+		return nil, err
+	}
 	err = System("mount", sourceFile, targetMountDir)
 	if err != nil {
 		logger.Printf("MOUNT: mount err for %s on %s: %v", sourceFile, targetMountDir, err)
