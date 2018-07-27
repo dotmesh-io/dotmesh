@@ -1,3 +1,8 @@
+# TODO: try to clean up test runs by wrapping go test in a timeout & running
+# the cleanup scripts.
+# I think we'll need to pass in a name to the test runner, and then cleanup
+# anything with that prefix...
+
 variables:
     SERVER_NAME: dotmesh-server
     PROVISIONER_NAME: dotmesh-dynamic-provisioner
@@ -19,6 +24,7 @@ variables:
     CI_SERVICE_BEING_TESTED: dotmesh
 
     DOTMESH_TEST_CLEANUP: always
+    DOTMESH_TEST_TIMEOUT: 10m
 
 stages:
     - build
@@ -469,7 +475,7 @@ linux_stress_lots_of_commits:
         - ubuntu-bionic
         - fast
     script:
-        - ./test.sh -timeout 30m -run TestStressLotsOfCommits
+        - DOTMESH_TEST_TIMEOUT=30m ./test.sh -run TestStressLotsOfCommits
     artifacts:
         paths:
         - extracted_logs
@@ -487,7 +493,7 @@ linux_stress_handover:
         - ubuntu-bionic
         - fast
     script:
-        - ./test.sh -timeout 30m -run TestStressHandover
+        - DOTMESH_TEST_TIMEOUT=30m ./test.sh -run TestStressHandover
     artifacts:
         paths:
         - extracted_logs

@@ -1069,7 +1069,11 @@ func nodeName(now int64, i, j int) string {
 
 // testDirName
 func testDirName(now int64) string {
-	return fmt.Sprintf("/dotmesh-test-pools/%d", now)
+	if os.Getenv("GO_TEST_ID") != "" {
+		return fmt.Sprintf("/dotmesh-test-pools/%d-%s", now, os.Getenv("GO_TEST_ID"))
+	} else {
+		return fmt.Sprintf("/dotmesh-test-pools/%d", now)
+	}
 }
 
 func NodeName(now int64, i, j int) string {
