@@ -59,7 +59,7 @@ build-client() {
     if [ ! -d "${location}/dm/${output_dir}" ]; then
         output_dir=${platform}_pure_stripped
     fi
-    bazel run //cmd/dm:dm --platforms=@io_bazel_rules_go//go/toolchain:linux_amd64 --workspace_status_command=`realpath version_status.sh` --version
+    bazel run //cmd/dm:dm --platforms=@io_bazel_rules_go//go/toolchain:linux_amd64 --workspace_status_command=/home/gitlab-runner/builds/46c6b076/2/dotmesh/dotmesh-sync/version_status.sh -- version
     cp ${location}/dm/$output_dir/dm binaries/$OS/
     return 0
 }
