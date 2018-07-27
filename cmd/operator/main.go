@@ -65,6 +65,7 @@ const DOTMESH_CONFIG_MAP = "configuration"
 const DOTMESH_NODE_LABEL = "dotmesh.io/node"
 const DOTMESH_ROLE_LABEL = "dotmesh.io/role"
 const DOTMESH_ROLE_SERVER = "dotmesh-server"
+const DOTMESH_ROLE_SENTINEL = "dotmesh-sentinel"
 const DOTMESH_ROLE_PVC = "dotmesh-pvc"
 
 // ConfigMap keys
@@ -100,6 +101,11 @@ func GetClientConfig(kubeconfig string) (*rest.Config, error) {
 
 var Version string = "none" // Set at compile time
 
+type dotmeshSentinel struct {
+	node string
+	pvc  string
+}
+
 func main() {
 	// When running as a pod in-cluster, a kubeconfig is not needed. Instead
 	// this will make use of the service account injected into the pod.
@@ -130,13 +136,15 @@ func main() {
 }
 
 type dotmeshController struct {
-	client       kubernetes.Interface
-	nodeLister   lister_v1.NodeLister
-	pvcLister    lister_v1.PersistentVolumeClaimLister
-	podLister    lister_v1.PodLister
-	nodeInformer cache.Controller
-	pvcInformer  cache.Controller
-	podInformer  cache.Controller
+	client           kubernetes.Interface
+	nodeLister       lister_v1.NodeLister
+	pvcLister        lister_v1.PersistentVolumeClaimLister
+	sentinelLister   lister_v1.PodLister
+	podLister        lister_v1.PodLister
+	nodeInformer     cache.Controller
+	pvcInformer      cache.Controller
+	sentinelInformer cache.Controller
+	podInformer      cache.Controller
 
 	updatesNeeded     bool
 	updatesNeededLock *sync.Mutex
@@ -271,8 +279,52 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 	// *v1.node)
 	rc.nodeLister = lister_v1.NewNodeLister(nodeIndexer)
 
-	// TRACK DOTMESH PODS
+	// TRACK DOTMESH SENTINELS
+	sentinelIndexer, sentinelInformer := cache.NewIndexerInformer(
+		&cache.ListWatch{
+			ListFunc: func(lo meta_v1.ListOptions) (runtime.Object, error) {
+				// Add selectors to only list Sentinel pods
+				dmLo := lo.DeepCopy()
+				dmLo.LabelSelector = fmt.Sprintf("%s=%s", DOTMESH_ROLE_LABEL, DOTMESH_ROLE_SENTINEL)
+				return client.Core().Pods(DOTMESH_NAMESPACE).List(*dmLo)
+			},
+			WatchFunc: func(lo meta_v1.ListOptions) (watch.Interface, error) {
+				// Add selectors to only list Dotmesh pods
+				dmLo := lo.DeepCopy()
+				dmLo.LabelSelector = fmt.Sprintf("%s=%s", DOTMESH_ROLE_LABEL, DOTMESH_ROLE_SENTINEL)
+				return client.Core().Pods(DOTMESH_NAMESPACE).Watch(*dmLo)
+			},
+		},
+		// The types of objects this informer will return
+		&v1.Pod{},
+		// The resync period of this object. This will force a re-update of all
+		// cached objects at this interval.  Every object will trigger the
+		// `Updatefunc` even if there have been no actual updates triggered.
+		60*time.Second,
+		// Callback Functions to trigger on add/update/delete
+		cache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				glog.V(3).Info("SENTINEL ADD %#v", obj)
+				rc.scheduleUpdate()
+			},
+			UpdateFunc: func(old, new interface{}) {
+				glog.V(3).Info("SENTINEL UPDATE %#v -> %#v", old, new)
+				rc.scheduleUpdate()
+			},
+			DeleteFunc: func(obj interface{}) {
+				glog.V(3).Info("SENTINEL DELETE %#v", obj)
+				rc.scheduleUpdate()
+			},
+		},
+		cache.Indexers{},
+	)
 
+	rc.sentinelInformer = sentinelInformer
+	// PodLister avoids some boilerplate code (e.g. convert runtime.Object to
+	// *v1.pod)
+	rc.sentinelLister = lister_v1.NewPodLister(sentinelIndexer)
+
+	// TRACK DOTMESH PODS
 	podIndexer, podInformer := cache.NewIndexerInformer(
 		&cache.ListWatch{
 			ListFunc: func(lo meta_v1.ListOptions) (runtime.Object, error) {
@@ -318,7 +370,6 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 	rc.podLister = lister_v1.NewPodLister(podIndexer)
 
 	// TRACK DOTMESH PVCS
-
 	pvcIndexer, pvcInformer := cache.NewIndexerInformer(
 		&cache.ListWatch{
 			ListFunc: func(lo meta_v1.ListOptions) (runtime.Object, error) {
@@ -379,6 +430,7 @@ func (c *dotmeshController) Run(stopCh chan struct{}) {
 	go c.nodeInformer.Run(stopCh)
 	go c.podInformer.Run(stopCh)
 	go c.pvcInformer.Run(stopCh)
+	go c.sentinelInformer.Run(stopCh)
 
 	// Wait for all caches to be synced, before processing is started
 	if !cache.WaitForCacheSync(stopCh, c.nodeInformer.HasSynced) {
@@ -393,6 +445,11 @@ func (c *dotmeshController) Run(stopCh chan struct{}) {
 
 	if !cache.WaitForCacheSync(stopCh, c.pvcInformer.HasSynced) {
 		glog.Error(fmt.Errorf("Timed out waiting for pvc cache to sync"))
+		return
+	}
+
+	if !cache.WaitForCacheSync(stopCh, c.sentinelInformer.HasSynced) {
+		glog.Error(fmt.Errorf("Timed out waiting for sentinel cache to sync"))
 		return
 	}
 
@@ -742,6 +799,32 @@ func (c *dotmeshController) process() error {
 		}
 	}
 
+	// GET A LIST OF DOTMESH SENTINELS
+
+	sentinels := map[string]dotmeshSentinel{} // Set of pod IDs that are in the "Running" state
+	sentinelPods, err := c.sentinelLister.List(labels.Everything())
+	if err != nil {
+		return err
+	}
+
+	for _, sentinel := range sentinelPods {
+		sentinelName := sentinel.ObjectMeta.Name
+		var sentinelPVC, sentinelNode string
+		for _, volume := range sentinel.Spec.Volumes {
+			if volume.VolumeSource.PersistentVolumeClaim != nil {
+				sentinelPVC = volume.VolumeSource.PersistentVolumeClaim.ClaimName
+			}
+		}
+
+		sentinelNode, ok := sentinel.Spec.NodeSelector[DOTMESH_NODE_LABEL]
+		if !ok {
+			glog.Infof("Observing sentinel %s - cannot find %s label", sentinelName, DOTMESH_NODE_LABEL)
+		}
+		sentinels[sentinelName] = dotmeshSentinel{
+			node: sentinelNode,
+			pvc:  sentinelPVC,
+		}
+	}
 	// CREATE NEW DOTMESH PODS WHERE NEEDED
 	c.createDotmeshPods(undottedNodes, suspendedNodes, unusedPVCs)
 
@@ -896,12 +979,12 @@ nodeLoop:
 			podName = fmt.Sprintf("server-%s-node-%s", pvc, node)
 			provisionSentinel = true // Flag to integrate
 			sentinelName = fmt.Sprintf("sentinel-server-%s-node-%s", pvc, node)
-			pvVolumeMounts := v1.VolumeMount{
+			pvVolumeMounts = []v1.VolumeMount{v1.VolumeMount{
 				Name:      "backend-pv",
 				MountPath: "/backend-pv",
-			}
-			volumeMounts = append(volumeMounts, pvVolumeMounts)
-			pvVolumes := v1.Volume{
+			}}
+			volumeMounts = append(volumeMounts, pvVolumeMounts...)
+			pvVolumes = []v1.Volume{v1.Volume{
 				Name: "backend-pv",
 				VolumeSource: v1.VolumeSource{
 					PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
@@ -909,9 +992,9 @@ nodeLoop:
 						ReadOnly:  false,
 					},
 				},
-			}
-			volumes = append(volumes, pvVolumes)
-			pvEnvs := []v1.EnvVar{v1.EnvVar{
+			}}
+			volumes = append(volumes, pvVolumes...)
+			pvEnvs = []v1.EnvVar{v1.EnvVar{
 				Name:  "CONTAINER_POOL_MNT",
 				Value: "/backend-pv",
 			},
@@ -955,6 +1038,7 @@ nodeLoop:
 }
 
 func (c *dotmeshController) createServerPod(podName string, node string, env []v1.EnvVar, volumeMounts []v1.VolumeMount, volumes []v1.Volume) {
+
 	privileged := true
 	terminationGracePeriodSeconds := int64(500)
 
@@ -1046,16 +1130,19 @@ func (c *dotmeshController) createServerPod(podName string, node string, env []v
 
 	c.createResource(dotmeshServer, node)
 }
+
 func (c *dotmeshController) createSentinelPod(podName string, node string, env []v1.EnvVar, volumeMounts []v1.VolumeMount, volumes []v1.Volume) {
 	privileged := true
 	terminationGracePeriodSeconds := int64(500)
+	sentinelImage := "gcr.io/google-containers/busybox:latest"
+	glog.Infof("--Creating sentinel %#v - volumeMounts %#v volumes %#v--", podName, volumeMounts, volumes)
 
 	sentinel := v1.Pod{
 		ObjectMeta: meta_v1.ObjectMeta{
 			Name:      podName,
 			Namespace: "dotmesh",
 			Labels: map[string]string{
-				DOTMESH_ROLE_LABEL: DOTMESH_ROLE_SERVER,
+				DOTMESH_ROLE_LABEL: DOTMESH_ROLE_SENTINEL,
 			},
 			Annotations: map[string]string{},
 		},
@@ -1074,7 +1161,7 @@ func (c *dotmeshController) createSentinelPod(podName string, node string, env [
 			Containers: []v1.Container{
 				v1.Container{
 					Name:  "dotmesh-outer",
-					Image: DOTMESH_IMAGE,
+					Image: sentinelImage,
 					Command: []string{
 						"tail",
 						"-f",
@@ -1100,6 +1187,7 @@ func (c *dotmeshController) createSentinelPod(podName string, node string, env [
 		},
 	}
 
+	glog.Infof("-----Sentinel conig %#v-----", sentinel)
 	c.createResource(sentinel, node)
 }
 
