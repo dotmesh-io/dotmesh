@@ -305,6 +305,10 @@ func TestSingleNode(t *testing.T) {
 			parsedResponse = append(parsedResponse, strings.Fields(strings.TrimSpace(versionBit))...)
 		}
 
+		if len(parsedResponse) != 6 {
+			t.Fatalf("dm version response has the wrong number of lines in versionInfo (found %d):\n%s\n%#v\n", len(parsedResponse), serverResponse, parsedResponse)
+		}
+
 		if (parsedResponse[0] != "Client:") || parsedResponse[1] != "Version:" {
 			t.Errorf("unable to find all parts of Client version in ouput: %v %v", parsedResponse[0], parsedResponse[1])
 		}
