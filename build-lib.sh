@@ -59,6 +59,7 @@ build-client() {
     if [ ! -d "${location}/dm/${output_dir}" ]; then
         output_dir=${platform}_pure_stripped
     fi
+    sha1sum ${location}/dm/$output_dir/dm
     cp ${location}/dm/$output_dir/dm binaries/$OS/
     return 0
 }
