@@ -50,7 +50,7 @@ before_script:
 build_client_linux:
     stage: build
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         - ./rebuild_client.sh Linux
@@ -64,7 +64,7 @@ build_client_linux:
 build_client_macos:
     stage: build
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         - ./rebuild_client.sh Darwin
@@ -78,7 +78,7 @@ build_client_macos:
 build_yaml:
     stage: build
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         - (cd kubernetes && ./rebuild.sh)
@@ -92,7 +92,7 @@ build_yaml:
 .build_without_bazel:
     stage: build
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
@@ -107,7 +107,7 @@ build_yaml:
 build_operator:
     stage: build
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         # push to the CI registry
@@ -124,7 +124,7 @@ build_operator:
 build_provisioner:
     stage: build
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         # push to the CI registry
@@ -141,7 +141,7 @@ build_provisioner:
 build_server:
     stage: build
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         # push to the CI registry
@@ -179,7 +179,7 @@ macos_docker_edge_smoke:
 linux_smoke:
     stage: smoke
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         - timeout 5m ./scripts/smoke.sh
@@ -189,7 +189,7 @@ linux_smoke:
 dotmesh_unit_tests:
     stage: test
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         - go test `go list ./... | egrep -v /tests`
@@ -199,7 +199,7 @@ dotmesh_unit_tests:
 versioner_unit_tests:
     stage: test
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         - cd cmd/versioner && go test
@@ -212,7 +212,7 @@ linux_default_dot:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         - ./test.sh -run TestDefaultDot
@@ -228,7 +228,7 @@ linux_single_node:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         - ./test.sh -run TestSingleNode
@@ -244,7 +244,7 @@ linux_recover_from_unmounted_dot_on_master:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         - ./test.sh -run TestRecoverFromUnmountedDotOnMaster
@@ -260,7 +260,7 @@ linux_two_nodes_same_cluster:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         - ./test.sh -run TestTwoNodesSameCluster
@@ -277,7 +277,7 @@ linux_kubernetes_volumes:
         - build_yaml
         - build_client_linux
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         - ./test.sh -run TestKubernetesVolumes
@@ -294,7 +294,7 @@ linux_kubernetes_operator_dynamic_provisioning:
         - build_yaml
         - build_client_linux
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         - ./test.sh -run TestKubernetesOperator/DynamicProvisioning
@@ -311,7 +311,7 @@ linux_kubernetes_operator_PVC:
         - build_yaml
         - build_client_linux
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         - ./test.sh -run TestKubernetesOperator/PVC*
@@ -327,7 +327,7 @@ linux_deletion_simple:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         - ./test.sh -run TestDeletionSimple
@@ -343,7 +343,7 @@ linux_deletion_complex:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         - ./test.sh -run TestDeletionComplex
@@ -359,7 +359,7 @@ linux_backup_and_restore_two_single_node_clusters:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         - ./test.sh -run TestBackupAndRestoreTwoSingleNodeClusters
@@ -375,7 +375,7 @@ linux_two_single_node_clusters:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         - ./test.sh -run TestTwoSingleNodeClusters
@@ -391,7 +391,7 @@ linux_three_single_node_clusters:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         - ./test.sh -run TestThreeSingleNodeClusters
@@ -407,7 +407,7 @@ linux_two_double_node_clusters:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         - ./test.sh -run TestTwoDoubleNodeClusters
@@ -423,7 +423,7 @@ linux_s3:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         - ./test.sh -run TestS3Remote
@@ -440,7 +440,7 @@ linux_s3:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         - ./test.sh -run TestKubernetesTestTooling
@@ -456,7 +456,7 @@ linux_stress_lots_of_commits:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         - DOTMESH_TEST_TIMEOUT=30m ./test.sh -run TestStressLotsOfCommits
@@ -473,7 +473,7 @@ linux_stress_handover:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         - DOTMESH_TEST_TIMEOUT=30m ./test.sh -run TestStressHandover
@@ -493,7 +493,7 @@ publish_images:
         - build_server
         - build_yaml
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         # push to quay.io, by re-tagging and pushing the images
@@ -506,7 +506,7 @@ publish_images:
 trigger_e2e_test:
     stage: deploy
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         - echo - curl -X POST -F "token=$E2E_TRIGGER_TOKEN" -F "ref=master" -F "variables[DOTMESH_CI_COMMIT_SHA]=$CI_COMMIT_SHA" -F "variables[DOTMESH_CI_BUILD_REF_NAME]=$CI_BUILD_REF_NAME" https://gitlab.dotmesh.com/api/v4/projects/31/trigger/pipeline
@@ -524,7 +524,7 @@ deploy_unstable_build:
         - build_yaml
         - publish_images
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         - "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no releases@get.dotmesh.io mkdir -p /pool/releases/unstable/$CI_COMMIT_REF_NAME"
@@ -542,7 +542,7 @@ deploy_release_build:
         - build_yaml
         - publish_images
     tags:
-        - ubuntu-bionic
+        - ubuntu
         - fast
     script:
         - VERSION=`cd cmd/versioner; go run versioner.go`; echo VERSION=$VERSION
