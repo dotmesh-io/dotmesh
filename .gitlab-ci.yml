@@ -497,6 +497,7 @@ publish_images:
         - fast
     script:
         # push to quay.io, by re-tagging and pushing the images
+        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
         - docker login -u $QUAY_USER -p $QUAY_PASSWORD $RELEASE_DOCKER_REGISTRY
         - ./release-images.sh $RELEASE_DOCKER_REGISTRY $RELEASE_DOCKER_REPOSITORY
     except:
