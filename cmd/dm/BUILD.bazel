@@ -18,6 +18,7 @@ go_binary(
     visibility = ["//visibility:public"],
     x_defs = {"main.clientVersion": "{VERSION}",
     "main.dockerTag": "{DOCKERTAG}"},
+    static = "on"
 )
 
 load("@bazel_gazelle//:def.bzl", "gazelle")
