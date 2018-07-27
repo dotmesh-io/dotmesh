@@ -353,7 +353,7 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 			// XXX the following only works if overlay is working
 			err = TryUntilSucceeds(
 				func() error {
-					System("bash", "-c", fmt.Sprintf(`
+					return System("bash", "-c", fmt.Sprintf(`
 					set -xe
 					mkdir -p /dotmesh-test-pools
 					MOUNTPOINT=/dotmesh-test-pools
