@@ -19,7 +19,7 @@ set-defaults() {
     # Non-CI build
         export DOCKERTAG=latest
     else
-        export DOCKERTAG=$CI_DOCKER_TAG
+        export STABLE_DOCKERTAG=$CI_DOCKER_TAG
     fi
 
     export REGISTRY=${CI_REGISTRY:-$(hostname).local:80}
@@ -28,7 +28,7 @@ set-defaults() {
 
     if [ -z "$CI_DOCKER_SERVER_IMAGE" ]; then
         # Non-CI build
-        export CI_DOCKER_SERVER_IMAGE=${REGISTRY}/${REPOSITORY}/dotmesh-server:${DOCKERTAG}
+        export STABLE_CI_DOCKER_SERVER_IMAGE=${REGISTRY}/${REPOSITORY}/dotmesh-server:${DOCKERTAG}
     fi
 }
 
