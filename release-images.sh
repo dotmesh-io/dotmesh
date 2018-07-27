@@ -17,8 +17,8 @@ main() {
     pull-then-push dotmesh-server
     # do a full rebuild on operator because it needs to know the server image link
     build-operator
-    pull-then-push operator
-    pull-then-push dynamic-provisioner
+    pull-then-push dotmesh-operator
+    pull-then-push dotmesh-dynamic-provisioner
 }
 
 main $@
