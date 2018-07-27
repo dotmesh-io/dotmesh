@@ -352,52 +352,54 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 
 			// XXX the following only works if overlay is working
 			err = TryUntilSucceeds(
-				System("bash", "-c", fmt.Sprintf(`
-			set -xe
-			mkdir -p /dotmesh-test-pools
-			MOUNTPOINT=/dotmesh-test-pools
-			NODE=%s
-			if [ $(mount |grep $MOUNTPOINT |wc -l) -eq 0 ]; then
-				echo "Creating and bind-mounting shared $MOUNTPOINT"
-				mkdir -p $MOUNTPOINT && \
-				mount --bind $MOUNTPOINT $MOUNTPOINT && \
-				mount --make-shared $MOUNTPOINT;
-			fi
-			(cd %s
-				EXTRA_DOCKER_ARGS="-v /dotmesh-test-pools:/dotmesh-test-pools:rshared -v /var/run/docker.sock:/hostdocker.sock %s " \
-				CNI_PLUGIN=weave %s bare $NODE %s)
-			sleep 1
-			echo "About to run docker exec on $NODE"
-			docker exec -t $NODE bash -c '
-				set -xe
-				# from dind::fix-mounts
-				mount --make-shared /lib/modules/
-				mount --make-shared /run
-			    echo "%s '$(hostname)'.local" >> /etc/hosts
-				mkdir -p /etc/docker
-				echo "{\"insecure-registries\" : [\"%s.local:80\"]}" > /etc/docker/daemon.json
-				systemctl daemon-reload
-				systemctl restart docker
-			'
-			ret=$?
-			echo "Return code for docker exec was $ret"
-			if [[ $ret -ne 0 ]]; then
-			    # Do it again
-				echo "Retrying after 5 seconds..."
-				sleep 5
-				docker exec -t $NODE bash -c '
+				func() error {
+					System("bash", "-c", fmt.Sprintf(`
 					set -xe
-					echo "%s '$(hostname)'.local" >> /etc/hosts
-					mkdir -p /etc/docker
-					echo "{\"insecure-registries\" : [\"%s.local:80\"]}" > /etc/docker/daemon.json
-					systemctl daemon-reload
-					systemctl restart docker
-				'
-			fi
-			`, node, runScriptDir, mountDockerAuth,
-					dindClusterScriptName, c.RunArgs(i, j), HOST_IP_FROM_CONTAINER,
-					hostname, HOST_IP_FROM_CONTAINER, hostname),
-				),
+					mkdir -p /dotmesh-test-pools
+					MOUNTPOINT=/dotmesh-test-pools
+					NODE=%s
+					if [ $(mount |grep $MOUNTPOINT |wc -l) -eq 0 ]; then
+						echo "Creating and bind-mounting shared $MOUNTPOINT"
+						mkdir -p $MOUNTPOINT && \
+						mount --bind $MOUNTPOINT $MOUNTPOINT && \
+						mount --make-shared $MOUNTPOINT;
+					fi
+					(cd %s
+						EXTRA_DOCKER_ARGS="-v /dotmesh-test-pools:/dotmesh-test-pools:rshared -v /var/run/docker.sock:/hostdocker.sock %s " \
+						CNI_PLUGIN=weave %s bare $NODE %s)
+					sleep 1
+					echo "About to run docker exec on $NODE"
+					docker exec -t $NODE bash -c '
+						set -xe
+						# from dind::fix-mounts
+						mount --make-shared /lib/modules/
+						mount --make-shared /run
+						echo "%s '$(hostname)'.local" >> /etc/hosts
+						mkdir -p /etc/docker
+						echo "{\"insecure-registries\" : [\"%s.local:80\"]}" > /etc/docker/daemon.json
+						systemctl daemon-reload
+						systemctl restart docker
+					'
+					ret=$?
+					echo "Return code for docker exec was $ret"
+					if [[ $ret -ne 0 ]]; then
+						# Do it again
+						echo "Retrying after 5 seconds..."
+						sleep 5
+						docker exec -t $NODE bash -c '
+							set -xe
+							echo "%s '$(hostname)'.local" >> /etc/hosts
+							mkdir -p /etc/docker
+							echo "{\"insecure-registries\" : [\"%s.local:80\"]}" > /etc/docker/daemon.json
+							systemctl daemon-reload
+							systemctl restart docker
+						'
+					fi
+					`, node, runScriptDir, mountDockerAuth,
+						dindClusterScriptName, c.RunArgs(i, j), HOST_IP_FROM_CONTAINER,
+						hostname, HOST_IP_FROM_CONTAINER, hostname),
+					)
+				},
 				fmt.Sprintf("starting container %s", node),
 			)
 			if err != nil {
