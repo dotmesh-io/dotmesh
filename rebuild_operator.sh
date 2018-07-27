@@ -5,6 +5,7 @@ set -ex
 source build-lib.sh
 
 main() {
+    set-defaults
     build-operator
 }
 
