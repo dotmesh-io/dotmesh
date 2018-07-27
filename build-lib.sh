@@ -25,6 +25,7 @@ set-defaults() {
     export REGISTRY=${CI_REGISTRY:-$(hostname).local:80}
     export REPOSITORY=${CI_REPOSITORY:-dotmesh}
 
+    export STABLE_VERSION=$(cd cmd/versioner && go run versioner.go)
 
     if [ -z "$CI_DOCKER_SERVER_IMAGE" ]; then
         # Non-CI build
