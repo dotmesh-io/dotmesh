@@ -10,6 +10,7 @@ fi
 source build-lib.sh
 
 main() {
+    set-defaults
     build-client $1
     if [ -z "${SKIP_K8S}" ]; then
         build-provisioner
