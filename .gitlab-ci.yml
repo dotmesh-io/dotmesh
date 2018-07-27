@@ -275,6 +275,7 @@ linux_two_nodes_same_cluster:
 linux_kubernetes_volumes:
     stage: test
     dependencies:
+        - build_yaml
         - build_client_linux
     tags:
         - ubuntu-bionic
@@ -292,6 +293,7 @@ linux_kubernetes_volumes:
 linux_kubernetes_operator_dynamic_provisioning:
     stage: test
     dependencies:
+        - build_yaml
         - build_client_linux
     tags:
         - ubuntu-bionic
@@ -308,6 +310,7 @@ linux_kubernetes_operator_dynamic_provisioning:
 linux_kubernetes_operator_PVC:
     stage: test
     dependencies:
+        - build_yaml
         - build_client_linux
     tags:
         - ubuntu-bionic
