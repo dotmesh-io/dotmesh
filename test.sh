@@ -28,9 +28,9 @@ cleanup() {
 
     # Outside of the -xe/pipefail, after the timeout has fired, do belt-and-braces cleanup.
     if [ "$DOTMESH_TEST_CLEANUP" == "always" ]; then
-        if [ "$(/dotmesh-test-pools/*${GO_TEST_ID}*/cleanup-actions.*)" != "" ]; then
-            for SCRIPT in /dotmesh-test-pools/*${GO_TEST_ID}*/cleanup-actions.*; do set -x; sudo bash $SCRIPT; done
-        fi
+        # https://stackoverflow.com/questions/29438045/how-to-match-nothing-if-a-file-name-glob-has-no-matches
+        shopt -s nullglob
+        for SCRIPT in /dotmesh-test-pools/*${GO_TEST_ID}*/cleanup-actions.*; do set -x; sudo bash $SCRIPT; done
     fi
     echo "Finished cleaning up"
 }
