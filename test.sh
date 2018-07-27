@@ -20,7 +20,7 @@ fi
 # container-unique /dotmesh-test-pools dir, so we can find them later and clean
 # them up in case the 'go test' itself times out.
 
-export GO_TEST_ID=$(uuidgen |cut -f "-" -d 1)
+export GO_TEST_ID=$(uuidgen |cut -d "-" -f 1)
 
 cleanup() {
     local REASON="$1"
