@@ -73,8 +73,8 @@ build-server() {
         # dind-provisioner (builds a container)
         echo "building dind-provisioner container"
         # todo switch back to build when bazel can push without being annoying
-        bazel-with-workspace build //cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioning
-        bazel run cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioning -- --norun
+        bazel-with-workspace build //cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioner
+        bazel run cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioner -- --norun
     fi
 
     # dotmesh-server
@@ -98,8 +98,8 @@ build-server() {
         #bazel-with-workspace run //cmd/dotmesh-server:dotmesh-server_push
         if [ -z "${SKIP_K8S}" ]; then
             echo "pushing dind provisioner"
-            docker tag bazel/cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioning $CI_REGISTRY/$CI_REPOSITORY/dind-dynamic-provisioning:$CI_DOCKER_TAG
-            docker push $CI_REGISTRY/$CI_REPOSITORY/dind-dynamic-provisioning:$CI_DOCKER_TAG
+            docker tag bazel/cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioner $CI_REGISTRY/$CI_REPOSITORY/dind-dynamic-provisioner:$CI_DOCKER_TAG
+            docker push $CI_REGISTRY/$CI_REPOSITORY/dind-dynamic-provisioner:$CI_DOCKER_TAG
             #bazel-with-workspace run //cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind_push
         fi
     fi
