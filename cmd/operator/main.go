@@ -894,7 +894,7 @@ nodeLoop:
 			// Configure the pod to use PV storage
 
 			podName = fmt.Sprintf("server-%s-node-%s", pvc, node)
-			provisionSentinel = false // Flag to integrate
+			provisionSentinel = true // Flag to integrate
 			sentinelName = fmt.Sprintf("sentinel-server-%s-node-%s", pvc, node)
 			pvVolumeMounts := v1.VolumeMount{
 				Name:      "backend-pv",
