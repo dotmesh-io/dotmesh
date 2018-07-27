@@ -1169,7 +1169,7 @@ SEARCHABLE HEADER: STARTING CLUSTER
 	// Register to eradicate all lingering mounts (the awk/sort/cut
 	// sorts by line lengths, longest first, to ensure we unmount /A/B
 	// before /A)
-	RegisterCleanupAction(90, fmt.Sprintf("for MNT in `grep %s /proc/self/mountinfo | cut -f 5 -d ' ' | awk '{ print length, $0 }' | sort -nr | cut -d ' ' -f2-`; do umount -f $MNT; done",
+	RegisterCleanupAction(40, fmt.Sprintf("for MNT in `grep %s /proc/self/mountinfo | cut -f 5 -d ' ' | awk '{ print length, $0 }' | sort -nr | cut -d ' ' -f2-`; do umount -f $MNT; done",
 		testDirName(stamp),
 	))
 
