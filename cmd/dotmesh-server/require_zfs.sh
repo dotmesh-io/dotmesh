@@ -376,7 +376,7 @@ trap 'shutdown SIGTERM' SIGTERM
 trap 'shutdown SIGINT' SIGINT
 trap 'shutdown SIGQUIT' SIGQUIT
 trap 'shutdown SIGHUP' SIGHUP
-trap 'shutdown SIGKILL' SIGKILL
+trap 'shutdown SIGPIPE' SIGPIPE
 
 set +e
 

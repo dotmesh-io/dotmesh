@@ -22,6 +22,30 @@ fi
 
 export GO_TEST_ID=$(uuidgen |cut -f "-" -d 1)
 
+cleanup() {
+    local REASON="$1"
+    echo "Cleaning up due to $REASON"
+
+    # Outside of the -xe/pipefail, after the timeout has fired, do belt-and-braces cleanup.
+    if [ "$DOTMESH_TEST_CLEANUP" == "always" ]; then
+        for SCRIPT in /dotmesh-test-pools/*${GO_TEST_ID}*/cleanup-actions.*; do set -x; . $SCRIPT; done
+    fi
+    echo "Finished cleaning up"
+}
+
+shutdown() {
+    local SIGNAL="$1"
+    # Remove the handler now it's happened once
+    trap - $SIGNAL
+    cleanup "signal $SIGNAL"
+}
+
+trap 'shutdown SIGTERM' SIGTERM
+trap 'shutdown SIGINT' SIGINT
+trap 'shutdown SIGQUIT' SIGQUIT
+trap 'shutdown SIGHUP' SIGHUP
+trap 'shutdown SIGPIPE' SIGPIPE
+
 (
     set -xe
     set -o pipefail
@@ -35,12 +59,5 @@ export GO_TEST_ID=$(uuidgen |cut -f "-" -d 1)
     fi
 )
 TEST_EXIT_CODE=$?
-
-# Outside of the -xe/pipefail, after the timeout has fired, do belt-and-braces cleanup.
-
-if [ $DOTMESH_TEST_CLEANUP == "always" ]; then
-    cd /dotmesh-test-pools
-    for SCRIPT in *${GO_TEST_ID}*/cleanup-actions.*; do set -x; . $SCRIPT; done
-fi
-
+cleanup "test terminated with retval=$RETVAL"
 exit $TEST_EXIT_CODE
