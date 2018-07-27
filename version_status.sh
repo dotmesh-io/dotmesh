@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 # script to tell bazel what version to set on the client
 VERSION=$(cd cmd/versioner && go run versioner.go)
 echo VERSION ${VERSION}
