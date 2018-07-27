@@ -19,7 +19,7 @@ go_library(
 )
 
 go_image(
-    name = "dind-dynamic-provisioning",
+    name = "dind-dynamic-provisioner",
     embed = [":go_default_library"],
     goarch = "amd64",
     goos = "linux",
