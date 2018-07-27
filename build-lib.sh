@@ -134,6 +134,6 @@ build-operator() {
 
 tag-then-push() {
     img=$1
-    docker tag bazel/cmd/$img:$img $CI_REGISTRY/$CI_REPOSITORY/$img:$CI_DOCKER_TAG
-    docker push $CI_REGISTRY/$CI_REPOSITORY/$img:$CI_DOCKER_TAG
+    docker tag bazel/cmd/$img:$img $REGISTRY/$REPOSITORY/$img:$DOCKERTAG
+    docker push $REGISTRY/$REPOSITORY/$img:$DOCKERTAG
 }
