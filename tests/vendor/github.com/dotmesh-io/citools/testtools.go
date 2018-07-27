@@ -1447,8 +1447,8 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		}
 	}
 
-	// TODO regex the following yamels to refer to the newly pushed
-	// dotmesh container image, rather than the latest stable
+	// Regex the following yamels to refer to the newly pushed dotmesh
+	// container image, rather than the latest stable
 
 	err := System("bash", "-c",
 		fmt.Sprintf(
@@ -1468,6 +1468,8 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		return err
 	}
 
+	fmt.Println("Yamls are wrangled, preparing to kubeadm init...")
+
 	st, err := docker(
 		nodeName(now, i, 0),
 		"touch /dind/flexvolume_driver && "+
@@ -1481,6 +1483,8 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 	if err != nil {
 		return err
 	}
+
+	fmt.Println("kubeadm init is done, preparing to join...")
 
 	lines := strings.Split(st, "\n")
 
