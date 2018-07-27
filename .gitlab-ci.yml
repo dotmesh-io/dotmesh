@@ -211,7 +211,6 @@ versioner_unit_tests:
 linux_default_dot:
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu-bionic
@@ -228,7 +227,6 @@ linux_default_dot:
 linux_single_node:
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu-bionic
@@ -245,7 +243,6 @@ linux_single_node:
 linux_recover_from_unmounted_dot_on_master:
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu-bionic
@@ -262,7 +259,6 @@ linux_recover_from_unmounted_dot_on_master:
 linux_two_nodes_same_cluster:
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu-bionic
@@ -279,7 +275,6 @@ linux_two_nodes_same_cluster:
 linux_kubernetes_volumes:
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu-bionic
@@ -297,7 +292,6 @@ linux_kubernetes_volumes:
 linux_kubernetes_operator_dynamic_provisioning:
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu-bionic
@@ -314,7 +308,6 @@ linux_kubernetes_operator_dynamic_provisioning:
 linux_kubernetes_operator_PVC:
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu-bionic
@@ -332,7 +325,6 @@ linux_kubernetes_operator_PVC:
 linux_deletion_simple:
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu-bionic
@@ -349,7 +341,6 @@ linux_deletion_simple:
 linux_deletion_complex:
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu-bionic
@@ -366,7 +357,6 @@ linux_deletion_complex:
 linux_backup_and_restore_two_single_node_clusters:
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu-bionic
@@ -383,7 +373,6 @@ linux_backup_and_restore_two_single_node_clusters:
 linux_two_single_node_clusters:
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu-bionic
@@ -400,7 +389,6 @@ linux_two_single_node_clusters:
 linux_three_single_node_clusters:
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu-bionic
@@ -417,7 +405,6 @@ linux_three_single_node_clusters:
 linux_two_double_node_clusters:
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu-bionic
@@ -434,7 +421,6 @@ linux_two_double_node_clusters:
 linux_s3:
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu-bionic
@@ -452,7 +438,6 @@ linux_s3:
 .linux_kubernetes_test_tooling:
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu-bionic
@@ -469,7 +454,6 @@ linux_s3:
 linux_stress_lots_of_commits:
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu-bionic
@@ -487,7 +471,6 @@ linux_stress_lots_of_commits:
 linux_stress_handover:
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu-bionic
