@@ -74,7 +74,7 @@ build-server() {
         echo "building dind-provisioner container"
         # todo switch back to build when bazel can push without being annoying
         bazel-with-workspace build //cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioning
-        bazel-with-workspace run cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioning
+        bazel run cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioning -- --norun
     fi
 
     # dotmesh-server
@@ -112,7 +112,7 @@ build-server() {
 build-provisioner() {
     # fixme switch back to bazel for pushing when it's not flaky
     bazel-with-workspace build //cmd/dynamic-provisioner:dynamic-provisioner
-    bazel-with-workspace run cmd/dynamic-provisioner:dynamic-provisioner
+    bazel run cmd/dynamic-provisioner:dynamic-provisioner -- --norun
     if [ -z "${NO_PUSH}" ]; then
         echo "pushing image"
         tag-then-push dynamic-provisioner
@@ -123,7 +123,7 @@ build-provisioner() {
 build-operator() {
     # operator (builds container)
     bazel-with-workspace build //cmd/operator:operator
-    bazel-with-workspace run cmd/operator:operator
+    bazel run cmd/operator:operator -- --norun
     if [ -z "${NO_PUSH}" ]; then
         echo "pushing image"
         tag-then-push operator
