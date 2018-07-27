@@ -53,8 +53,14 @@ trap 'shutdown SIGPIPE' SIGPIPE
     export DISABLE_LOG_AGGREGATION=1
     cd tests
     if [ -n $DOTMESH_TEST_TIMEOUT ]; then
+        echo "======================================================"
+        echo "Running with $DOTMESH_TEST_TIMEOUT timeout: go test $@"
+        echo "======================================================"
         ($TIMEOUT $DOTMESH_TEST_TIMEOUT sudo -E `which go` test -v "$@" 2>&1 ) | ts
     else
+        echo "======================================================"
+        echo "Running without timeout: go test $@"
+        echo "======================================================"
         (sudo -E `which go` test -v "$@" 2>&1 ) | ts
     fi
 )
