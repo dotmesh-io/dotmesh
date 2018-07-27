@@ -115,7 +115,7 @@ build-provisioner() {
     bazel run cmd/dynamic-provisioner:dynamic-provisioner -- --norun
     if [ -z "${NO_PUSH}" ]; then
         echo "pushing image"
-        tag-then-push dotmesh-dynamic-provisioner
+        tag-then-push dynamic-provisioner dotmesh-dynamic-provisioner
         #bazel-with-workspace run //cmd/dynamic-provisioner:provisioner_push
     fi
 }
@@ -126,14 +126,15 @@ build-operator() {
     bazel run cmd/operator:operator -- --norun
     if [ -z "${NO_PUSH}" ]; then
         echo "pushing image"
-        tag-then-push dotmesh-operator
+        tag-then-push operator dotmesh-operator
         #bazel-with-workspace run //cmd/operator:operator_push
     fi
 
 }
 
 tag-then-push() {
-    img=$1
-    docker tag bazel/cmd/$img:$img $REGISTRY/$REPOSITORY/$img:$DOCKERTAG
+    target=$1
+    img=$2
+    docker tag bazel/cmd/$target:$target $REGISTRY/$REPOSITORY/$img:$DOCKERTAG
     docker push $REGISTRY/$REPOSITORY/$img:$DOCKERTAG
 }
