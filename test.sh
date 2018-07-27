@@ -28,7 +28,7 @@ export GO_TEST_ID=$(uuidgen |cut -f "-" -d 1)
     export PATH=/usr/local/go/bin:$PATH
     export DISABLE_LOG_AGGREGATION=1
     cd tests
-    if [ -z $DOTMESH_TEST_TIMEOUT ]; then
+    if [ -n $DOTMESH_TEST_TIMEOUT ]; then
         ($TIMEOUT $DOTMESH_TEST_TIMEOUT sudo -E `which go` test -v "$@" 2>&1 ) | ts
     else
         (sudo -E `which go` test -v "$@" 2>&1 ) | ts
