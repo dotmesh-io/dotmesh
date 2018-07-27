@@ -14,6 +14,24 @@ setup-target-dir() {
     mkdir -p target/
 }
 
+set-defaults() {
+    if [ -z "$CI_DOCKER_TAG" ]; then
+    # Non-CI build
+        export DOCKERTAG=latest
+    else
+        export DOCKERTAG=$CI_DOCKER_TAG
+    fi
+
+    export REGISTRY=${CI_REGISTRY:-$(hostname).local:80}
+    export REPOSITORY=${CI_REPOSITORY:-dotmesh}
+
+
+    if [ -z "$CI_DOCKER_SERVER_IMAGE" ]; then
+        # Non-CI build
+        export CI_DOCKER_SERVER_IMAGE=${REGISTRY}/${REPOSITORY}/dotmesh-server:${DOCKERTAG}
+    fi
+}
+
 build-client() {
     OS=${1:-Linux}
     if [ $OS = "Linux" ]; then 
@@ -54,25 +72,33 @@ build-server() {
     if [ -z "${SKIP_K8S}" ]; then
         # dind-provisioner (builds a container)
         echo "building dind-provisioner container"
-        bazel-with-workspace build //cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioning
+        # todo switch back to build when bazel can push without being annoying
+        bazel-with-workspace run //cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioning
     fi
 
     # dotmesh-server
     echo "Building dotmesh-server container"
     # TODO serverVersion?
-    bazel-with-workspace build //cmd/dotmesh-server:dotmesh-server-img
-    if [ -n "${GENERATE_LOCAL_DOCKER_IMAGE}" ]; then
-        # set this variable if you need the generated image to show up in docker images
-        bazel-with-workspace run //cmd/dotmesh-server:dotmesh-server-img
-    fi
-    #     go build -pkgdir /go/pkg -ldflags "-X main.serverVersion=${VERSION}" -o /target/dotmesh-server
+    # bazel-with-workspace build //cmd/dotmesh-server:dotmesh-server-img
+    # fixme hack so that we don't have to use bazel to do pushing, which seems to flake :(
+    bazel-with-workspace run //cmd/dotmesh-server:dotmesh-server-img
+    # if [ -n "${GENERATE_LOCAL_DOCKER_IMAGE}" ]; then
+    #     # set this variable if you need the generated image to show up in docker images
+    #     bazel-with-workspace run //cmd/dotmesh-server:dotmesh-server-img
+    # fi
+    
     # allow disabling of registry push
     if [ -z "${NO_PUSH}" ]; then
         echo "pushing images"
-        bazel-with-workspace run //cmd/dotmesh-server:dotmesh-server_push
+        #fixme get back to using bazel for container pushes when it's not flaky.
+        docker tag bazel/cmd/dotmesh-server:dotmesh-server-img $CI_REGISTRY/$CI_REPOSITORY/dotmesh-server:$CI_DOCKER_TAG
+        docker push $CI_REGISTRY/$CI_REPOSITORY/dotmesh-server:$CI_DOCKER_TAG
+        #bazel-with-workspace run //cmd/dotmesh-server:dotmesh-server_push
         if [ -z "${SKIP_K8S}" ]; then
             echo "pushing dind provisioner"
-            bazel-with-workspace run //cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind_push
+            docker tag bazel/cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioning $CI_REGISTRY/$CI_REPOSITORY/dind-dynamic-provisioning:$CI_DOCKER_TAG
+            docker push $CI_REGISTRY/$CI_REPOSITORY/dind-dynamic-provisioning:$CI_DOCKER_TAG
+            #bazel-with-workspace run //cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind_push
         fi
     fi
 
@@ -82,10 +108,12 @@ build-server() {
 }
 
 build-provisioner() {
-    bazel-with-workspace build //cmd/dynamic-provisioner:dynamic-provisioner
+    # fixme switch back to bazel for pushing when it's not flaky
+    bazel-with-workspace run //cmd/dynamic-provisioner:dynamic-provisioner
     if [ -z "${NO_PUSH}" ]; then
         echo "pushing image"
-        bazel-with-workspace run //cmd/dynamic-provisioner:provisioner_push
+        tag-then-push dynamic-provisioner
+        #bazel-with-workspace run //cmd/dynamic-provisioner:provisioner_push
     fi
 }
 
@@ -95,7 +123,14 @@ build-operator() {
 
     if [ -z "${NO_PUSH}" ]; then
         echo "pushing image"
-        bazel-with-workspace run //cmd/operator:operator_push
+        tag-then-push operator
+        #bazel-with-workspace run //cmd/operator:operator_push
     fi
 
+}
+
+tag-then-push() {
+    img=$1
+    docker tag bazel/cmd/$img:$img $CI_REGISTRY/$CI_REPOSITORY/$img:$CI_DOCKER_TAG
+    docker push $CI_REGISTRY/$CI_REPOSITORY/$img:$CI_DOCKER_TAG
 }
