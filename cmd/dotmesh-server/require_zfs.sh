@@ -240,11 +240,13 @@ if [ -z "$DOTMESH_MANUAL_NETWORKING" ]; then
         # by etcd operator on Kubernetes).
         link="--link dotmesh-etcd:dotmesh-etcd"
     fi
+
+    # "$DOTMESH_ETCD_ENDPOINT" != "" proxy for checking we're in a k8s environment.
     if [ "$DOTMESH_ETCD_ENDPOINT" != "" ]; then
         # When running in a pod network, calculate the id of the current container
         # in scope, and pass that as --net=container:<id> so that dotmesh-server
         # itself runs in the same network namespace.
-        self_containers=$(docker ps -q --filter="ancestor=$DOTMESH_DOCKER_IMAGE")
+        self_containers=$(docker ps --no-trunc | grep "dotmesh-outer_`hostname`" | cut -f 1 -d ' ')
         array_containers=( $self_containers )
         num_containers=${#array_containers[@]}
         if [ $num_containers -eq 0 ]; then
