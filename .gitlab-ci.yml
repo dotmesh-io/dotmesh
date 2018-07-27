@@ -145,6 +145,7 @@ build_server:
     artifacts:
         paths:
             - target
+            - dotmesh-base.tar
         expire_in: 1 week
     except:
         - schedules
@@ -290,7 +291,6 @@ linux_kubernetes_volumes:
         when: always
     except:
         - schedules
-    allow_failure: true
 
 linux_kubernetes_operator_dynamic_provisioning:
     stage: test
@@ -325,7 +325,6 @@ linux_kubernetes_operator_PVC:
         when: always
     except:
         - schedules
-    allow_failure: true
 
 linux_deletion_simple:
     stage: test
@@ -505,6 +504,7 @@ publish_images:
     dependencies:
         - build_client_linux
         - build_client_macos
+        - build_server
         - build_yaml
     tags:
         - ubuntu
@@ -522,8 +522,8 @@ trigger_e2e_test:
         - ubuntu
         - fast
     script:
-        - echo - curl -X POST -F "token=$E2E_TRIGGER_TOKEN" -F "ref=master" -F "variables[DOTMESH_CI_COMMIT_SHA]=$CI_COMMIT_SHA" -F "variables[DOTMESH_CI_BUILD_REF_NAME]=$CI_BUILD_REF_NAME" http://gitlab.dotmesh.io:9999/api/v4/projects/31/trigger/pipeline
-        - curl -X POST -F "token=$E2E_TRIGGER_TOKEN" -F "ref=master" -F "variables[DOTMESH_CI_COMMIT_SHA]=$CI_COMMIT_SHA" -F "variables[DOTMESH_CI_BUILD_REF_NAME]=$CI_BUILD_REF_NAME" http://gitlab.dotmesh.io:9999/api/v4/projects/31/trigger/pipeline
+        - echo - curl -X POST -F "token=$E2E_TRIGGER_TOKEN" -F "ref=master" -F "variables[DOTMESH_CI_COMMIT_SHA]=$CI_COMMIT_SHA" -F "variables[DOTMESH_CI_BUILD_REF_NAME]=$CI_BUILD_REF_NAME" https://gitlab.dotmesh.com/api/v4/projects/31/trigger/pipeline
+        - curl -X POST -F "token=$E2E_TRIGGER_TOKEN" -F "ref=master" -F "variables[DOTMESH_CI_COMMIT_SHA]=$CI_COMMIT_SHA" -F "variables[DOTMESH_CI_BUILD_REF_NAME]=$CI_BUILD_REF_NAME" https://gitlab.dotmesh.com/api/v4/projects/31/trigger/pipeline
     only:
         - master
     except:
