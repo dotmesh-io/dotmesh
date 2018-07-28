@@ -16,9 +16,9 @@ main() {
     export CI_REPOSITORY=$2
     pull-then-push dotmesh-server
     # do a full rebuild on operator because it needs to know the server image link
-    build-operator
-    pull-then-push operator
-    pull-then-push dynamic-provisioner
+    set-defaults
+    build-operator # think this should push straight to quay now that above have been exported
+    pull-then-push dotmesh-dynamic-provisioner
 }
 
 main $@

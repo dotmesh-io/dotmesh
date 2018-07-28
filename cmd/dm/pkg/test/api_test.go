@@ -8,7 +8,7 @@ import (
 func TestUserPriviledged(t *testing.T) {
 	dm, err := remotes.NewDotmeshAPI("./fixtures/admin.config", true)
 	if err != nil {
-		t.Errorf("Unable to get an instance of API", err)
+		t.Errorf("Unable to get an instance of API: %s", err)
 	}
 
 	priv := dm.IsUserPriveledged()
@@ -20,7 +20,7 @@ func TestUserPriviledged(t *testing.T) {
 func TestUserNotPriviledged(t *testing.T) {
 	dm, err := remotes.NewDotmeshAPI("./fixtures/non-admin.config", true)
 	if err != nil {
-		t.Errorf("Unable to get an instance of API", err)
+		t.Errorf("Unable to get an instance of API: %s", err)
 	}
 
 	priv := dm.IsUserPriveledged()

@@ -351,51 +351,57 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 			}
 
 			// XXX the following only works if overlay is working
-			err = System("bash", "-c", fmt.Sprintf(`
-			set -xe
-			mkdir -p /dotmesh-test-pools
-			MOUNTPOINT=/dotmesh-test-pools
-			NODE=%s
-			if [ $(mount |grep $MOUNTPOINT |wc -l) -eq 0 ]; then
-				echo "Creating and bind-mounting shared $MOUNTPOINT"
-				mkdir -p $MOUNTPOINT && \
-				mount --bind $MOUNTPOINT $MOUNTPOINT && \
-				mount --make-shared $MOUNTPOINT;
-			fi
-			(cd %s
-				EXTRA_DOCKER_ARGS="-v /dotmesh-test-pools:/dotmesh-test-pools:rshared -v /var/run/docker.sock:/hostdocker.sock %s " \
-				CNI_PLUGIN=weave %s bare $NODE %s)
-			sleep 1
-			echo "About to run docker exec on $NODE"
-			docker exec -t $NODE bash -c '
-				set -xe
-				# from dind::fix-mounts
-				mount --make-shared /lib/modules/
-				mount --make-shared /run
-			    echo "%s '$(hostname)'.local" >> /etc/hosts
-				mkdir -p /etc/docker
-				echo "{\"insecure-registries\" : [\"%s.local:80\"]}" > /etc/docker/daemon.json
-				systemctl daemon-reload
-				systemctl restart docker
-			'
-			ret=$?
-			echo "Return code for docker exec was $ret"
-			if [[ $ret -ne 0 ]]; then
-			    # Do it again
-				echo "Retrying after 5 seconds..."
-				sleep 5
-				docker exec -t $NODE bash -c '
+			err = TryUntilSucceeds(
+				func() error {
+					return System("bash", "-c", fmt.Sprintf(`
 					set -xe
-					echo "%s '$(hostname)'.local" >> /etc/hosts
-					mkdir -p /etc/docker
-					echo "{\"insecure-registries\" : [\"%s.local:80\"]}" > /etc/docker/daemon.json
-					systemctl daemon-reload
-					systemctl restart docker
-				'
-			fi
-			`, node, runScriptDir, mountDockerAuth,
-				dindClusterScriptName, c.RunArgs(i, j), HOST_IP_FROM_CONTAINER,
-				hostname, HOST_IP_FROM_CONTAINER, hostname))
+					mkdir -p /dotmesh-test-pools
+					MOUNTPOINT=/dotmesh-test-pools
+					NODE=%s
+					if [ $(mount |grep $MOUNTPOINT |wc -l) -eq 0 ]; then
+						echo "Creating and bind-mounting shared $MOUNTPOINT"
+						mkdir -p $MOUNTPOINT && \
+						mount --bind $MOUNTPOINT $MOUNTPOINT && \
+						mount --make-shared $MOUNTPOINT;
+					fi
+					(cd %s
+						EXTRA_DOCKER_ARGS="-v /dotmesh-test-pools:/dotmesh-test-pools:rshared -v /var/run/docker.sock:/hostdocker.sock %s " \
+						CNI_PLUGIN=weave %s bare $NODE %s)
+					sleep 1
+					echo "About to run docker exec on $NODE"
+					docker exec -t $NODE bash -c '
+						set -xe
+						# from dind::fix-mounts
+						mount --make-shared /lib/modules/
+						mount --make-shared /run
+						echo "%s '$(hostname)'.local" >> /etc/hosts
+						mkdir -p /etc/docker
+						echo "{\"insecure-registries\" : [\"%s.local:80\"]}" > /etc/docker/daemon.json
+						systemctl daemon-reload
+						systemctl restart docker
+					'
+					ret=$?
+					echo "Return code for docker exec was $ret"
+					if [[ $ret -ne 0 ]]; then
+						# Do it again
+						echo "Retrying after 5 seconds..."
+						sleep 5
+						docker exec -t $NODE bash -c '
+							set -xe
+							echo "%s '$(hostname)'.local" >> /etc/hosts
+							mkdir -p /etc/docker
+							echo "{\"insecure-registries\" : [\"%s.local:80\"]}" > /etc/docker/daemon.json
+							systemctl daemon-reload
+							systemctl restart docker
+						'
+					fi
+					`, node, runScriptDir, mountDockerAuth,
+						dindClusterScriptName, c.RunArgs(i, j), HOST_IP_FROM_CONTAINER,
+						hostname, HOST_IP_FROM_CONTAINER, hostname),
+					)
+				},
+				fmt.Sprintf("starting container %s", node),
+			)
 			if err != nil {
 				return err
 			}
@@ -1069,7 +1075,11 @@ func nodeName(now int64, i, j int) string {
 
 // testDirName
 func testDirName(now int64) string {
-	return fmt.Sprintf("/dotmesh-test-pools/%d", now)
+	if os.Getenv("GO_TEST_ID") != "" {
+		return fmt.Sprintf("/dotmesh-test-pools/%d-%s", now, os.Getenv("GO_TEST_ID"))
+	} else {
+		return fmt.Sprintf("/dotmesh-test-pools/%d", now)
+	}
 }
 
 func NodeName(now int64, i, j int) string {
@@ -1437,8 +1447,8 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		}
 	}
 
-	// TODO regex the following yamels to refer to the newly pushed
-	// dotmesh container image, rather than the latest stable
+	// Regex the following yamels to refer to the newly pushed dotmesh
+	// container image, rather than the latest stable
 
 	err := System("bash", "-c",
 		fmt.Sprintf(
@@ -1458,6 +1468,8 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		return err
 	}
 
+	fmt.Println("Yamls are wrangled, preparing to kubeadm init...")
+
 	st, err := docker(
 		nodeName(now, i, 0),
 		"touch /dind/flexvolume_driver && "+
@@ -1471,6 +1483,8 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 	if err != nil {
 		return err
 	}
+
+	fmt.Println("kubeadm init is done, preparing to join...")
 
 	lines := strings.Split(st, "\n")
 

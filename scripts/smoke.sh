@@ -65,7 +65,8 @@ echo "### Fetching client"
 
 mkdir -p $SMOKE_TEST_DIR
 
-curl -sSL -o $SMOKE_TEST_DIR/dm https://get.dotmesh.io/unstable/master/$(uname -s)/dm && chmod +x $SMOKE_TEST_DIR/dm
+curl -sSL -o $SMOKE_TEST_DIR/dm https://get.dotmesh.io/unstable/$CI_COMMIT_REF_NAME/$(uname -s)/dm
+chmod +x $SMOKE_TEST_DIR/dm
 
 sudo "$DM" -c "$CONFIG" cluster reset || (sleep 10; sudo "$DM" cluster reset) || true
 

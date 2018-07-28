@@ -1,3 +1,8 @@
+# TODO: try to clean up test runs by wrapping go test in a timeout & running
+# the cleanup scripts.
+# I think we'll need to pass in a name to the test runner, and then cleanup
+# anything with that prefix...
+
 variables:
     SERVER_NAME: dotmesh-server
     PROVISIONER_NAME: dotmesh-dynamic-provisioner
@@ -19,12 +24,14 @@ variables:
     CI_SERVICE_BEING_TESTED: dotmesh
 
     DOTMESH_TEST_CLEANUP: always
+    DOTMESH_TEST_TIMEOUT: 10m
 
 stages:
     - build
     - test
     - deploy_images
     - deploy
+    - smoke
     - manual_deploy
     - notify
 
@@ -41,6 +48,7 @@ before_script:
     - while [ -f /dotmesh-test-cleanup.lock ]; do echo "waiting for test cleanup..."; sleep 1; done
 
 build_client_linux:
+    retry: 2
     stage: build
     tags:
         - ubuntu
@@ -55,6 +63,7 @@ build_client_linux:
         - schedules
 
 build_client_macos:
+    retry: 2
     stage: build
     tags:
         - ubuntu
@@ -69,6 +78,7 @@ build_client_macos:
         - schedules
 
 build_yaml:
+    retry: 2
     stage: build
     tags:
         - ubuntu
@@ -98,6 +108,7 @@ build_yaml:
         - schedules
 
 build_operator:
+    retry: 2
     stage: build
     tags:
         - ubuntu
@@ -115,6 +126,7 @@ build_operator:
         - schedules
 
 build_provisioner:
+    retry: 2
     stage: build
     tags:
         - ubuntu
@@ -132,6 +144,7 @@ build_provisioner:
         - schedules
 
 build_server:
+    retry: 2
     stage: build
     tags:
         - ubuntu
@@ -145,13 +158,13 @@ build_server:
     artifacts:
         paths:
             - target
-            - dotmesh-base.tar
         expire_in: 1 week
     except:
         - schedules
 
 macos_docker_stable_smoke:
-    stage: test
+    retry: 2
+    stage: smoke
     tags:
         - macos
         - docker-stable
@@ -159,11 +172,10 @@ macos_docker_stable_smoke:
         - gtimeout 5m ./scripts/smoke.sh
     after_script:
         - docker container prune -f
-    only:
-        - schedules
 
 macos_docker_edge_smoke:
-    stage: test
+    retry: 2
+    stage: smoke
     tags:
         - macos
         - docker-edge
@@ -171,11 +183,10 @@ macos_docker_edge_smoke:
         - gtimeout 5m ./scripts/smoke.sh
     after_script:
         - docker container prune -f
-    only:
-        - schedules
 
 linux_smoke:
-    stage: test
+    retry: 2
+    stage: smoke
     tags:
         - ubuntu
         - fast
@@ -183,8 +194,6 @@ linux_smoke:
         - timeout 5m ./scripts/smoke.sh
     after_script:
         - docker container prune -f
-    only:
-        - schedules
 
 dotmesh_unit_tests:
     stage: test
@@ -208,9 +217,9 @@ versioner_unit_tests:
 
 # run full dind tests on linux
 linux_default_dot:
+    retry: 2
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu
@@ -225,9 +234,9 @@ linux_default_dot:
         - schedules
 
 linux_single_node:
+    retry: 2
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu
@@ -242,9 +251,9 @@ linux_single_node:
         - schedules
 
 linux_recover_from_unmounted_dot_on_master:
+    retry: 2
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu
@@ -259,9 +268,9 @@ linux_recover_from_unmounted_dot_on_master:
         - schedules
 
 linux_two_nodes_same_cluster:
+    retry: 2
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu
@@ -276,9 +285,10 @@ linux_two_nodes_same_cluster:
         - schedules
 
 linux_kubernetes_volumes:
+    retry: 2
     stage: test
     dependencies:
-        - build_server
+        - build_yaml
         - build_client_linux
     tags:
         - ubuntu
@@ -293,9 +303,10 @@ linux_kubernetes_volumes:
         - schedules
 
 linux_kubernetes_operator_dynamic_provisioning:
+    retry: 2
     stage: test
     dependencies:
-        - build_server
+        - build_yaml
         - build_client_linux
     tags:
         - ubuntu
@@ -310,9 +321,10 @@ linux_kubernetes_operator_dynamic_provisioning:
         - schedules
 
 linux_kubernetes_operator_PVC:
+    retry: 2
     stage: test
     dependencies:
-        - build_server
+        - build_yaml
         - build_client_linux
     tags:
         - ubuntu
@@ -327,9 +339,9 @@ linux_kubernetes_operator_PVC:
         - schedules
 
 linux_deletion_simple:
+    retry: 2
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu
@@ -344,9 +356,9 @@ linux_deletion_simple:
         - schedules
 
 linux_deletion_complex:
+    retry: 2
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu
@@ -361,9 +373,9 @@ linux_deletion_complex:
         - schedules
 
 linux_backup_and_restore_two_single_node_clusters:
+    retry: 2
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu
@@ -378,9 +390,9 @@ linux_backup_and_restore_two_single_node_clusters:
         - schedules
 
 linux_two_single_node_clusters:
+    retry: 2
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu
@@ -395,9 +407,9 @@ linux_two_single_node_clusters:
         - schedules
 
 linux_three_single_node_clusters:
+    retry: 2
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu
@@ -412,9 +424,9 @@ linux_three_single_node_clusters:
         - schedules
 
 linux_two_double_node_clusters:
+    retry: 2
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu
@@ -429,9 +441,9 @@ linux_two_double_node_clusters:
         - schedules
 
 linux_s3:
+    retry: 2
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu
@@ -447,9 +459,9 @@ linux_s3:
 
 # Test disabled while we rethink how it works (see comments in acceptance_test.go)
 .linux_kubernetes_test_tooling:
+    retry: 2
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu
@@ -466,13 +478,12 @@ linux_s3:
 linux_stress_lots_of_commits:
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu
         - fast
     script:
-        - ./test.sh -timeout 30m -run TestStressLotsOfCommits
+        - DOTMESH_TEST_TIMEOUT=30m ./test.sh -run TestStressLotsOfCommits
     artifacts:
         paths:
         - extracted_logs
@@ -484,13 +495,12 @@ linux_stress_lots_of_commits:
 linux_stress_handover:
     stage: test
     dependencies:
-        - build_server
         - build_client_linux
     tags:
         - ubuntu
         - fast
     script:
-        - ./test.sh -timeout 30m -run TestStressHandover
+        - DOTMESH_TEST_TIMEOUT=30m ./test.sh -run TestStressHandover
     artifacts:
         paths:
         - extracted_logs
@@ -500,6 +510,7 @@ linux_stress_handover:
         - schedules
 
 publish_images:
+    retry: 2
     stage: deploy_images
     dependencies:
         - build_client_linux
@@ -511,6 +522,7 @@ publish_images:
         - fast
     script:
         # push to quay.io, by re-tagging and pushing the images
+        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
         - docker login -u $QUAY_USER -p $QUAY_PASSWORD $RELEASE_DOCKER_REGISTRY
         - ./release-images.sh $RELEASE_DOCKER_REGISTRY $RELEASE_DOCKER_REPOSITORY
     except:
@@ -530,6 +542,7 @@ trigger_e2e_test:
         - schedules
 
 deploy_unstable_build:
+    retry: 2
     stage: deploy
     dependencies:
         - build_client_linux
@@ -548,6 +561,7 @@ deploy_unstable_build:
         - schedules
 
 deploy_release_build:
+    retry: 2
     stage: deploy
     dependencies:
         - build_client_linux

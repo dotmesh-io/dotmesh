@@ -1,25 +1,10 @@
 #!/bin/bash
 
+set -e
+
 # script to tell bazel what version to set on the client
-VERSION=$(cd cmd/versioner && go run versioner.go)
-echo VERSION ${VERSION}
-if [ -z "$CI_DOCKER_TAG" ]; then
-    # Non-CI build
-    DOCKERTAG=latest
-else
-    DOCKERTAG=$CI_DOCKER_TAG
-fi
-
-REGISTRY=${CI_REGISTRY:-$(hostname).local:80}
-REPOSITORY=${CI_REPOSITORY:-dotmesh}
-
-
-if [ -z "$CI_DOCKER_SERVER_IMAGE" ]; then
-    # Non-CI build
-    CI_DOCKER_SERVER_IMAGE=${REGISTRY}/${REPOSITORY}/dotmesh-server:${DOCKERTAG}
-fi
-
-echo DOCKERTAG ${DOCKERTAG}
+echo STABLE_VERSION ${STABLE_VERSION}
+echo STABLE_DOCKERTAG ${STABLE_DOCKERTAG}
 echo CI_REGISTRY ${REGISTRY}
 echo CI_REPOSITORY ${REPOSITORY}
-echo CI_DOCKER_SERVER_IMAGE ${CI_DOCKER_SERVER_IMAGE}
+echo STABLE_CI_DOCKER_SERVER_IMAGE ${STABLE_CI_DOCKER_SERVER_IMAGE}

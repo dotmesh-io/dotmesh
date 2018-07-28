@@ -291,6 +291,7 @@ func TestSingleNode(t *testing.T) {
 		var validRemote = regexp.MustCompile(`^Current remote: `)
 
 		serverResponse := citools.OutputFromRunOnNode(t, node1, "dm version")
+		fmt.Sprintf("Server response: %s\n", serverResponse)
 
 		lines := strings.Split(serverResponse, "\n")
 
@@ -303,6 +304,10 @@ func TestSingleNode(t *testing.T) {
 
 		for _, versionBit := range versionInfo {
 			parsedResponse = append(parsedResponse, strings.Fields(strings.TrimSpace(versionBit))...)
+		}
+
+		if len(parsedResponse) != 6 {
+			t.Fatalf("dm version response has the wrong number of lines in versionInfo (found %d):\n%s\n%#v\n", len(parsedResponse), serverResponse, parsedResponse)
 		}
 
 		if (parsedResponse[0] != "Client:") || parsedResponse[1] != "Version:" {
