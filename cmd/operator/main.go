@@ -102,7 +102,7 @@ func GetClientConfig(kubeconfig string) (*rest.Config, error) {
 var Version string = "none" // Set at compile time
 
 type dotmeshSentinel struct {
-	node string
+	name string
 	pvc  string
 }
 
@@ -562,6 +562,33 @@ func (c *dotmeshController) process() error {
 		}
 	}
 
+	// GET A LIST OF DOTMESH SENTINELS
+
+	sentinels := map[string]dotmeshSentinel{} // Set of pod IDs that are in the "Running" state
+	sentinelPods, err := c.sentinelLister.List(labels.Everything())
+	if err != nil {
+		return err
+	}
+
+	for _, sentinel := range sentinelPods {
+		sentinelName := sentinel.ObjectMeta.Name
+		var sentinelPVC, sentinelNode string
+		for _, volume := range sentinel.Spec.Volumes {
+			if volume.VolumeSource.PersistentVolumeClaim != nil {
+				sentinelPVC = volume.VolumeSource.PersistentVolumeClaim.ClaimName
+			}
+		}
+
+		sentinelNode, ok := sentinel.Spec.NodeSelector[DOTMESH_NODE_LABEL]
+		if !ok {
+			glog.Infof("Observing sentinel %s - cannot find %s label", sentinelName, DOTMESH_NODE_LABEL)
+		}
+		sentinels[sentinelNode] = dotmeshSentinel{
+			name: sentinelName,
+			pvc:  sentinelPVC,
+		}
+	}
+
 	// GET A LIST OF DOTMESH PVCS
 
 	// pvcs is a []*v1.PersistentVolumeClaim
@@ -799,39 +826,14 @@ func (c *dotmeshController) process() error {
 		}
 	}
 
-	// GET A LIST OF DOTMESH SENTINELS
-
-	sentinels := map[string]dotmeshSentinel{} // Set of pod IDs that are in the "Running" state
-	sentinelPods, err := c.sentinelLister.List(labels.Everything())
-	if err != nil {
-		return err
-	}
-
-	for _, sentinel := range sentinelPods {
-		sentinelName := sentinel.ObjectMeta.Name
-		var sentinelPVC, sentinelNode string
-		for _, volume := range sentinel.Spec.Volumes {
-			if volume.VolumeSource.PersistentVolumeClaim != nil {
-				sentinelPVC = volume.VolumeSource.PersistentVolumeClaim.ClaimName
-			}
-		}
-
-		sentinelNode, ok := sentinel.Spec.NodeSelector[DOTMESH_NODE_LABEL]
-		if !ok {
-			glog.Infof("Observing sentinel %s - cannot find %s label", sentinelName, DOTMESH_NODE_LABEL)
-		}
-		sentinels[sentinelName] = dotmeshSentinel{
-			node: sentinelNode,
-			pvc:  sentinelPVC,
-		}
-	}
 	// CREATE NEW DOTMESH PODS WHERE NEEDED
-	c.createDotmeshPods(undottedNodes, suspendedNodes, unusedPVCs)
+	c.createDotmeshPods(undottedNodes, suspendedNodes, unusedPVCs, sentinels)
 
 	return nil
 }
 
-func (c *dotmeshController) createDotmeshPods(undottedNodes map[string]struct{}, suspendedNodes map[string]struct{}, unusedPVCs map[string]struct{}) {
+func (c *dotmeshController) createDotmeshPods(undottedNodes map[string]struct{}, suspendedNodes map[string]struct{},
+	unusedPVCs map[string]struct{}, sentinels map[string]dotmeshSentinel) {
 	// FIXME: This hardcodes the name of the Deployment to be the
 	// ownerRef of created pods. It would be nicer to use an API to
 	// find the Pod containing the currently running process and then
@@ -887,7 +889,7 @@ nodeLoop:
 
 		var podName string
 		var sentinelName string
-		var provisionSentinel bool
+		var provisionSentinelOnNode bool
 		var pvVolumes []v1.Volume
 		var pvEnvs []v1.EnvVar
 		var pvVolumeMounts []v1.VolumeMount
@@ -913,7 +915,10 @@ nodeLoop:
 			// The name of the PVC we're going to use for this pod
 			var pvc string
 
-			if len(unusedPVCs) == 0 {
+			//If no PVC's are available or they are available but allocated to sentinels NOT on this node
+			sentinelOnNode, ok := sentinels[node]
+			if !ok {
+				provisionSentinelOnNode = true
 				// Create a new PVC, as we don't have a spare.
 
 				// Pick a name
@@ -963,21 +968,14 @@ nodeLoop:
 					continue nodeLoop
 				}
 			} else {
-				// Pick the first one in unusedPVCs
-				// TODO: Is there a better basis for picking one? Most recently used?
-				for pvcName, _ := range unusedPVCs {
-					pvc = pvcName
-					break
-				}
-				// It's claimed now, so take it off the list
-				delete(unusedPVCs, pvc)
-				glog.Infof("Reusing existing pvc %s", pvc)
+				pvc = sentinelOnNode.pvc
+				delete(unusedPVCs, pvc) //not used here but will be useful in multi-dotmesh node clusters
+				glog.Infof("Reusing the PVC that the sentinel on this node is attached to. PVC: %s on Sentinel: %s", pvc, sentinelOnNode.name)
 			}
 
 			// Configure the pod to use PV storage
 
 			podName = fmt.Sprintf("server-%s-node-%s", pvc, node)
-			provisionSentinel = true // Flag to integrate
 			sentinelName = fmt.Sprintf("sentinel-server-%s-node-%s", pvc, node)
 			pvVolumeMounts = []v1.VolumeMount{v1.VolumeMount{
 				Name:      "backend-pv",
@@ -1031,7 +1029,7 @@ nodeLoop:
 
 		c.createServerPod(podName, node, env, volumeMounts, volumes)
 
-		if provisionSentinel {
+		if provisionSentinelOnNode {
 			c.createSentinelPod(sentinelName, node, pvEnvs, pvVolumeMounts, pvVolumes)
 		}
 	}
