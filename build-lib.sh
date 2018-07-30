@@ -47,7 +47,7 @@ build-client() {
     if [ $OS = "Linux" ]; then 
         platform="linux_amd64"
     elif [ $OS = "Darwin" ]; then 
-        platform="darwin_amd64_pure" 
+        platform="darwin_amd64"
     else
         echo "Please enter Linux or Darwin as the first arg"
         return 1
@@ -67,7 +67,7 @@ build-client() {
     bazel-with-workspace build //cmd/dm:dm $platform
     # tiny bit hacky - if we're on a mac and compiling for linux the output will be "pure", and vice versa compiling for mac from linux
     if [ ! -d "${location}/dm/${output_dir}" ]; then
-        output_dir=${platform}_pure_stripped
+        output_dir=${platform}_pure_static_stripped
     fi
     cp ${location}/dm/$output_dir/dm binaries/$OS/
     return 0
