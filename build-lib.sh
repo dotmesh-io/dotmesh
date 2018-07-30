@@ -7,7 +7,15 @@ bazel-with-workspace() {
     cmd=$1
     cmd_path=$2
     platform=${3:-linux_amd64}
+    pass_thru=$4
     bazel $cmd $cmd_path --platforms=@io_bazel_rules_go//go/toolchain:$platform --workspace_status_command=$(realpath ./version_status.sh)
+}
+
+bazel-with-workspace-no-run() {
+    cmd=$1
+    cmd_path=$2
+    platform=${3:-linux_amd64}
+    bazel $cmd $cmd_path --platforms=@io_bazel_rules_go//go/toolchain:$platform --workspace_status_command=$(realpath ./version_status.sh) -- --norun
 }
 
 setup-target-dir() {
@@ -76,7 +84,7 @@ build-server() {
         echo "building dind-provisioner container"
         # todo switch back to build when bazel can push without being annoying
         bazel-with-workspace build //cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioner
-        bazel run cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioner -- --norun
+        bazel-with-workspace-no-run run cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioner
     fi
 
     # dotmesh-server
@@ -85,7 +93,7 @@ build-server() {
     # bazel-with-workspace build //cmd/dotmesh-server:dotmesh-server-img
     # fixme hack so that we don't have to use bazel to do pushing, which seems to flake :(
     bazel-with-workspace build //cmd/dotmesh-server:dotmesh-server-img
-    bazel-with-workspace run cmd/dotmesh-server:dotmesh-server-img
+    bazel-with-workspace-no-run run cmd/dotmesh-server:dotmesh-server-img
     # if [ -n "${GENERATE_LOCAL_DOCKER_IMAGE}" ]; then
     #     # set this variable if you need the generated image to show up in docker images
     #     bazel-with-workspace run //cmd/dotmesh-server:dotmesh-server-img
@@ -114,7 +122,7 @@ build-server() {
 build-provisioner() {
     # fixme switch back to bazel for pushing when it's not flaky
     bazel-with-workspace build //cmd/dynamic-provisioner:dynamic-provisioner
-    bazel run cmd/dynamic-provisioner:dynamic-provisioner -- --norun
+    bazel-with-workspace-no-run run cmd/dynamic-provisioner:dynamic-provisioner
     if [ -z "${NO_PUSH}" ]; then
         echo "pushing image"
         tag-then-push dynamic-provisioner dotmesh-dynamic-provisioner
@@ -125,10 +133,10 @@ build-provisioner() {
 build-operator() {
     # operator (builds container)
     bazel-with-workspace build //cmd/operator:operator
-    bazel run cmd/operator:operator -- --norun
+    bazel-with-workspace-no-run run cmd/operator:operator
     if [ -z "${NO_PUSH}" ]; then
         echo "pushing image"
-        tag-then-push operator dotmesh-operator
+        tag-then-push operator dotmesh-operator operator
         #bazel-with-workspace run //cmd/operator:operator_push
     fi
 
@@ -137,6 +145,10 @@ build-operator() {
 tag-then-push() {
     target=$1
     img=$2
-    docker tag bazel/cmd/$target:$target $REGISTRY/$REPOSITORY/$img:$STABLE_DOCKERTAG
+    dir=$3
+    if [ -z $dir ]; then
+        dir=$1
+    fi
+    docker tag bazel/cmd/$dir:$target $REGISTRY/$REPOSITORY/$img:$STABLE_DOCKERTAG
     docker push $REGISTRY/$REPOSITORY/$img:$STABLE_DOCKERTAG
 }
