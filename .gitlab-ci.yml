@@ -16,7 +16,7 @@ variables:
 
     # PLEASE NOTE: If you change these, you also need to update the BUILD.bazel files in those projects
     # to make their docker_push thingies match - they don't automatically remain in sync.
-    CI_DOCKER_SERVER_IMAGE: $CI_REGISTRY/$CI_REPOSITORY/dotmesh-server:$CI_COMMIT_SHA
+    STABLE_CI_DOCKER_SERVER_IMAGE: $CI_REGISTRY/$CI_REPOSITORY/dotmesh-server:$CI_COMMIT_SHA
     CI_DOCKER_PROVISIONER_IMAGE: $CI_REGISTRY/$CI_REPOSITORY/dotmesh-dynamic-provisioner:$CI_COMMIT_SHA
     CI_DOCKER_OPERATOR_IMAGE: $CI_REGISTRY/$CI_REPOSITORY/dotmesh-operator:$CI_COMMIT_SHA
     CI_DOCKER_DIND_PROVISIONER_IMAGE: $CI_REGISTRY/$CI_REPOSITORY/dind-dynamic-provisioner:$CI_COMMIT_SHA
