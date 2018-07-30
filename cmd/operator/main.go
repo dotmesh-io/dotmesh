@@ -562,33 +562,6 @@ func (c *dotmeshController) process() error {
 		}
 	}
 
-	// GET A LIST OF DOTMESH SENTINELS
-
-	sentinels := map[string]dotmeshSentinel{} // Set of pod IDs that are in the "Running" state
-	sentinelPods, err := c.sentinelLister.List(labels.Everything())
-	if err != nil {
-		return err
-	}
-
-	for _, sentinel := range sentinelPods {
-		sentinelName := sentinel.ObjectMeta.Name
-		var sentinelPVC, sentinelNode string
-		for _, volume := range sentinel.Spec.Volumes {
-			if volume.VolumeSource.PersistentVolumeClaim != nil {
-				sentinelPVC = volume.VolumeSource.PersistentVolumeClaim.ClaimName
-			}
-		}
-
-		sentinelNode, ok := sentinel.Spec.NodeSelector[DOTMESH_NODE_LABEL]
-		if !ok {
-			glog.Infof("Observing sentinel %s - cannot find %s label", sentinelName, DOTMESH_NODE_LABEL)
-		}
-		sentinels[sentinelNode] = dotmeshSentinel{
-			name: sentinelName,
-			pvc:  sentinelPVC,
-		}
-	}
-
 	// GET A LIST OF DOTMESH PVCS
 
 	// pvcs is a []*v1.PersistentVolumeClaim
@@ -603,6 +576,34 @@ func (c *dotmeshController) process() error {
 		// We will eliminate PVCs we find bound to pods as we go, to
 		// leave just the unused ones after we've looked at every pod.
 		unusedPVCs[pvc.ObjectMeta.Name] = struct{}{}
+	}
+
+	// GET A LIST OF DOTMESH SENTINELS
+
+	sentinels := map[string]dotmeshSentinel{} // Set of pod IDs that are in the "Running" state
+	sentinelPods, err := c.sentinelLister.List(labels.Everything())
+	if err != nil {
+		return err
+	}
+
+	for _, sentinel := range sentinelPods {
+		sentinelName := sentinel.ObjectMeta.Name
+		var sentinelPVC, sentinelNode string
+		for _, volume := range sentinel.Spec.Volumes {
+			if volume.VolumeSource.PersistentVolumeClaim != nil {
+				sentinelPVC = volume.VolumeSource.PersistentVolumeClaim.ClaimName
+				delete(unusedPVCs, sentinelPVC)
+			}
+		}
+
+		sentinelNode, ok := sentinel.Spec.NodeSelector[DOTMESH_NODE_LABEL]
+		if !ok {
+			glog.Infof("Observing sentinel %s - cannot find %s label", sentinelName, DOTMESH_NODE_LABEL)
+		}
+		sentinels[sentinelNode] = dotmeshSentinel{
+			name: sentinelName,
+			pvc:  sentinelPVC,
+		}
 	}
 
 	// EXAMINE DOTMESH PODS
@@ -919,57 +920,69 @@ nodeLoop:
 			sentinelOnNode, ok := sentinels[node]
 			if !ok {
 				provisionSentinelOnNode = true
-				// Create a new PVC, as we don't have a spare.
+				if len(unusedPVCs) != 0 {
+					// Pick the first one in unusedPVCs
+					// TODO: Is there a better basis for picking one? Most recently used?
+					for pvcName, _ := range unusedPVCs {
+						pvc = pvcName
+						break
+					}
+					// It's claimed now, so take it off the list
+					delete(unusedPVCs, pvc)
+					glog.Infof("Reusing existing pvc %s that is unattached to any pods", pvc)
+				} else {
+					// Create a new PVC, as we don't have a spare.
 
-				// Pick a name
-				randBytes := make([]byte, PVC_NAME_RANDOM_BYTES)
-				_, err := rand.Read(randBytes)
-				if err != nil {
-					glog.Errorf("Error picking a random PVC name: %+v", err)
-					continue nodeLoop
-				}
-				pvc = fmt.Sprintf("pvc-%s", hex.EncodeToString(randBytes))
+					// Pick a name
+					randBytes := make([]byte, PVC_NAME_RANDOM_BYTES)
+					_, err := rand.Read(randBytes)
+					if err != nil {
+						glog.Errorf("Error picking a random PVC name: %+v", err)
+						continue nodeLoop
+					}
+					pvc = fmt.Sprintf("pvc-%s", hex.EncodeToString(randBytes))
 
-				// Create a PVC with that name
-				storageNeeded, err := resource.ParseQuantity(c.config.Data[CONFIG_PPN_POOL_SIZE_PER_NODE])
-				if err != nil {
-					glog.Errorf("Error parsing %s value %s: %+v", CONFIG_PPN_POOL_SIZE_PER_NODE, c.config.Data[CONFIG_PPN_POOL_SIZE_PER_NODE], err)
-					continue nodeLoop
-				}
+					// Create a PVC with that name
+					storageNeeded, err := resource.ParseQuantity(c.config.Data[CONFIG_PPN_POOL_SIZE_PER_NODE])
+					if err != nil {
+						glog.Errorf("Error parsing %s value %s: %+v", CONFIG_PPN_POOL_SIZE_PER_NODE, c.config.Data[CONFIG_PPN_POOL_SIZE_PER_NODE], err)
+						continue nodeLoop
+					}
 
-				storageClass := c.config.Data[CONFIG_PPN_POOL_STORAGE_CLASS]
+					storageClass := c.config.Data[CONFIG_PPN_POOL_STORAGE_CLASS]
 
-				newPVC := v1.PersistentVolumeClaim{
-					ObjectMeta: meta_v1.ObjectMeta{
-						Namespace: DOTMESH_NAMESPACE,
-						Name:      pvc,
-						Labels: map[string]string{
-							DOTMESH_ROLE_LABEL: DOTMESH_ROLE_PVC,
-						},
-						Annotations: map[string]string{},
-					},
-					Spec: v1.PersistentVolumeClaimSpec{
-						Resources: v1.ResourceRequirements{
-							Requests: v1.ResourceList{
-								v1.ResourceStorage: storageNeeded,
+					newPVC := v1.PersistentVolumeClaim{
+						ObjectMeta: meta_v1.ObjectMeta{
+							Namespace: DOTMESH_NAMESPACE,
+							Name:      pvc,
+							Labels: map[string]string{
+								DOTMESH_ROLE_LABEL: DOTMESH_ROLE_PVC,
 							},
+							Annotations: map[string]string{},
 						},
-						AccessModes: []v1.PersistentVolumeAccessMode{
-							v1.ReadWriteOnce,
+						Spec: v1.PersistentVolumeClaimSpec{
+							Resources: v1.ResourceRequirements{
+								Requests: v1.ResourceList{
+									v1.ResourceStorage: storageNeeded,
+								},
+							},
+							AccessModes: []v1.PersistentVolumeAccessMode{
+								v1.ReadWriteOnce,
+							},
+							StorageClassName: &storageClass,
 						},
-						StorageClassName: &storageClass,
-					},
-				}
+					}
 
-				glog.Infof("Creating new pvc %s", pvc)
-				_, err = c.client.Core().PersistentVolumeClaims(DOTMESH_NAMESPACE).Create(&newPVC)
-				if err != nil {
-					glog.Errorf("Error creating pvc: %+v", err)
-					continue nodeLoop
+					glog.Infof("Creating new pvc %s", pvc)
+					_, err = c.client.Core().PersistentVolumeClaims(DOTMESH_NAMESPACE).Create(&newPVC)
+					if err != nil {
+						glog.Errorf("Error creating pvc: %+v", err)
+						continue nodeLoop
+					}
 				}
 			} else {
 				pvc = sentinelOnNode.pvc
-				delete(unusedPVCs, pvc) //not used here but will be useful in multi-dotmesh node clusters
+				delete(unusedPVCs, pvc)
 				glog.Infof("Reusing the PVC that the sentinel on this node is attached to. PVC: %s on Sentinel: %s", pvc, sentinelOnNode.name)
 			}
 
