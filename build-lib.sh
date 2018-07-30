@@ -17,7 +17,7 @@ setup-target-dir() {
 set-defaults() {
     if [ -z "$CI_DOCKER_TAG" ]; then
     # Non-CI build
-        export DOCKERTAG=latest
+        export STABLE_DOCKERTAG=latest
     else
         export STABLE_DOCKERTAG=$CI_DOCKER_TAG
     fi
@@ -29,7 +29,7 @@ set-defaults() {
 
     if [ -z "$CI_DOCKER_SERVER_IMAGE" ]; then
         # Non-CI build
-        export STABLE_CI_DOCKER_SERVER_IMAGE=${REGISTRY}/${REPOSITORY}/dotmesh-server:${DOCKERTAG}
+        export STABLE_CI_DOCKER_SERVER_IMAGE=${REGISTRY}/${REPOSITORY}/dotmesh-server:${STABLE_DOCKERTAG}
     fi
 }
 
