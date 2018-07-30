@@ -47,7 +47,7 @@ build-client() {
     if [ $OS = "Linux" ]; then 
         platform="linux_amd64"
     elif [ $OS = "Darwin" ]; then 
-        platform="darwin_amd64" 
+        platform="darwin_amd64_pure" 
     else
         echo "Please enter Linux or Darwin as the first arg"
         return 1
