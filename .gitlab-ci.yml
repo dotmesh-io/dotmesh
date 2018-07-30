@@ -308,6 +308,7 @@ linux_kubernetes_operator_dynamic_provisioning:
     dependencies:
         - build_yaml
         - build_client_linux
+        - build_server
     tags:
         - ubuntu
         - fast
@@ -326,6 +327,7 @@ linux_kubernetes_operator_PVC:
     dependencies:
         - build_yaml
         - build_client_linux
+        - build_server
     tags:
         - ubuntu
         - fast
