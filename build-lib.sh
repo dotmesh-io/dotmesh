@@ -11,6 +11,7 @@ bazel-with-workspace() {
 }
 
 setup-target-dir() {
+    rm -rf target/
     mkdir -p target/
 }
 
@@ -44,7 +45,7 @@ build-client() {
         return 1
     fi
 
-    output_dir=${platform}_stripped
+    output_dir=${platform}_static_stripped
     rm -rf binaries/$OS || true
     mkdir -p binaries/$OS/
 
@@ -94,19 +95,19 @@ build-server() {
     if [ -z "${NO_PUSH}" ]; then
         echo "pushing images"
         #fixme get back to using bazel for container pushes when it's not flaky.
-        docker tag bazel/cmd/dotmesh-server:dotmesh-server-img $CI_REGISTRY/$CI_REPOSITORY/dotmesh-server:$CI_DOCKER_TAG
-        docker push $CI_REGISTRY/$CI_REPOSITORY/dotmesh-server:$CI_DOCKER_TAG
+        docker tag bazel/cmd/dotmesh-server:dotmesh-server-img $REGISTRY/$REPOSITORY/dotmesh-server:$STABLE_DOCKERTAG
+        docker push $REGISTRY/$REPOSITORY/dotmesh-server:$STABLE_DOCKERTAG
         #bazel-with-workspace run //cmd/dotmesh-server:dotmesh-server_push
         if [ -z "${SKIP_K8S}" ]; then
             echo "pushing dind provisioner"
-            docker tag bazel/cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioner $CI_REGISTRY/$CI_REPOSITORY/dind-dynamic-provisioner:$CI_DOCKER_TAG
-            docker push $CI_REGISTRY/$CI_REPOSITORY/dind-dynamic-provisioner:$CI_DOCKER_TAG
+            docker tag bazel/cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioner $REGISTRY/$REPOSITORY/dind-dynamic-provisioner:$STABLE_DOCKERTAG
+            docker push $REGISTRY/$REPOSITORY/dind-dynamic-provisioner:$STABLE_DOCKERTAG
             #bazel-with-workspace run //cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind_push
         fi
     fi
 
     bazel-with-workspace build //cmd/dotmesh-server/pkg/dind-flexvolume:dind-flexvolume
-    mkdir -p ./target
+    setup-target-dir
     cp bazel-bin/cmd/dotmesh-server/pkg/dind-flexvolume/linux_amd64_pure_stripped/dind-flexvolume ./target/dind-flexvolume
 }
 
