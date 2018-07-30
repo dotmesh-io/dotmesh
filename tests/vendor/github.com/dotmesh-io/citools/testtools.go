@@ -1733,7 +1733,22 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 				if debugErr != nil {
 					log.Printf("Error debugging kubctl status:  %v, %s", debugErr, st)
 				}
+				if c.DindStorage {
+					// Is the DIND provisioner not working?
 
+					// If we see "list of unmounted volumes=[backend-pv]"
+					// appearing in the dotmesh server pod status, this is
+					// often the problem.
+
+					st, err = docker(
+						nodeName(now, i, j),
+						fmt.Sprintf(
+							"echo DIND FLEXVOLUME STATUS ON %s:\nls -l /usr/libexec/kubernetes/kubelet-plugins/volume/exec/dotmesh.io~dind/dind\ntail -n 50 /var/log/dotmesh-dind-flexvolume.log\n",
+							nodeName(now, i, j),
+						),
+						nil,
+					)
+				}
 				log.Printf("Error adding remote:  %v, retrying..", err)
 			} else {
 				break
