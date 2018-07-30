@@ -24,7 +24,7 @@ fi
 
 VERSION=$(cd cmd/versioner && go run versioner.go)
 
-export CI_DOCKER_SERVER_IMAGE=${CI_DOCKER_SERVER_IMAGE:=$(hostname).local:80/dotmesh/dotmesh-server:latest}
+export STABLE_CI_DOCKER_SERVER_IMAGE=${STABLE_CI_DOCKER_SERVER_IMAGE:=$(hostname).local:80/dotmesh/dotmesh-server:latest}
 export CI_DOCKER_PROVISIONER_IMAGE=${CI_DOCKER_PROVISIONER_IMAGE:=$(hostname).local:80/dotmesh/dotmesh-dynamic-provisioner:latest}
 export CI_DOCKER_DIND_PROVISIONER_IMAGE=${CI_DOCKER_DIND_PROVISIONER_IMAGE:=$(hostname).local:80/dotmesh/dind-dynamic-provisioner:latest}
 export CI_DOCKER_OPERATOR_IMAGE=${CI_DOCKER_OPERATOR_IMAGE:=$(hostname).local:80/dotmesh/dotmesh-operator:latest}
@@ -54,7 +54,7 @@ then
 
     ## operator
 
-    go build -ldflags "-extldflags \"-static\" -X main.DOTMESH_VERSION=${VERSION} -X main.DOTMESH_IMAGE=${CI_DOCKER_SERVER_IMAGE} " -o ./target/operator ./cmd/operator
+    go build -ldflags "-extldflags \"-static\" -X main.DOTMESH_VERSION=${VERSION} -X main.DOTMESH_IMAGE=${STABLE_CI_DOCKER_SERVER_IMAGE} " -o ./target/operator ./cmd/operator
 
     echo "building image: ${CI_DOCKER_OPERATOR_IMAGE}"
     echo 'FROM scratch' > target/Dockerfile
@@ -112,7 +112,7 @@ go build -ldflags "-X main.serverVersion=${VERSION}" -o ./target/dotmesh-server 
 
 cp ./cmd/dotmesh-server/require_zfs.sh ./target
 
-echo "building image: ${CI_DOCKER_SERVER_IMAGE}"
+echo "building image: ${STABLE_CI_DOCKER_SERVER_IMAGE}"
 
 echo 'FROM ubuntu:artful' > target/Dockerfile
 echo 'ENV SECURITY_UPDATES 2018-01-19' >> target/Dockerfile
@@ -123,9 +123,9 @@ echo 'ADD ./require_zfs.sh /require_zfs.sh' >> target/Dockerfile
 echo 'COPY ./flexvolume /usr/local/bin/' >> target/Dockerfile
 echo 'COPY ./dotmesh-server /usr/local/bin/' >> target/Dockerfile
 
-docker build -f target/Dockerfile -t "${CI_DOCKER_SERVER_IMAGE}" target
+docker build -f target/Dockerfile -t "${STABLE_CI_DOCKER_SERVER_IMAGE}" target
 
 if [ -n "${PUSH}" ]; then
     echo "pushing image"
-    docker push ${CI_DOCKER_SERVER_IMAGE}
+    docker push ${STABLE_CI_DOCKER_SERVER_IMAGE}
 fi

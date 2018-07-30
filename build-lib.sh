@@ -7,10 +7,19 @@ bazel-with-workspace() {
     cmd=$1
     cmd_path=$2
     platform=${3:-linux_amd64}
+    pass_thru=$4
     bazel $cmd $cmd_path --platforms=@io_bazel_rules_go//go/toolchain:$platform --workspace_status_command=$(realpath ./version_status.sh)
 }
 
+bazel-with-workspace-no-run() {
+    cmd=$1
+    cmd_path=$2
+    platform=${3:-linux_amd64}
+    bazel $cmd $cmd_path --platforms=@io_bazel_rules_go//go/toolchain:$platform --workspace_status_command=$(realpath ./version_status.sh) -- --norun
+}
+
 setup-target-dir() {
+    rm -rf target/
     mkdir -p target/
 }
 
@@ -38,13 +47,13 @@ build-client() {
     if [ $OS = "Linux" ]; then 
         platform="linux_amd64"
     elif [ $OS = "Darwin" ]; then 
-        platform="darwin_amd64" 
+        platform="darwin_amd64"
     else
         echo "Please enter Linux or Darwin as the first arg"
         return 1
     fi
 
-    output_dir=${platform}_stripped
+    output_dir=${platform}_static_stripped
     rm -rf binaries/$OS || true
     mkdir -p binaries/$OS/
 
@@ -58,7 +67,7 @@ build-client() {
     bazel-with-workspace build //cmd/dm:dm $platform
     # tiny bit hacky - if we're on a mac and compiling for linux the output will be "pure", and vice versa compiling for mac from linux
     if [ ! -d "${location}/dm/${output_dir}" ]; then
-        output_dir=${platform}_pure_stripped
+        output_dir=${platform}_static_pure_stripped
     fi
     cp ${location}/dm/$output_dir/dm binaries/$OS/
     return 0
@@ -75,7 +84,7 @@ build-server() {
         echo "building dind-provisioner container"
         # todo switch back to build when bazel can push without being annoying
         bazel-with-workspace build //cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioner
-        bazel run cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioner -- --norun
+        bazel-with-workspace-no-run run cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioner
     fi
 
     # dotmesh-server
@@ -84,7 +93,7 @@ build-server() {
     # bazel-with-workspace build //cmd/dotmesh-server:dotmesh-server-img
     # fixme hack so that we don't have to use bazel to do pushing, which seems to flake :(
     bazel-with-workspace build //cmd/dotmesh-server:dotmesh-server-img
-    bazel-with-workspace run cmd/dotmesh-server:dotmesh-server-img
+    bazel-with-workspace-no-run run cmd/dotmesh-server:dotmesh-server-img
     # if [ -n "${GENERATE_LOCAL_DOCKER_IMAGE}" ]; then
     #     # set this variable if you need the generated image to show up in docker images
     #     bazel-with-workspace run //cmd/dotmesh-server:dotmesh-server-img
@@ -94,26 +103,26 @@ build-server() {
     if [ -z "${NO_PUSH}" ]; then
         echo "pushing images"
         #fixme get back to using bazel for container pushes when it's not flaky.
-        docker tag bazel/cmd/dotmesh-server:dotmesh-server-img $CI_REGISTRY/$CI_REPOSITORY/dotmesh-server:$CI_DOCKER_TAG
-        docker push $CI_REGISTRY/$CI_REPOSITORY/dotmesh-server:$CI_DOCKER_TAG
+        docker tag bazel/cmd/dotmesh-server:dotmesh-server-img $REGISTRY/$REPOSITORY/dotmesh-server:$STABLE_DOCKERTAG
+        docker push $REGISTRY/$REPOSITORY/dotmesh-server:$STABLE_DOCKERTAG
         #bazel-with-workspace run //cmd/dotmesh-server:dotmesh-server_push
         if [ -z "${SKIP_K8S}" ]; then
             echo "pushing dind provisioner"
-            docker tag bazel/cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioner $CI_REGISTRY/$CI_REPOSITORY/dind-dynamic-provisioner:$CI_DOCKER_TAG
-            docker push $CI_REGISTRY/$CI_REPOSITORY/dind-dynamic-provisioner:$CI_DOCKER_TAG
+            docker tag bazel/cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioner $REGISTRY/$REPOSITORY/dind-dynamic-provisioner:$STABLE_DOCKERTAG
+            docker push $REGISTRY/$REPOSITORY/dind-dynamic-provisioner:$STABLE_DOCKERTAG
             #bazel-with-workspace run //cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind_push
         fi
     fi
 
     bazel-with-workspace build //cmd/dotmesh-server/pkg/dind-flexvolume:dind-flexvolume
-    mkdir -p ./target
+    setup-target-dir
     cp bazel-bin/cmd/dotmesh-server/pkg/dind-flexvolume/linux_amd64_pure_stripped/dind-flexvolume ./target/dind-flexvolume
 }
 
 build-provisioner() {
     # fixme switch back to bazel for pushing when it's not flaky
     bazel-with-workspace build //cmd/dynamic-provisioner:dynamic-provisioner
-    bazel run cmd/dynamic-provisioner:dynamic-provisioner -- --norun
+    bazel-with-workspace-no-run run cmd/dynamic-provisioner:dynamic-provisioner
     if [ -z "${NO_PUSH}" ]; then
         echo "pushing image"
         tag-then-push dynamic-provisioner dotmesh-dynamic-provisioner
@@ -124,10 +133,10 @@ build-provisioner() {
 build-operator() {
     # operator (builds container)
     bazel-with-workspace build //cmd/operator:operator
-    bazel run cmd/operator:operator -- --norun
+    bazel-with-workspace-no-run run cmd/operator:operator
     if [ -z "${NO_PUSH}" ]; then
         echo "pushing image"
-        tag-then-push operator dotmesh-operator
+        tag-then-push operator dotmesh-operator operator
         #bazel-with-workspace run //cmd/operator:operator_push
     fi
 
@@ -136,6 +145,10 @@ build-operator() {
 tag-then-push() {
     target=$1
     img=$2
-    docker tag bazel/cmd/$target:$target $REGISTRY/$REPOSITORY/$img:$STABLE_DOCKERTAG
+    dir=$3
+    if [ -z $dir ]; then
+        dir=$1
+    fi
+    docker tag bazel/cmd/$dir:$target $REGISTRY/$REPOSITORY/$img:$STABLE_DOCKERTAG
     docker push $REGISTRY/$REPOSITORY/$img:$STABLE_DOCKERTAG
 }
