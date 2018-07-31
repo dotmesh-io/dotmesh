@@ -119,8 +119,8 @@ build-server() {
 
 build-provisioner() {
     # fixme switch back to bazel for pushing when it's not flaky
-    bazel-with-workspace build //cmd/dynamic-provisioner:dynamic-provisioner
-    bazel-with-workspace-no-run //cmd/dynamic-provisioner:dynamic-provisioner
+    bazel-with-workspace build //cmd/dynamic-provisioner:provisioner-img
+    bazel-with-workspace-no-run //cmd/dynamic-provisioner:provisioner-img
     if [ -z "${NO_PUSH}" ]; then
         echo "pushing image"
         tag-then-push provisioner-img dotmesh-dynamic-provisioner dynamic-provisioner 
