@@ -1892,10 +1892,8 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 		// node).
 		_, err = docker(nodeName(now, i, j), fmt.Sprintf(
 			"dm cluster join %s %s %s",
-			localImageArgs()+
-				" --use-pool-dir "+
-				filepath.Join(testDirName(now), fmt.Sprintf("wd-%d-%d", i, j))+
-				joinUrl,
+			localImageArgs()+" --use-pool-dir "+filepath.Join(testDirName(now), fmt.Sprintf("wd-%d-%d", i, j)),
+			joinUrl,
 			" --use-pool-name "+poolId(now, i, j)+c.ClusterArgs,
 		), env)
 		if err != nil {
