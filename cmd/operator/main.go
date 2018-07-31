@@ -921,19 +921,15 @@ nodeLoop:
 			if !ok {
 				provisionSentinelOnNode = true
 				if len(unusedPVCs) != 0 {
-					// Pick the first one in unusedPVCs
+					glog.Infof("Reusing existing pvc that is unattached to any pods. PVC: %s on node %s", pvc, node)
 					// TODO: Is there a better basis for picking one? Most recently used?
 					for pvcName, _ := range unusedPVCs {
 						pvc = pvcName
 						break
 					}
-					// It's claimed now, so take it off the list
 					delete(unusedPVCs, pvc)
-					glog.Infof("Reusing existing pvc %s that is unattached to any pods", pvc)
 				} else {
-					// Create a new PVC, as we don't have a spare.
-
-					// Pick a name
+					glog.Infof("Creating new PVC for dotmesh server on node. PVC: %s on node %s", pvc, node)
 					randBytes := make([]byte, PVC_NAME_RANDOM_BYTES)
 					_, err := rand.Read(randBytes)
 					if err != nil {
@@ -942,7 +938,6 @@ nodeLoop:
 					}
 					pvc = fmt.Sprintf("pvc-%s", hex.EncodeToString(randBytes))
 
-					// Create a PVC with that name
 					storageNeeded, err := resource.ParseQuantity(c.config.Data[CONFIG_PPN_POOL_SIZE_PER_NODE])
 					if err != nil {
 						glog.Errorf("Error parsing %s value %s: %+v", CONFIG_PPN_POOL_SIZE_PER_NODE, c.config.Data[CONFIG_PPN_POOL_SIZE_PER_NODE], err)
@@ -982,14 +977,13 @@ nodeLoop:
 				}
 			} else {
 				pvc = sentinelOnNode.pvc
-				delete(unusedPVCs, pvc)
 				glog.Infof("Reusing the PVC that the sentinel on this node is attached to. PVC: %s on Sentinel: %s", pvc, sentinelOnNode.name)
 			}
 
 			// Configure the pod to use PV storage
 
 			podName = fmt.Sprintf("server-%s-node-%s", pvc, node)
-			sentinelName = fmt.Sprintf("sentinel-server-%s-node-%s", pvc, node)
+			sentinelName = fmt.Sprintf("sentinel-%s-node-%s", pvc, node)
 			pvVolumeMounts = []v1.VolumeMount{v1.VolumeMount{
 				Name:      "backend-pv",
 				MountPath: "/backend-pv",
