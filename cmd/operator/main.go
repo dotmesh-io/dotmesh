@@ -1090,7 +1090,14 @@ func (c *dotmeshController) createServerPod(podName string, node string, env []v
 							Protocol:      v1.ProtocolTCP,
 						},
 					},
-					VolumeMounts:    volumeMounts,
+					VolumeMounts: volumeMounts,
+					Lifecycle: &v1.Lifecycle{
+						PreStop: &v1.Handler{
+							Exec: &v1.ExecAction{
+								Command: []string{"docker", "rm", "-f", "dotmesh-server-inner"},
+							},
+						},
+					},
 					Env:             env,
 					ImagePullPolicy: v1.PullAlways,
 					LivenessProbe: &v1.Probe{
