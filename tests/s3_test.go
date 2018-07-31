@@ -36,7 +36,7 @@ func TestS3Remote(t *testing.T) {
 	citools.StartTiming()
 	err := f.Start(t)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	node1 := f[0].GetNode(0).Container
 
