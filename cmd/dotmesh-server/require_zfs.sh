@@ -240,13 +240,11 @@ if [ -z "$DOTMESH_MANUAL_NETWORKING" ]; then
         # by etcd operator on Kubernetes).
         link="--link dotmesh-etcd:dotmesh-etcd"
     fi
-
-    # "$DOTMESH_ETCD_ENDPOINT" != "" proxy for checking we're in a k8s environment.
     if [ "$DOTMESH_ETCD_ENDPOINT" != "" ]; then
         # When running in a pod network, calculate the id of the current container
         # in scope, and pass that as --net=container:<id> so that dotmesh-server
         # itself runs in the same network namespace.
-        self_containers=$(docker ps --no-trunc | grep "dotmesh-outer_`hostname`" | cut -f 1 -d ' ')
+        self_containers=$(docker ps -q --filter="ancestor=$DOTMESH_DOCKER_IMAGE")
         array_containers=( $self_containers )
         num_containers=${#array_containers[@]}
         if [ $num_containers -eq 0 ]; then
@@ -303,61 +301,6 @@ done
 # such that k8s will pick them up from the pod - the inner container is not
 # a pod but a container run from /var/run/docker.sock
 (while true; do docker logs -f dotmesh-server-inner || true; sleep 1; done) &
-
-# Prepare cleanup logic
-
-TERMINATING=no
-
-cleanup() {
-    local REASON="$1"
-
-    if [ -z "$CONTAINER_POOL_MNT" ]; then
-        echo "Skipping shutdown actions in local mode"
-        return
-    fi
-
-    if [ $TERMINATING = no ]
-    then
-        echo "Shutting down due to $REASON"
-        TERMINATING=yes
-    else
-        echo "Ignoring $REASON as we're already shutting down"
-        return
-    fi
-
-    if true
-    then
-        # Log mounts
-
-        # '| egrep "$DIR|$OUTER_DIR"' might make this less verbose, but
-        # also might miss out useful information about parent
-        # mountpoints. For instaince, in dind mode in the test suite, the
-        # relevent mountpoint in the host is `/dotmesh-test-pools` rather
-        # than the full $OUTER_DIR.
-
-        echo "DEBUG mounts on host:"
-        nsenter -t 1 -m -u -n -i cat /proc/self/mountinfo | sed 's/^/HOST: /' || true
-        echo "DEBUG mounts in require_zfs.sh container:"
-        cat /proc/self/mountinfo | sed 's/^/OUTER: /' || true
-        echo "DEBUG mounts in an inner container:"
-        run_in_zfs_container inspect-namespace /bin/cat /proc/self/mountinfo | sed 's/^/INNER: /' || true
-        echo "DEBUG End of mount tables."
-    fi
-}
-
-shutdown() {
-    local SIGNAL="$1"
-
-    # Remove the handler now it's happened once
-    trap - $SIGNAL
-
-    cleanup "signal $SIGNAL"
-}
-
-trap 'shutdown SIGTERM' SIGTERM
-trap 'shutdown SIGINT' SIGINT
-trap 'shutdown SIGQUIT' SIGQUIT
-trap 'shutdown SIGHUP' SIGHUP
 
 set +e
 
