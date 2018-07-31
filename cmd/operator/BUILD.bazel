@@ -47,9 +47,8 @@ container_image(
         ":operator",
     ],
     base = "@go_base//image",
-    cmd = "operator",
+    entrypoint = ["/operator"],
     visibility = ["//visibility:public"],
-    directory = "/",
     stamp = True
 )
 

@@ -34,7 +34,7 @@ container_image(
         ":dynamic-provisioner",
     ],
     base = "@go_base//image",
-    cmd = "dynamic-provisioner",
+    cmd = ["/dynamic-provisioner"],
     visibility = ["//visibility:public"],
     directory = "/",
     stamp = True
