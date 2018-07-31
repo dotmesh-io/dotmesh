@@ -82,7 +82,7 @@ build-server() {
         echo "building dind-provisioner container"
         # todo switch back to build when bazel can push without being annoying
         bazel-with-workspace build //cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioner
-        bazel-with-workspace-no-run cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioner
+        bazel-with-workspace-no-run //cmd/dotmesh-server/pkg/dind-dynamic-provisioning:dind-dynamic-provisioner
     fi
 
     # dotmesh-server
@@ -91,7 +91,7 @@ build-server() {
     # bazel-with-workspace build //cmd/dotmesh-server:dotmesh-server-img
     # fixme hack so that we don't have to use bazel to do pushing, which seems to flake :(
     bazel-with-workspace build //cmd/dotmesh-server:dotmesh-server-img
-    bazel-with-workspace-no-run cmd/dotmesh-server:dotmesh-server-img
+    bazel-with-workspace-no-run //cmd/dotmesh-server:dotmesh-server-img
     # if [ -n "${GENERATE_LOCAL_DOCKER_IMAGE}" ]; then
     #     # set this variable if you need the generated image to show up in docker images
     #     bazel-with-workspace run //cmd/dotmesh-server:dotmesh-server-img
@@ -120,7 +120,7 @@ build-server() {
 build-provisioner() {
     # fixme switch back to bazel for pushing when it's not flaky
     bazel-with-workspace build //cmd/dynamic-provisioner:dynamic-provisioner
-    bazel-with-workspace-no-run cmd/dynamic-provisioner:dynamic-provisioner
+    bazel-with-workspace-no-run //cmd/dynamic-provisioner:dynamic-provisioner
     if [ -z "${NO_PUSH}" ]; then
         echo "pushing image"
         tag-then-push provisioner-img dotmesh-dynamic-provisioner dynamic-provisioner 
@@ -131,7 +131,7 @@ build-provisioner() {
 build-operator() {
     # operator (builds container)
     bazel-with-workspace build //cmd/operator:operator-img
-    bazel-with-workspace-no-run cmd/operator:operator-img
+    bazel-with-workspace-no-run //cmd/operator:operator-img
     if [ -z "${NO_PUSH}" ]; then
         echo "pushing image"
         tag-then-push operator-img dotmesh-operator operator
