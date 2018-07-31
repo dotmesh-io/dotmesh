@@ -1045,7 +1045,6 @@ nodeLoop:
 func (c *dotmeshController) createServerPod(podName string, node string, env []v1.EnvVar, volumeMounts []v1.VolumeMount, volumes []v1.Volume) {
 
 	privileged := true
-	terminationGracePeriodSeconds := int64(500)
 
 	dotmeshServer := v1.Pod{
 		ObjectMeta: meta_v1.ObjectMeta{
@@ -1091,14 +1090,7 @@ func (c *dotmeshController) createServerPod(podName string, node string, env []v
 							Protocol:      v1.ProtocolTCP,
 						},
 					},
-					VolumeMounts: volumeMounts,
-					Lifecycle: &v1.Lifecycle{
-						PreStop: &v1.Handler{
-							Exec: &v1.ExecAction{
-								Command: []string{"docker", "rm", "-f", "dotmesh-server-inner"},
-							},
-						},
-					},
+					VolumeMounts:    volumeMounts,
 					Env:             env,
 					ImagePullPolicy: v1.PullAlways,
 					LivenessProbe: &v1.Probe{
@@ -1126,10 +1118,9 @@ func (c *dotmeshController) createServerPod(podName string, node string, env []v
 					},
 				},
 			},
-			RestartPolicy:                 v1.RestartPolicyNever,
-			TerminationGracePeriodSeconds: &terminationGracePeriodSeconds,
-			ServiceAccountName:            "dotmesh",
-			Volumes:                       volumes,
+			RestartPolicy:      v1.RestartPolicyNever,
+			ServiceAccountName: "dotmesh",
+			Volumes:            volumes,
 		},
 	}
 
@@ -1138,7 +1129,6 @@ func (c *dotmeshController) createServerPod(podName string, node string, env []v
 
 func (c *dotmeshController) createSentinelPod(podName string, node string, env []v1.EnvVar, volumeMounts []v1.VolumeMount, volumes []v1.Volume) {
 	privileged := true
-	terminationGracePeriodSeconds := int64(500)
 	sentinelImage := "gcr.io/google-containers/busybox:latest"
 	glog.Infof("--Creating sentinel %#v - volumeMounts %#v volumes %#v--", podName, volumeMounts, volumes)
 
@@ -1185,10 +1175,9 @@ func (c *dotmeshController) createSentinelPod(podName string, node string, env [
 					},
 				},
 			},
-			RestartPolicy:                 v1.RestartPolicyNever,
-			TerminationGracePeriodSeconds: &terminationGracePeriodSeconds,
-			ServiceAccountName:            "dotmesh",
-			Volumes:                       volumes,
+			RestartPolicy:      v1.RestartPolicyNever,
+			ServiceAccountName: "dotmesh",
+			Volumes:            volumes,
 		},
 	}
 
