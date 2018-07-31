@@ -63,6 +63,12 @@ exit 0)` // never let the debug command failing cause us to fail the tests!
 var timings map[string]float64
 var lastTiming int64
 
+// An arbitrary point in time that all test runs after this commit
+// should be after, so we can use it as an epoch for our timestamps
+// and therefore make them much shorter strings... Update this every
+// decade or so to keep them short.
+const DAWN_OF_DOTMESH_TIME = 1533034862684223659
+
 var stamp int64
 
 // DOTMESH_TEST_CLEANUP_ENV - cleanup policy for the tests
@@ -1166,7 +1172,7 @@ SEARCHABLE HEADER: STARTING CLUSTER
                                          
 `)
 
-	stamp = time.Now().UnixNano()
+	stamp = time.Now().UnixNano() - DAWN_OF_DOTMESH_TIME
 	err := testSetup(t, f)
 	if err != nil {
 		return err
@@ -1587,15 +1593,13 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		fmt.Sprintf(
 			"kubectl create configmap -n dotmesh configuration "+
 				"--from-literal=upgradesUrl= "+
-				"'--from-literal=poolNamePrefix=%s-#HOSTNAME#-' "+
-				"'--from-literal=local.poolLocation=%s/%s-#HOSTNAME#' "+
+				"'--from-literal=poolNamePrefix=#HOSTNAME#-' "+
+				"'--from-literal=local.poolLocation=%s' "+
 				"--from-literal=logAddress=%s "+
 				"--from-literal=storageMode=%s "+
 				"--from-literal=pvcPerNode.storageClass=dind-pv "+
 				"--from-literal=nodeSelector=clusterSize-%d=yes", // This needs to be in here so it can be replaced with sed
-			poolId(now, i, 0),
-			testDirName(now),
-			poolId(now, i, 0),
+			filepath.Join(testDirName(now), "wd-#HOSTNAME#"),
 			logAddr,
 			c.StorageMode,
 			c.DesiredNodeCount,
@@ -1838,7 +1842,8 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 	}
 
 	dmInitCommand := "EXTRA_HOST_COMMANDS='echo Testing EXTRA_HOST_COMMANDS' dm cluster init " + localImageArgs() +
-		" --use-pool-dir " + testDirName(now) + "/" + poolId(now, i, 0) +
+		" --use-pool-dir " +
+		filepath.Join(testDirName(now), fmt.Sprintf("wd-%d-0", i)) +
 		" --use-pool-name " + poolId(now, i, 0) +
 		" --dotmesh-upgrades-url ''" +
 		" --port " + strconv.Itoa(c.Port) +
@@ -1887,8 +1892,10 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 		// node).
 		_, err = docker(nodeName(now, i, j), fmt.Sprintf(
 			"dm cluster join %s %s %s",
-			localImageArgs()+" --use-pool-dir "+filepath.Join(testDirName(now), poolId(now, i, j)),
-			joinUrl,
+			localImageArgs()+
+				" --use-pool-dir "+
+				filepath.Join(testDirName(now), fmt.Sprintf("wd-%d-%d", i, j))+
+				joinUrl,
 			" --use-pool-name "+poolId(now, i, j)+c.ClusterArgs,
 		), env)
 		if err != nil {
