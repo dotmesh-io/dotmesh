@@ -141,12 +141,24 @@ else
     fi
 fi
 
+KERNEL_ZFS_VERSION=$(modinfo -F version zfs)
+
+if [[ "$KERNEL_ZFS_VERSION" == "0.6"* ]]; then
+    echo "Detected ZFS 0.6 kernel modules, using matching userland"
+    export ZFS_USERLAND_ROOT=/opt/zfs-0.6
+elif [[ "$KERNEL_ZFS_VERSION" == "0.7"* ]]; then
+    echo "Detected ZFS 0.7 kernel modules, using matching userland"
+    export ZFS_USERLAND_ROOT=/opt/zfs-0.7
+fi
+
 POOL_LOGFILE=$DIR/dotmesh_pool_log
 
 run_in_zfs_container() {
     NAME=$1
     shift
     docker run -i --rm --pid=host --privileged --name=dotmesh-$NAME-$$ \
+           -e LD_LIBRARY_PATH=$ZFS_USERLAND_ROOT/lib \
+           -e PATH=$ZFS_USERLAND_ROOT/sbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
            -v $OUTER_DIR:$OUTER_DIR:rshared \
            $DOTMESH_DOCKER_IMAGE \
            "$@"
@@ -415,6 +427,8 @@ docker run -i $rm_opt --pid=host --privileged --name=$DOTMESH_INNER_SERVER_NAME 
     -e "TRACE_ADDR=$TRACE_ADDR" \
     -e "POOL_LOGFILE=$OUTER_DIR/dotmesh_pool_log" \
     -e "DOTMESH_ETCD_ENDPOINT=$DOTMESH_ETCD_ENDPOINT" $INHERIT_ENVIRONMENT_ARGS \
+    -e "LD_LIBRARY_PATH=$ZFS_USERLAND_ROOT/lib" \
+    -e "ZFS_USERLAND_ROOT=$ZFS_USERLAND_ROOT" \
     $secret \
     $log_opts \
     $pki_volume_mount \

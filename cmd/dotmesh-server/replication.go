@@ -122,10 +122,10 @@ func (z ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if z.fromSnap == "START" {
-		logZFSCommand(z.filesystem, fmt.Sprintf("zfs send -p -R %s@%s", fq(z.filesystem), z.toSnap))
+		logZFSCommand(z.filesystem, fmt.Sprintf("%s send -p -R %s@%s", ZFS, fq(z.filesystem), z.toSnap))
 		cmd = exec.Command(
 			// -R sends interim snapshots as well
-			"zfs", "send", "-p", "-R", fq(z.filesystem)+"@"+z.toSnap,
+			ZFS, "send", "-p", "-R", fq(z.filesystem)+"@"+z.toSnap,
 		)
 	} else {
 		var fromSnap string
@@ -137,9 +137,9 @@ func (z ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// presume it refers to a snapshot
 			fromSnap = z.fromSnap
 		}
-		logZFSCommand(z.filesystem, fmt.Sprintf("zfs send -p -I %s %s@%s", fromSnap, fq(z.filesystem), z.toSnap))
+		logZFSCommand(z.filesystem, fmt.Sprintf("%s send -p -I %s %s@%s", ZFS, fromSnap, fq(z.filesystem), z.toSnap))
 		cmd = exec.Command(
-			"zfs", "send", "-p",
+			ZFS, "send", "-p",
 			"-I", fromSnap, fq(z.filesystem)+"@"+z.toSnap,
 		)
 	}
@@ -309,9 +309,9 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// and is therefore blocking on us to tell it we've finished, one way or another, via
 	// z.state.notifyPushCompleted(z.filesystem, true/false) so we'd better do that in every path.
 
-	logZFSCommand(z.filesystem, fmt.Sprintf("zfs recv %s", fq(z.filesystem)))
+	logZFSCommand(z.filesystem, fmt.Sprintf("%s recv %s", ZFS, fq(z.filesystem)))
 
-	cmd := exec.Command("zfs", "recv", fq(z.filesystem))
+	cmd := exec.Command(ZFS, "recv", fq(z.filesystem))
 	pipeReader, pipeWriter := io.Pipe()
 	defer pipeReader.Close()
 	defer pipeWriter.Close()

@@ -25,13 +25,14 @@ import (
 
 // initial setup
 const ROOT_FS = "dmfs"
-const ZFS = "zfs"
-const ZPOOL = "zpool"
 const META_KEY_PREFIX = "io.dotmesh:meta-"
 const ETCD_PREFIX = "/dotmesh.io"
 const SERVER_PORT = "32607"
 const LIVENESS_PORT = "32608"
 const SERVER_PORT_OLD = "6969"
+
+var ZFS string
+var ZPOOL string
 
 var LOG_TO_STDOUT bool
 var POOL string
@@ -121,6 +122,12 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+
+	if zRoot := os.Getenv("ZFS_USERLAND_ROOT"); zRoot == "" {
+		panic("Must specify ZFS_USERLAND_ROOT, e.g. /opt/zfs-0.7")
+	}
+	ZFS = zRoot + "/sbin/zfs"
+	ZPOOL = zRoot + "/sbin/zpool"
 
 	localPoolId, err := findLocalPoolId()
 	if err != nil {

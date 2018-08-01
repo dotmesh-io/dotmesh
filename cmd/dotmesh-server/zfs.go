@@ -36,7 +36,7 @@ func logZFSCommand(filesystemId, command string) {
 // TODO rename getDirtyDelta and dirtyInfo etc to sizeInfo
 func getDirtyDelta(filesystemId, latestSnap string) (int64, int64, error) {
 	o, err := exec.Command(
-		"zfs", "get", "-pHr", "referenced,used", fq(filesystemId),
+		ZFS, "get", "-pHr", "referenced,used", fq(filesystemId),
 	).CombinedOutput()
 	if err != nil {
 		return 0, 0, fmt.Errorf(
@@ -188,7 +188,7 @@ func doSimpleZFSCommand(cmd *exec.Cmd, description string) error {
 }
 
 func deleteFilesystemInZFS(fs string) error {
-	logZFSCommand(fs, fmt.Sprintf("zfs destroy -r %s", fq(fs)))
+	logZFSCommand(fs, fmt.Sprintf("%s destroy -r %s", ZFS, fq(fs)))
 	cmd := exec.Command(ZFS, "destroy", "-r", fq(fs))
 	err := doSimpleZFSCommand(cmd, fmt.Sprintf("delete filesystem %s (full name: %s)", fs, fq(fs)))
 	return err
@@ -243,7 +243,7 @@ func deleteFilesystemInZFS(fs string) error {
 // # zfs promote foo
 
 func stashBranch(existingFs string, newFs string, rollbackTo string) error {
-	logZFSCommand(existingFs, fmt.Sprintf("zfs rename %s %s", fq(existingFs), fq(newFs)))
+	logZFSCommand(existingFs, fmt.Sprintf("%s rename %s %s", ZFS, fq(existingFs), fq(newFs)))
 	err := doSimpleZFSCommand(exec.Command(ZFS, "rename", fq(existingFs), fq(newFs)),
 		fmt.Sprintf("rename filesystem %s (%s) to %s (%s) for retroBranch",
 			existingFs, fq(existingFs),
@@ -254,7 +254,7 @@ func stashBranch(existingFs string, newFs string, rollbackTo string) error {
 		return err
 	}
 
-	logZFSCommand(existingFs, fmt.Sprintf("zfs clone %s@%s %s", fq(newFs), rollbackTo, fq(existingFs)))
+	logZFSCommand(existingFs, fmt.Sprintf("%s clone %s@%s %s", ZFS, fq(newFs), rollbackTo, fq(existingFs)))
 	err = doSimpleZFSCommand(exec.Command(ZFS, "clone", fq(newFs)+"@"+rollbackTo, fq(existingFs)),
 		fmt.Sprintf("clone snapshot %s of filesystem %s (%s) to %s (%s) for retroBranch",
 			rollbackTo, newFs, fq(newFs)+"@"+rollbackTo,
@@ -265,7 +265,7 @@ func stashBranch(existingFs string, newFs string, rollbackTo string) error {
 		return err
 	}
 
-	logZFSCommand(existingFs, fmt.Sprintf("zfs promote %s", fq(existingFs)))
+	logZFSCommand(existingFs, fmt.Sprintf("%s promote %s", ZFS, fq(existingFs)))
 	err = doSimpleZFSCommand(exec.Command(ZFS, "promote", fq(existingFs)),
 		fmt.Sprintf("promote filesystem %s (%s) for retroBranch",
 			existingFs, fq(existingFs),

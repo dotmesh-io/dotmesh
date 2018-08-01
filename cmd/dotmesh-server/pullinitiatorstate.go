@@ -228,8 +228,8 @@ func (f *fsMachine) pull(
 
 	// 2) Pulling node is trying to mount the master fsid and failing.
 
-	// cmd := exec.Command("zfs", "recv", fq(f.filesystemId))
-	cmd := exec.Command("zfs", "recv", fq(toFilesystemId))
+	// cmd := exec.Command(ZFS, "recv", fq(f.filesystemId))
+	cmd := exec.Command(ZFS, "recv", fq(toFilesystemId))
 	pipeReader, pipeWriter := io.Pipe()
 	defer pipeReader.Close()
 	defer pipeWriter.Close()

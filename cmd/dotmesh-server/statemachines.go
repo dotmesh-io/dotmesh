@@ -387,7 +387,7 @@ func (f *fsMachine) snapshot(e *Event) (responseEvent *Event, nextState stateFn)
 	args := []string{"snapshot"}
 	args = append(args, metadataEncoded...)
 	args = append(args, fq(f.filesystemId)+"@"+snapshotId)
-	logZFSCommand(f.filesystemId, fmt.Sprintf("zfs %s", strings.Join(args, " ")))
+	logZFSCommand(f.filesystemId, fmt.Sprintf("%s %s", ZFS, strings.Join(args, " ")))
 	out, err := exec.Command(ZFS, args...).CombinedOutput()
 	log.Printf("[snapshot] Attempting: zfs %s", args)
 	if err != nil {
@@ -674,7 +674,7 @@ func predictSize(
 	predictArgs := []string{"send", "-nP"}
 	predictArgs = append(predictArgs, sendArgs...)
 
-	sizeCmd := exec.Command("zfs", predictArgs...)
+	sizeCmd := exec.Command(ZFS, predictArgs...)
 
 	log.Printf("[predictSize] predict command: %s", strings.Join(predictArgs, " "))
 

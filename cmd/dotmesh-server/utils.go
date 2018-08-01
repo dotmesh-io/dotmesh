@@ -114,7 +114,7 @@ func applyPrelude(prelude Prelude, fqfs string) error {
 				args := []string{"set"}
 				args = append(args, k)
 				args = append(args, fqfs+"@"+j.Id)
-				out, err := exec.Command("zfs", args...).CombinedOutput()
+				out, err := exec.Command(ZFS, args...).CombinedOutput()
 				if err != nil {
 					log.Printf(
 						"[applyPrelude] Error applying prelude: %s, %s, %s", args, err, out,

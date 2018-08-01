@@ -127,8 +127,8 @@ func receivingState(f *fsMachine) stateFn {
 	)
 
 	f.transitionedTo("receiving", "starting")
-	logZFSCommand(f.filesystemId, fmt.Sprintf("zfs recv %s", fq(f.filesystemId)))
-	cmd := exec.Command("zfs", "recv", fq(f.filesystemId))
+	logZFSCommand(f.filesystemId, fmt.Sprintf("%s recv %s", ZFS, fq(f.filesystemId)))
+	cmd := exec.Command(ZFS, "recv", fq(f.filesystemId))
 	pipeReader, pipeWriter := io.Pipe()
 	defer pipeReader.Close()
 	defer pipeWriter.Close()

@@ -208,8 +208,8 @@ func (f *fsMachine) push(
 	}
 
 	// proceed to do real send
-	logZFSCommand(filesystemId, fmt.Sprintf("zfs %s", strings.Join(realArgs, " ")))
-	cmd = exec.Command("zfs", realArgs...)
+	logZFSCommand(filesystemId, fmt.Sprintf("%s %s", ZFS, strings.Join(realArgs, " ")))
+	cmd = exec.Command(ZFS, realArgs...)
 	pipeReader, pipeWriter := io.Pipe()
 
 	defer pipeWriter.Close()
