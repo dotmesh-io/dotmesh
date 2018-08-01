@@ -1,2 +1,2 @@
 FROM ubuntu:bionic
-RUN apt update && apt install -y zfsutils-linux
+RUN apt-get update && apt-get install -dy zfsutils-linux
