@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -851,6 +852,8 @@ nodeLoop:
 			continue
 		}
 
+		// Common volumes and their mounts, for all modes
+
 		volumeMounts := []v1.VolumeMount{
 			{Name: "docker-sock", MountPath: "/var/run/docker.sock"},
 			{Name: "run-docker", MountPath: "/run/docker"},
@@ -859,7 +862,6 @@ nodeLoop:
 			{Name: "dotmesh-kernel-modules", MountPath: "/bundled-lib"},
 			{Name: "dotmesh-secret", MountPath: "/secret"},
 			{Name: "test-pools-dir", MountPath: "/dotmesh-test-pools"},
-			{Name: "pool-dir", MountPath: c.config.Data[CONFIG_LOCAL_POOL_LOCATION]},
 		}
 
 		volumes := []v1.Volume{
@@ -870,7 +872,6 @@ nodeLoop:
 			{Name: "system-lib", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/lib"}}},
 			{Name: "dotmesh-kernel-modules", VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{}}},
 			{Name: "dotmesh-secret", VolumeSource: v1.VolumeSource{Secret: &v1.SecretVolumeSource{SecretName: "dotmesh"}}},
-			{Name: "pool-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: c.config.Data[CONFIG_LOCAL_POOL_LOCATION]}}},
 		}
 
 		env := []v1.EnvVar{
@@ -898,10 +899,28 @@ nodeLoop:
 		switch c.config.Data[CONFIG_MODE] {
 		case CONFIG_MODE_LOCAL:
 			podName = fmt.Sprintf("server-%s", node)
+
+			// The pool directory is the location on the host, and will
+			// also be the location inside the container so that the
+			// paths are aligned for ZFS purposes.
+			rawPoolDir := c.config.Data[CONFIG_LOCAL_POOL_LOCATION]
+
+			// However, for CI testing (where all the nodes are the same
+			// physical host), we need to interpolate any #HOSTNAME#
+			// references in the configured pool location for each node
+			// to uniqify them.
+
+			// require_zfs.sh does this itself for the contents of
+			// USE_POOL_DIR, but we need to make sure the paths in the
+			// k8s volume mounts match as well, so need to (also) do it
+			// here.
+
+			poolDir := strings.Replace(rawPoolDir, "#HOSTNAME#", node, 1)
+
 			env = append(env,
 				v1.EnvVar{
 					Name:  "USE_POOL_DIR",
-					Value: c.config.Data[CONFIG_LOCAL_POOL_LOCATION],
+					Value: poolDir,
 				},
 				v1.EnvVar{
 					Name:  "USE_POOL_NAME",
@@ -911,6 +930,19 @@ nodeLoop:
 					Name:  "POOL_SIZE",
 					Value: c.config.Data[CONFIG_LOCAL_POOL_SIZE_PER_NODE],
 				},
+			)
+			volumeMounts = append(volumeMounts,
+				v1.VolumeMount{
+					Name:      "pool-dir",
+					MountPath: poolDir,
+				},
+			)
+			volumes = append(volumes,
+				v1.Volume{
+					Name: "pool-dir",
+					VolumeSource: v1.VolumeSource{
+						HostPath: &v1.HostPathVolumeSource{
+							Path: poolDir}}},
 			)
 		case CONFIG_MODE_PPN:
 			// The name of the PVC we're going to use for this pod
