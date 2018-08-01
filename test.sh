@@ -54,7 +54,7 @@ trap 'shutdown SIGPIPE' SIGPIPE
     export PATH=/usr/local/go/bin:$PATH
     export DISABLE_LOG_AGGREGATION=1
     cd tests
-    if [ -n $DOTMESH_TEST_TIMEOUT ]; then
+    if [ -n "$DOTMESH_TEST_TIMEOUT" ]; then
         echo "======================================================"
         echo "Running with $DOTMESH_TEST_TIMEOUT timeout: go test $@"
         echo "======================================================"
