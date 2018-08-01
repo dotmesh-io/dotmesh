@@ -1740,6 +1740,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 	for j := 0; j < c.DesiredNodeCount; j++ {
 		dotmeshIteration := 0
 		for ; ; dotmeshIteration++ {
+			log.Printf("Attempting to add dm remote on cluster %d node %d", i, j)
 			st, err = docker(
 				nodeName(now, i, j),
 				"echo FAKEAPIKEY | dm remote add local admin@127.0.0.1",
@@ -1777,13 +1778,19 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 						),
 						nil,
 					)
+
+					if err == nil {
+						log.Printf("DIND status:\n%s\n", st)
+					} else {
+						log.Printf("Error getting DIND status: %#v\n", err)
+					}
 				}
 				log.Printf("Error adding remote:  %v, retrying..", err)
 			} else {
 				break
 			}
 		}
-		fmt.Printf("RETRIES: dotmesh started on cluster %d node %d after %d tries\n", i, j, dotmeshIteration)
+		log.Printf("RETRIES: dotmesh started on cluster %d node %d after %d tries\n", i, j, dotmeshIteration)
 		c.Nodes[j] = NodeFromNodeName(t, now, i, j, clusterName)
 	}
 
