@@ -1634,25 +1634,6 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		return err
 	}
 
-	st, err = docker(
-		nodeName(now, i, 0),
-		// install etcd operator on the cluster
-		"echo '#### STARTING ETCD OPERATOR' && "+
-			"kubectl apply -f /dotmesh-kube-yaml/etcd-operator-clusterrole.yaml && "+
-			"kubectl apply -f /dotmesh-kube-yaml/etcd-operator-dep.yaml && "+
-			// install dotmesh once on the master (retry because etcd operator
-			// needs to initialize)
-			"sleep 1 && "+
-			"echo '#### STARTING ETCD' && "+
-			"while ! kubectl apply -f /dotmesh-kube-yaml/dotmesh-etcd-cluster.yaml; do sleep 2; "+KUBE_DEBUG_CMD+"; done && "+
-			"echo '#### STARTING DOTMESH' && "+
-			"kubectl apply -f /dotmesh-kube-yaml/dotmesh.yaml",
-		DEBUG_ENV,
-	)
-	if err != nil {
-		return err
-	}
-
 	if c.DindStorage { // Release the DIND provisioner!!!
 
 		// Install the dind-flexvolume driver on all nodes (test tooling to
@@ -1733,6 +1714,25 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	st, err = docker(
+		nodeName(now, i, 0),
+		// install etcd operator on the cluster
+		"echo '#### STARTING ETCD OPERATOR' && "+
+			"kubectl apply -f /dotmesh-kube-yaml/etcd-operator-clusterrole.yaml && "+
+			"kubectl apply -f /dotmesh-kube-yaml/etcd-operator-dep.yaml && "+
+			// install dotmesh once on the master (retry because etcd operator
+			// needs to initialize)
+			"sleep 1 && "+
+			"echo '#### STARTING ETCD' && "+
+			"while ! kubectl apply -f /dotmesh-kube-yaml/dotmesh-etcd-cluster.yaml; do sleep 2; "+KUBE_DEBUG_CMD+"; done && "+
+			"echo '#### STARTING DOTMESH' && "+
+			"kubectl apply -f /dotmesh-kube-yaml/dotmesh.yaml",
+		DEBUG_ENV,
+	)
+	if err != nil {
+		return err
 	}
 
 	// Add the nodes at the end, because NodeFromNodeName expects dotmesh
