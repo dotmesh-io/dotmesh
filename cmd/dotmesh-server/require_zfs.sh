@@ -120,6 +120,7 @@ nsenter -t 1 -m -u -n -i /bin/sh -c \
         mount --make-rshared $OUTER_DIR;
     fi
     mkdir -p /run/docker/plugins
+    mkdir -p $MOUNTPOINT
     mkdir -p $CONTAINER_MOUNT_PREFIX"
 
 if [ ! -e /sys ]; then
@@ -166,7 +167,7 @@ if ! run_in_zfs_container zpool-status zpool status $POOL; then
     # failed or never run recoverable.
     if [ ! -f $FILE ]; then
         truncate -s $POOL_SIZE $FILE
-        run_in_zfs_container zpool-create zpool create -m $MOUNTPOINT $POOL "$OUTER_DIR/dotmesh_data"
+        run_in_zfs_container zpool-create zpool create -m none $POOL "$OUTER_DIR/dotmesh_data"
         echo "This directory contains dotmesh data files, please leave them alone unless you know what you're doing. See github.com/dotmesh-io/dotmesh for more information." > $DIR/README
         run_in_zfs_container zpool-get zpool get -H guid $POOL |cut -f 3 > $DIR/dotmesh_pool_id
         if [ -n "$CONTAINER_POOL_PVC_NAME" ]; then
