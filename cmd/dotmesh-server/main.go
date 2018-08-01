@@ -123,7 +123,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	if zRoot := os.Getenv("ZFS_USERLAND_ROOT"); zRoot == "" {
+	zRoot := os.Getenv("ZFS_USERLAND_ROOT")
+	if zRoot == "" {
 		panic("Must specify ZFS_USERLAND_ROOT, e.g. /opt/zfs-0.7")
 	}
 	ZFS = zRoot + "/sbin/zfs"
