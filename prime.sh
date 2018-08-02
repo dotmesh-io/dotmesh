@@ -8,13 +8,6 @@ while read p; do
     cache[${items[0]}]=${items[1]}
 done < kubernetes/images.txt
 
-# cd $GOPATH/src/github.com/dotmesh-io/dotmesh/cmd/dotmesh-server
-# ./rebuild.sh
-./rebuild_server.sh
-
-docker build -f cmd/dotmesh-server/Dockerfile -t $(hostname).local:80/dotmesh/dotmesh-server:latest .
-docker push $(hostname).local:80/dotmesh/dotmesh-server:latest
-
 docker pull quay.io/dotmesh/etcd:v3.0.15
 docker tag quay.io/dotmesh/etcd:v3.0.15 $(hostname).local:80/dotmesh/etcd:v3.0.15
 docker push $(hostname).local:80/dotmesh/etcd:v3.0.15
@@ -26,10 +19,6 @@ docker push $(hostname).local:80/busybox
 docker pull mysql:5.7.17
 docker tag mysql:5.7.17 $(hostname).local:80/mysql:5.7.17
 docker push $(hostname).local:80/mysql:5.7.17
-
-cd ~/dotmesh-instrumentation/etcd-browser
-docker build -t $(hostname).local:80/dotmesh/etcd-browser:v1 .
-docker push $(hostname).local:80/dotmesh/etcd-browser:v1
 
 # Cache images required by Kubernetes
 
