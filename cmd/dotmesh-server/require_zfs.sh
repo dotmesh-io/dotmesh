@@ -142,7 +142,15 @@ else
     fi
 fi
 
-KERNEL_ZFS_VERSION=$(modinfo -F version zfs)
+# System takes precedence over bundled version - if there is a
+# system version, we'll use it
+KERNEL_ZFS_VERSION=$(modinfo -F version -b /system-lib zfs ||true)
+if [ -z "KERNEL_ZFS_VERSION" ]; then
+    KERNEL_ZFS_VERSION=$(modinfo -F version -b /bundled-lib zfs ||true)
+    echo "Using bundled ZFS kernel version $KERNEL_ZFS_VERSION"
+else
+    echo "Using system ZFS kernel version $KERNEL_ZFS_VERSION"
+fi
 
 if [[ "$KERNEL_ZFS_VERSION" == "0.6"* ]]; then
     echo "Detected ZFS 0.6 kernel modules ($KERNEL_ZFS_VERSION), using matching userland"
@@ -150,6 +158,9 @@ if [[ "$KERNEL_ZFS_VERSION" == "0.6"* ]]; then
 elif [[ "$KERNEL_ZFS_VERSION" == "0.7"* ]]; then
     echo "Detected ZFS 0.7 kernel modules ($KERNEL_ZFS_VERSION), using matching userland"
     export ZFS_USERLAND_ROOT=/opt/zfs-0.7
+else
+    echo "Kernel ZFS version doesn't match 0.6 or 0.7, not supported"
+    exit 1
 fi
 
 POOL_LOGFILE=$DIR/dotmesh_pool_log
