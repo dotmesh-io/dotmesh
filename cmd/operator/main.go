@@ -624,6 +624,7 @@ func (c *dotmeshController) process() error {
 	for _, dotmesh := range dotmeshes {
 		podName := dotmesh.ObjectMeta.Name
 		status := dotmesh.Status.Phase
+		var pvcAttachedToPod string
 
 		dotmeshIsRunning[podName] = status == v1.PodRunning
 		if status == v1.PodRunning {
@@ -636,7 +637,13 @@ func (c *dotmeshController) process() error {
 		// immediatelly reallocated (until the pod is killed).
 		for _, volume := range dotmesh.Spec.Volumes {
 			if volume.VolumeSource.PersistentVolumeClaim != nil {
-				delete(unusedPVCs, volume.VolumeSource.PersistentVolumeClaim.ClaimName)
+				pvcName := volume.VolumeSource.PersistentVolumeClaim.ClaimName
+				// Check it's a dotmesh PVC, one attached per pod.
+				_, found := unusedPVCs[pvcName]
+				if found {
+					pvcAttachedToPod = pvcName
+					delete(unusedPVCs, pvcName)
+				}
 			}
 		}
 
@@ -753,6 +760,64 @@ func (c *dotmeshController) process() error {
 
 		glog.V(2).Infof("Observing pod %s running %s on %s (status: %s)", podName, image, boundNode, dotmesh.Status.Phase)
 		delete(undottedNodes, boundNode)
+
+		if dotmeshIsRunning[podName] {
+			_, sentinelFound := sentinels[runningNode]
+			if c.config.Data[CONFIG_MODE] == CONFIG_MODE_PPN && !sentinelFound {
+				if pvcAttachedToPod != "" {
+					sentinelName := fmt.Sprintf("sentinel-%s-node-%s", pvcAttachedToPod, runningNode)
+					pvVolumes := []v1.Volume{v1.Volume{
+						Name: "backend-pv",
+						VolumeSource: v1.VolumeSource{
+							PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+								ClaimName: pvcAttachedToPod,
+								ReadOnly:  false,
+							},
+						},
+					}}
+
+					pvVolumeMounts := []v1.VolumeMount{v1.VolumeMount{
+						Name:      "backend-pv",
+						MountPath: "/backend-pv",
+					}}
+
+					pvEnvs := []v1.EnvVar{v1.EnvVar{
+						Name:  "CONTAINER_POOL_MNT",
+						Value: "/backend-pv",
+					},
+						v1.EnvVar{
+							Name:  "CONTAINER_POOL_PVC_NAME",
+							Value: pvcAttachedToPod,
+						},
+						v1.EnvVar{
+							Name:  "USE_POOL_DIR",
+							Value: "/backend-pv",
+						},
+						v1.EnvVar{
+							Name: "USE_POOL_NAME",
+							// Pool is named after the PVC, as per
+							// https://github.com/dotmesh-io/dotmesh/issues/348
+							Value: c.config.Data[CONFIG_POOL_NAME_PREFIX] + pvcAttachedToPod,
+						},
+						v1.EnvVar{
+							Name: "POOL_SIZE",
+							// Size the pool to match the size of the filesystem
+							// we're putting it in. We could take the size we
+							// request for the PVC and subtract a larger margin
+							// for FS metadata and so on, but that involves more
+							// flakey second-guessing of filesystem internals;
+							// best to ask require_zfs.sh to ask df how much space
+							// is really available in the FS once it's mounted.
+							Value: "AUTO",
+						}}
+
+					c.createSentinelPod(sentinelName, runningNode, pvEnvs, pvVolumeMounts, pvVolumes)
+				} else {
+					glog.Infof("No PVC attached to Pod and pod is in pvcPerNodeMode, scheduling pod ot be killed. PodName %s on Node : ", podName, runningNode)
+					dotmeshesToKill[podName] = struct{}{}
+				}
+			}
+		}
 	}
 
 	dottedNodeCount := len(validNodes) - len(undottedNodes)
