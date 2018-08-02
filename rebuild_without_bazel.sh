@@ -116,19 +116,7 @@ cp ./cmd/dotmesh-server/require_zfs.sh ./target
 
 echo "building image: ${STABLE_CI_DOCKER_SERVER_IMAGE}"
 
-echo 'FROM ubuntu:artful' > target/Dockerfile
-echo 'ENV SECURITY_UPDATES 2018-01-19' >> target/Dockerfile
-echo 'RUN apt-get -y update && apt-get -y install zfsutils-linux iproute2 kmod curl && \' >> target/Dockerfile
-echo "echo 'search updates extra ubuntu built-in weak-updates' > /etc/depmod.d/ubuntu.conf && \\" >> target/Dockerfile
-echo '  mkdir /tmp/d && \' >> target/Dockerfile
-echo '    curl -o /tmp/d/docker.tgz \' >> target/Dockerfile
-echo '        https://download.docker.com/linux/static/edge/x86_64/docker-17.10.0-ce.tgz && \' >> target/Dockerfile
-echo '    cd /tmp/d && \' >> target/Dockerfile
-echo '    tar zxfv /tmp/d/docker.tgz && \' >> target/Dockerfile
-echo '    cp /tmp/d/docker/docker /usr/local/bin && \' >> target/Dockerfile
-echo '    chmod +x /usr/local/bin/docker && \' >> target/Dockerfile
-echo '    rm -rf /tmp/d' >> target/Dockerfile
-echo 'ADD ./require_zfs.sh /require_zfs.sh' >> target/Dockerfile
+cp cmd/dotmesh-server/Dockerfile target/Dockerfile
 echo 'COPY ./flexvolume /usr/local/bin/' >> target/Dockerfile
 echo 'COPY ./dotmesh-server /usr/local/bin/' >> target/Dockerfile
 

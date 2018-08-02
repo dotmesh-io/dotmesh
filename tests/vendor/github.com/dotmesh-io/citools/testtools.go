@@ -1803,26 +1803,22 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		return err
 	}
 
-	// Add the nodes at the end, because NodeFromNodeName expects dotmesh
-	// config to be set up.
+	// For each node, wait until we can talk to dm from that node before
+	// proceeding.
 	for j := 0; j < c.DesiredNodeCount; j++ {
-		dotmeshIteration := 0
+		nn := nodeName(now, i, j)
 		crashlooping := 0
-		for ; ; dotmeshIteration++ {
-			nodeIP := GetNodeIP(t, now, i, j)
-			log.Printf("Attempting to add dm remote on cluster %d node %d (IP %s)", i, j, nodeIP)
-			st, err = docker(
-				nodeName(now, i, j),
-				"echo FAKEAPIKEY | dm remote add local admin@"+nodeIP,
-				nil,
+		err := TryUntilSucceeds(func() error {
+			// Check that the docker volume plugin socket works
+			st, err = RunOnNodeErr(
+				nn,
+				`curl -X POST --unix-socket /usr/libexec/kubernetes/kubelet-plugins/volume/exec/dotmesh.io~dm/dm.sock -H "Content-Type: application/json" http://socket/rpc --data-binary "{\"jsonrpc\":\"2.0\",\"method\":\"DotmeshRPC.Ping\",\"params\":{},\"id\":1}"`,
 			)
 
-			if err != nil {
-				if dotmeshIteration > 20 {
-					log.Printf("Gave up adding remotes after %d retries, giving up: %v\n", dotmeshIteration, err)
-					return err
-				}
-
+			if err == nil && strings.Contains(st, `{"jsonrpc":"2.0","result":true,"id":1}`) {
+				log.Printf("Probed API socket on cluster %d node %d: %s", i, j, st)
+			} else {
+				log.Printf("Failed to probe API socket on cluster %d node %d: %s / %#v", i, j, st, err)
 				st, debugErr := docker(
 					nodeName(now, i, 0),
 					KUBE_DEBUG_CMD,
@@ -1853,10 +1849,10 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 					// often the problem.
 
 					st, err = docker(
-						nodeName(now, i, j),
+						nn,
 						fmt.Sprintf(
 							"echo DIND FLEXVOLUME STATUS ON %s:\nls -l /usr/libexec/kubernetes/kubelet-plugins/volume/exec/dotmesh.io~dind/dind\ntail -n 50 /var/log/dotmesh-dind-flexvolume.log\n",
-							nodeName(now, i, j),
+							nn,
 						),
 						nil,
 					)
@@ -1867,7 +1863,37 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 						log.Printf("Error getting DIND status: %#v\n", err)
 					}
 				}
-				log.Printf("Error adding remote: %v, sleeping then retrying..", err)
+
+				time.Sleep(time.Second * 2)
+				return fmt.Errorf("Failed to API socket plugin on cluster %d node %d: %s", i, j, st)
+			}
+
+			return nil
+		}, fmt.Sprintf("checking dotmesh is running on %s", nn))
+		if err != nil {
+			return err
+		}
+	}
+
+	// Add the nodes at the end, because NodeFromNodeName expects dotmesh
+	// config to be set up.
+	for j := 0; j < c.DesiredNodeCount; j++ {
+		dotmeshIteration := 0
+		for ; ; dotmeshIteration++ {
+			// This will succeed as soon as ANY node is ready, as k8s will route
+			// access to 127.0.0.1:32607 to any "ready" dotmesh server pod.
+			log.Printf("Attempting to add dm remote on cluster %d node %d", i, j)
+			st, err = docker(
+				nodeName(now, i, j),
+				"echo FAKEAPIKEY | dm remote add local admin@127.0.0.1",
+				nil,
+			)
+
+			if err != nil {
+				if dotmeshIteration > 20 {
+					log.Printf("Gave up adding remotes after %d retries, giving up: %v\n", dotmeshIteration, err)
+					return err
+				}
 				time.Sleep(time.Second * 2)
 			} else {
 				break
@@ -1875,47 +1901,6 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		}
 		log.Printf("RETRIES: dotmesh started on cluster %d node %d after %d tries\n", i, j, dotmeshIteration)
 		c.Nodes[j] = NodeFromNodeName(t, now, i, j, clusterName)
-	}
-
-	// For each node, wait until we can talk to dm from that node before
-	// proceeding.
-	for j := 0; j < c.DesiredNodeCount; j++ {
-		nodeName := nodeName(now, i, j)
-		err := TryUntilSucceeds(func() error {
-			// Check that the dm API works
-			st, err := RunOnNodeErr(nodeName, "dm list")
-			if err == nil {
-				log.Printf("Probed dm list on cluster %d node %d: %s", i, j, st)
-			} else {
-				log.Printf("Failed to probe dm list on cluster %d node %d: %s / %#v", i, j, st, err)
-				time.Sleep(time.Second * 2)
-				return err
-			}
-
-			// Check that the docker volume plugin socket works
-			st, err = RunOnNodeErr(
-				nodeName,
-				"echo 'GET / HTTP/1.0' | socat /run/docker/plugins/dm.sock -",
-			)
-			if err == nil {
-				if strings.Contains(st, "HTTP/1.1 400 Bad Request") {
-					log.Printf("Probed docker plugin on cluster %d node %d: %s", i, j, st)
-				} else {
-					log.Printf("Failed to probe docker plugin on cluster %d node %d: %s", i, j, st)
-					time.Sleep(time.Second * 2)
-					return fmt.Errorf("Failed to probe docker plugin on cluster %d node %d: %s", i, j, st)
-				}
-			} else {
-				log.Printf("Failed to probe docker plugin on cluster %d node %d: %s / %#v", i, j, st, err)
-				time.Sleep(time.Second * 2)
-				return err
-			}
-
-			return nil
-		}, fmt.Sprintf("checking dotmesh is running on %s", nodeName))
-		if err != nil {
-			return err
-		}
 	}
 
 	return nil
