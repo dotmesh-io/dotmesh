@@ -122,6 +122,8 @@ func (d *FlexVolumeDriver) mount(targetMountDir, jsonOptions string) (map[string
 		return nil, err
 	}
 
+	logger.Printf("MOUNT: Successfully mounted %s on %s", sourceFile, targetMountDir)
+
 	return nil, nil
 }
 
