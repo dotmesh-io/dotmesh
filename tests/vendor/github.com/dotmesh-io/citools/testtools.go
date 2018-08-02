@@ -1812,7 +1812,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			// Check that the docker volume plugin socket works
 			st, err = RunOnNodeErr(
 				nn,
-				`curl -X POST --unix-socket /usr/libexec/kubernetes/kubelet-plugins/volume/exec/dotmesh.io~dm/dm.sock -H Content-Type: application/json http://socket/rpc --data-binary "{\"jsonrpc\":\"2.0\",\"method\":\"DotmeshRPC.Ping\",\"params\":{},\"id\":1}"`,
+				`curl -X POST --unix-socket /usr/libexec/kubernetes/kubelet-plugins/volume/exec/dotmesh.io~dm/dm.sock -H "Content-Type: application/json" http://socket/rpc --data-binary "{\"jsonrpc\":\"2.0\",\"method\":\"DotmeshRPC.Ping\",\"params\":{},\"id\":1}"`,
 			)
 
 			if err == nil && strings.Contains(st, `{"jsonrpc":"2.0","result":true,"id":1}`) {
