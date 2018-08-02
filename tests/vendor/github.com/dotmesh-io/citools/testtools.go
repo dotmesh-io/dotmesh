@@ -58,7 +58,8 @@ for INTERESTING_POD in $(kubectl get pods --all-namespaces --no-headers \
 	fi
 
 	if [ "$PHASE" == "CrashLoopBackOff" ]; then
-		echo "WARNING crashlooping."
+		echo "WARNING crashLoopBackOff, will try again then exit."
+		kubectl describe $INTERESTING_POD -n $NS
 	fi
 
 	if [ "$PHASE" == "CreateContainerConfigError" ]; then
@@ -77,6 +78,15 @@ echo '/_/  |_|\_\\___/|____/|_____| |____/|_____|____/ \___/ \____|'
 echo '                                                             '
 
 exit 0)` // never let the debug command failing cause us to fail the tests!
+
+// return a list of names of pods which are crashing. If there are some, exit 1.
+var checkCrashLoopCmd = `(
+	kubectl get pod --all-namespaces -o json | jq '.items[] | if .status.phase == "CrashLoopBackOff" then .metadata.name else empty end'
+	if [ ! -z $result ]; then
+		echo $result
+		exit 1
+	fi
+	exit 0)`
 
 var timings map[string]float64
 var lastTiming int64
@@ -1114,7 +1124,7 @@ func poolId(now int64, i, j int) string {
 	return fmt.Sprintf("testpool-%d-%d-node-%d", now, i, j)
 }
 
-func NodeFromNodeName(t *testing.T, now int64, i, j int, clusterName string) Node {
+func GetNodeIP(t *testing.T, now int64, i, j int) string {
 	nodeIP := strings.TrimSpace(OutputFromRunOnNode(t,
 		nodeName(now, i, j),
 		`ifconfig eth0 | grep -v "inet6" | grep "inet" | cut -d " " -f 10`,
@@ -1126,6 +1136,12 @@ func NodeFromNodeName(t *testing.T, now int64, i, j int, clusterName string) Nod
 			`ifconfig eth0 | grep -v "inet6" | grep "inet" | cut -d " " -f 12 |cut -d ":" -f 2`,
 		))
 	}
+
+	return nodeIP
+}
+
+func NodeFromNodeName(t *testing.T, now int64, i, j int, clusterName string) Node {
+	nodeIP := GetNodeIP(t, now, i, j)
 
 	dotmeshConfig, err := docker(
 		nodeName(now, i, j),
@@ -1634,25 +1650,6 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		return err
 	}
 
-	st, err = docker(
-		nodeName(now, i, 0),
-		// install etcd operator on the cluster
-		"echo '#### STARTING ETCD OPERATOR' && "+
-			"kubectl apply -f /dotmesh-kube-yaml/etcd-operator-clusterrole.yaml && "+
-			"kubectl apply -f /dotmesh-kube-yaml/etcd-operator-dep.yaml && "+
-			// install dotmesh once on the master (retry because etcd operator
-			// needs to initialize)
-			"sleep 1 && "+
-			"echo '#### STARTING ETCD' && "+
-			"while ! kubectl apply -f /dotmesh-kube-yaml/dotmesh-etcd-cluster.yaml; do sleep 2; "+KUBE_DEBUG_CMD+"; done && "+
-			"echo '#### STARTING DOTMESH' && "+
-			"kubectl apply -f /dotmesh-kube-yaml/dotmesh.yaml",
-		DEBUG_ENV,
-	)
-	if err != nil {
-		return err
-	}
-
 	if c.DindStorage { // Release the DIND provisioner!!!
 
 		// Install the dind-flexvolume driver on all nodes (test tooling to
@@ -1735,70 +1732,27 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		}
 	}
 
-	// Add the nodes at the end, because NodeFromNodeName expects dotmesh
-	// config to be set up.
-	for j := 0; j < c.DesiredNodeCount; j++ {
-		dotmeshIteration := 0
-		for ; ; dotmeshIteration++ {
-			log.Printf("Attempting to add dm remote on cluster %d node %d", i, j)
-			st, err = docker(
-				nodeName(now, i, j),
-				"echo FAKEAPIKEY | dm remote add local admin@127.0.0.1",
-				nil,
-			)
-
-			if err != nil {
-				if dotmeshIteration > 20 {
-					log.Printf("Gave up adding remotes after %d retries, giving up: %v\n", dotmeshIteration, err)
-					return err
-				}
-
-				time.Sleep(time.Second * 2)
-				st, debugErr := docker(
-					nodeName(now, i, 0),
-					KUBE_DEBUG_CMD,
-					DEBUG_ENV,
-				)
-				if debugErr != nil {
-					log.Printf("Error debugging kubctl status:  %v, %s", debugErr, st)
-					return debugErr
-				}
-				if c.DindStorage {
-					// Is the DIND provisioner not working?
-
-					// If we see "list of unmounted volumes=[backend-pv]"
-					// appearing in the dotmesh server pod status, this is
-					// often the problem.
-
-					st, err = docker(
-						nodeName(now, i, j),
-						fmt.Sprintf(
-							"echo DIND FLEXVOLUME STATUS ON %s:\nls -l /usr/libexec/kubernetes/kubelet-plugins/volume/exec/dotmesh.io~dind/dind\ntail -n 50 /var/log/dotmesh-dind-flexvolume.log\n",
-							nodeName(now, i, j),
-						),
-						nil,
-					)
-
-					if err == nil {
-						log.Printf("DIND status:\n%s\n", st)
-					} else {
-						log.Printf("Error getting DIND status: %#v\n", err)
-					}
-				}
-				log.Printf("Error adding remote:  %v, retrying..", err)
-			} else {
-				break
-			}
-		}
-		log.Printf("RETRIES: dotmesh started on cluster %d node %d after %d tries\n", i, j, dotmeshIteration)
-		c.Nodes[j] = NodeFromNodeName(t, now, i, j, clusterName)
+	crashloopMax := 2
+	st, err = docker(
+		nodeName(now, i, 0),
+		// install etcd operator on the cluster
+		"echo '#### STARTING ETCD OPERATOR' && "+
+			"kubectl apply -f /dotmesh-kube-yaml/etcd-operator-clusterrole.yaml && "+
+			"kubectl apply -f /dotmesh-kube-yaml/etcd-operator-dep.yaml && "+
+			// install dotmesh once on the master (retry because etcd operator
+			// needs to initialize)
+			"sleep 1 && "+
+			"echo '#### STARTING ETCD' && "+
+			"while ! kubectl apply -f /dotmesh-kube-yaml/dotmesh-etcd-cluster.yaml; do sleep 2; "+KUBE_DEBUG_CMD+"; done",
+		DEBUG_ENV,
+	)
+	if err != nil {
+		return err
 	}
 
-	// Wait for etcd to settle before firing up volumes. This works
-	// around https://github.com/dotmesh-io/dotmesh/issues/62 so
-	// removing this will be a good test of that issue :-)
 	fmt.Printf("Waiting for etcd...\n")
 	etcdIteration := 0
+	crashlooping := 0
 	for ; ; etcdIteration++ {
 		resp := OutputFromRunOnNode(t, c.Nodes[0].Container, "kubectl describe etcd dotmesh-etcd-cluster -n dotmesh | grep Type:")
 		if err != nil {
@@ -1823,8 +1777,105 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		if err != nil {
 			return err
 		}
+		st, debugErr := docker(
+			nodeName(now, i, 0),
+			checkCrashLoopCmd,
+			DEBUG_ENV,
+		)
+		if debugErr != nil {
+			if crashlooping < crashloopMax {
+				log.Printf("Some pods - %s - are crashlooping. Will retry %d times then quit.", st, crashloopMax)
+				crashlooping++
+			} else {
+				return debugErr
+			}
+		}
 	}
 	fmt.Printf("RETRIES: etcd started after %d tries\n", etcdIteration)
+
+	st, err = docker(
+		nodeName(now, i, 0),
+		"echo '#### STARTING DOTMESH' && "+
+			"kubectl apply -f /dotmesh-kube-yaml/dotmesh.yaml",
+		DEBUG_ENV,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Add the nodes at the end, because NodeFromNodeName expects dotmesh
+	// config to be set up.
+	for j := 0; j < c.DesiredNodeCount; j++ {
+		dotmeshIteration := 0
+		crashlooping := 0
+		for ; ; dotmeshIteration++ {
+			nodeIP := GetNodeIP(t, now, i, j)
+			log.Printf("Attempting to add dm remote on cluster %d node %d (IP %s)", i, j, nodeIP)
+			st, err = docker(
+				nodeName(now, i, j),
+				"echo FAKEAPIKEY | dm remote add local admin@"+nodeIP,
+				nil,
+			)
+
+			if err != nil {
+				if dotmeshIteration > 20 {
+					log.Printf("Gave up adding remotes after %d retries, giving up: %v\n", dotmeshIteration, err)
+					return err
+				}
+
+				st, debugErr := docker(
+					nodeName(now, i, 0),
+					KUBE_DEBUG_CMD,
+					DEBUG_ENV,
+				)
+				if debugErr != nil {
+					log.Printf("Error debugging kubectl status:  %v, %s", debugErr, st)
+					return debugErr
+				}
+				st, debugErr = docker(
+					nodeName(now, i, 0),
+					checkCrashLoopCmd,
+					DEBUG_ENV,
+				)
+				if debugErr != nil {
+					if crashlooping < crashloopMax {
+						log.Printf("Some pods - %s - are crashlooping. Will retry %d times then quit.", st, crashloopMax)
+						crashlooping++
+					} else {
+						return debugErr
+					}
+				}
+				if c.DindStorage {
+					// Is the DIND provisioner not working?
+
+					// If we see "list of unmounted volumes=[backend-pv]"
+					// appearing in the dotmesh server pod status, this is
+					// often the problem.
+
+					st, err = docker(
+						nodeName(now, i, j),
+						fmt.Sprintf(
+							"echo DIND FLEXVOLUME STATUS ON %s:\nls -l /usr/libexec/kubernetes/kubelet-plugins/volume/exec/dotmesh.io~dind/dind\ntail -n 50 /var/log/dotmesh-dind-flexvolume.log\n",
+							nodeName(now, i, j),
+						),
+						nil,
+					)
+
+					if err == nil {
+						log.Printf("DIND status:\n%s\n", st)
+					} else {
+						log.Printf("Error getting DIND status: %#v\n", err)
+					}
+				}
+				log.Printf("Error adding remote: %v, sleeping then retrying..", err)
+				time.Sleep(time.Second * 2)
+			} else {
+				break
+			}
+		}
+		log.Printf("RETRIES: dotmesh started on cluster %d node %d after %d tries\n", i, j, dotmeshIteration)
+		c.Nodes[j] = NodeFromNodeName(t, now, i, j, clusterName)
+	}
 
 	// For each node, wait until we can talk to dm from that node before
 	// proceeding.
@@ -1832,18 +1883,36 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		nodeName := nodeName(now, i, j)
 		err := TryUntilSucceeds(func() error {
 			// Check that the dm API works
-			_, err := RunOnNodeErr(nodeName, "dm list")
-			if err != nil {
+			st, err := RunOnNodeErr(nodeName, "dm list")
+			if err == nil {
+				log.Printf("Probed dm list on cluster %d node %d: %s", i, j, st)
+			} else {
+				log.Printf("Failed to probe dm list on cluster %d node %d: %s / %#v", i, j, st, err)
+				time.Sleep(time.Second * 2)
 				return err
 			}
 
 			// Check that the docker volume plugin socket works
-			_, err = RunOnNodeErr(
+			st, err = RunOnNodeErr(
 				nodeName,
 				"echo 'GET / HTTP/1.0' | socat /run/docker/plugins/dm.sock -",
 			)
-			return err
-		}, fmt.Sprintf("running dm list on %s", nodeName))
+			if err == nil {
+				if strings.Contains(st, "HTTP/1.1 400 Bad Request") {
+					log.Printf("Probed docker plugin on cluster %d node %d: %s", i, j, st)
+				} else {
+					log.Printf("Failed to probe docker plugin on cluster %d node %d: %s", i, j, st)
+					time.Sleep(time.Second * 2)
+					return fmt.Errorf("Failed to probe docker plugin on cluster %d node %d: %s", i, j, st)
+				}
+			} else {
+				log.Printf("Failed to probe docker plugin on cluster %d node %d: %s / %#v", i, j, st, err)
+				time.Sleep(time.Second * 2)
+				return err
+			}
+
+			return nil
+		}, fmt.Sprintf("checking dotmesh is running on %s", nodeName))
 		if err != nil {
 			return err
 		}
