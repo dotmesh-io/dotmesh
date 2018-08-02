@@ -288,6 +288,7 @@ func testSetup(t *testing.T, f Federation) error {
 		return err
 	}
 
+	// XXX do we actually use this for anything at all???
 	dindConfig := `
 if [[ ${IP_MODE} = "ipv4" ]]; then
     # DinD subnet (expected to be /16)
@@ -365,6 +366,9 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 	}()
 
 	for i, c := range f {
+
+		clusterIpPrefix := getUniqueIpPrefix()
+
 		for j := 0; j < c.GetDesiredNodeCount(); j++ {
 			node := nodeName(stamp, i, j)
 			fmt.Printf(">>> Using RunArgs %s\n", c.RunArgs(i, j))
@@ -400,7 +404,8 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 					fi
 					(cd %s
 						EXTRA_DOCKER_ARGS="-v /dotmesh-test-pools:/dotmesh-test-pools:rshared -v /var/run/docker.sock:/hostdocker.sock %s " \
-						CNI_PLUGIN=weave %s bare $NODE %s)
+						POD_NETWORK_CIDR="%s0.0/24" \
+						CNI_PLUGIN=bridge %s run $NODE "%s" %d)
 					sleep 1
 					echo "About to run docker exec on $NODE"
 					docker exec -t $NODE bash -c '
@@ -409,6 +414,7 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 						mount --make-shared /lib/modules/
 						mount --make-shared /run
 						echo "%s '$(hostname)'.local" >> /etc/hosts
+						echo -n "%s" > /POD_IP_PREFIX
 						mkdir -p /etc/docker
 						echo "{\"insecure-registries\" : [\"%s.local:80\"]}" > /etc/docker/daemon.json
 						systemctl daemon-reload
@@ -423,15 +429,17 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 						docker exec -t $NODE bash -c '
 							set -xe
 							echo "%s '$(hostname)'.local" >> /etc/hosts
+							echo -n "%s" > /POD_IP_PREFIX
 							mkdir -p /etc/docker
 							echo "{\"insecure-registries\" : [\"%s.local:80\"]}" > /etc/docker/daemon.json
 							systemctl daemon-reload
 							systemctl restart docker
 						'
 					fi
-					`, node, runScriptDir, mountDockerAuth,
-						dindClusterScriptName, c.RunArgs(i, j), HOST_IP_FROM_CONTAINER,
-						hostname, HOST_IP_FROM_CONTAINER, hostname),
+					`, node, runScriptDir, mountDockerAuth, clusterIpPrefix,
+						dindClusterScriptName, c.RunArgs(i, j), j+11,
+						HOST_IP_FROM_CONTAINER, clusterIpPrefix, hostname,
+						HOST_IP_FROM_CONTAINER, clusterIpPrefix, hostname),
 					)
 				},
 				fmt.Sprintf("starting container %s", node),
@@ -862,7 +870,7 @@ func RunOnNode(t *testing.T, node string, cmd string) {
 	debugEnv := map[string]string{}
 	s, err := docker(node, cmd, debugEnv)
 	if err != nil {
-		t.Error(fmt.Errorf("%s while running %s on %s: %s", err, cmd, node, s))
+		t.Fatalf("%s while running %s on %s: %s", err, cmd, node, s)
 	}
 }
 
@@ -876,7 +884,7 @@ func RunOnNodeContext(ctx context.Context, t *testing.T, node string, cmd string
 			// nothing to do, ctx was cancelled
 			return
 		default:
-			t.Error(fmt.Errorf("%s while running %s on %s: %s", err, cmd, node, s))
+			t.Fatalf("%s while running %s on %s: %s", err, cmd, node, s)
 		}
 	}
 }
@@ -885,7 +893,7 @@ func RunOnNodeDebug(t *testing.T, node string, cmd string) {
 	fmt.Printf("RUNNING on %s: %s\n", node, cmd)
 	s, err := docker(node, cmd, DEBUG_ENV)
 	if err != nil {
-		t.Error(fmt.Errorf("%s while running %s on %s: %s", err, cmd, node, s))
+		t.Fatalf("%s while running %s on %s: %s", err, cmd, node, s)
 	}
 }
 
@@ -1390,6 +1398,42 @@ func RestartOperator(t *testing.T, masterNode string) {
 	}
 }
 
+func getUniqueIpPrefix() string {
+	// TODO make this less racy
+
+	latestIpPrefixFile := "/DOTMESH_KUBE_LATEST_IP_PREFIX"
+	if _, err := os.Stat(latestIpPrefixFile); os.IsNotExist(err) {
+		f, cerr := os.Create(latestIpPrefixFile)
+		if cerr != nil {
+			panic(cerr)
+		}
+		f.Write([]byte("20"))
+		f.Close()
+	} else if err != nil {
+		panic(err)
+	}
+
+	ipPrefixBytes, err := ioutil.ReadFile(latestIpPrefixFile)
+	if err != nil {
+		panic(err)
+	}
+
+	ipPrefix, err := strconv.Atoi(string(ipPrefixBytes))
+	if err != nil {
+		panic(err)
+	}
+
+	// Wrap between 20-80 because we've seen things at 10.10 and 10.96 and higher
+	nextIpPrefix := (ipPrefix-20)%60 + 21
+
+	err = ioutil.WriteFile(latestIpPrefixFile, []byte(fmt.Sprintf("%d", nextIpPrefix)), 0666)
+	if err != nil {
+		panic(err)
+	}
+
+	return fmt.Sprintf("10.%d.", ipPrefix)
+}
+
 func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 	if c.DesiredNodeCount == 0 {
 		panic("no such thing as a zero-node cluster")
@@ -1508,6 +1552,33 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		return err
 	}
 
+	// Set up routing between nodes, similar to how kubeadm-dind-cluster does it.
+
+	fmt.Printf("Setting up bridge networking between nodes...\n")
+	fmt.Printf("============================================================\n")
+
+	for j := 0; j < c.DesiredNodeCount; j++ {
+		for k := 0; k < c.DesiredNodeCount; k++ {
+			if j == k {
+				continue
+			}
+			gw := OutputFromRunOnNode(t, c.Nodes[k].Container,
+				"ip addr show eth0 | grep -w inet | awk '{ print $2 }' | sed 's,/.*,,'",
+			)
+
+			// debuggering
+			routes := OutputFromRunOnNode(t, c.Nodes[j].Container, "ip route")
+			fmt.Printf("Routes on %s: %s\n", c.Nodes[j].Container, routes)
+			podIpPrefix := OutputFromRunOnNode(t, c.Nodes[j].Container, "cat /POD_IP_PREFIX")
+			fmt.Printf("POD_IP_PREFIX on %s: %s\n", c.Nodes[j].Container, podIpPrefix)
+
+			cmd := fmt.Sprintf("ip route add $(cat /POD_IP_PREFIX)%d.0/24 via %s", k+11, gw)
+			fmt.Printf("ON %s, RUN %s\n", c.Nodes[j].Container, cmd)
+			RunOnNode(t, c.Nodes[j].Container, cmd)
+		}
+	}
+	fmt.Printf("============================================================\n")
+
 	fmt.Println("Yamls are wrangled, preparing to kubeadm init...")
 
 	st, err := docker(
@@ -1559,16 +1630,6 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			return err
 		}
 		LogTiming("join_" + poolId(now, i, j))
-	}
-
-	st, err = docker(
-		nodeName(now, i, 0),
-		"echo '#### STARTING WEAVE-NET' && "+
-			"kubectl apply -f /dotmesh-kube-yaml/weave-net.yaml",
-		nil,
-	)
-	if err != nil {
-		return err
 	}
 
 	// Wait until all nodes are Ready, or the next step will fail.

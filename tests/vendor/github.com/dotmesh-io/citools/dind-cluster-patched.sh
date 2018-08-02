@@ -1615,9 +1615,9 @@ case "${1:-}" in
     dind::ensure-kubectl
     dind::join "$(dind::create-node-container)" "$@"
     ;;
-  bare)
+  run)
     shift
-    dind::bare "$@"
+    dind::run "$@"
     ;;
   snapshot)
     shift
