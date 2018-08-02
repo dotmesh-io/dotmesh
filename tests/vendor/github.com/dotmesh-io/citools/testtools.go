@@ -49,6 +49,24 @@ for INTERESTING_POD in $(kubectl get pods --all-namespaces --no-headers \
 			kubectl logs --tail 10 $NAME -n $NS $CONTAINER
 		done
 	fi
+
+	if [ "$PHASE" == "ImagePullBackOff" ]; then
+		echo "QUITTING, image could not be found for pod ${INTERESTING_POD}"
+		echo "IMAGEPULLBACKOFF Describe output -->"
+		kubectl describe $INTERESTING_POD -n $NS
+		exit 1
+	fi
+
+	if [ "$PHASE" == "CrashLoopBackOff" ]; then
+		echo "WARNING crashlooping."
+	fi
+
+	if [ "$PHASE" == "CreateContainerConfigError" ]; then
+		echo "QUITTING, Create Container config error for pod ${INTERESTING_POD}"
+		echo "CREATECONTAINERCONFIGERROR Describe output -->"
+		kubectl describe $INTERESTING_POD -n $NS
+		exit 1
+	fi
 done
 kubectl get pods --all-namespaces
 echo '    ___  ___   _ ____  _____   ____  _____ ____  _   _  ____ '
@@ -62,6 +80,12 @@ exit 0)` // never let the debug command failing cause us to fail the tests!
 
 var timings map[string]float64
 var lastTiming int64
+
+// An arbitrary point in time that all test runs after this commit
+// should be after, so we can use it as an epoch for our timestamps
+// and therefore make them much shorter strings... Update this every
+// decade or so to keep them short.
+const DAWN_OF_DOTMESH_TIME = 1533034862684223659
 
 var stamp int64
 
@@ -1166,7 +1190,7 @@ SEARCHABLE HEADER: STARTING CLUSTER
                                          
 `)
 
-	stamp = time.Now().UnixNano()
+	stamp = time.Now().UnixNano() - DAWN_OF_DOTMESH_TIME
 	err := testSetup(t, f)
 	if err != nil {
 		return err
@@ -1587,15 +1611,13 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		fmt.Sprintf(
 			"kubectl create configmap -n dotmesh configuration "+
 				"--from-literal=upgradesUrl= "+
-				"'--from-literal=poolNamePrefix=%s-#HOSTNAME#-' "+
-				"'--from-literal=local.poolLocation=%s/%s-#HOSTNAME#' "+
+				"'--from-literal=poolNamePrefix=#HOSTNAME#-' "+
+				"'--from-literal=local.poolLocation=%s' "+
 				"--from-literal=logAddress=%s "+
 				"--from-literal=storageMode=%s "+
 				"--from-literal=pvcPerNode.storageClass=dind-pv "+
 				"--from-literal=nodeSelector=clusterSize-%d=yes", // This needs to be in here so it can be replaced with sed
-			poolId(now, i, 0),
-			testDirName(now),
-			poolId(now, i, 0),
+			filepath.Join(testDirName(now), "wd-#HOSTNAME#"),
 			logAddr,
 			c.StorageMode,
 			c.DesiredNodeCount,
@@ -1640,9 +1662,9 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			getFlexCommand := fmt.Sprintf(`
 			export NODE=%s
 			docker exec -i $NODE mkdir -p \
-				/usr/libexec/kubernetes/kubelet-plugins/volume/exec/dotmesh.io~dind
+				/usr/libexec/kubernetes/kubelet-plugins/volume/exec/dotmesh.io~dind &&
 			docker cp ../target/dind-flexvolume \
-				$NODE:/usr/libexec/kubernetes/kubelet-plugins/volume/exec/dotmesh.io~dind/dind
+				$NODE:/usr/libexec/kubernetes/kubelet-plugins/volume/exec/dotmesh.io~dind/dind &&
 			docker exec -i $NODE systemctl restart kubelet
 			`,
 				// Restarting the kubelet (line above) shouldn't be
@@ -1716,7 +1738,9 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 	// Add the nodes at the end, because NodeFromNodeName expects dotmesh
 	// config to be set up.
 	for j := 0; j < c.DesiredNodeCount; j++ {
-		for {
+		dotmeshIteration := 0
+		for ; ; dotmeshIteration++ {
+			log.Printf("Attempting to add dm remote on cluster %d node %d", i, j)
 			st, err = docker(
 				nodeName(now, i, j),
 				"echo FAKEAPIKEY | dm remote add local admin@127.0.0.1",
@@ -1724,6 +1748,11 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			)
 
 			if err != nil {
+				if dotmeshIteration > 20 {
+					log.Printf("Gave up adding remotes after %d retries, giving up: %v\n", dotmeshIteration, err)
+					return err
+				}
+
 				time.Sleep(time.Second * 2)
 				st, debugErr := docker(
 					nodeName(now, i, 0),
@@ -1732,13 +1761,36 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 				)
 				if debugErr != nil {
 					log.Printf("Error debugging kubctl status:  %v, %s", debugErr, st)
+					return debugErr
 				}
+				if c.DindStorage {
+					// Is the DIND provisioner not working?
 
+					// If we see "list of unmounted volumes=[backend-pv]"
+					// appearing in the dotmesh server pod status, this is
+					// often the problem.
+
+					st, err = docker(
+						nodeName(now, i, j),
+						fmt.Sprintf(
+							"echo DIND FLEXVOLUME STATUS ON %s:\nls -l /usr/libexec/kubernetes/kubelet-plugins/volume/exec/dotmesh.io~dind/dind\ntail -n 50 /var/log/dotmesh-dind-flexvolume.log\n",
+							nodeName(now, i, j),
+						),
+						nil,
+					)
+
+					if err == nil {
+						log.Printf("DIND status:\n%s\n", st)
+					} else {
+						log.Printf("Error getting DIND status: %#v\n", err)
+					}
+				}
 				log.Printf("Error adding remote:  %v, retrying..", err)
 			} else {
 				break
 			}
 		}
+		log.Printf("RETRIES: dotmesh started on cluster %d node %d after %d tries\n", i, j, dotmeshIteration)
 		c.Nodes[j] = NodeFromNodeName(t, now, i, j, clusterName)
 	}
 
@@ -1746,7 +1798,8 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 	// around https://github.com/dotmesh-io/dotmesh/issues/62 so
 	// removing this will be a good test of that issue :-)
 	fmt.Printf("Waiting for etcd...\n")
-	for {
+	etcdIteration := 0
+	for ; ; etcdIteration++ {
 		resp := OutputFromRunOnNode(t, c.Nodes[0].Container, "kubectl describe etcd dotmesh-etcd-cluster -n dotmesh | grep Type:")
 		if err != nil {
 			return err
@@ -1755,6 +1808,11 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			fmt.Printf("etcd is up!\n")
 			break
 		}
+		if etcdIteration > 20 {
+			log.Printf("Gave up waiting for etcd after %d retries, giving up.\n", etcdIteration)
+			return fmt.Errorf("Gave up waiting for etcd cluster to be ready after %d retries", etcdIteration)
+		}
+
 		fmt.Printf("etcd is not up... %#v\n", resp)
 		time.Sleep(time.Second * 2)
 		st, err = docker(
@@ -1766,6 +1824,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			return err
 		}
 	}
+	fmt.Printf("RETRIES: etcd started after %d tries\n", etcdIteration)
 
 	// For each node, wait until we can talk to dm from that node before
 	// proceeding.
@@ -1823,7 +1882,8 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 	}
 
 	dmInitCommand := "EXTRA_HOST_COMMANDS='echo Testing EXTRA_HOST_COMMANDS' dm cluster init " + localImageArgs() +
-		" --use-pool-dir " + testDirName(now) + "/" + poolId(now, i, 0) +
+		" --use-pool-dir " +
+		filepath.Join(testDirName(now), fmt.Sprintf("wd-%d-0", i)) +
 		" --use-pool-name " + poolId(now, i, 0) +
 		" --dotmesh-upgrades-url ''" +
 		" --port " + strconv.Itoa(c.Port) +
@@ -1872,7 +1932,7 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 		// node).
 		_, err = docker(nodeName(now, i, j), fmt.Sprintf(
 			"dm cluster join %s %s %s",
-			localImageArgs()+" --use-pool-dir "+filepath.Join(testDirName(now), poolId(now, i, j)),
+			localImageArgs()+" --use-pool-dir "+filepath.Join(testDirName(now), fmt.Sprintf("wd-%d-%d", i, j))+" ",
 			joinUrl,
 			" --use-pool-name "+poolId(now, i, j)+c.ClusterArgs,
 		), env)

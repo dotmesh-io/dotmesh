@@ -1,4 +1,3 @@
-load("@io_bazel_rules_docker//go:image.bzl", "go_image")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_binary", "go_test")
 load("@io_bazel_rules_docker//docker:docker.bzl", "docker_push")
 load("@io_bazel_rules_docker//container:container.bzl", "container_image")
@@ -99,6 +98,7 @@ container_image(
     ],
     directory = "/usr/local/bin",
     visibility = ["//visibility:public"],
+    stamp = True
 )
 
 docker_push(

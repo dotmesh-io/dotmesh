@@ -1,6 +1,6 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
-load("@io_bazel_rules_docker//go:image.bzl", "go_image")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_binary")
 load("@io_bazel_rules_docker//docker:docker.bzl", "docker_push")
+load("@io_bazel_rules_docker//container:container.bzl", "container_image")
 
 go_library(
     name = "go_default_library",
@@ -28,7 +28,7 @@ go_library(
     ],
 )
 
-go_image(
+go_binary(
     name = "operator",
     embed = [":go_default_library"],
     goarch = "amd64",
@@ -38,6 +38,18 @@ go_image(
     x_defs = {"main.DOTMESH_VERSION": "{STABLE_VERSION}",
     "main.DOTMESH_IMAGE": "{STABLE_CI_DOCKER_SERVER_IMAGE}"},
     visibility = ["//visibility:public"],
+)
+
+# have to use container image in order to get the timestamping
+container_image(
+    name = "operator-img",
+    files = [
+        ":operator",
+    ],
+    base = "@go_base//image",
+    entrypoint = ["/operator"],
+    visibility = ["//visibility:public"],
+    stamp = True
 )
 
 docker_push(

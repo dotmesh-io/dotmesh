@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -65,6 +66,7 @@ const DOTMESH_CONFIG_MAP = "configuration"
 const DOTMESH_NODE_LABEL = "dotmesh.io/node"
 const DOTMESH_ROLE_LABEL = "dotmesh.io/role"
 const DOTMESH_ROLE_SERVER = "dotmesh-server"
+const DOTMESH_ROLE_SENTINEL = "dotmesh-sentinel"
 const DOTMESH_ROLE_PVC = "dotmesh-pvc"
 
 // ConfigMap keys
@@ -100,6 +102,11 @@ func GetClientConfig(kubeconfig string) (*rest.Config, error) {
 
 var Version string = "none" // Set at compile time
 
+type dotmeshSentinel struct {
+	name string
+	pvc  string
+}
+
 func main() {
 	// When running as a pod in-cluster, a kubeconfig is not needed. Instead
 	// this will make use of the service account injected into the pod.
@@ -130,13 +137,15 @@ func main() {
 }
 
 type dotmeshController struct {
-	client       kubernetes.Interface
-	nodeLister   lister_v1.NodeLister
-	pvcLister    lister_v1.PersistentVolumeClaimLister
-	podLister    lister_v1.PodLister
-	nodeInformer cache.Controller
-	pvcInformer  cache.Controller
-	podInformer  cache.Controller
+	client           kubernetes.Interface
+	nodeLister       lister_v1.NodeLister
+	pvcLister        lister_v1.PersistentVolumeClaimLister
+	sentinelLister   lister_v1.PodLister
+	podLister        lister_v1.PodLister
+	nodeInformer     cache.Controller
+	pvcInformer      cache.Controller
+	sentinelInformer cache.Controller
+	podInformer      cache.Controller
 
 	updatesNeeded     bool
 	updatesNeededLock *sync.Mutex
@@ -271,8 +280,52 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 	// *v1.node)
 	rc.nodeLister = lister_v1.NewNodeLister(nodeIndexer)
 
-	// TRACK DOTMESH PODS
+	// TRACK DOTMESH SENTINELS
+	sentinelIndexer, sentinelInformer := cache.NewIndexerInformer(
+		&cache.ListWatch{
+			ListFunc: func(lo meta_v1.ListOptions) (runtime.Object, error) {
+				// Add selectors to only list Sentinel pods
+				dmLo := lo.DeepCopy()
+				dmLo.LabelSelector = fmt.Sprintf("%s=%s", DOTMESH_ROLE_LABEL, DOTMESH_ROLE_SENTINEL)
+				return client.Core().Pods(DOTMESH_NAMESPACE).List(*dmLo)
+			},
+			WatchFunc: func(lo meta_v1.ListOptions) (watch.Interface, error) {
+				// Add selectors to only list Dotmesh pods
+				dmLo := lo.DeepCopy()
+				dmLo.LabelSelector = fmt.Sprintf("%s=%s", DOTMESH_ROLE_LABEL, DOTMESH_ROLE_SENTINEL)
+				return client.Core().Pods(DOTMESH_NAMESPACE).Watch(*dmLo)
+			},
+		},
+		// The types of objects this informer will return
+		&v1.Pod{},
+		// The resync period of this object. This will force a re-update of all
+		// cached objects at this interval.  Every object will trigger the
+		// `Updatefunc` even if there have been no actual updates triggered.
+		60*time.Second,
+		// Callback Functions to trigger on add/update/delete
+		cache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				glog.V(3).Info("SENTINEL ADD %#v", obj)
+				rc.scheduleUpdate()
+			},
+			UpdateFunc: func(old, new interface{}) {
+				glog.V(3).Info("SENTINEL UPDATE %#v -> %#v", old, new)
+				rc.scheduleUpdate()
+			},
+			DeleteFunc: func(obj interface{}) {
+				glog.V(3).Info("SENTINEL DELETE %#v", obj)
+				rc.scheduleUpdate()
+			},
+		},
+		cache.Indexers{},
+	)
 
+	rc.sentinelInformer = sentinelInformer
+	// PodLister avoids some boilerplate code (e.g. convert runtime.Object to
+	// *v1.pod)
+	rc.sentinelLister = lister_v1.NewPodLister(sentinelIndexer)
+
+	// TRACK DOTMESH PODS
 	podIndexer, podInformer := cache.NewIndexerInformer(
 		&cache.ListWatch{
 			ListFunc: func(lo meta_v1.ListOptions) (runtime.Object, error) {
@@ -318,7 +371,6 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 	rc.podLister = lister_v1.NewPodLister(podIndexer)
 
 	// TRACK DOTMESH PVCS
-
 	pvcIndexer, pvcInformer := cache.NewIndexerInformer(
 		&cache.ListWatch{
 			ListFunc: func(lo meta_v1.ListOptions) (runtime.Object, error) {
@@ -379,6 +431,7 @@ func (c *dotmeshController) Run(stopCh chan struct{}) {
 	go c.nodeInformer.Run(stopCh)
 	go c.podInformer.Run(stopCh)
 	go c.pvcInformer.Run(stopCh)
+	go c.sentinelInformer.Run(stopCh)
 
 	// Wait for all caches to be synced, before processing is started
 	if !cache.WaitForCacheSync(stopCh, c.nodeInformer.HasSynced) {
@@ -393,6 +446,11 @@ func (c *dotmeshController) Run(stopCh chan struct{}) {
 
 	if !cache.WaitForCacheSync(stopCh, c.pvcInformer.HasSynced) {
 		glog.Error(fmt.Errorf("Timed out waiting for pvc cache to sync"))
+		return
+	}
+
+	if !cache.WaitForCacheSync(stopCh, c.sentinelInformer.HasSynced) {
+		glog.Error(fmt.Errorf("Timed out waiting for sentinel cache to sync"))
 		return
 	}
 
@@ -519,6 +577,34 @@ func (c *dotmeshController) process() error {
 		// We will eliminate PVCs we find bound to pods as we go, to
 		// leave just the unused ones after we've looked at every pod.
 		unusedPVCs[pvc.ObjectMeta.Name] = struct{}{}
+	}
+
+	// GET A LIST OF DOTMESH SENTINELS
+
+	sentinels := map[string]dotmeshSentinel{} // Set of pod IDs that are in the "Running" state
+	sentinelPods, err := c.sentinelLister.List(labels.Everything())
+	if err != nil {
+		return err
+	}
+
+	for _, sentinel := range sentinelPods {
+		sentinelName := sentinel.ObjectMeta.Name
+		var sentinelPVC, sentinelNode string
+		for _, volume := range sentinel.Spec.Volumes {
+			if volume.VolumeSource.PersistentVolumeClaim != nil {
+				sentinelPVC = volume.VolumeSource.PersistentVolumeClaim.ClaimName
+				delete(unusedPVCs, sentinelPVC)
+			}
+		}
+
+		sentinelNode, ok := sentinel.Spec.NodeSelector[DOTMESH_NODE_LABEL]
+		if !ok {
+			glog.Infof("Observing sentinel %s - cannot find %s label", sentinelName, DOTMESH_NODE_LABEL)
+		}
+		sentinels[sentinelNode] = dotmeshSentinel{
+			name: sentinelName,
+			pvc:  sentinelPVC,
+		}
 	}
 
 	// EXAMINE DOTMESH PODS
@@ -743,13 +829,13 @@ func (c *dotmeshController) process() error {
 	}
 
 	// CREATE NEW DOTMESH PODS WHERE NEEDED
-	c.createDotmeshPods(undottedNodes, suspendedNodes, unusedPVCs)
+	c.createDotmeshPods(undottedNodes, suspendedNodes, unusedPVCs, sentinels)
 
 	return nil
 }
 
-//priya
-func (c *dotmeshController) createDotmeshPods(undottedNodes map[string]struct{}, suspendedNodes map[string]struct{}, unusedPVCs map[string]struct{}) {
+func (c *dotmeshController) createDotmeshPods(undottedNodes map[string]struct{}, suspendedNodes map[string]struct{},
+	unusedPVCs map[string]struct{}, sentinels map[string]dotmeshSentinel) {
 	// FIXME: This hardcodes the name of the Deployment to be the
 	// ownerRef of created pods. It would be nicer to use an API to
 	// find the Pod containing the currently running process and then
@@ -766,6 +852,8 @@ nodeLoop:
 			continue
 		}
 
+		// Common volumes and their mounts, for all modes
+
 		volumeMounts := []v1.VolumeMount{
 			{Name: "docker-sock", MountPath: "/var/run/docker.sock"},
 			{Name: "run-docker", MountPath: "/run/docker"},
@@ -774,7 +862,6 @@ nodeLoop:
 			{Name: "dotmesh-kernel-modules", MountPath: "/bundled-lib"},
 			{Name: "dotmesh-secret", MountPath: "/secret"},
 			{Name: "test-pools-dir", MountPath: "/dotmesh-test-pools"},
-			{Name: "pool-dir", MountPath: c.config.Data[CONFIG_LOCAL_POOL_LOCATION]},
 		}
 
 		volumes := []v1.Volume{
@@ -785,7 +872,6 @@ nodeLoop:
 			{Name: "system-lib", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/lib"}}},
 			{Name: "dotmesh-kernel-modules", VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{}}},
 			{Name: "dotmesh-secret", VolumeSource: v1.VolumeSource{Secret: &v1.SecretVolumeSource{SecretName: "dotmesh"}}},
-			{Name: "pool-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: c.config.Data[CONFIG_LOCAL_POOL_LOCATION]}}},
 		}
 
 		env := []v1.EnvVar{
@@ -804,14 +890,37 @@ nodeLoop:
 		}
 
 		var podName string
+		var sentinelName string
+		var provisionSentinelOnNode bool
+		var pvVolumes []v1.Volume
+		var pvEnvs []v1.EnvVar
+		var pvVolumeMounts []v1.VolumeMount
 
 		switch c.config.Data[CONFIG_MODE] {
 		case CONFIG_MODE_LOCAL:
 			podName = fmt.Sprintf("server-%s", node)
+
+			// The pool directory is the location on the host, and will
+			// also be the location inside the container so that the
+			// paths are aligned for ZFS purposes.
+			rawPoolDir := c.config.Data[CONFIG_LOCAL_POOL_LOCATION]
+
+			// However, for CI testing (where all the nodes are the same
+			// physical host), we need to interpolate any #HOSTNAME#
+			// references in the configured pool location for each node
+			// to uniqify them.
+
+			// require_zfs.sh does this itself for the contents of
+			// USE_POOL_DIR, but we need to make sure the paths in the
+			// k8s volume mounts match as well, so need to (also) do it
+			// here.
+
+			poolDir := strings.Replace(rawPoolDir, "#HOSTNAME#", node, 1)
+
 			env = append(env,
 				v1.EnvVar{
 					Name:  "USE_POOL_DIR",
-					Value: c.config.Data[CONFIG_LOCAL_POOL_LOCATION],
+					Value: poolDir,
 				},
 				v1.EnvVar{
 					Name:  "USE_POOL_NAME",
@@ -822,95 +931,110 @@ nodeLoop:
 					Value: c.config.Data[CONFIG_LOCAL_POOL_SIZE_PER_NODE],
 				},
 			)
+			volumeMounts = append(volumeMounts,
+				v1.VolumeMount{
+					Name:      "pool-dir",
+					MountPath: poolDir,
+				},
+			)
+			volumes = append(volumes,
+				v1.Volume{
+					Name: "pool-dir",
+					VolumeSource: v1.VolumeSource{
+						HostPath: &v1.HostPathVolumeSource{
+							Path: poolDir}}},
+			)
 		case CONFIG_MODE_PPN:
 			// The name of the PVC we're going to use for this pod
 			var pvc string
 
-			if len(unusedPVCs) == 0 {
-				// Create a new PVC, as we don't have a spare.
+			//If no PVC's are available or they are available but allocated to sentinels NOT on this node
+			sentinelOnNode, ok := sentinels[node]
+			if !ok {
+				provisionSentinelOnNode = true
+				if len(unusedPVCs) != 0 {
+					glog.Infof("Reusing existing pvc that is unattached to any pods. PVC: %s on node %s", pvc, node)
+					// TODO: Is there a better basis for picking one? Most recently used?
+					for pvcName, _ := range unusedPVCs {
+						pvc = pvcName
+						break
+					}
+					delete(unusedPVCs, pvc)
+				} else {
+					glog.Infof("Creating new PVC for dotmesh server on node. PVC: %s on node %s", pvc, node)
+					randBytes := make([]byte, PVC_NAME_RANDOM_BYTES)
+					_, err := rand.Read(randBytes)
+					if err != nil {
+						glog.Errorf("Error picking a random PVC name: %+v", err)
+						continue nodeLoop
+					}
+					pvc = fmt.Sprintf("pvc-%s", hex.EncodeToString(randBytes))
 
-				// Pick a name
-				randBytes := make([]byte, PVC_NAME_RANDOM_BYTES)
-				_, err := rand.Read(randBytes)
-				if err != nil {
-					glog.Errorf("Error picking a random PVC name: %+v", err)
-					continue nodeLoop
-				}
-				pvc = fmt.Sprintf("pvc-%s", hex.EncodeToString(randBytes))
+					storageNeeded, err := resource.ParseQuantity(c.config.Data[CONFIG_PPN_POOL_SIZE_PER_NODE])
+					if err != nil {
+						glog.Errorf("Error parsing %s value %s: %+v", CONFIG_PPN_POOL_SIZE_PER_NODE, c.config.Data[CONFIG_PPN_POOL_SIZE_PER_NODE], err)
+						continue nodeLoop
+					}
 
-				// Create a PVC with that name
-				storageNeeded, err := resource.ParseQuantity(c.config.Data[CONFIG_PPN_POOL_SIZE_PER_NODE])
-				if err != nil {
-					glog.Errorf("Error parsing %s value %s: %+v", CONFIG_PPN_POOL_SIZE_PER_NODE, c.config.Data[CONFIG_PPN_POOL_SIZE_PER_NODE], err)
-					continue nodeLoop
-				}
+					storageClass := c.config.Data[CONFIG_PPN_POOL_STORAGE_CLASS]
 
-				storageClass := c.config.Data[CONFIG_PPN_POOL_STORAGE_CLASS]
-
-				newPVC := v1.PersistentVolumeClaim{
-					ObjectMeta: meta_v1.ObjectMeta{
-						Namespace: DOTMESH_NAMESPACE,
-						Name:      pvc,
-						Labels: map[string]string{
-							DOTMESH_ROLE_LABEL: DOTMESH_ROLE_PVC,
-						},
-						Annotations: map[string]string{},
-					},
-					Spec: v1.PersistentVolumeClaimSpec{
-						Resources: v1.ResourceRequirements{
-							Requests: v1.ResourceList{
-								v1.ResourceStorage: storageNeeded,
+					newPVC := v1.PersistentVolumeClaim{
+						ObjectMeta: meta_v1.ObjectMeta{
+							Namespace: DOTMESH_NAMESPACE,
+							Name:      pvc,
+							Labels: map[string]string{
+								DOTMESH_ROLE_LABEL: DOTMESH_ROLE_PVC,
 							},
+							Annotations: map[string]string{},
 						},
-						AccessModes: []v1.PersistentVolumeAccessMode{
-							v1.ReadWriteOnce,
+						Spec: v1.PersistentVolumeClaimSpec{
+							Resources: v1.ResourceRequirements{
+								Requests: v1.ResourceList{
+									v1.ResourceStorage: storageNeeded,
+								},
+							},
+							AccessModes: []v1.PersistentVolumeAccessMode{
+								v1.ReadWriteOnce,
+							},
+							StorageClassName: &storageClass,
 						},
-						StorageClassName: &storageClass,
-					},
-				}
+					}
 
-				glog.Infof("Creating new pvc %s", pvc)
-				_, err = c.client.Core().PersistentVolumeClaims(DOTMESH_NAMESPACE).Create(&newPVC)
-				if err != nil {
-					glog.Errorf("Error creating pvc: %+v", err)
-					continue nodeLoop
+					glog.Infof("Creating new pvc %s", pvc)
+					_, err = c.client.Core().PersistentVolumeClaims(DOTMESH_NAMESPACE).Create(&newPVC)
+					if err != nil {
+						glog.Errorf("Error creating pvc: %+v", err)
+						continue nodeLoop
+					}
 				}
 			} else {
-				// Pick the first one in unusedPVCs
-				// TODO: Is there a better basis for picking one? Most recently used?
-				for pvcName, _ := range unusedPVCs {
-					pvc = pvcName
-					break
-				}
-				// It's claimed now, so take it off the list
-				delete(unusedPVCs, pvc)
-				glog.Infof("Reusing existing pvc %s", pvc)
+				pvc = sentinelOnNode.pvc
+				glog.Infof("Reusing the PVC that the sentinel on this node is attached to. PVC: %s on Sentinel: %s", pvc, sentinelOnNode.name)
 			}
 
 			// Configure the pod to use PV storage
 
 			podName = fmt.Sprintf("server-%s-node-%s", pvc, node)
-
-			volumeMounts = append(volumeMounts,
-				v1.VolumeMount{
-					Name:      "backend-pv",
-					MountPath: "/backend-pv",
-				})
-			volumes = append(volumes,
-				v1.Volume{
-					Name: "backend-pv",
-					VolumeSource: v1.VolumeSource{
-						PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-							ClaimName: pvc,
-							ReadOnly:  false,
-						},
+			sentinelName = fmt.Sprintf("sentinel-%s-node-%s", pvc, node)
+			pvVolumeMounts = []v1.VolumeMount{v1.VolumeMount{
+				Name:      "backend-pv",
+				MountPath: "/backend-pv",
+			}}
+			volumeMounts = append(volumeMounts, pvVolumeMounts...)
+			pvVolumes = []v1.Volume{v1.Volume{
+				Name: "backend-pv",
+				VolumeSource: v1.VolumeSource{
+					PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+						ClaimName: pvc,
+						ReadOnly:  false,
 					},
-				})
-			env = append(env,
-				v1.EnvVar{
-					Name:  "CONTAINER_POOL_MNT",
-					Value: "/backend-pv",
 				},
+			}}
+			volumes = append(volumes, pvVolumes...)
+			pvEnvs = []v1.EnvVar{v1.EnvVar{
+				Name:  "CONTAINER_POOL_MNT",
+				Value: "/backend-pv",
+			},
 				v1.EnvVar{
 					Name:  "CONTAINER_POOL_PVC_NAME",
 					Value: pvc,
@@ -935,108 +1059,176 @@ nodeLoop:
 					// best to ask require_zfs.sh to ask df how much space
 					// is really available in the FS once it's mounted.
 					Value: "AUTO",
-				},
-			)
+				}}
+			env = append(env, pvEnvs...)
 		default:
 			glog.Errorf("Unsupported %s: %s", CONFIG_MODE, c.config.Data[CONFIG_MODE])
 			continue nodeLoop
 		}
 
-		// Create a dotmesh pod (with local storage for now) assigned to this node
-		privileged := true
-		terminationGracePeriodSeconds := int64(500)
+		c.createServerPod(podName, node, env, volumeMounts, volumes)
 
-		newDotmesh := v1.Pod{
-			ObjectMeta: meta_v1.ObjectMeta{
-				Name:      podName,
-				Namespace: "dotmesh",
-				Labels: map[string]string{
-					DOTMESH_ROLE_LABEL: DOTMESH_ROLE_SERVER,
-				},
-				Annotations: map[string]string{},
+		if provisionSentinelOnNode {
+			c.createSentinelPod(sentinelName, node, pvEnvs, pvVolumeMounts, pvVolumes)
+		}
+	}
+}
+
+func (c *dotmeshController) createServerPod(podName string, node string, env []v1.EnvVar, volumeMounts []v1.VolumeMount, volumes []v1.Volume) {
+
+	privileged := true
+
+	dotmeshServer := v1.Pod{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name:      podName,
+			Namespace: "dotmesh",
+			Labels: map[string]string{
+				DOTMESH_ROLE_LABEL: DOTMESH_ROLE_SERVER,
 			},
-			Spec: v1.PodSpec{
-				HostPID: true,
-				// This is what binds the pod to a specific node
-				NodeSelector: map[string]string{
-					DOTMESH_NODE_LABEL: node,
-				},
-				Tolerations: []v1.Toleration{
-					v1.Toleration{
-						Effect:   v1.TaintEffectNoSchedule,
-						Operator: v1.TolerationOpExists,
-					}},
-				InitContainers: []v1.Container{},
-				Containers: []v1.Container{
-					v1.Container{
-						Name:  "dotmesh-outer",
-						Image: DOTMESH_IMAGE,
-						Command: []string{
-							"/require_zfs.sh",
-							"dotmesh-server",
+			Annotations: map[string]string{},
+		},
+		Spec: v1.PodSpec{
+			HostPID: true,
+			// This is what binds the pod to a specific node
+			NodeSelector: map[string]string{
+				DOTMESH_NODE_LABEL: node,
+			},
+			Tolerations: []v1.Toleration{
+				v1.Toleration{
+					Effect:   v1.TaintEffectNoSchedule,
+					Operator: v1.TolerationOpExists,
+				}},
+			InitContainers: []v1.Container{},
+			Containers: []v1.Container{
+				v1.Container{
+					Name:  "dotmesh-outer",
+					Image: DOTMESH_IMAGE,
+					Command: []string{
+						"/require_zfs.sh",
+						"dotmesh-server",
+					},
+					SecurityContext: &v1.SecurityContext{
+						Privileged: &privileged,
+					},
+					Ports: []v1.ContainerPort{
+						{
+							Name:          "dotmesh-api",
+							ContainerPort: int32(32607),
+							Protocol:      v1.ProtocolTCP,
 						},
-						SecurityContext: &v1.SecurityContext{
-							Privileged: &privileged,
+						{
+							Name:          "dotmesh-live",
+							ContainerPort: int32(32608),
+							Protocol:      v1.ProtocolTCP,
 						},
-						Ports: []v1.ContainerPort{
-							{
-								Name:          "dotmesh-api",
-								ContainerPort: int32(32607),
-								Protocol:      v1.ProtocolTCP,
-							},
-							{
-								Name:          "dotmesh-live",
-								ContainerPort: int32(32608),
-								Protocol:      v1.ProtocolTCP,
-							},
-						},
-						VolumeMounts: volumeMounts,
-						Lifecycle: &v1.Lifecycle{
-							PreStop: &v1.Handler{
-								Exec: &v1.ExecAction{
-									Command: []string{"docker", "rm", "-f", "dotmesh-server-inner"},
-								},
-							},
-						},
-						Env:             env,
-						ImagePullPolicy: v1.PullAlways,
-						LivenessProbe: &v1.Probe{
-							Handler: v1.Handler{
-								HTTPGet: &v1.HTTPGetAction{
-									Path: "/check",
-									Port: intstr.FromInt(32608),
-								},
-							},
-							InitialDelaySeconds: int32(30),
-						},
-						ReadinessProbe: &v1.Probe{
-							Handler: v1.Handler{
-								HTTPGet: &v1.HTTPGetAction{
-									Path: "/check",
-									Port: intstr.FromInt(32607),
-								},
-							},
-							InitialDelaySeconds: int32(30),
-						},
-						Resources: v1.ResourceRequirements{
-							Requests: v1.ResourceList{
-								v1.ResourceCPU: resource.MustParse("10m"),
+					},
+					VolumeMounts: volumeMounts,
+					Lifecycle: &v1.Lifecycle{
+						PreStop: &v1.Handler{
+							Exec: &v1.ExecAction{
+								Command: []string{"docker", "rm", "-f", "dotmesh-server-inner"},
 							},
 						},
 					},
+					Env:             env,
+					ImagePullPolicy: v1.PullAlways,
+					LivenessProbe: &v1.Probe{
+						Handler: v1.Handler{
+							HTTPGet: &v1.HTTPGetAction{
+								Path: "/check",
+								Port: intstr.FromInt(32608),
+							},
+						},
+						InitialDelaySeconds: int32(30),
+					},
+					ReadinessProbe: &v1.Probe{
+						Handler: v1.Handler{
+							HTTPGet: &v1.HTTPGetAction{
+								Path: "/check",
+								Port: intstr.FromInt(32607),
+							},
+						},
+						InitialDelaySeconds: int32(30),
+					},
+					Resources: v1.ResourceRequirements{
+						Requests: v1.ResourceList{
+							v1.ResourceCPU: resource.MustParse("10m"),
+						},
+					},
 				},
-				RestartPolicy:                 v1.RestartPolicyNever,
-				TerminationGracePeriodSeconds: &terminationGracePeriodSeconds,
-				ServiceAccountName:            "dotmesh",
-				Volumes:                       volumes,
 			},
-		}
+			RestartPolicy:      v1.RestartPolicyNever,
+			ServiceAccountName: "dotmesh",
+			Volumes:            volumes,
+		},
+	}
 
-		glog.Infof("Creating pod %s running %s on node %s", newDotmesh.ObjectMeta.Name, DOTMESH_IMAGE, node)
-		_, err := c.client.Core().Pods(DOTMESH_NAMESPACE).Create(&newDotmesh)
-		if err != nil {
-			// Do not abort in error case, just keep pressing on
-			glog.Error(err)
-		}
+	c.createResource(dotmeshServer, node)
+}
+
+func (c *dotmeshController) createSentinelPod(podName string, node string, env []v1.EnvVar, volumeMounts []v1.VolumeMount, volumes []v1.Volume) {
+	privileged := true
+	sentinelImage := "gcr.io/google-containers/busybox:latest"
+	glog.Infof("--Creating sentinel %#v - volumeMounts %#v volumes %#v--", podName, volumeMounts, volumes)
+
+	sentinel := v1.Pod{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Name:      podName,
+			Namespace: "dotmesh",
+			Labels: map[string]string{
+				DOTMESH_ROLE_LABEL: DOTMESH_ROLE_SENTINEL,
+			},
+			Annotations: map[string]string{},
+		},
+		Spec: v1.PodSpec{
+			HostPID: true,
+			// This is what binds the pod to a specific node
+			NodeSelector: map[string]string{
+				DOTMESH_NODE_LABEL: node,
+			},
+			Tolerations: []v1.Toleration{
+				v1.Toleration{
+					Effect:   v1.TaintEffectNoSchedule,
+					Operator: v1.TolerationOpExists,
+				}},
+			InitContainers: []v1.Container{},
+			Containers: []v1.Container{
+				v1.Container{
+					Name:  "dotmesh-outer",
+					Image: sentinelImage,
+					Command: []string{
+						"tail",
+						"-f",
+						"/dev/null",
+					},
+					SecurityContext: &v1.SecurityContext{
+						Privileged: &privileged,
+					},
+					VolumeMounts:    volumeMounts,
+					Env:             env,
+					ImagePullPolicy: v1.PullAlways,
+					Resources: v1.ResourceRequirements{
+						Requests: v1.ResourceList{
+							v1.ResourceCPU: resource.MustParse("10m"),
+						},
+					},
+				},
+			},
+			RestartPolicy:      v1.RestartPolicyNever,
+			ServiceAccountName: "dotmesh",
+			Volumes:            volumes,
+		},
+	}
+
+	glog.Infof("-----Sentinel conig %#v-----", sentinel)
+	c.createResource(sentinel, node)
+}
+
+func (c *dotmeshController) createResource(pod v1.Pod, node string) {
+	glog.Infof("Creating pod %s running %s on node %s", pod.ObjectMeta.Name, DOTMESH_IMAGE, node)
+	_, err := c.client.Core().Pods(DOTMESH_NAMESPACE).Create(&pod)
+	if err != nil {
+		// Do not abort in error case, just keep pressing on
+		glog.Error(err)
 	}
 }

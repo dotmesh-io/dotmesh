@@ -43,5 +43,7 @@ docker run \
        -e "CI_DOCKER_PROVISIONER_IMAGE=$CI_DOCKER_PROVISIONER_IMAGE" \
        -e "CI_DOCKER_DIND_PROVISIONER_IMAGE=$CI_DOCKER_DIND_PROVISIONER_IMAGE" \
        -e "CI_DOCKER_OPERATOR_IMAGE=$CI_DOCKER_OPERATOR_IMAGE" \
+       -e "HOSTNAME=`hostname`.local" \
+       -e "PUSH=YES" \
        $BUILDER_IMAGE \
        ./rebuild_without_bazel.sh "$@"
