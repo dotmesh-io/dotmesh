@@ -1,5 +1,5 @@
 FROM ubuntu:bionic
-ENV SECURITY_UPDATES 2018-08-02
+ENV SECURITY_UPDATES 2018-08-02a
 # (echo 'search ...') Merge kernel module search paths from CentOS and Ubuntu :-O
 RUN apt-get -y update && apt-get -y install iproute2 kmod curl && \
     echo 'search updates extra ubuntu built-in weak-updates' > /etc/depmod.d/ubuntu.conf && \
