@@ -624,6 +624,7 @@ func (c *dotmeshController) process() error {
 	for _, dotmesh := range dotmeshes {
 		podName := dotmesh.ObjectMeta.Name
 		status := dotmesh.Status.Phase
+		var pvcAttachedToPod string
 
 		dotmeshIsRunning[podName] = status == v1.PodRunning
 		if status == v1.PodRunning {
@@ -636,7 +637,13 @@ func (c *dotmeshController) process() error {
 		// immediatelly reallocated (until the pod is killed).
 		for _, volume := range dotmesh.Spec.Volumes {
 			if volume.VolumeSource.PersistentVolumeClaim != nil {
-				delete(unusedPVCs, volume.VolumeSource.PersistentVolumeClaim.ClaimName)
+				pvcName := volume.VolumeSource.PersistentVolumeClaim.ClaimName
+				// Check it's a dotmesh PVC, one attached per pod.
+				_, found := unusedPVCs[pvcName]
+				if found {
+					pvcAttachedToPod = pvcName
+					delete(unusedPVCs, pvcName)
+				}
 			}
 		}
 
@@ -753,6 +760,20 @@ func (c *dotmeshController) process() error {
 
 		glog.V(2).Infof("Observing pod %s running %s on %s (status: %s)", podName, image, boundNode, dotmesh.Status.Phase)
 		delete(undottedNodes, boundNode)
+
+		// Check sentinels running on pod
+		if dotmeshIsRunning[podName] {
+			_, sentinelFound := sentinels[runningNode]
+			if c.config.Data[CONFIG_MODE] == CONFIG_MODE_PPN && !sentinelFound {
+				glog.Infof("Dotmesh pod without Sentinel found. Creating new sentinel. PodName %s on Node %s ", podName, runningNode)
+				if pvcAttachedToPod != "" {
+					c.createSentinelPod(pvcAttachedToPod, runningNode)
+				} else {
+					glog.Infof("No PVC attached to Pod and pod is in pvcPerNodeMode, scheduling pod ot be killed. PodName %s on Node : ", podName, runningNode)
+					dotmeshesToKill[podName] = struct{}{}
+				}
+			}
+		}
 	}
 
 	dottedNodeCount := len(validNodes) - len(undottedNodes)
@@ -890,7 +911,7 @@ nodeLoop:
 		}
 
 		var podName string
-		var sentinelName string
+		var pvc string
 		var provisionSentinelOnNode bool
 		var pvVolumes []v1.Volume
 		var pvEnvs []v1.EnvVar
@@ -945,9 +966,6 @@ nodeLoop:
 							Path: poolDir}}},
 			)
 		case CONFIG_MODE_PPN:
-			// The name of the PVC we're going to use for this pod
-			var pvc string
-
 			//If no PVC's are available or they are available but allocated to sentinels NOT on this node
 			sentinelOnNode, ok := sentinels[node]
 			if !ok {
@@ -1015,51 +1033,11 @@ nodeLoop:
 			// Configure the pod to use PV storage
 
 			podName = fmt.Sprintf("server-%s-node-%s", pvc, node)
-			sentinelName = fmt.Sprintf("sentinel-%s-node-%s", pvc, node)
-			pvVolumeMounts = []v1.VolumeMount{v1.VolumeMount{
-				Name:      "backend-pv",
-				MountPath: "/backend-pv",
-			}}
+			pvVolumeMounts = getDotmeshPVVolumeMounts()
 			volumeMounts = append(volumeMounts, pvVolumeMounts...)
-			pvVolumes = []v1.Volume{v1.Volume{
-				Name: "backend-pv",
-				VolumeSource: v1.VolumeSource{
-					PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-						ClaimName: pvc,
-						ReadOnly:  false,
-					},
-				},
-			}}
+			pvVolumes = getDotmeshPVVolumes(pvc)
 			volumes = append(volumes, pvVolumes...)
-			pvEnvs = []v1.EnvVar{v1.EnvVar{
-				Name:  "CONTAINER_POOL_MNT",
-				Value: "/backend-pv",
-			},
-				v1.EnvVar{
-					Name:  "CONTAINER_POOL_PVC_NAME",
-					Value: pvc,
-				},
-				v1.EnvVar{
-					Name:  "USE_POOL_DIR",
-					Value: "/backend-pv",
-				},
-				v1.EnvVar{
-					Name: "USE_POOL_NAME",
-					// Pool is named after the PVC, as per
-					// https://github.com/dotmesh-io/dotmesh/issues/348
-					Value: c.config.Data[CONFIG_POOL_NAME_PREFIX] + pvc,
-				},
-				v1.EnvVar{
-					Name: "POOL_SIZE",
-					// Size the pool to match the size of the filesystem
-					// we're putting it in. We could take the size we
-					// request for the PVC and subtract a larger margin
-					// for FS metadata and so on, but that involves more
-					// flakey second-guessing of filesystem internals;
-					// best to ask require_zfs.sh to ask df how much space
-					// is really available in the FS once it's mounted.
-					Value: "AUTO",
-				}}
+			pvEnvs = getDotmeshPVEnvs(c.config.Data[CONFIG_POOL_NAME_PREFIX], pvc)
 			env = append(env, pvEnvs...)
 		default:
 			glog.Errorf("Unsupported %s: %s", CONFIG_MODE, c.config.Data[CONFIG_MODE])
@@ -1069,7 +1047,7 @@ nodeLoop:
 		c.createServerPod(podName, node, env, volumeMounts, volumes)
 
 		if provisionSentinelOnNode {
-			c.createSentinelPod(sentinelName, node, pvEnvs, pvVolumeMounts, pvVolumes)
+			c.createSentinelPod(pvc, node)
 		}
 	}
 }
@@ -1166,14 +1144,15 @@ func (c *dotmeshController) createServerPod(podName string, node string, env []v
 	c.createResource(dotmeshServer, node)
 }
 
-func (c *dotmeshController) createSentinelPod(podName string, node string, env []v1.EnvVar, volumeMounts []v1.VolumeMount, volumes []v1.Volume) {
+func (c *dotmeshController) createSentinelPod(pvcName string, node string) {
+	sentinelName := fmt.Sprintf("sentinel-%s-node-%s", pvcName, node)
 	privileged := true
 	sentinelImage := "gcr.io/google-containers/busybox:latest"
-	glog.Infof("--Creating sentinel %#v - volumeMounts %#v volumes %#v--", podName, volumeMounts, volumes)
 
+	glog.Infof("Creating sentinel %#v", sentinelName)
 	sentinel := v1.Pod{
 		ObjectMeta: meta_v1.ObjectMeta{
-			Name:      podName,
+			Name:      sentinelName,
 			Namespace: "dotmesh",
 			Labels: map[string]string{
 				DOTMESH_ROLE_LABEL: DOTMESH_ROLE_SENTINEL,
@@ -1204,8 +1183,8 @@ func (c *dotmeshController) createSentinelPod(podName string, node string, env [
 					SecurityContext: &v1.SecurityContext{
 						Privileged: &privileged,
 					},
-					VolumeMounts:    volumeMounts,
-					Env:             env,
+					VolumeMounts:    getDotmeshPVVolumeMounts(),
+					Env:             getDotmeshPVEnvs(c.config.Data[CONFIG_POOL_NAME_PREFIX], pvcName),
 					ImagePullPolicy: v1.PullAlways,
 					Resources: v1.ResourceRequirements{
 						Requests: v1.ResourceList{
@@ -1216,11 +1195,10 @@ func (c *dotmeshController) createSentinelPod(podName string, node string, env [
 			},
 			RestartPolicy:      v1.RestartPolicyNever,
 			ServiceAccountName: "dotmesh",
-			Volumes:            volumes,
+			Volumes:            getDotmeshPVVolumes(pvcName),
 		},
 	}
 
-	glog.Infof("-----Sentinel conig %#v-----", sentinel)
 	c.createResource(sentinel, node)
 }
 
@@ -1231,4 +1209,55 @@ func (c *dotmeshController) createResource(pod v1.Pod, node string) {
 		// Do not abort in error case, just keep pressing on
 		glog.Error(err)
 	}
+}
+
+func getDotmeshPVVolumes(pvcName string) []v1.Volume {
+	return []v1.Volume{v1.Volume{
+		Name: "backend-pv",
+		VolumeSource: v1.VolumeSource{
+			PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+				ClaimName: pvcName,
+				ReadOnly:  false,
+			},
+		},
+	}}
+}
+
+func getDotmeshPVVolumeMounts() []v1.VolumeMount {
+	return []v1.VolumeMount{v1.VolumeMount{
+		Name:      "backend-pv",
+		MountPath: "/backend-pv",
+	}}
+}
+
+func getDotmeshPVEnvs(poolNamePrefix string, pvcName string) []v1.EnvVar {
+	return []v1.EnvVar{v1.EnvVar{
+		Name:  "CONTAINER_POOL_MNT",
+		Value: "/backend-pv",
+	},
+		v1.EnvVar{
+			Name:  "CONTAINER_POOL_PVC_NAME",
+			Value: pvcName,
+		},
+		v1.EnvVar{
+			Name:  "USE_POOL_DIR",
+			Value: "/backend-pv",
+		},
+		v1.EnvVar{
+			Name: "USE_POOL_NAME",
+			// Pool is named after the PVC, as per
+			// https://github.com/dotmesh-io/dotmesh/issues/348
+			Value: poolNamePrefix + pvcName,
+		},
+		v1.EnvVar{
+			Name: "POOL_SIZE",
+			// Size the pool to match the size of the filesystem
+			// we're putting it in. We could take the size we
+			// request for the PVC and subtract a larger margin
+			// for FS metadata and so on, but that involves more
+			// flakey second-guessing of filesystem internals;
+			// best to ask require_zfs.sh to ask df how much space
+			// is really available in the FS once it's mounted.
+			Value: "AUTO",
+		}}
 }
