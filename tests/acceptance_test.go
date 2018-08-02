@@ -2141,6 +2141,27 @@ func TestThreeSingleNodeClusters(t *testing.T) {
 	*/
 }
 
+/***********************************************************************
+
+    KUBERNETES TEST HACKERS - PLEASE READ THIS
+
+  The networking setup when we install k8s clusters means that k8s is
+  always transparently routing dotmesh API requests to a live server
+  pod via a NodePort service - so:
+
+  1) The IPs in f[X].GetNode(Y).IP are all interchangeable from the
+  perspective of the Dotmesh API on port 32607, and don't ACTUALLY
+  address that node.
+
+  2) The `dm remote`s set up for different nodes in a cluster all
+  actually talk to any node in that cluster, not the ones named by
+  that remote.
+
+  3) If you run a `dm` command on a node, with the default `local`
+  remote, it will talk to an arbitrary node in that cluster.
+
+ ***********************************************************************/
+
 func TestKubernetesOperator(t *testing.T) {
 	citools.TeardownFinishedTestRuns()
 
