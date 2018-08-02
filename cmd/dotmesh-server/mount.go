@@ -52,8 +52,8 @@ func (f *fsMachine) mountSnap(snapId string, readonly bool) (responseEvent *Even
 				}, backoffState
 			}
 		}
-		logZFSCommand(fullId, fmt.Sprintf("mount.zfs -o %s %s %s", options, zfsPath, mountPath))
-		out, err := exec.Command("mount.zfs", "-o", options,
+		logZFSCommand(fullId, fmt.Sprintf("%s -o %s %s %s", MOUNT_ZFS, options, zfsPath, mountPath))
+		out, err := exec.Command(MOUNT_ZFS, "-o", options,
 			zfsPath, mountPath).CombinedOutput()
 		if err != nil {
 			log.Printf("[mount:%s] %v while trying to mount %s", fullId, err, zfsPath)

@@ -32,6 +32,7 @@ const LIVENESS_PORT = "32608"
 const SERVER_PORT_OLD = "6969"
 
 var ZFS string
+var MOUNT_ZFS string
 var ZPOOL string
 
 var LOG_TO_STDOUT bool
@@ -128,6 +129,7 @@ func main() {
 		panic("Must specify ZFS_USERLAND_ROOT, e.g. /opt/zfs-0.7")
 	}
 	ZFS = zRoot + "/sbin/zfs"
+	MOUNT_ZFS = zRoot + "/sbin/mount.zfs"
 	ZPOOL = zRoot + "/sbin/zpool"
 
 	localPoolId, err := findLocalPoolId()

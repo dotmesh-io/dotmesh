@@ -145,10 +145,10 @@ fi
 KERNEL_ZFS_VERSION=$(modinfo -F version zfs)
 
 if [[ "$KERNEL_ZFS_VERSION" == "0.6"* ]]; then
-    echo "Detected ZFS 0.6 kernel modules, using matching userland"
+    echo "Detected ZFS 0.6 kernel modules ($KERNEL_ZFS_VERSION), using matching userland"
     export ZFS_USERLAND_ROOT=/opt/zfs-0.6
 elif [[ "$KERNEL_ZFS_VERSION" == "0.7"* ]]; then
-    echo "Detected ZFS 0.7 kernel modules, using matching userland"
+    echo "Detected ZFS 0.7 kernel modules ($KERNEL_ZFS_VERSION), using matching userland"
     export ZFS_USERLAND_ROOT=/opt/zfs-0.7
 fi
 
