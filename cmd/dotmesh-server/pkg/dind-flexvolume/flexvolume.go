@@ -96,19 +96,31 @@ func (d *FlexVolumeDriver) mount(targetMountDir, jsonOptions string) (map[string
 
 	sourceFile := filepath.Join(dindStorageRoot, pvId)
 
-	// see if our target folder exists (because we are the target of a migration)
-	// if not - then make it!
-	_, err = os.Stat(sourceFile)
-	if os.IsNotExist(err) {
+	// See if our target image file exists already, and create it if
+	// not.  Take care to be atomic here!
+
+	fp, err := os.OpenFile(sourceFile, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	switch {
+	case os.IsExist(err):
+		// Already exists, just use it
+		logger.Printf("MOUNT: Using existing source file %s", sourceFile)
+	case err == nil:
+		// We created the file, so it didn't already exist; close it
+		// (zero length) and let mkfs.ext4 fill it in.
+		fp.Close()
+
 		// Pull the requested size from the opts, must be "NNNk" to NNN kilobytes etc.
 		err = System("mkfs.ext4", sourceFile, fmt.Sprintf("%dk", (sizeBytes+1023)/1024))
 		if err != nil {
 			logger.Printf("MOUNT: mkfs err for %s: %v", sourceFile, err)
 			return nil, err
 		}
+		logger.Printf("MOUNT: Created source file %s", sourceFile)
+	default:
+		// Something went wrong!!!
+		logger.Printf("MOUNT: error acquiring exclusive access to %s: %v", sourceFile, err)
+		return nil, err
 	}
-
-	logger.Printf("MOUNT: Procured source file %s", sourceFile)
 
 	// Mount sourceFile at targetMountDir, -o loop
 	err = os.MkdirAll(targetMountDir, 0777)
