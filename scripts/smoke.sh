@@ -36,16 +36,14 @@ function delete_lingering_dots() {
 # triggered!
 function finish {
 	EXIT=$?
-    if [ $EXIT != 0 ]; then
-        echo "INTERNAL STATE"
-        "$DM" -c "$CONFIG" remote switch local
-        "$DM" -c "$CONFIG" debug DotmeshRPC.DumpInternalState
-	    echo "DOTMESH LOGS"
-        docker logs dotmesh-server
-        echo "DOCKER VERSION"
-        docker version
-        which docker
-    fi
+    echo "INTERNAL STATE"
+    "$DM" -c "$CONFIG" remote switch local
+    "$DM" -c "$CONFIG" debug DotmeshRPC.DumpInternalState
+    echo "DOTMESH LOGS"
+    docker logs dotmesh-server
+    echo "DOCKER VERSION"
+    docker version
+    which docker
     if [ x$SMOKE_TEST_REMOTE != x ]; then
         "$DM" -c "$CONFIG" remote rm "$REMOTE" || true
     fi

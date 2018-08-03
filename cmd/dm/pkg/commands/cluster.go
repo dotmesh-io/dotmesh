@@ -68,6 +68,7 @@ var (
 	usePoolName        string
 	discoveryUrl       string
 	port               int
+	kernelZFSVersion   string
 )
 
 // names of environment variables we pass from the content of `dm cluster {init,join}`
@@ -256,6 +257,10 @@ func NewCmdClusterInit(out io.Writer) *cobra.Command {
 		&port, "port", 0,
 		"Port to run cluster on",
 	)
+	cmd.Flags().StringVar(
+		&kernelZFSVersion, "zfs", "",
+		"Version of ZFS already available in the kernel (inhibits automatic loading and detection)",
+	)
 	return cmd
 }
 
@@ -277,6 +282,14 @@ func NewCmdClusterJoin(out io.Writer) *cobra.Command {
 		"Node was previously in etcd cluster, set this to the value of "+
 			"'ETCD_INITIAL_CLUSTER' as given by 'etcdctl member add'",
 	)
+	cmd.Flags().IntVar(
+		&port, "port", 0,
+		"Port to run cluster on",
+	)
+	cmd.Flags().StringVar(
+		&kernelZFSVersion, "zfs", "",
+		"Version of ZFS already available in the kernel (inhibits automatic loading and detection)",
+	)
 	return cmd
 }
 
@@ -293,6 +306,14 @@ func NewCmdClusterUpgrade(out io.Writer) *cobra.Command {
 			}
 		},
 	}
+	cmd.Flags().IntVar(
+		&port, "port", 0,
+		"Port to run cluster on",
+	)
+	cmd.Flags().StringVar(
+		&kernelZFSVersion, "zfs", "",
+		"Version of ZFS already available in the kernel (inhibits automatic loading and detection)",
+	)
 	return cmd
 }
 
@@ -672,6 +693,10 @@ func startDotmeshContainer(pkiPath string) error {
 	if port != 0 {
 		args = append(args, "-e")
 		args = append(args, fmt.Sprintf("DOTMESH_SERVER_PORT=%d", port))
+	}
+	if kernelZFSVersion != "" {
+		args = append(args, "-e")
+		args = append(args, fmt.Sprintf("KERNEL_ZFS_VERSION=%s", kernelZFSVersion))
 	}
 
 	// inject the inherited env variables from the context of the dm binary into require_zfs.sh

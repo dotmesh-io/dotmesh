@@ -77,6 +77,7 @@ const CONFIG_UPGRADES_INTERVAL_SECONDS = "upgradesIntervalSeconds"
 const CONFIG_FLEXVOLUME_DRIVER_DIR = "flexvolumeDriverDir"
 const CONFIG_POOL_NAME_PREFIX = "poolNamePrefix"
 const CONFIG_LOG_ADDRESS = "logAddress"
+const CONFIG_KERNEL_ZFS_VERSION = "kernel.zfsVersion"
 const CONFIG_MODE = "storageMode"
 
 const CONFIG_MODE_LOCAL = "local" // Value for CONFIG_MODE
@@ -224,6 +225,7 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 	provideDefault(&rc.config.Data, CONFIG_FLEXVOLUME_DRIVER_DIR, "/usr/libexec/kubernetes/kubelet-plugins/volume/exec")
 	provideDefault(&rc.config.Data, CONFIG_POOL_NAME_PREFIX, "")
 	provideDefault(&rc.config.Data, CONFIG_LOG_ADDRESS, "")
+	provideDefault(&rc.config.Data, CONFIG_KERNEL_ZFS_VERSION, "")
 	provideDefault(&rc.config.Data, CONFIG_MODE, CONFIG_MODE_LOCAL)
 	provideDefault(&rc.config.Data, CONFIG_LOCAL_POOL_SIZE_PER_NODE, "10G")
 	provideDefault(&rc.config.Data, CONFIG_LOCAL_POOL_LOCATION, "/var/lib/dotmesh")
@@ -908,6 +910,13 @@ nodeLoop:
 			{Name: "DOTMESH_UPGRADES_URL", Value: c.config.Data[CONFIG_UPGRADES_URL]},
 			{Name: "DOTMESH_UPGRADES_INTERVAL_SECONDS", Value: c.config.Data[CONFIG_UPGRADES_INTERVAL_SECONDS]},
 			{Name: "FLEXVOLUME_DRIVER_DIR", Value: c.config.Data[CONFIG_FLEXVOLUME_DRIVER_DIR]},
+		}
+
+		if c.config.Data[CONFIG_KERNEL_ZFS_VERSION] != "" {
+			env = append(env, v1.EnvVar{
+				Name:  "KERNEL_ZFS_VERSION",
+				Value: c.config.Data[CONFIG_KERNEL_ZFS_VERSION],
+			})
 		}
 
 		var podName string

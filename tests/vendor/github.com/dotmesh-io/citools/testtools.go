@@ -1684,6 +1684,12 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		return err
 	}
 
+	zfsVersionOverride := ""
+
+	if kzv := os.Getenv("KERNEL_ZFS_VERSION"); kzv != "" {
+		zfsVersionOverride = "--from-literal=kernel.zfsVersion=" + kzv + " "
+	}
+
 	st, err = docker(
 		nodeName(now, i, 0),
 		fmt.Sprintf(
@@ -1694,6 +1700,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 				"--from-literal=logAddress=%s "+
 				"--from-literal=storageMode=%s "+
 				"--from-literal=pvcPerNode.storageClass=dind-pv "+
+				zfsVersionOverride+
 				"--from-literal=nodeSelector=clusterSize-%d=yes", // This needs to be in here so it can be replaced with sed
 			filepath.Join(testDirName(now), "wd-#HOSTNAME#"),
 			logAddr,
@@ -2002,8 +2009,13 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 		filepath.Join(testDirName(now), fmt.Sprintf("wd-%d-0", i)) +
 		" --use-pool-name " + poolId(now, i, 0) +
 		" --dotmesh-upgrades-url ''" +
-		" --port " + strconv.Itoa(c.Port) +
-		c.ClusterArgs
+		" --port " + strconv.Itoa(c.Port)
+
+	if kzv := os.Getenv("KERNEL_ZFS_VERSION"); kzv != "" {
+		dmInitCommand = dmInitCommand + " --zfs " + kzv
+	}
+
+	dmInitCommand = dmInitCommand + c.ClusterArgs
 
 	RegisterCleanupAction(50, fmt.Sprintf(
 		"MNT=%s/%s/mnt; umount -f $MNT; zpool destroy -f %s",
@@ -2046,12 +2058,21 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 	for j := 1; j < c.DesiredNodeCount; j++ {
 		// if c.Nodes is 3, this iterates over 1 and 2 (0 was the init'd
 		// node).
-		_, err = docker(nodeName(now, i, j), fmt.Sprintf(
+
+		dmJoinCommand := fmt.Sprintf(
 			"dm cluster join %s %s %s",
 			localImageArgs()+" --use-pool-dir "+filepath.Join(testDirName(now), fmt.Sprintf("wd-%d-%d", i, j))+" ",
 			joinUrl,
-			" --use-pool-name "+poolId(now, i, j)+c.ClusterArgs,
-		), env)
+			" --use-pool-name "+poolId(now, i, j),
+		)
+
+		if kzv := os.Getenv("KERNEL_ZFS_VERSION"); kzv != "" {
+			dmJoinCommand = dmJoinCommand + " --zfs " + kzv
+		}
+
+		dmJoinCommand = dmJoinCommand + c.ClusterArgs
+
+		_, err = docker(nodeName(now, i, j), dmJoinCommand, env)
 		if err != nil {
 			return err
 		}
