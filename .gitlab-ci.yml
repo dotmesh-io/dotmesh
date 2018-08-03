@@ -313,7 +313,7 @@ linux_kubernetes_operator_dynamic_provisioning:
         - ubuntu
         - fast
     script:
-        - ./test.sh -run TestKubernetesOperator/DynamicProvisioning
+        - DOTMESH_TEST_TIMEOUT=15m ./test.sh -run TestKubernetesOperator/DynamicProvisioning
     artifacts:
         paths:
         - extracted_logs
