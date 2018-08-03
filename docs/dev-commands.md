@@ -72,7 +72,7 @@ Then run:
 sudo nixos-rebuild switch
 ```
 
-## Setup - ubuntu
+## Setup - ubuntu (18.04)
 
 [Install Docker](https://docs.docker.com/engine/installation/linux/docker-ce/ubuntu/), then put the following docker config in /etc/docker/daemon.json:
 
@@ -92,15 +92,10 @@ echo 'vm.max_map_count=262144' >> /etc/sysctl.conf
 sysctl vm.max_map_count=262144
 ```
 
-Note on golang versions: The current ubuntu LTS is Ubuntu 16.04.3, and the default version of golang on this is go1.6.2. dotmesh requires go1.7 or above.
-```
-apt-get install golang-1.10
-```
-This puts binaries in  `/usr/lib/go-1.10/bin`. So you'd need to set symlinks on your PATH to golang binaries
+Note on golang versions: The current ubuntu LTS is Ubuntu 18.04.1, and the default version of golang when installed with `snap install go` is go1.10.3. dotmesh requires go1.7 or above.
 
 ```
-ln -s  /usr/lib/go-1.10/bin/go /usr/local/bin/go
-ln -s  /usr/lib/go-1.10/bin/gofmt /usr/local/bin/gofmt
+snap install go --classic
 ```
 
 [Install Docker Compose](https://docs.docker.com/compose/install/).
@@ -221,7 +216,7 @@ ssh-keygen ## If you haven't already
 ## Now add your ~/.ssh/id_rsa.pub to your user settings on Gitlab and Github
 mkdir -p $GOPATH/src/github.com/dotmesh-io
 cd $GOPATH/src/github.com/dotmesh-io
-git clone git@github.com/dotmesh-io/dotmesh
+git clone git@github.com:dotmesh-io/dotmesh
 ```
 
 We're going to create `~/dotmesh-instrumentation` and
