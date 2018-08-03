@@ -407,6 +407,7 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 					fi
 					(cd %s
 						EXTRA_DOCKER_ARGS="-v /dotmesh-test-pools:/dotmesh-test-pools:rshared -v /var/run/docker.sock:/hostdocker.sock %s " \
+						DIND_LABEL="%s" \
 						POD_NETWORK_CIDR="%s0.0/24" \
 						CNI_PLUGIN=bridge %s run $NODE "%s" %d)
 					sleep 1
@@ -439,8 +440,18 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 							systemctl restart docker
 						'
 					fi
-					`, node, runScriptDir, mountDockerAuth, clusterIpPrefix,
-						dindClusterScriptName, c.RunArgs(i, j), j+11,
+					`, node, runScriptDir, mountDockerAuth,
+						// Set DIND_LABEL to the cluster, but not the node
+						// name.  This is so that different clusters end up on
+						// different docker networks, and don't end up on
+						// overlapping (identical) service VIP ranges.
+						fmt.Sprintf("cluster-%d-%d", stamp, i),
+						clusterIpPrefix,
+						dindClusterScriptName, c.RunArgs(i, j),
+						// See also "k+11" elsewhere - this is the per-node pod
+						// network subnet, passed as the third argument to
+						// dind::run in dind-cluster-patched.sh
+						j+11,
 						HOST_IP_FROM_CONTAINER, clusterIpPrefix, hostname,
 						HOST_IP_FROM_CONTAINER, clusterIpPrefix, hostname),
 					)
@@ -2035,8 +2046,6 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 
 	RegisterCleanupAction(50, fmt.Sprintf(
 		"zpool destroy -f %s",
-		testDirName(now),
-		poolId(now, i, 0),
 		poolId(now, i, 0),
 	))
 
@@ -2081,6 +2090,11 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 			joinUrl,
 			" --use-pool-name "+poolId(now, i, j),
 		)
+
+		RegisterCleanupAction(50, fmt.Sprintf(
+			"zpool destroy -f %s",
+			poolId(now, i, j),
+		))
 
 		if kzv := os.Getenv("KERNEL_ZFS_VERSION"); kzv != "" {
 			dmJoinCommand = dmJoinCommand + " --zfs " + kzv
