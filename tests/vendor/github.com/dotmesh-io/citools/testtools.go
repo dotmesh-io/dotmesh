@@ -266,7 +266,8 @@ func testSetup(t *testing.T, f Federation) error {
 		if [ $(mount |grep "/tmpfs " |wc -l) -eq 0 ]; then
 		        mkdir -p /tmpfs && mount -t tmpfs -o size=4g tmpfs /tmpfs
 		fi
-		echo 131072 > /sys/module/nf_conntrack/parameters/hashsize
+      # Attempt to mitigate https://github.com/kinvolk/kube-spawn/issues/14#issuecomment-293207134
+		echo 131072 > /sys/module/nf_conntrack/parameters/hashsize || true
 	`, testDirName(stamp)))
 	if err != nil {
 		return err
