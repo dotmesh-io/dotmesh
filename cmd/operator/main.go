@@ -581,17 +581,34 @@ func (c *dotmeshController) process() error {
 		unusedPVCs[pvc.ObjectMeta.Name] = struct{}{}
 	}
 
-	// GET A LIST OF DOTMESH SENTINELS
+	// EXAMINE DOTMESH SENTINELS
 
-	sentinels := map[string]dotmeshSentinel{} // Set of pod IDs that are in the "Running" state
+	sentinels := map[string]dotmeshSentinel{} // Set of sentinel pod IDs that are in the "Running" state
 	sentinelPods, err := c.sentinelLister.List(labels.Everything())
 	if err != nil {
 		return err
 	}
 
 	for _, sentinel := range sentinelPods {
+		status := sentinel.Status.Phase
 		sentinelName := sentinel.ObjectMeta.Name
 		var sentinelPVC, sentinelNode string
+
+		if status == v1.PodFailed || status == v1.PodSucceeded {
+			c.logPodInfo(sentinel)
+
+			// Broken, delete it
+			glog.Infof("Deleting pod %s", sentinelName)
+			dp := meta_v1.DeletePropagationBackground
+			err = c.client.Core().Pods(DOTMESH_NAMESPACE).Delete(sentinelName, &meta_v1.DeleteOptions{
+				PropagationPolicy: &dp,
+			})
+			if err != nil {
+				glog.Error(err)
+			}
+			continue
+		}
+
 		for _, volume := range sentinel.Spec.Volumes {
 			if volume.VolumeSource.PersistentVolumeClaim != nil {
 				sentinelPVC = volume.VolumeSource.PersistentVolumeClaim.ClaimName
@@ -704,50 +721,7 @@ func (c *dotmeshController) process() error {
 		}
 
 		if status == v1.PodFailed || status == v1.PodSucceeded {
-			// We're deleting the pod, so the user can't "kubectl describe" it, so let's log lots of stuff
-			glog.Infof("Observing pod %s - status %s: FAILED (Message: %s) (Reason: %s)",
-				podName,
-				status,
-				dotmesh.Status.Message,
-				dotmesh.Status.Reason,
-			)
-			for idx, cond := range dotmesh.Status.Conditions {
-				glog.Infof("Failed pod %s - condition %d: %#v", podName, idx, cond)
-			}
-			for idx, cont := range dotmesh.Status.ContainerStatuses {
-				glog.Infof("Failed pod %s - container %d: %#v", podName, idx, cont)
-			}
-
-			// Get logs
-			logReq := c.client.Core().Pods(dotmesh.ObjectMeta.Namespace).
-				GetLogs(podName,
-					&v1.PodLogOptions{},
-				)
-
-			func() {
-				readCloser, err := logReq.Stream()
-				if err != nil {
-					glog.Errorf("Failed pod %s - error getting logs - %#v", podName, err)
-					return // Only from inner func
-				}
-				defer readCloser.Close()
-				scanner := bufio.NewReader(readCloser)
-				for {
-					line, err := scanner.ReadString('\n')
-					if line != "" {
-						glog.Infof("Failed pod %s log: %s", podName, line)
-					}
-					if err != nil {
-						if err == io.EOF {
-							glog.Infof("Failed pod %s log ends", podName, line)
-							return // Only from inner func
-						} else {
-							glog.Errorf("Failed pod %s - error reading logs - %#v", podName, err)
-							return // Only from inner func
-						}
-					}
-				}
-			}()
+			c.logPodInfo(dotmesh)
 
 			// Broken, mark it for death
 			dotmeshesToKill[podName] = struct{}{}
@@ -1269,4 +1243,54 @@ func getDotmeshPVEnvs(poolNamePrefix string, pvcName string) []v1.EnvVar {
 			// is really available in the FS once it's mounted.
 			Value: "AUTO",
 		}}
+}
+
+func (c *dotmeshController) logPodInfo(pod *v1.Pod) {
+	podName := pod.ObjectMeta.Name
+	status := pod.Status.Phase
+	// We're deleting the pod, so the user can't "kubectl describe" it, so let's log lots of stuff
+	glog.Infof("Observing pod %s - status %s: FAILED (Message: %s) (Reason: %s)",
+		podName,
+		status,
+		pod.Status.Message,
+		pod.Status.Reason,
+	)
+	for idx, cond := range pod.Status.Conditions {
+		glog.Infof("Failed pod %s - condition %d: %#v", podName, idx, cond)
+	}
+	for idx, cont := range pod.Status.ContainerStatuses {
+		glog.Infof("Failed pod %s - container %d: %#v", podName, idx, cont)
+	}
+
+	// Get logs
+	logReq := c.client.Core().Pods(pod.ObjectMeta.Namespace).
+		GetLogs(podName,
+			&v1.PodLogOptions{},
+		)
+
+	func() {
+		readCloser, err := logReq.Stream()
+		if err != nil {
+			glog.Errorf("Failed pod %s - error getting logs - %#v", podName, err)
+			return // Only from inner func
+		}
+		defer readCloser.Close()
+		scanner := bufio.NewReader(readCloser)
+		for {
+			line, err := scanner.ReadString('\n')
+			if line != "" {
+				glog.Infof("Failed pod %s log: %s", podName, line)
+			}
+			if err != nil {
+				if err == io.EOF {
+					glog.Infof("Failed pod %s log ends", podName, line)
+					return // Only from inner func
+				} else {
+					glog.Errorf("Failed pod %s - error reading logs - %#v", podName, err)
+					return // Only from inner func
+				}
+			}
+		}
+	}()
+
 }
