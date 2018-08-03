@@ -74,42 +74,47 @@ sudo nixos-rebuild switch
 
 ## Setup - ubuntu (18.04)
 
-[Install Docker](https://docs.docker.com/engine/installation/linux/docker-ce/ubuntu/), then put the following docker config in /etc/docker/daemon.json:
+Follow these steps to get setup for Ubuntu 18.04:
 
-```
+```bash
+# install go
+snap install go --classic
+
+# install docker
+apt-get update
+apt-get install     apt-transport-https     ca-certificates     curl     software-properties-common
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+apt-key fingerprint 0EBFCD88
+add-apt-repository    "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
+   $(lsb_release -cs) \
+   stable"
+apt-get update
+apt-get install docker-ce
+
+# configure docker
+cat << EOT > /etc/docker/daemon.json
 {
     "storage-driver": "overlay2",
     "insecure-registries": ["$(hostname).local:80"]
 }
-```
+EOT
+systemctl restart docker
 
-Replacing `$(hostname)` with your hostname, and then `systemctl restart docker`.
-
-Run (as root):
-```
+# install packages
 apt install zfsutils-linux jq moreutils
 echo 'vm.max_map_count=262144' >> /etc/sysctl.conf
 sysctl vm.max_map_count=262144
-```
 
-Note on golang versions: The current ubuntu LTS is Ubuntu 18.04.1, and the default version of golang when installed with `snap install go` is go1.10.3. dotmesh requires go1.7 or above.
+# install docker-compose
+sudo curl -L https://github.com/docker/compose/releases/download/1.22.0/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
 
-```
-snap install go --classic
-```
-
-[Install Docker Compose](https://docs.docker.com/compose/install/).
-
-Add the hostname to the hosts file:
-
-```bash
+# update hosts
 cat <<EOF >> /etc/hosts
 127.0.0.1 $(hostname).local
 EOF
-```
 
-Install bazel:
-```
+# install bazel
 apt-get -y install pkg-config zip g++ zlib1g-dev unzip python git-core
 curl -L -o bazel-installer.sh https://github.com/bazelbuild/bazel/releases/download/0.15.2/bazel-0.15.2-installer-linux-x86_64.sh
 chmod +x bazel-installer.sh && ./bazel-installer.sh --user
@@ -306,9 +311,128 @@ Please enter the executor: kubernetes, docker, parallels, shell, virtualbox, doc
 shell
 ```
 
+**NOTE** if you are installing a runner on Ubuntu Bionic - tag the runner as `ubuntu-bionic` rather than just `ubuntu`
+
 Add the `gitlab-runner` user's SSH public key to `authorized_hosts` on releases@get.dotmesh.io
 
 Edit  /etc/gitlab-runner/config.toml to set the concurrency to 4 (it's obvious how)
+
+#### setting up a Bionic runner from scratch
+
+There are the steps to follow to get a Bionic runner setup - you will need a login to github and gitlab under the dotmesh namespace.
+
+First - as root, login to the server, then follow these steps:
+
+First - run through the `Setup - ubuntu (18.04)` section above - then:
+
+```bash
+# make a gitlab-runner user
+adduser \
+   --disabled-password \
+   --home /home/gitlab-runner \
+   --gecos "" \
+   gitlab-runner
+
+
+# add gitlab-runner to sudoers
+chmod 0660 /etc/sudoers
+echo 'gitlab-runner ALL=(ALL:ALL) NOPASSWD:ALL' >> /etc/sudoers
+chmod 0440 /etc/sudoers
+
+# add gitlab-runner to the docker group
+usermod -a -G docker gitlab-runner
+
+# setup the gitlab-runner user
+su - gitlab-runner
+cd ~
+mkdir -p gocode/bin
+
+# setup GOPATH
+echo export GOPATH=\"\$HOME/go\" >> ~/.bash_profile
+echo export PATH=\"\$PATH:\$GOPATH/bin\" >> ~/.bash_profile
+
+# make an ssh key
+ssh-keygen
+
+# print public key for next step
+cat ~/.ssh/id_rsa.pub
+```
+
+Now you must add the public key printed in the last step to your github and gitlab SSH keys thus giving the gitlab-runner user access to our private repos.
+
+Also - copy the `/home/gitlab-runner/.ssh/authorized_keys` file from gitlab-runner.dotmesh.io and copy it into `/home/gitlab-runner/.ssh/authorized_keys` on the new runner (don't forgot to `chmod 0600 /home/gitlab-runner/.ssh/authorized_keys`)
+
+Then continue:
+
+```bash
+exit
+exit
+# you should now have accesss because we added authorized_keys
+ssh gitlab-runner@<HOSTNAME-OF-RUNNER>
+su - gitlab-runner
+# clone the dotmesh repo
+mkdir -p $GOPATH/src/github.com/dotmesh-io
+cd $GOPATH/src/github.com/dotmesh-io
+git clone git@github.com:dotmesh-io/dotmesh.git
+cd dotmesh
+./prime.sh
+
+# clone & setup the dotmesh-instrumentation repo
+cd ~/
+git clone git@github.com:dotmesh-io/dotmesh-instrumentation
+cd dotmesh-instrumentation
+./up.sh
+
+# clone & setup the discovery.dotmesh.io repo
+cd ~/
+git clone git@github.com:dotmesh-io/discovery.dotmesh.io
+cd discovery.dotmesh.io
+./start-local.sh
+
+# install gitlab runner
+sudo wget -O /usr/local/bin/gitlab-runner https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-linux-amd64
+sudo chmod +x /usr/local/bin/gitlab-runner
+sudo gitlab-runner install --user=gitlab-runner --working-directory=/home/gitlab-runner
+```
+
+Then - edit the `/etc/gitlab-runner/config.toml` file (as root) as change the `concurrent` setting to 4.
+
+Visit the [gitlab runner admin page](https://gitlab.dotmesh.com/admin/runners) and make a note of:
+
+ * the runner token
+ * the URL of coordinator
+
+```bash
+sudo gitlab-runner start
+sudo gitlab-runner register
+```
+
+Here are the values to enter:
+
+ * `tags` = `fast,ubuntu-bionic`
+ * `executor` = `shell`
+
+Example:
+
+```
+gitlab-runner@gitlab-dawdler:~$ sudo gitlab-runner register
+Running in system-mode.
+
+Please enter the gitlab-ci coordinator URL (e.g. https://gitlab.com/):
+https://gitlab.dotmesh.com/
+Please enter the gitlab-ci token for this runner:
+XXX
+Please enter the gitlab-ci description for this runner:
+[gitlab-dawdler]:
+Please enter the gitlab-ci tags for this runner (comma separated):
+fast,ubuntu-bionic
+Registering runner... succeeded                     runner=WyJjQ2zg
+Please enter the executor: docker-ssh, parallels, shell, ssh, virtualbox, kubernetes, docker, docker-ssh+machine, docker+machine:
+shell
+Runner registered successfully. Feel free to start it, but if it's running already the config should be automatically reloaded!
+```
+
+Finally - edit each runner on the [gitlab runner admin page](https://gitlab.dotmesh.com/admin/runners) and untick the `Lock to current projects` checkbox.
 
 ## cleanup code - for CI runners and for local dev machines
 
