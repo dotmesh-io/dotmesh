@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/exec"
@@ -1400,38 +1401,52 @@ func RestartOperator(t *testing.T, masterNode string) {
 }
 
 func getUniqueIpPrefix() string {
-	// TODO make this less racy
+	ipPrefix := -1
+	iteration := 0
+	prefixFileName := ""
+	for ; iteration < 20; iteration++ {
+		ipPrefix = rand.Intn(60) + 20
 
-	latestIpPrefixFile := "/DOTMESH_KUBE_LATEST_IP_PREFIX"
-	if _, err := os.Stat(latestIpPrefixFile); os.IsNotExist(err) {
-		f, cerr := os.Create(latestIpPrefixFile)
-		if cerr != nil {
-			panic(cerr)
+		prefixFileName = fmt.Sprintf("/tmp/DOTMESH_KUBE_IP.%d", ipPrefix)
+
+		// Attempt atomic creation of the lock file
+		fp, err := os.OpenFile(prefixFileName, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+		if os.IsExist(err) {
+			// Is it stale?
+			stat, err := os.Stat(prefixFileName)
+			if err != nil {
+				if os.IsNotExist(err) {
+					// Somebody might have deleted it from under us, no problem
+				} else {
+					panic(err)
+				}
+			} else {
+				age := time.Now().Nanosecond() - stat.ModTime().Nanosecond()
+				if age > 3600000000 { // 1 hour in nanoseconds
+					os.Remove(prefixFileName) // Deliberately ignore errors, as somebody else might be doing the same thing at the same time
+				}
+			}
+			// Sleep a random interval to avoid thundering herds, then try again, picking a new
+			// random number
+			time.Sleep(time.Duration(rand.Intn(1000)+500) * time.Millisecond)
+			continue
+		} else if err != nil {
+			panic(err)
 		}
-		f.Write([]byte("20"))
-		f.Close()
-	} else if err != nil {
-		panic(err)
+
+		// Success! Write an identifying string (our test dir name) to
+		// the file, just for audit reasons.
+		fp.Write([]byte(testDirName(stamp)))
+		fp.Close()
+		break
 	}
 
-	ipPrefixBytes, err := ioutil.ReadFile(latestIpPrefixFile)
-	if err != nil {
-		panic(err)
+	if ipPrefix == -1 {
+		panic("Gave up looking for a free IP prefix")
 	}
 
-	ipPrefix, err := strconv.Atoi(string(ipPrefixBytes))
-	if err != nil {
-		panic(err)
-	}
-
-	// Wrap between 20-80 because we've seen things at 10.10 and 10.96 and higher
-	nextIpPrefix := (ipPrefix-20)%60 + 21
-
-	err = ioutil.WriteFile(latestIpPrefixFile, []byte(fmt.Sprintf("%d", nextIpPrefix)), 0666)
-	if err != nil {
-		panic(err)
-	}
-
+	// Make sure we clear up if the tests finish OK
+	RegisterCleanupAction(30, fmt.Sprintf("rm %s", prefixFileName))
 	return fmt.Sprintf("10.%d.", ipPrefix)
 }
 
