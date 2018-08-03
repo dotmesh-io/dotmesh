@@ -1,5 +1,5 @@
---- dind-cluster-original.sh	2018-07-20 09:54:37.370416165 +0000
-+++ dind-cluster-patched.sh	2018-07-20 10:27:10.553216533 +0000
+--- dind-cluster-original.sh	2018-07-26 13:57:46.438893637 +0100
++++ dind-cluster-patched.sh	2018-08-02 15:49:35.767038261 +0100
 @@ -261,9 +261,9 @@
  function dind::prepare-sys-mounts {
    if [[ ! ${using_linuxkit} ]]; then
@@ -65,9 +65,9 @@
 -  #   shift
 -  #   dind::bare "$@"
 -  #   ;;
-+  bare)
++  run)
 +    shift
-+    dind::bare "$@"
++    dind::run "$@"
 +    ;;
    snapshot)
      shift
