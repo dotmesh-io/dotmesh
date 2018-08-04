@@ -291,64 +291,11 @@ func testSetup(t *testing.T, f Federation) error {
 
 	// XXX do we actually use this for anything at all???
 	dindConfig := `
-if [[ ${IP_MODE} = "ipv4" ]]; then
-    # DinD subnet (expected to be /16)
-    DIND_SUBNET="${DIND_SUBNET:-10.192.0.0}"
-else
-    # DinD subnet (expected to be /64)
-    DIND_SUBNET="${DIND_SUBNET:-fd00:10::}"
-fi
-
 # Apiserver port
 APISERVER_PORT=${APISERVER_PORT:-8080}
 
-# Number of nodes. 0 nodes means just one master node.
-# In case of NUM_NODES=0 'node-role.kubernetes.io/master' taint is removed
-# from the master node.
-NUM_NODES=${NUM_NODES:-2}
-
-# Use non-dockerized build
-# KUBEADM_DIND_LOCAL=
-
 # Use prebuilt DIND image
 DIND_IMAGE="${DIND_IMAGE:-mirantis/kubeadm-dind-cluster:v1.10}"
-
-# Set to non-empty string to enable building kubeadm
-# BUILD_KUBEADM=y
-
-# Set to non-empty string to enable building hyperkube
-# BUILD_HYPERKUBE=y
-
-# download kubectl on the host
-# Set automatically based on DIND image version tag
-# if image version tag is of the form vNNN.NNN
-# LOCAL_KUBECTL_VERSION="${LOCAL_KUBECTL_VERSION:-v1.10}"
-
-# Set custom URL for Dashboard yaml file
-# DASHBOARD_URL="${DASHBOARD_URL:-https://rawgit.com/kubernetes/dashboard/bfab10151f012d1acc5dfb1979f3172e2400aa3c/src/deploy/kubernetes-dashboard.yaml}"
-
-# CNI plugin to use (bridge, flannel, calico, calico-kdd, weave). Defaults to 'bridge'
-# In case of 'bridge' plugin, additional hacks are employed to bridge
-# DIND containers together.
-CNI_PLUGIN="${CNI_PLUGIN:-bridge}"
-
-# When using Calico with Kubernetes as the datastore (calico-kdd) your
-# controller manager needs to be started with --cluster-cidr=192.168.0.0/16.
-# More information here: http://docs.projectcalico.org/v2.3/getting-started/kubernetes/installation/hosted/kubernetes-datastore/
-# POD_NETWORK_CIDR="192.168.0.0/16"
-
-# Set SKIP_SNAPSHOT to non-empty string to skip making the snapshot.
-# This may be useful for CI environment where the cluster is never
-# restarted after it's created.
-# SKIP_SNAPSHOT=y
-
-# Disable parallel running of e2e tests. Use this if you use a resource
-# constrained machine for e2e tests and get some flakes.
-# DIND_NO_PARALLEL_E2E=y
-
-# Any options to be passed to the docker run both on init and reup.
-# By default it's empty
-# MASTER_EXTRA_OPTS="  "
 
 # Define which DNS service to run
 # possible values are kube-dns (default) and coredns
@@ -369,7 +316,7 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 	for i, c := range f {
 
 		clusterIpPrefix := getUniqueIpPrefix()
-		c.SetHostIPFromContainer(fmt.Sprintf("192.168.%d.1", clusterIpPrefix))
+		c.SetIpPrefix(clusterIpPrefix)
 
 		for j := 0; j < c.GetDesiredNodeCount(); j++ {
 			node := nodeName(stamp, i, j)
@@ -409,8 +356,8 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 						DIND_SUBNET="192.168.%d.0" \
 						DIND_SUBNET_SIZE="24" \
 						DIND_LABEL="%s" \
-						SERVICE_CIDR="10.%d.254.0/24" \
-						POD_NETWORK_CIDR="10.%d.0.0/16" \
+						SERVICE_CIDR="%s" \
+						POD_NETWORK_CIDR="%s" \
 						CNI_PLUGIN=bridge %s run $NODE "%s" %d)
 					sleep 1
 					echo "About to run docker exec on $NODE"
@@ -453,11 +400,11 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 						// (identical) service VIP ranges.
 						fmt.Sprintf("dotmesh-cluster-ip-range-%d", clusterIpPrefix),
 						// clusterIpPrefix is used here to generate a
-						// 10.x.254.0/24 SERVICE_CIDR...
-						clusterIpPrefix,
-						// ... and a 10.x.0.0/16 overall POD_NETWORK_CIDR,
-						// which gets broken up into per-node /24s below (j+11)
-						clusterIpPrefix,
+						// SERVICE_CIDR...
+						serviceCIDR(clusterIpPrefix),
+						// ... and a POD_NETWORK_CIDR, which gets broken up
+						// into per-node /24s below (j+11)
+						podNetworkCIDR(clusterIpPrefix),
 						dindClusterScriptName, c.RunArgs(i, j),
 						// See also "k+11" elsewhere - this is the per-node pod
 						// network subnet, passed as the third argument to
@@ -466,8 +413,8 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 						// above into a 10.x.j+11.0/24 pod network sub-range
 						// per node.
 						j+11,
-						c.GetHostIPFromContainer(), clusterIpPrefix, hostname,
-						c.GetHostIPFromContainer(), clusterIpPrefix, hostname),
+						hostIpFromContainer(c.GetIpPrefix()), clusterIpPrefix, hostname,
+						hostIpFromContainer(c.GetIpPrefix()), clusterIpPrefix, hostname),
 					)
 				},
 				fmt.Sprintf("starting container %s", node),
@@ -998,15 +945,15 @@ func localEtcdImage() string {
 func (c *Cluster) localImageArgs() string {
 	logSuffix := ""
 	if os.Getenv("DISABLE_LOG_AGGREGATION") == "" {
-		logSuffix = fmt.Sprintf(" --log %s", c.GetHostIPFromContainer())
+		logSuffix = fmt.Sprintf(" --log %s", hostIpFromContainer(c.GetIpPrefix()))
 	}
 	traceSuffix := ""
 	if os.Getenv("DISABLE_TRACING") == "" {
-		traceSuffix = fmt.Sprintf(" --trace %s", c.GetHostIPFromContainer())
+		traceSuffix = fmt.Sprintf(" --trace %s", hostIpFromContainer(c.GetIpPrefix()))
 	}
 	regSuffix := ""
 	return ("--image " + LocalImage("dotmesh-server") + " --etcd-image " + localEtcdImage() +
-		" --docker-api-version 1.23 --discovery-url http://" + c.GetHostIPFromContainer() + ":8087" +
+		" --docker-api-version 1.23 --discovery-url http://" + hostIpFromContainer(c.GetIpPrefix()) + ":8087" +
 		logSuffix + traceSuffix + regSuffix)
 }
 
@@ -1089,20 +1036,20 @@ type Node struct {
 }
 
 type Cluster struct {
-	DesiredNodeCount    int
-	Port                int
-	Env                 map[string]string
-	ClusterArgs         string
-	Nodes               []Node
-	HostIPFromContainer string
+	DesiredNodeCount int
+	Port             int
+	Env              map[string]string
+	ClusterArgs      string
+	Nodes            []Node
+	IpPrefix         int
 }
 
 type Kubernetes struct {
-	DesiredNodeCount    int
-	Nodes               []Node
-	StorageMode         string
-	DindStorage         bool
-	HostIPFromContainer string
+	DesiredNodeCount int
+	Nodes            []Node
+	StorageMode      string
+	DindStorage      bool
+	IpPrefix         int
 }
 
 type Pair struct {
@@ -1227,6 +1174,22 @@ func NodeFromNodeName(t *testing.T, now int64, i, j int, clusterName string) Nod
 	}
 }
 
+// Networking config helper functions
+
+func hostIpFromContainer(prefix int) string {
+	return fmt.Sprintf("192.168.%d.1", prefix)
+}
+
+func serviceCIDR(prefix int) string {
+	return fmt.Sprintf("172.16.%d.0/24", prefix)
+}
+
+func podNetworkCIDR(prefix int) string {
+	return fmt.Sprintf("10.%d.0.0/16", prefix)
+}
+
+// Federation
+
 func (f Federation) Start(t *testing.T) error {
 	fmt.Printf(`
 SEARCHABLE HEADER: STARTING CLUSTER
@@ -1349,8 +1312,8 @@ type Startable interface {
 	GetDesiredNodeCount() int
 	Start(*testing.T, int64, int) error
 	RunArgs(int, int) string
-	GetHostIPFromContainer() string
-	SetHostIPFromContainer(string)
+	GetIpPrefix() int
+	SetIpPrefix(int)
 }
 
 ///////////// Kubernetes
@@ -1376,12 +1339,12 @@ func (c *Kubernetes) GetDesiredNodeCount() int {
 	return c.DesiredNodeCount
 }
 
-func (c *Kubernetes) SetHostIPFromContainer(hostIP string) {
-	c.HostIPFromContainer = hostIP
+func (c *Kubernetes) SetIpPrefix(ipPrefix int) {
+	c.IpPrefix = ipPrefix
 }
 
-func (c *Kubernetes) GetHostIPFromContainer() string {
-	return c.HostIPFromContainer
+func (c *Kubernetes) GetIpPrefix() int {
+	return c.IpPrefix
 }
 
 func ChangeOperatorNodeSelector(masterNode, nodeSelector string) error {
@@ -1548,7 +1511,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 
 	logAddr := ""
 	if os.Getenv("DISABLE_LOG_AGGREGATION") == "" {
-		logAddr = c.GetHostIPFromContainer()
+		logAddr = hostIpFromContainer(c.GetIpPrefix())
 	}
 
 	// Move k8s root dir into /dotmesh-test-pools/<timestamp>/ on every node.
@@ -1640,6 +1603,33 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		nodeName(now, i, 0),
 		"touch /dind/flexvolume_driver && "+
 			"systemctl start kubelet && "+
+
+			// write out an appropriate kubeadm.conf, especially wrt networking config
+			fmt.Sprintf(`sed -e "s|{{API_VERSION}}|kubeadm.k8s.io/v1alpha2|" \
+				-e "s|{{ADV_ADDR}}|%s|" \
+				-e "s|{{POD_SUBNET_DISABLE}}||" \
+				-e "s|{{POD_NETWORK_CIDR}}|%s|" \
+				-e "s|{{SVC_SUBNET}}|%s|" \
+				-e "s|{{BIND_ADDR}}|0.0.0.0|" \
+				-e "s|{{BIND_PORT}}|8080|" \
+				-e "s|{{FEATURE_GATES}}|{}|" \
+				-e "s|{{KUBEADM_VERSION}}|1.10.1|" \
+				-e "s|{{COMPONENT_FEATURE_GATES}}|feature-gates: MountPropagation=true|" \
+				-e "s|{{APISERVER_EXTRA_ARGS}}||" \
+				-e "s|{{CONTROLLER_MANAGER_EXTRA_ARGS}}||" \
+				-e "s|{{SCHEDULER_EXTRA_ARGS}}||" \
+				-e "s|{{KUBE_MASTER_NAME}}|%s|" \
+				/etc/kubeadm.conf.tmpl > /etc/kubeadm.conf && `,
+				// master ip address
+				c.Nodes[0].IP,
+				// POD_NETWORK_CIDR
+				podNetworkCIDR(c.GetIpPrefix()),
+				// SERVICE_CIDR
+				serviceCIDR(c.GetIpPrefix()),
+				// master hostname
+				nodeName(now, i, 0),
+			)+
+
 			"wrapkubeadm init --ignore-preflight-errors=all && "+
 			"mkdir /root/.kube && cp /etc/kubernetes/admin.conf /root/.kube/config && "+
 			// Make kube-dns faster; trick copied from dind-cluster-v1.7.sh
@@ -2052,12 +2042,12 @@ func (c *Cluster) GetDesiredNodeCount() int {
 	return c.DesiredNodeCount
 }
 
-func (c *Cluster) SetHostIPFromContainer(hostIP string) {
-	c.HostIPFromContainer = hostIP
+func (c *Cluster) SetIpPrefix(ipPrefix int) {
+	c.IpPrefix = ipPrefix
 }
 
-func (c *Cluster) GetHostIPFromContainer() string {
-	return c.HostIPFromContainer
+func (c *Cluster) GetIpPrefix() int {
+	return c.IpPrefix
 }
 
 func (c *Cluster) Start(t *testing.T, now int64, i int) error {
