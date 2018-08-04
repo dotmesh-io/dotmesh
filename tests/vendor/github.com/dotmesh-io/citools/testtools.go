@@ -419,7 +419,7 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 						mount --make-shared /lib/modules/
 						mount --make-shared /run
 						echo "%s '$(hostname)'.local" >> /etc/hosts
-						echo -n "%s" > /POD_IP_PREFIX
+						echo -n "10.%d." > /POD_IP_PREFIX
 						mkdir -p /etc/docker
 						echo "{\"insecure-registries\" : [\"%s.local:80\"]}" > /etc/docker/daemon.json
 						systemctl daemon-reload
@@ -434,7 +434,7 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 						docker exec -t $NODE bash -c '
 							set -xe
 							echo "%s '$(hostname)'.local" >> /etc/hosts
-							echo -n "%s" > /POD_IP_PREFIX
+							echo -n "10.%d." > /POD_IP_PREFIX
 							mkdir -p /etc/docker
 							echo "{\"insecure-registries\" : [\"%s.local:80\"]}" > /etc/docker/daemon.json
 							systemctl daemon-reload
