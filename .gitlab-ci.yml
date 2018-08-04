@@ -48,7 +48,6 @@ before_script:
     - while [ -f /dotmesh-test-cleanup.lock ]; do echo "waiting for test cleanup..."; sleep 1; done
 
 build_client_linux:
-    retry: 2
     stage: build
     tags:
         - ubuntu-bionic
@@ -63,7 +62,6 @@ build_client_linux:
         - schedules
 
 build_client_macos:
-    retry: 2
     stage: build
     tags:
         - ubuntu-bionic
@@ -78,7 +76,6 @@ build_client_macos:
         - schedules
 
 build_yaml:
-    retry: 2
     stage: build
     tags:
         - ubuntu-bionic
@@ -108,7 +105,6 @@ build_yaml:
         - schedules
 
 build_operator:
-    retry: 2
     stage: build
     tags:
         - ubuntu-bionic
@@ -126,7 +122,6 @@ build_operator:
         - schedules
 
 build_provisioner:
-    retry: 2
     stage: build
     tags:
         - ubuntu-bionic
@@ -144,7 +139,6 @@ build_provisioner:
         - schedules
 
 build_server:
-    retry: 2
     stage: build
     tags:
         - ubuntu-bionic
@@ -163,7 +157,6 @@ build_server:
         - schedules
 
 macos_docker_stable_smoke:
-    retry: 2
     stage: smoke
     tags:
         - macos
@@ -174,7 +167,6 @@ macos_docker_stable_smoke:
         - docker container prune -f
 
 macos_docker_edge_smoke:
-    retry: 2
     stage: smoke
     tags:
         - macos
@@ -185,7 +177,6 @@ macos_docker_edge_smoke:
         - docker container prune -f
 
 linux_smoke:
-    retry: 2
     stage: smoke
     tags:
         - ubuntu-bionic
@@ -217,7 +208,6 @@ versioner_unit_tests:
 
 # run full dind tests on linux
 linux_default_dot:
-    retry: 2
     stage: test
     dependencies:
         - build_client_linux
@@ -234,7 +224,6 @@ linux_default_dot:
         - schedules
 
 linux_single_node:
-    retry: 2
     stage: test
     dependencies:
         - build_client_linux
@@ -251,7 +240,6 @@ linux_single_node:
         - schedules
 
 linux_recover_from_unmounted_dot_on_master:
-    retry: 2
     stage: test
     dependencies:
         - build_client_linux
@@ -268,7 +256,6 @@ linux_recover_from_unmounted_dot_on_master:
         - schedules
 
 linux_two_nodes_same_cluster:
-    retry: 2
     stage: test
     dependencies:
         - build_client_linux
@@ -285,7 +272,6 @@ linux_two_nodes_same_cluster:
         - schedules
 
 linux_kubernetes_volumes:
-    retry: 2
     stage: test
     dependencies:
         - build_yaml
@@ -303,7 +289,6 @@ linux_kubernetes_volumes:
         - schedules
 
 linux_kubernetes_operator_dynamic_provisioning:
-    retry: 2
     stage: test
     dependencies:
         - build_yaml
@@ -322,7 +307,6 @@ linux_kubernetes_operator_dynamic_provisioning:
         - schedules
 
 linux_kubernetes_operator_PVC:
-    retry: 2
     stage: test
     dependencies:
         - build_yaml
@@ -341,7 +325,6 @@ linux_kubernetes_operator_PVC:
         - schedules
 
 linux_deletion_simple:
-    retry: 2
     stage: test
     dependencies:
         - build_client_linux
@@ -358,7 +341,6 @@ linux_deletion_simple:
         - schedules
 
 linux_deletion_complex:
-    retry: 2
     stage: test
     dependencies:
         - build_client_linux
@@ -375,7 +357,6 @@ linux_deletion_complex:
         - schedules
 
 linux_backup_and_restore_two_single_node_clusters:
-    retry: 2
     stage: test
     dependencies:
         - build_client_linux
@@ -392,7 +373,6 @@ linux_backup_and_restore_two_single_node_clusters:
         - schedules
 
 linux_two_single_node_clusters:
-    retry: 2
     stage: test
     dependencies:
         - build_client_linux
@@ -409,7 +389,6 @@ linux_two_single_node_clusters:
         - schedules
 
 linux_three_single_node_clusters:
-    retry: 2
     stage: test
     dependencies:
         - build_client_linux
@@ -426,7 +405,6 @@ linux_three_single_node_clusters:
         - schedules
 
 linux_two_double_node_clusters:
-    retry: 2
     stage: test
     dependencies:
         - build_client_linux
@@ -443,7 +421,6 @@ linux_two_double_node_clusters:
         - schedules
 
 linux_s3:
-    retry: 2
     stage: test
     dependencies:
         - build_client_linux
@@ -461,7 +438,6 @@ linux_s3:
 
 # Test disabled while we rethink how it works (see comments in acceptance_test.go)
 .linux_kubernetes_test_tooling:
-    retry: 2
     stage: test
     dependencies:
         - build_client_linux
@@ -512,7 +488,6 @@ linux_stress_handover:
         - schedules
 
 publish_images:
-    retry: 2
     stage: deploy_images
     dependencies:
         - build_client_linux
@@ -544,7 +519,6 @@ trigger_e2e_test:
         - schedules
 
 deploy_unstable_build:
-    retry: 2
     stage: deploy
     dependencies:
         - build_client_linux
@@ -563,7 +537,6 @@ deploy_unstable_build:
         - schedules
 
 deploy_release_build:
-    retry: 2
     stage: deploy
     dependencies:
         - build_client_linux
