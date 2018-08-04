@@ -409,6 +409,7 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 						DIND_SUBNET="192.168.%d.0" \
 						DIND_SUBNET_SIZE="24" \
 						DIND_LABEL="%s" \
+						SERVICE_CIDR="10.%d.254.0/24" \
 						POD_NETWORK_CIDR="10.%d.0.0/16" \
 						CNI_PLUGIN=bridge %s run $NODE "%s" %d)
 					sleep 1
@@ -452,7 +453,10 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 						// (identical) service VIP ranges.
 						fmt.Sprintf("dotmesh-cluster-ip-range-%d", clusterIpPrefix),
 						// clusterIpPrefix is used here to generate a
-						// 10.x.0.0/16 overall POD_NETWORK_CIDR
+						// 10.x.254.0/24 SERVICE_CIDR...
+						clusterIpPrefix,
+						// ... and a 10.x.0.0/16 overall POD_NETWORK_CIDR,
+						// which gets broken up into per-node /24s below (j+11)
 						clusterIpPrefix,
 						dindClusterScriptName, c.RunArgs(i, j),
 						// See also "k+11" elsewhere - this is the per-node pod
