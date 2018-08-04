@@ -2265,14 +2265,17 @@ spec:
 		err = citools.TryUntilSucceeds(func() error {
 			resp, err := http.Get(fmt.Sprintf("http://%s:30050/on-the-vine", node1.IP))
 			if err != nil {
+				fmt.Printf(citools.OutputFromRunOnNode(t, node1.Container, citools.KUBE_DEBUG_CMD) + "\n")
 				return err
 			}
 			defer resp.Body.Close()
 			body, err := ioutil.ReadAll(resp.Body)
 			if err != nil {
+				fmt.Printf(citools.OutputFromRunOnNode(t, node1.Container, citools.KUBE_DEBUG_CMD) + "\n")
 				return err
 			}
 			if !strings.Contains(string(body), "grapes") {
+				fmt.Printf(citools.OutputFromRunOnNode(t, node1.Container, citools.KUBE_DEBUG_CMD) + "\n")
 				return fmt.Errorf("No grapes on the vine, got this instead: %v", string(body))
 			}
 			return nil
@@ -2518,14 +2521,17 @@ spec:
 		err = citools.TryUntilSucceeds(func() error {
 			resp, err := http.Get(fmt.Sprintf("http://%s:30003/on-the-tree", node1.IP))
 			if err != nil {
+				fmt.Printf(citools.OutputFromRunOnNode(t, node1.Container, citools.KUBE_DEBUG_CMD))
 				return err
 			}
 			defer resp.Body.Close()
 			body, err := ioutil.ReadAll(resp.Body)
 			if err != nil {
+				fmt.Printf(citools.OutputFromRunOnNode(t, node1.Container, citools.KUBE_DEBUG_CMD))
 				return err
 			}
 			if !strings.Contains(string(body), "apples") {
+				fmt.Printf(citools.OutputFromRunOnNode(t, node1.Container, citools.KUBE_DEBUG_CMD))
 				return fmt.Errorf("No apples on the tree, got this instead: %v", string(body))
 			}
 			return nil

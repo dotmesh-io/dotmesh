@@ -63,6 +63,11 @@ for INTERESTING_POD in $(kubectl get pods --all-namespaces --no-headers \
 		kubectl describe $INTERESTING_POD -n $NS
 	fi
 
+	if [ "$PHASE" == "Evicted" ]; then
+		echo "WARNING evicted, will try again then exit."
+		kubectl describe $INTERESTING_POD -n $NS
+	fi
+
 	if [ "$PHASE" == "CreateContainerConfigError" ]; then
 		echo "QUITTING, Create Container config error for pod ${INTERESTING_POD}"
 		echo "CREATECONTAINERCONFIGERROR Describe output -->"
