@@ -128,7 +128,7 @@ func (d *FlexVolumeDriver) mount(targetMountDir, jsonOptions string) (map[string
 		logger.Printf("MOUNT: MkdirAll err for %s: %v", targetMountDir, err)
 		return nil, err
 	}
-	err = System("mount", sourceFile, targetMountDir)
+	err = System("mount", "-o", "loop", sourceFile, targetMountDir)
 	if err != nil {
 		logger.Printf("MOUNT: mount err for %s on %s: %v", sourceFile, targetMountDir, err)
 		return nil, err
