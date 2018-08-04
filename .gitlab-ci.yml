@@ -48,6 +48,7 @@ before_script:
     - while [ -f /dotmesh-test-cleanup.lock ]; do echo "waiting for test cleanup..."; sleep 1; done
 
 build_client_linux:
+    retry: 2
     stage: build
     tags:
         - ubuntu-bionic
@@ -62,6 +63,7 @@ build_client_linux:
         - schedules
 
 build_client_macos:
+    retry: 2
     stage: build
     tags:
         - ubuntu-bionic
@@ -76,6 +78,7 @@ build_client_macos:
         - schedules
 
 build_yaml:
+    retry: 2
     stage: build
     tags:
         - ubuntu-bionic
@@ -90,6 +93,7 @@ build_yaml:
         - schedules
 
 .build_without_bazel:
+    retry: 2
     stage: build
     tags:
         - ubuntu-bionic
@@ -105,6 +109,7 @@ build_yaml:
         - schedules
 
 build_operator:
+    retry: 2
     stage: build
     tags:
         - ubuntu-bionic
@@ -122,6 +127,7 @@ build_operator:
         - schedules
 
 build_provisioner:
+    retry: 2
     stage: build
     tags:
         - ubuntu-bionic
@@ -139,6 +145,7 @@ build_provisioner:
         - schedules
 
 build_server:
+    retry: 2
     stage: build
     tags:
         - ubuntu-bionic
