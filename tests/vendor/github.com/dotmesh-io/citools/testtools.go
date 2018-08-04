@@ -128,8 +128,6 @@ func getCleanupStrategy() cleanupStrategy {
 	return defaultCleanupStrategy
 }
 
-const HOST_IP_FROM_CONTAINER = "10.192.0.1"
-
 var getFieldsByNewLine = func(c rune) bool {
 	return c == '\n'
 }
@@ -266,7 +264,7 @@ func testSetup(t *testing.T, f Federation) error {
 		if [ $(mount |grep "/tmpfs " |wc -l) -eq 0 ]; then
 		        mkdir -p /tmpfs && mount -t tmpfs -o size=4g tmpfs /tmpfs
 		fi
-      # Attempt to mitigate https://github.com/kinvolk/kube-spawn/issues/14#issuecomment-293207134
+		# Attempt to mitigate https://github.com/kinvolk/kube-spawn/issues/14#issuecomment-293207134
 		echo 131072 > /sys/module/nf_conntrack/parameters/hashsize || true
 	`, testDirName(stamp)))
 	if err != nil {
@@ -371,6 +369,7 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 	for i, c := range f {
 
 		clusterIpPrefix := getUniqueIpPrefix()
+		c.SetHostIPFromContainer(fmt.Sprintf("192.168.%d.1", clusterIpPrefix))
 
 		for j := 0; j < c.GetDesiredNodeCount(); j++ {
 			node := nodeName(stamp, i, j)
@@ -407,8 +406,10 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 					fi
 					(cd %s
 						EXTRA_DOCKER_ARGS="-v /dotmesh-test-pools:/dotmesh-test-pools:rshared -v /var/run/docker.sock:/hostdocker.sock %s " \
+						DIND_SUBNET="192.168.%d.0" \
+						DIND_SUBNET_SIZE="24" \
 						DIND_LABEL="%s" \
-						POD_NETWORK_CIDR="%s0.0/24" \
+						POD_NETWORK_CIDR="10.%d.0.0/16" \
 						CNI_PLUGIN=bridge %s run $NODE "%s" %d)
 					sleep 1
 					echo "About to run docker exec on $NODE"
@@ -441,19 +442,28 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 						'
 					fi
 					`, node, runScriptDir, mountDockerAuth,
-						// Set DIND_LABEL to the cluster, but not the node
-						// name.  This is so that different clusters end up on
-						// different docker networks, and don't end up on
-						// overlapping (identical) service VIP ranges.
-						fmt.Sprintf("cluster-%d-%d", stamp, i),
+						// clusterIpPrefix is used here to generate a
+						// 192.168.x.0/24 DIND_SUBNET
+						clusterIpPrefix,
+						// Set DIND_LABEL to the clusterIpPrefix which is
+						// allocated for this cluster.  This is so that
+						// different clusters end up on different docker
+						// networks, and don't end up on overlapping
+						// (identical) service VIP ranges.
+						fmt.Sprintf("dotmesh-cluster-ip-range-%d", clusterIpPrefix),
+						// clusterIpPrefix is used here to generate a
+						// 10.x.0.0/16 overall POD_NETWORK_CIDR
 						clusterIpPrefix,
 						dindClusterScriptName, c.RunArgs(i, j),
 						// See also "k+11" elsewhere - this is the per-node pod
 						// network subnet, passed as the third argument to
-						// dind::run in dind-cluster-patched.sh
+						// dind::run in dind-cluster-patched.sh.
+						// This transforms the 10.x.0.0/16 POD_NETWORK_CIDR
+						// above into a 10.x.j+11.0/24 pod network sub-range
+						// per node.
 						j+11,
-						HOST_IP_FROM_CONTAINER, clusterIpPrefix, hostname,
-						HOST_IP_FROM_CONTAINER, clusterIpPrefix, hostname),
+						c.GetHostIPFromContainer(), clusterIpPrefix, hostname,
+						c.GetHostIPFromContainer(), clusterIpPrefix, hostname),
 					)
 				},
 				fmt.Sprintf("starting container %s", node),
@@ -981,18 +991,18 @@ func localEtcdImage() string {
 	return fmt.Sprintf("%s.local:80/dotmesh/etcd:v3.0.15", hostname)
 }
 
-func localImageArgs() string {
+func (c *Cluster) localImageArgs() string {
 	logSuffix := ""
 	if os.Getenv("DISABLE_LOG_AGGREGATION") == "" {
-		logSuffix = fmt.Sprintf(" --log %s", HOST_IP_FROM_CONTAINER)
+		logSuffix = fmt.Sprintf(" --log %s", c.GetHostIPFromContainer())
 	}
 	traceSuffix := ""
 	if os.Getenv("DISABLE_TRACING") == "" {
-		traceSuffix = fmt.Sprintf(" --trace %s", HOST_IP_FROM_CONTAINER)
+		traceSuffix = fmt.Sprintf(" --trace %s", c.GetHostIPFromContainer())
 	}
 	regSuffix := ""
 	return ("--image " + LocalImage("dotmesh-server") + " --etcd-image " + localEtcdImage() +
-		" --docker-api-version 1.23 --discovery-url http://" + HOST_IP_FROM_CONTAINER + ":8087" +
+		" --docker-api-version 1.23 --discovery-url http://" + c.GetHostIPFromContainer() + ":8087" +
 		logSuffix + traceSuffix + regSuffix)
 }
 
@@ -1075,18 +1085,20 @@ type Node struct {
 }
 
 type Cluster struct {
-	DesiredNodeCount int
-	Port             int
-	Env              map[string]string
-	ClusterArgs      string
-	Nodes            []Node
+	DesiredNodeCount    int
+	Port                int
+	Env                 map[string]string
+	ClusterArgs         string
+	Nodes               []Node
+	HostIPFromContainer string
 }
 
 type Kubernetes struct {
-	DesiredNodeCount int
-	Nodes            []Node
-	StorageMode      string
-	DindStorage      bool
+	DesiredNodeCount    int
+	Nodes               []Node
+	StorageMode         string
+	DindStorage         bool
+	HostIPFromContainer string
 }
 
 type Pair struct {
@@ -1333,6 +1345,8 @@ type Startable interface {
 	GetDesiredNodeCount() int
 	Start(*testing.T, int64, int) error
 	RunArgs(int, int) string
+	GetHostIPFromContainer() string
+	SetHostIPFromContainer(string)
 }
 
 ///////////// Kubernetes
@@ -1356,6 +1370,14 @@ func (c *Kubernetes) AppendNode(n Node) {
 
 func (c *Kubernetes) GetDesiredNodeCount() int {
 	return c.DesiredNodeCount
+}
+
+func (c *Kubernetes) SetHostIPFromContainer(hostIP string) {
+	c.HostIPFromContainer = hostIP
+}
+
+func (c *Kubernetes) GetHostIPFromContainer() string {
+	return c.HostIPFromContainer
 }
 
 func ChangeOperatorNodeSelector(masterNode, nodeSelector string) error {
@@ -1412,7 +1434,7 @@ func RestartOperator(t *testing.T, masterNode string) {
 	}
 }
 
-func getUniqueIpPrefix() string {
+func getUniqueIpPrefix() int {
 	ipPrefix := -1
 	iteration := 0
 	prefixFileName := ""
@@ -1448,7 +1470,7 @@ func getUniqueIpPrefix() string {
 
 		// Success! Write an identifying string (our test dir name) to
 		// the file, just for audit reasons.
-		fp.Write([]byte(testDirName(stamp)))
+		fp.Write([]byte(testDirName(stamp) + "\n"))
 		fp.Close()
 		break
 	}
@@ -1459,7 +1481,8 @@ func getUniqueIpPrefix() string {
 
 	// Make sure we clear up if the tests finish OK
 	RegisterCleanupAction(30, fmt.Sprintf("rm %s", prefixFileName))
-	return fmt.Sprintf("10.%d.", ipPrefix)
+
+	return ipPrefix
 }
 
 func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
@@ -1521,7 +1544,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 
 	logAddr := ""
 	if os.Getenv("DISABLE_LOG_AGGREGATION") == "" {
-		logAddr = HOST_IP_FROM_CONTAINER
+		logAddr = c.GetHostIPFromContainer()
 	}
 
 	// Move k8s root dir into /dotmesh-test-pools/<timestamp>/ on every node.
@@ -2025,13 +2048,21 @@ func (c *Cluster) GetDesiredNodeCount() int {
 	return c.DesiredNodeCount
 }
 
+func (c *Cluster) SetHostIPFromContainer(hostIP string) {
+	c.HostIPFromContainer = hostIP
+}
+
+func (c *Cluster) GetHostIPFromContainer() string {
+	return c.HostIPFromContainer
+}
+
 func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 	// init the first node in the cluster, join the rest
 	if c.DesiredNodeCount == 0 {
 		panic("no such thing as a zero-node cluster")
 	}
 
-	dmInitCommand := "EXTRA_HOST_COMMANDS='echo Testing EXTRA_HOST_COMMANDS' dm cluster init " + localImageArgs() +
+	dmInitCommand := "EXTRA_HOST_COMMANDS='echo Testing EXTRA_HOST_COMMANDS' dm cluster init " + c.localImageArgs() +
 		" --use-pool-dir " +
 		filepath.Join(testDirName(now), fmt.Sprintf("wd-%d-0", i)) +
 		" --use-pool-name " + poolId(now, i, 0) +
@@ -2046,8 +2077,6 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 
 	RegisterCleanupAction(50, fmt.Sprintf(
 		"zpool destroy -f %s",
-		testDirName(now),
-		poolId(now, i, 0),
 		poolId(now, i, 0),
 	))
 
@@ -2088,10 +2117,15 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 
 		dmJoinCommand := fmt.Sprintf(
 			"dm cluster join %s %s %s",
-			localImageArgs()+" --use-pool-dir "+filepath.Join(testDirName(now), fmt.Sprintf("wd-%d-%d", i, j))+" ",
+			c.localImageArgs()+" --use-pool-dir "+filepath.Join(testDirName(now), fmt.Sprintf("wd-%d-%d", i, j))+" ",
 			joinUrl,
 			" --use-pool-name "+poolId(now, i, j),
 		)
+
+		RegisterCleanupAction(50, fmt.Sprintf(
+			"zpool destroy -f %s",
+			poolId(now, i, j),
+		))
 
 		if kzv := os.Getenv("KERNEL_ZFS_VERSION"); kzv != "" {
 			dmJoinCommand = dmJoinCommand + " --zfs " + kzv
