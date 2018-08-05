@@ -360,7 +360,6 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 						EXTRA_DOCKER_ARGS="-v /dotmesh-test-pools:/dotmesh-test-pools:rshared -v /var/run/docker.sock:/hostdocker.sock %s " \
 						DIND_SUBNET="192.168.%d.0" \
 						DIND_SUBNET_SIZE="24" \
-						DIND_LABEL="%s" \
 						SERVICE_CIDR="%s" \
 						POD_NETWORK_CIDR="%s" \
 						CNI_PLUGIN=bridge %s run $NODE "%s" %d)
@@ -398,12 +397,6 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 						// clusterIpPrefix is used here to generate a
 						// 192.168.x.0/24 DIND_SUBNET
 						clusterIpPrefix,
-						// Set DIND_LABEL to the clusterIpPrefix which is
-						// allocated for this cluster.  This is so that
-						// different clusters end up on different docker
-						// networks, and don't end up on overlapping
-						// (identical) service VIP ranges.
-						fmt.Sprintf("dotmesh-cluster-ip-range-%d", clusterIpPrefix),
 						// clusterIpPrefix is used here to generate a
 						// SERVICE_CIDR...
 						serviceCIDR(clusterIpPrefix),
