@@ -27,7 +27,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -45,6 +44,31 @@ func System(cmd string, args ...string) error {
 	out, err := c.CombinedOutput()
 	logger.Printf("[system] result: %v, %s", err, out)
 	return err
+}
+
+func runZfsCmd(cmd string, args ...string) (string, error) {
+	// Run a zfs command (e.g. zfs, zpool) etc on the _actual host_. Assumes
+	// that zfs userland tools are installed there, but that's ok because we
+	// control our own test runners.
+
+	logger.Printf("[runZfsCmd] running %s %s", cmd, args)
+
+	// Setting up a command like:
+	// DOCKER_HOST=unix:///hostdocker.sock docker run -it --rm --privileged
+	//     --pid=host alpine:edge nsenter -t 1 -m -u -n -i zpool status
+	newArgs := []string{
+		/* docker */ "run", "-i", "--rm", "--privileged", "--pid=host",
+		"alpine:edge", "nsenter", "-t", "1", "-m", "-u", "-n", "-i",
+		"--", cmd,
+	}
+	newArgs = append(newArgs, args...)
+
+	c := exec.Command("docker", newArgs...)
+	c.Env = []string{"DOCKER_HOST=unix:///hostdocker.sock"}
+
+	out, err := c.CombinedOutput()
+	logger.Printf("[runZfsCmd] result: %v, %s", err, out)
+	return string(out), err
 }
 
 func init() {
@@ -86,7 +110,6 @@ func (d *FlexVolumeDriver) mount(targetMountDir, jsonOptions string) (map[string
 		return nil, fmt.Errorf("failed to unmarshal json options: %v", err)
 	}
 	logger.Printf("MOUNT: targetMountDir: %v, jsonOptions: %+v", targetMountDir, jsonOptions)
-
 	pvId := opts["id"].(string)
 	sizeBytes, err := strconv.Atoi(opts["size"].(string))
 	if err != nil {
@@ -94,47 +117,65 @@ func (d *FlexVolumeDriver) mount(targetMountDir, jsonOptions string) (map[string
 		return nil, err
 	}
 
-	sourceFile := filepath.Join(dindStorageRoot, pvId)
+	// Setup system test zpool if it doesn't exist
 
-	// See if our target image file exists already, and create it if
-	// not.  Take care to be atomic here!
+	POOL_NAME := "dind-flexvolume-pool"
+	POOL_PATH := "/dotmesh-test-pools/" + POOL_NAME
 
-	fp, err := os.OpenFile(sourceFile, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-	switch {
-	case os.IsExist(err):
-		// Already exists, just use it
-		logger.Printf("MOUNT: Using existing source file %s", sourceFile)
-	case err == nil:
-		// We created the file, so it didn't already exist; close it
-		// (zero length) and let mkfs.ext4 fill it in.
-		fp.Close()
-
-		// Pull the requested size from the opts, must be "NNNk" to NNN kilobytes etc.
-		err = System("mkfs.ext4", sourceFile, fmt.Sprintf("%dk", (sizeBytes+1023)/1024))
-		if err != nil {
-			logger.Printf("MOUNT: mkfs err for %s: %v", sourceFile, err)
-			return nil, err
-		}
-		logger.Printf("MOUNT: Created source file %s", sourceFile)
-	default:
-		// Something went wrong!!!
-		logger.Printf("MOUNT: error acquiring exclusive access to %s: %v", sourceFile, err)
+	_, err = runZfsCmd("truncate", "-s", "50G", POOL_PATH)
+	if err != nil {
 		return nil, err
 	}
 
-	// Mount sourceFile at targetMountDir, -o loop
+	out, err := runZfsCmd("zpool", "create", "-m", "none", POOL_NAME, POOL_PATH)
+	if err != nil {
+		// Continue if we're already set up.
+		if !strings.Contains(out, "is part of active pool") {
+			return nil, err
+		}
+	}
+
+	fsName := POOL_NAME + "/" + pvId
+	// Create PVC zfs filesystem if it doesn't exist, setting the quota
+	out, err = runZfsCmd(
+		"zfs", "create",
+		"-o", fmt.Sprintf("quota=%d", sizeBytes),
+		"-o", "mountpoint=legacy",
+		fsName,
+	)
+	if err != nil {
+		// Continue if the filesystem already exists (e.g. sentinel and
+		// dotmesh-server both want the same PVC).
+		if !strings.Contains(out, "dataset already exists") {
+			return nil, err
+		}
+	}
+
+	// Mount the pvId into targetMountDir
+
 	err = os.MkdirAll(targetMountDir, 0777)
 	if err != nil {
 		logger.Printf("MOUNT: MkdirAll err for %s: %v", targetMountDir, err)
 		return nil, err
 	}
-	err = System("mount", "-o", "loop", sourceFile, targetMountDir)
+
+	_, err = runZfsCmd("mount.zfs", fsName, targetMountDir)
 	if err != nil {
-		logger.Printf("MOUNT: mount err for %s on %s: %v", sourceFile, targetMountDir, err)
 		return nil, err
 	}
 
-	logger.Printf("MOUNT: Successfully mounted %s on %s", sourceFile, targetMountDir)
+	// Register unmount and zfs destroy cleanup actions
+
+	f, err := os.OpenFile(fmt.Sprintf("%s/../cleanup-actions.95", dindStorageRoot),
+		os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0700)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer f.Close()
+
+	fmt.Fprintf(f, "umount -f %s ; zfs destroy %s\n", targetMountDir, fsName)
 
 	return nil, nil
 }

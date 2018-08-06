@@ -2180,6 +2180,7 @@ func TestKubernetesOperator(t *testing.T) {
 
 	// A quick smoke test of basic operation in this mode
 	t.Run("DynamicProvisioning", func(t *testing.T) {
+		fmt.Printf("Starting dynamic provisioning test... applying PVC\n")
 		// Ok, now we have the plumbing set up, try creating a PVC and see if it gets a PV dynamically provisioned
 		citools.KubectlApply(t, node1.Container, `
 kind: PersistentVolumeClaim
@@ -2200,8 +2201,10 @@ spec:
       storage: 1Gi
 `)
 
+		fmt.Printf("PVC created.\n")
 		citools.LogTiming("DynamicProvisioning: PV Claim")
 		err = citools.TryUntilSucceeds(func() error {
+			fmt.Printf("Waiting for PV to appear...")
 			result := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pv")
 			// We really want a line like:
 			// "pvc-85b6beb0-bb1f-11e7-8633-0242ff9ba756   1Gi        RWO           Delete          Bound     default/admin-grapes-pvc   dotmesh                 15s"
@@ -2213,6 +2216,7 @@ spec:
 		if err != nil {
 			t.Error(err)
 		}
+		fmt.Printf("Got it!\n")
 
 		citools.LogTiming("DynamicProvisioning: finding grapes PV")
 
@@ -2263,6 +2267,8 @@ spec:
 
 		citools.LogTiming("DynamicProvisioning: grape Service")
 		err = citools.TryUntilSucceeds(func() error {
+			fmt.Printf("About to make an http request to: http://%s:30050/on-the-vine\n", node1.IP)
+
 			resp, err := http.Get(fmt.Sprintf("http://%s:30050/on-the-vine", node1.IP))
 			if err != nil {
 				fmt.Printf(citools.OutputFromRunOnNode(t, node1.Container, citools.KUBE_DEBUG_CMD) + "\n")

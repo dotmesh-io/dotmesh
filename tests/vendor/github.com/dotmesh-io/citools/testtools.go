@@ -1525,7 +1525,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 	// throughout.
 	for j := 0; j < c.DesiredNodeCount; j++ {
 		node := nodeName(now, i, j)
-		path := fmt.Sprintf("%s/k8s-%s", testDirName(now), node)
+		path := fmt.Sprintf("%s/k8s-%d-%d", testDirName(now), i, j)
 		cmd := fmt.Sprintf("sed -i 's!hyperkube kubelet !hyperkube kubelet --root-dir %s !' /lib/systemd/system/kubelet.service && mkdir -p %s && systemctl restart kubelet", path, path)
 		_, err := docker(
 			node,
@@ -2004,9 +2004,10 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 
 			if err != nil {
 				if dotmeshIteration > 20 {
-					log.Printf("Gave up adding remotes after %d retries, giving up: %v\n", dotmeshIteration, err)
+					fmt.Printf("Gave up adding remotes after %d retries, giving up: %v\n", dotmeshIteration, err)
 					return err
 				}
+				fmt.Printf("got err %v, waiting 2 seconds and trying again...\n", err)
 				time.Sleep(time.Second * 2)
 			} else {
 				break
