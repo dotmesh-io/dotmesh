@@ -2004,10 +2004,10 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 
 			if err != nil {
 				if dotmeshIteration > 20 {
-					fmt.Printf("Gave up adding remotes after %d retries, giving up: %v (%s)\n", dotmeshIteration, err, out)
+					fmt.Printf("Gave up adding remotes after %d retries, giving up: %v (%s)\n", dotmeshIteration, err, st)
 					return err
 				}
-				fmt.Printf("got err %v (%s), waiting 2 seconds and trying again...\n", err, out)
+				fmt.Printf("got err %v (%s), waiting 2 seconds and trying again...\n", err, st)
 				time.Sleep(time.Second * 2)
 			} else {
 				break
