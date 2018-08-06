@@ -676,10 +676,12 @@ func predictSize(
 
 	sizeCmd := exec.Command(ZFS, predictArgs...)
 
-	log.Printf("[predictSize] predict command: %s", strings.Join(predictArgs, " "))
+	log.Printf("[predictSize] predict command: %#v", sizeCmd)
 
 	out, err := sizeCmd.CombinedOutput()
+	log.Printf("[predictSize] Output of predict command: %v", out)
 	if err != nil {
+		log.Printf("[predictSize] Got error on predict command: %v", err)
 		return 0, err
 	}
 	shrap := strings.Split(string(out), "\n")
