@@ -443,7 +443,7 @@ linux_two_double_node_clusters:
     except:
         - schedules
 
-linux_s3:
+.linux_s3:
     retry: 2
     stage: test
     dependencies:
