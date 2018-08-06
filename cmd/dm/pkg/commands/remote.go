@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"context"
 	"fmt"
 	"github.com/dotmesh-io/dotmesh/cmd/dm/pkg/remotes"
 	"github.com/howeyc/gopass"
@@ -130,9 +129,6 @@ func NewCmdRemote(out io.Writer) *cobra.Command {
 					Port:     port,
 					ApiKey:   apiKey,
 				}
-				var result bool
-				err = client.CallRemote(context.Background(), "DotmeshRPC.Ping", nil, &result)
-
 				_, err = remotes.Ping(client)
 
 				if err != nil {
