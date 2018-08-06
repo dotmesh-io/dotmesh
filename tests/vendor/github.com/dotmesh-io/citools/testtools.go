@@ -1224,6 +1224,9 @@ SEARCHABLE HEADER: STARTING CLUSTER
 		testDirName(stamp),
 	))
 
+	// And another sleep to attempt to avoid kernel panics...
+	RegisterCleanupAction(95, fmt.Sprintf("sleep 5"))
+
 	// Register to delete top-level directory, last of all
 	RegisterCleanupAction(99, fmt.Sprintf(`rm -rf %s`, testDirName(stamp)))
 
