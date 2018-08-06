@@ -2541,6 +2541,8 @@ spec:
 		citools.LogTiming("FlexVolume: apple Service")
 
 		err = citools.TryUntilSucceeds(func() error {
+			fmt.Printf("About to make an http request to: http://%s:30003/on-the-tree\n", node1.IP)
+
 			resp, err := http.Get(fmt.Sprintf("http://%s:30003/on-the-tree", node1.IP))
 			if err != nil {
 				fmt.Printf(citools.OutputFromRunOnNode(t, node1.Container, citools.KUBE_DEBUG_CMD))
@@ -2649,6 +2651,8 @@ spec:
 
 		citools.LogTiming("DynamicProvisioning: grape Service")
 		err = citools.TryUntilSucceeds(func() error {
+			fmt.Printf("About to make an http request to: http://%s:30050/on-the-vine\n", node1.IP)
+
 			resp, err := http.Get(fmt.Sprintf("http://%s:30050/on-the-vine", node1.IP))
 			if err != nil {
 				return err
@@ -2880,6 +2884,8 @@ func startContainers(t *testing.T, node string) {
 func testServiceAvailability(t *testing.T, IP string) {
 	citools.LogTiming("DynamicProvisioning: dind Service")
 	err := citools.TryUntilSucceeds(func() error {
+		fmt.Printf("About to make an http request to: http://%s:30050/on-the-vine\n", IP)
+
 		resp, err := http.Get(fmt.Sprintf("http://%s:30050/on-the-vine", IP))
 		if err != nil {
 			return err
