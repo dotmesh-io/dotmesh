@@ -1148,7 +1148,25 @@ func clusterInit(cmd *cobra.Command, args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("got URL:\n%s\n", string(body))
+
+	clusterUrl := string(body)
+
+	// The discovery service doesn't necessarily knows its own name, especially in gnarly dind test environments
+	// So, we need to take what we got and ensure it's in the correct URL prefix.
+
+	// Eg, we may have discoveryUrl = 'http://192.168.67.1:8087' and clusterUrl = 'http://10.192.0.1:8087/04d35d8ec3557bf67ac68082c52a695e'
+
+	// Therefore, take everything from the front to the third slash and replace it with discoveryUrl!
+
+	bits := strings.SplitAfterN(clusterUrl, "/", 4)
+	if len(bits) != 4 {
+		return fmt.Errorf("Unable to canonicalize the discovery URL: '%s' => '%#v'", clusterUrl, bits)
+	}
+
+	// Assuming discoveryUrl doesn't already have a trailing /...
+	clusterUrl = discoveryUrl + "/" + bits[3]
+
+	fmt.Printf("got URL:\n%s\n", clusterUrl)
 
 	// - Generate PKI material, and upload it to etcd at hidden clusterSecret
 
@@ -1184,7 +1202,7 @@ func clusterInit(cmd *cobra.Command, args []string, out io.Writer) error {
 		if err != nil {
 			return err
 		}
-		putPath := fmt.Sprintf("%s/_secrets/_%s", string(body), clusterSecret)
+		putPath := fmt.Sprintf("%s/_secrets/_%s", clusterUrl, clusterSecret)
 
 		req, err := http.NewRequest("PUT", putPath, bytes.NewBufferString(pkiJsonEncoded))
 		if err != nil {
@@ -1209,7 +1227,7 @@ func clusterInit(cmd *cobra.Command, args []string, out io.Writer) error {
 			"If you want more than one node in your cluster, run this on other nodes:\n\n"+
 				"    dm cluster join %s:%s\n\n"+
 				"This is the last time this secret will be printed, so keep it safe!\n\n",
-			string(body), clusterSecret,
+			clusterUrl, clusterSecret,
 		)
 		if serverCount > 1 {
 			fmt.Printf("=====================================================================\n" +
@@ -1235,7 +1253,7 @@ func clusterInit(cmd *cobra.Command, args []string, out io.Writer) error {
 
 	// - Run clusterCommonSetup.
 	err = clusterCommonSetup(
-		strings.TrimSpace(string(body)), adminPassword, adminKey, pkiPath,
+		strings.TrimSpace(clusterUrl), adminPassword, adminKey, pkiPath,
 	)
 	if err != nil {
 		return err
@@ -1281,7 +1299,7 @@ func clusterJoin(cmd *cobra.Command, args []string, out io.Writer) error {
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
-	//fmt.Printf(string(body))
+
 	var etcdNode map[string]interface{}
 	err = json.Unmarshal(body, &etcdNode)
 	if err != nil {
