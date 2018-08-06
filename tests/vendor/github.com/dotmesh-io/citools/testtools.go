@@ -1211,6 +1211,12 @@ SEARCHABLE HEADER: STARTING CLUSTER
 		return err
 	}
 
+	// Sleep to hopefully avoid kernel panics due to umount or rm too soon
+	// after a zpool destroy. See:
+	// https://github.com/dotmesh-io/dotmesh/issues/513
+	// NB: Step 50 is always `zpool destroy` (in two places).
+	RegisterCleanupAction(55, fmt.Sprintf("sleep 5"))
+
 	// Register to eradicate all lingering mounts (the awk/sort/cut
 	// sorts by line lengths, longest first, to ensure we unmount /A/B
 	// before /A)
