@@ -1172,7 +1172,9 @@ func NodeFromNodeName(t *testing.T, now int64, i, j int, clusterName string) Nod
 // Networking config helper functions
 
 func hostIpFromContainer(prefix int) string {
-	return fmt.Sprintf("192.168.%d.1", prefix)
+	// This is just 0.1 because we're not actually allocating 192.168.$prefix
+	// addresses any more
+	return "192.168.0.1"
 }
 
 func serviceCIDR(prefix int) string {
