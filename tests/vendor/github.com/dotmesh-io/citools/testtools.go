@@ -1290,6 +1290,7 @@ SEARCHABLE HEADER: STARTING CLUSTER
 			if !strings.Contains(res, pair.RemoteName) {
 				t.Errorf("can't find %s in %s's remote config", pair.RemoteName, pair.From.ClusterName)
 			}
+			// TODO remove duplicate runs of the following for minor speedup
 			RunOnNode(t, pair.From.Container, "dm remote switch local")
 		}
 	}
@@ -1457,57 +1458,65 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		panic("no such thing as a zero-node cluster")
 	}
 
-	/*
-		images, err := ioutil.ReadFile("../kubernetes/images.txt")
+	images, err := ioutil.ReadFile("../kubernetes/images.txt")
+	if err != nil {
+		return err
+	}
+	cache := map[string]string{}
+	for _, x := range strings.Split(string(images), "\n") {
+		ys := strings.Split(x, " ")
+		if len(ys) == 2 {
+			cache[ys[0]] = ys[1]
+		}
+	}
+
+	hostname, err := os.Hostname()
+	if err != nil {
+		return err
+	}
+
+	// pre-pull all the container images Kubernetes needs to use, tag them to
+	// trick it into not downloading anything.
+	for fqImage, _ := range cache {
+		err = SilentSystem("docker", "image", "inspect", fqImage)
 		if err != nil {
-			return err
-		}
-		cache := map[string]string{}
-		for _, x := range strings.Split(string(images), "\n") {
-			ys := strings.Split(x, " ")
-			if len(ys) == 2 {
-				cache[ys[0]] = ys[1]
+			fmt.Printf("Image for caching %s not available in local docker, pulling...\n", fqImage)
+			err = System("docker", "pull", fqImage)
+			if err != nil {
+				panic(fmt.Sprintf("unable to cache image %s", fqImage))
 			}
+		} else {
+			fmt.Printf("Found cached image %s\n", fqImage)
 		}
-	*/
-
-	/*
-
-		hostname, err := os.Hostname()
-		if err != nil {
-			return err
-		}
-
-		// pre-pull all the container images Kubernetes needs to use, tag them to
-		// trick it into not downloading anything.
-			finishing := make(chan bool)
-			for j := 0; j < c.DesiredNodeCount; j++ {
-				go func(j int) {
-					// Use the locally build dotmesh server image as the "latest" image in
-					// the test containers.
-					for _, imageName := range []string{"dotmesh-server", "dotmesh-dynamic-provisioner", "dotmesh-operator", "dind-dynamic-provisioner"} {
-						st, err := docker(
-							nodeName(now, i, j),
-							fmt.Sprintf(
-								"docker pull %s.local:80/dotmesh/%s:latest && "+
-									"docker tag %s.local:80/dotmesh/%s:latest "+
-									"quay.io/dotmesh/%s:latest",
-								hostname, imageName,
-								hostname, imageName,
-								imageName,
-							),
-							nil)
-						if err != nil {
-							panic(st)
-						}
-					}
-					finishing <- true
-				}(j)
+	}
+	finishing := make(chan bool)
+	for j := 0; j < c.DesiredNodeCount; j++ {
+		go func(j int) {
+			for fqImage, localName := range cache {
+				fmt.Printf("Pulling %s.local:80/%s\n", hostname, localName)
+				st, err := docker(
+					nodeName(now, i, j),
+					/*
+					   docker pull $local_name
+					   docker tag $local_name $fq_image
+					*/
+					fmt.Sprintf(
+						"docker pull %s.local:80/%s && "+
+							"docker tag %s.local:80/%s %s",
+						hostname, localName, hostname, localName, fqImage,
+					),
+					nil,
+				)
+				if err != nil {
+					panic(st)
+				}
 			}
-			for j := 0; j < c.DesiredNodeCount; j++ {
-				_ = <-finishing
-			}
-	*/
+			finishing <- true
+		}(j)
+	}
+	for j := 0; j < c.DesiredNodeCount; j++ {
+		_ = <-finishing
+	}
 
 	logAddr := ""
 	if os.Getenv("DISABLE_LOG_AGGREGATION") == "" {
@@ -1552,7 +1561,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 	// Regex the following yamels to refer to the newly pushed dotmesh
 	// container image, rather than the latest stable
 
-	err := System("bash", "-c",
+	err = System("bash", "-c",
 		fmt.Sprintf(
 			`MASTER=%s
 			docker exec $MASTER mkdir /dotmesh-kube-yaml
