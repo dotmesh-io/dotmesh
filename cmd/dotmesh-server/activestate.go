@@ -25,6 +25,29 @@ func activeState(f *fsMachine) stateFn {
 				}
 			}
 			return nil
+		} else if e.Name == "predictSize" {
+
+			fromFilesystemId := (*e.Args)["FromFilesystemId"].(string)
+			fromSnapshotId := (*e.Args)["FromSnapshotId"].(string)
+			toFilesystemId := (*e.Args)["ToFilesystemId"].(string)
+			toSnapshotId := (*e.Args)["ToSnapshotId"].(string)
+
+			size, err := predictSize(
+				fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
+			)
+
+			if err != nil {
+				f.innerResponses <- &Event{
+					Name: "error-predict-size",
+					Args: &EventArgs{"err": err},
+				}
+			} else {
+				f.innerResponses <- &Event{
+					Name: "predictedSize",
+					Args: &EventArgs{"size": int64(size)},
+				}
+			}
+			return activeState
 		} else if e.Name == "transfer" {
 
 			// TODO dedupe

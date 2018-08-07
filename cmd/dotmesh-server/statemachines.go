@@ -679,7 +679,7 @@ func predictSize(
 	log.Printf("[predictSize] predict command: %#v", sizeCmd)
 
 	out, err := sizeCmd.CombinedOutput()
-	log.Printf("[predictSize] Output of predict command: %v", out)
+	log.Printf("[predictSize] Output of predict command: %v", string(out))
 	if err != nil {
 		log.Printf("[predictSize] Got error on predict command: %v", err)
 		return 0, err

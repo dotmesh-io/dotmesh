@@ -1388,15 +1388,9 @@ func TestTwoDoubleNodeClusters(t *testing.T) {
 		citools.RunOnNode(t, c0n0, "dm switch "+fsname)
 		citools.RunOnNode(t, c0n0, "dm commit -m 'hello'")
 
-		err := citools.TryUntilSucceeds(func() error {
-			_, err := citools.RunOnNodeErr(c1n0, "dm clone cluster_0_node_1 "+fsname)
-			if err != nil {
-				return fmt.Errorf("%s unable to clone ", fsname)
-			}
-			return nil
-		}, fmt.Sprintf("checking for %s to be cloned", fsname))
+		_, err := citools.RunOnNodeErr(c1n0, "dm clone cluster_0_node_1 "+fsname)
 		if err != nil {
-			t.Error(err)
+			t.Errorf("Failed to clone fs %v from cluster_0_node_1, got %v", fsname, err)
 		}
 
 		// put more commits on it, on c0n0.
@@ -1404,15 +1398,9 @@ func TestTwoDoubleNodeClusters(t *testing.T) {
 		citools.RunOnNode(t, c0n0, "dm commit -m 'world'")
 
 		// try to pull those commits from c1n1.
-		err = citools.TryUntilSucceeds(func() error {
-			_, err := citools.RunOnNodeErr(c1n1, "dm clone cluster_0_node_1 "+fsname)
-			if err != nil {
-				return fmt.Errorf("%s unable to clone ", fsname)
-			}
-			return nil
-		}, fmt.Sprintf("checking for %s to be cloned", fsname))
+		_, err = citools.RunOnNodeErr(c1n1, "dm clone cluster_0_node_1 "+fsname)
 		if err != nil {
-			t.Error(err)
+			t.Errorf("Failed to clone fs %v from cluster_0_node_1, got %v", fsname, err)
 		}
 
 		// the commits should show up on c1n0! (the pull should have been initiated by the current master)

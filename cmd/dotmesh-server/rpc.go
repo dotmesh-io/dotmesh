@@ -1951,14 +1951,34 @@ func (d *DotmeshRPC) PredictSize(
 	},
 	result *int64,
 ) error {
-	log.Printf("[PredictSize] got args %+v", args)
-	size, err := predictSize(
-		args.FromFilesystemId, args.FromSnapshotId, args.ToFilesystemId, args.ToSnapshotId,
+	log.Printf(
+		"[predictSize] Adding  globaslFsRequest for  %s@%s to %s@%s",
+		args.FromFilesystemId,
+		args.FromSnapshotId,
+		args.ToFilesystemId,
+		args.ToSnapshotId,
+	)
+	responseChan, err := d.state.globalFsRequest(
+		args.ToFilesystemId,
+		&Event{Name: "predictSize",
+			Args: &EventArgs{
+				"FromFilesystemId": args.FromFilesystemId,
+				"FromSnapshotId":   args.FromSnapshotId,
+				"ToFilesystemId":   args.ToFilesystemId,
+				"ToSnapshotId":     args.ToSnapshotId,
+			},
+		},
 	)
 	if err != nil {
 		return err
 	}
-	*result = size
+
+	e := <-responseChan
+	if e.Name == "predictedSize" {
+		*result = int64((*e.Args)["size"].(float64))
+	} else {
+		return maybeError(e)
+	}
 	return nil
 }
 
