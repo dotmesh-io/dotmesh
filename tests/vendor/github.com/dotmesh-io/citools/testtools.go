@@ -1668,7 +1668,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		return err
 	}
 
-	_, err = docker(
+	st, err = docker(
 		nodeName(now, i, 0),
 		"mkdir /root/.kube && cp /etc/kubernetes/admin.conf /root/.kube/config && "+
 			// Make kube-dns faster; trick copied from dind-cluster-v1.7.sh
