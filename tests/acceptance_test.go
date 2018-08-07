@@ -2157,6 +2157,14 @@ func TestThreeSingleNodeClusters(t *testing.T) {
 	*/
 }
 
+func HttpGetWithTimeout(url string) (*http.Response, error) {
+	timeout := time.Duration(5 * time.Second)
+	client := http.Client{
+		Timeout: timeout,
+	}
+	return client.Get(url)
+}
+
 /***********************************************************************
 
     KUBERNETES TEST HACKERS - PLEASE READ THIS
@@ -2285,7 +2293,7 @@ spec:
 		err = citools.TryUntilSucceeds(func() error {
 			fmt.Printf("About to make an http request to: http://%s:30050/on-the-vine\n", node1.IP)
 
-			resp, err := http.Get(fmt.Sprintf("http://%s:30050/on-the-vine", node1.IP))
+			resp, err := HttpGetWithTimeout(fmt.Sprintf("http://%s:30050/on-the-vine", node1.IP))
 			if err != nil {
 				fmt.Printf(citools.OutputFromRunOnNode(t, node1.Container, citools.KUBE_DEBUG_CMD) + "\n")
 				return err
@@ -2543,7 +2551,7 @@ spec:
 		err = citools.TryUntilSucceeds(func() error {
 			fmt.Printf("About to make an http request to: http://%s:30003/on-the-tree\n", node1.IP)
 
-			resp, err := http.Get(fmt.Sprintf("http://%s:30003/on-the-tree", node1.IP))
+			resp, err := HttpGetWithTimeout(fmt.Sprintf("http://%s:30003/on-the-tree", node1.IP))
 			if err != nil {
 				fmt.Printf(citools.OutputFromRunOnNode(t, node1.Container, citools.KUBE_DEBUG_CMD))
 				return err
@@ -2653,7 +2661,7 @@ spec:
 		err = citools.TryUntilSucceeds(func() error {
 			fmt.Printf("About to make an http request to: http://%s:30050/on-the-vine\n", node1.IP)
 
-			resp, err := http.Get(fmt.Sprintf("http://%s:30050/on-the-vine", node1.IP))
+			resp, err := HttpGetWithTimeout(fmt.Sprintf("http://%s:30050/on-the-vine", node1.IP))
 			if err != nil {
 				return err
 			}
@@ -2886,7 +2894,7 @@ func testServiceAvailability(t *testing.T, IP string) {
 	err := citools.TryUntilSucceeds(func() error {
 		fmt.Printf("About to make an http request to: http://%s:30050/on-the-vine\n", IP)
 
-		resp, err := http.Get(fmt.Sprintf("http://%s:30050/on-the-vine", IP))
+		resp, err := HttpGetWithTimeout(fmt.Sprintf("http://%s:30050/on-the-vine", IP))
 		if err != nil {
 			return err
 		}
