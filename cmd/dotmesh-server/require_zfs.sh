@@ -362,7 +362,7 @@ docker run -i $rm_opt --pid=host --privileged --name=$DOTMESH_INNER_SERVER_NAME 
     $net \
     $link \
     -e "DISABLE_FLEXVOLUME=$DISABLE_FLEXVOLUME" \
-    -e "PATH=$PATH" \
+    -e "PATH=$ZFS_USERLAND_ROOT/sbin:$PATH" \
     -e "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" \
     -e "CONTAINER_MOUNT_PREFIX=$CONTAINER_MOUNT_PREFIX" \
     -e "MOUNT_PREFIX=$MOUNTPOINT" \
