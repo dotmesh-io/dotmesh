@@ -1658,7 +1658,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 
 	st, err = docker(
 		nodeName(now, i, 0),
-		"wrapkubeadm init --ignore-preflight-errors=all",
+		"wrapkubeadm init --ignore-preflight-errors=all --kubernetes-version=v1.10.6",
 		map[string]string{
 			"DEBUG_MODE": "WHY, YES PLEASE, IF THAT'S QUITE ALRIGHT",
 		},
