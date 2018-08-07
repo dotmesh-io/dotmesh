@@ -1477,7 +1477,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 
 	// pre-pull all the container images Kubernetes needs to use, tag them to
 	// trick it into not downloading anything.
-	for fqImage, _ := range cache {
+	for fqImage, localName := range cache {
 		err = SilentSystem("docker", "image", "inspect", fqImage)
 		if err != nil {
 			fmt.Printf("Image for caching %s not available in local docker, pulling...\n", fqImage)
@@ -1487,6 +1487,10 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 			}
 		} else {
 			fmt.Printf("Found cached image %s\n", fqImage)
+		}
+		err = System("docker", "tag", fqImage, fmt.Sprintf("%s.local:80/%s", hostname, localName))
+		if err != nil {
+			panic(fmt.Sprintf("Error tagging %s -> %s\n", fqImage, localName))
 		}
 	}
 	finishing := make(chan bool)
