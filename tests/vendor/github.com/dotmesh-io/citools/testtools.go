@@ -1640,7 +1640,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 				-e "s|{{CONTROLLER_MANAGER_EXTRA_ARGS}}||" \
 				-e "s|{{SCHEDULER_EXTRA_ARGS}}||" \
 				-e "s|{{KUBE_MASTER_NAME}}|%s|" \
-				/etc/kubeadm.conf.tmpl > /etc/kubeadm.conf && `,
+				/etc/kubeadm.conf.tmpl > /etc/kubeadm.conf`,
 				// master ip address
 				c.Nodes[0].IP,
 				// POD_NETWORK_CIDR
@@ -1649,10 +1649,27 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 				serviceCIDR(c.GetIpPrefix()),
 				// master hostname
 				nodeName(now, i, 0),
-			)+
+			),
+		nil,
+	)
+	if err != nil {
+		return err
+	}
 
-			"wrapkubeadm init --ignore-preflight-errors=all && "+
-			"mkdir /root/.kube && cp /etc/kubernetes/admin.conf /root/.kube/config && "+
+	st, err = docker(
+		nodeName(now, i, 0),
+		"wrapkubeadm init --ignore-preflight-errors=all",
+		map[string]string{
+			"DEBUG_MODE": "WHY, YES PLEASE, IF THAT'S QUITE ALRIGHT",
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	st, err = docker(
+		nodeName(now, i, 0),
+		"mkdir /root/.kube && cp /etc/kubernetes/admin.conf /root/.kube/config && "+
 			// Make kube-dns faster; trick copied from dind-cluster-v1.7.sh
 			"kubectl get deployment kube-dns -n kube-system -o json | jq '.spec.template.spec.containers[0].readinessProbe.initialDelaySeconds = 3|.spec.template.spec.containers[0].readinessProbe.periodSeconds = 3' | kubectl apply --force -f -",
 		nil,
