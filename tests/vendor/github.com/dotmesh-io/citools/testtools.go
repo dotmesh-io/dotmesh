@@ -828,6 +828,7 @@ func dockerContext(ctx context.Context, node string, cmd string, env map[string]
 }
 
 func RunOnNodeErr(node string, cmd string) (string, error) {
+	fmt.Printf("RUNNING on %s: %s\n", node, cmd)
 	return docker(node, cmd, nil)
 }
 
@@ -1667,7 +1668,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		return err
 	}
 
-	st, err = docker(
+	_, err = docker(
 		nodeName(now, i, 0),
 		"mkdir /root/.kube && cp /etc/kubernetes/admin.conf /root/.kube/config && "+
 			// Make kube-dns faster; trick copied from dind-cluster-v1.7.sh
