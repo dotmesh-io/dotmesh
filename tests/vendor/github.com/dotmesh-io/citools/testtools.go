@@ -1488,6 +1488,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		} else {
 			fmt.Printf("Found cached image %s\n", fqImage)
 		}
+		fmt.Printf("Tagging %s -> %s\n", fqImage, localName)
 		err = System("docker", "tag", fqImage, fmt.Sprintf("%s.local:80/%s", hostname, localName))
 		if err != nil {
 			panic(fmt.Sprintf("Error tagging %s -> %s\n", fqImage, localName))
