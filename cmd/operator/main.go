@@ -1156,7 +1156,7 @@ func (c *dotmeshController) createServerPod(podName string, node string, env []v
 func (c *dotmeshController) createSentinelPod(pvcName string, node string) {
 	sentinelName := fmt.Sprintf("sentinel-%s-node-%s", pvcName, node)
 	privileged := true
-	sentinelImage := "gcr.io/google-containers/busybox:latest"
+	sentinelImage := "busybox"
 
 	glog.Infof("Creating sentinel %#v", sentinelName)
 	sentinel := v1.Pod{
@@ -1182,7 +1182,7 @@ func (c *dotmeshController) createSentinelPod(pvcName string, node string) {
 			InitContainers: []v1.Container{},
 			Containers: []v1.Container{
 				v1.Container{
-					Name:  "dotmesh-outer",
+					Name:  "dotmesh-sentinel",
 					Image: sentinelImage,
 					Command: []string{
 						"tail",
