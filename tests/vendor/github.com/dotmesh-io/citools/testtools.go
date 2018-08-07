@@ -1478,6 +1478,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 	// pre-pull all the container images Kubernetes needs to use, tag them to
 	// trick it into not downloading anything.
 	for fqImage, localName := range cache {
+		realLocalName := fmt.Sprintf("%s.local:80/%s", hostname, localName)
 		err = SilentSystem("docker", "image", "inspect", fqImage)
 		if err != nil {
 			fmt.Printf("Image for caching %s not available in local docker, pulling...\n", fqImage)
@@ -1488,17 +1489,23 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		} else {
 			fmt.Printf("Found cached image %s\n", fqImage)
 		}
-		fmt.Printf("Tagging %s -> %s\n", fqImage, localName)
-		err = System("docker", "tag", fqImage, fmt.Sprintf("%s.local:80/%s", hostname, localName))
+		fmt.Printf("Tagging %s -> %s\n", fqImage, realLocalName)
+		err = System("docker", "tag", fqImage, realLocalName)
 		if err != nil {
-			panic(fmt.Sprintf("Error tagging %s -> %s\n", fqImage, localName))
+			panic(fmt.Sprintf("Error tagging %s -> %s\n", fqImage, realLocalName))
+		}
+		fmt.Printf("Pushing %s\n", realLocalName)
+		err = System("docker", "push", realLocalName)
+		if err != nil {
+			panic(fmt.Sprintf("Error pushing %s\n", realLocalName))
 		}
 	}
 	finishing := make(chan bool)
 	for j := 0; j < c.DesiredNodeCount; j++ {
 		go func(j int) {
 			for fqImage, localName := range cache {
-				fmt.Printf("Pulling %s.local:80/%s\n", hostname, localName)
+				realLocalName := fmt.Sprintf("%s.local:80/%s", hostname, localName)
+				fmt.Printf("Pulling %s\n", hostname, realLocalName)
 				st, err := docker(
 					nodeName(now, i, j),
 					/*
@@ -1506,9 +1513,9 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 					   docker tag $local_name $fq_image
 					*/
 					fmt.Sprintf(
-						"docker pull %s.local:80/%s && "+
-							"docker tag %s.local:80/%s %s",
-						hostname, localName, hostname, localName, fqImage,
+						"docker pull %s && "+
+							"docker tag %s %s",
+						hostname, realLocalName, hostname, realLocalName, fqImage,
 					),
 					nil,
 				)
