@@ -1505,7 +1505,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		go func(j int) {
 			for fqImage, localName := range cache {
 				realLocalName := fmt.Sprintf("%s.local:80/%s", hostname, localName)
-				fmt.Printf("Pulling %s\n", hostname, realLocalName)
+				fmt.Printf("Pulling %s\n", realLocalName)
 				st, err := docker(
 					nodeName(now, i, j),
 					/*
