@@ -1,9 +1,12 @@
+busybox:latest busybox:latest
+gcr.io/google-containers/busybox:latest google-busybox:latest
 k8s.gcr.io/etcd-amd64:3.1.12 etcd-amd64:3.1.12
+k8s.gcr.io/k8s-dns-dnsmasq-nanny-amd64:1.14.8 k8s-dns-dnsmasq-nanny-amd64:1.14.8
+k8s.gcr.io/k8s-dns-kube-dns-amd64:1.14.8 k8s.gcr.io/k8s-dns-kube-dns-amd64:1.14.8
+k8s.gcr.io/k8s-dns-sidecar-amd64:1.14.8 k8s-dns-sidecar-amd64:1.14.8
 k8s.gcr.io/kube-apiserver-amd64:v1.10.6 kube-apiserver-amd64:v1.10.6
 k8s.gcr.io/kube-controller-manager-amd64:v1.10.6 kube-controller-manager-amd64:v1.10.6
 k8s.gcr.io/kube-proxy-amd64:v1.10.6 kube-proxy-amd64:v1.10.6
 k8s.gcr.io/kube-scheduler-amd64:v1.10.6 kube-scheduler-amd64:v1.10.6
 k8s.gcr.io/pause-amd64:3.1 pause-amd64:3.1
-weaveworks/weave-kube:2.4.0 weaveworks/weave-kube:2.4.0
-weaveworks/weave-npc:2.4.0 weaveworks/weave-npc:2.4.0
 nginx:1.12.1 nginx:1.12.1
