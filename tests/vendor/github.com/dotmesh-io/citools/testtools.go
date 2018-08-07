@@ -1515,7 +1515,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 					fmt.Sprintf(
 						"docker pull %s && "+
 							"docker tag %s %s",
-						hostname, realLocalName, hostname, realLocalName, fqImage,
+						realLocalName, realLocalName, fqImage,
 					),
 					nil,
 				)
