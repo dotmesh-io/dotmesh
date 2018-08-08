@@ -22,6 +22,12 @@ then
     CI_DOCKER_TAG=latest
 fi
 
+LOWERCASE_OS=$(echo "$OS" | tr '[:upper:]' '[:lower:]')
+export GOOS="$LOWERCASE_OS"
+
+OUTPUT_DIR="`pwd`/binaries/$OS"
+mkdir -p $OUTPUT_DIR
+
 VERSION=$(cd cmd/versioner && go run versioner.go)
 
 HOSTNAME=${HOSTNAME:=$(hostname).local}
@@ -38,12 +44,6 @@ mkdir -p $GOCACHE
 rm -rf target/* || true
 
 ## client
-
-LOWERCASE_OS=$(echo "$OS" | tr '[:upper:]' '[:lower:]')
-export GOOS=${GOOS:="$LOWERCASE_OS"}
-
-OUTPUT_DIR="`pwd`/binaries/$OS"
-mkdir -p $OUTPUT_DIR
 
 CGO_ENABLED=0 go build -ldflags "-X main.clientVersion=${VERSION} -X main.dockerTag=$CI_DOCKER_TAG -s" -o $OUTPUT_DIR/dm ./cmd/dm
 
@@ -108,19 +108,22 @@ then
     fi
 fi
 
-## server
+if [ -z "${SKIP_SERVER}" ]
+then
+    ## server
 
-go build -ldflags "-X main.serverVersion=${VERSION}" -o ./target/dotmesh-server ./cmd/dotmesh-server
+    go build -ldflags "-X main.serverVersion=${VERSION}" -o ./target/dotmesh-server ./cmd/dotmesh-server
 
-cp ./cmd/dotmesh-server/require_zfs.sh ./target
+    cp ./cmd/dotmesh-server/require_zfs.sh ./target
 
-echo "building image: ${STABLE_CI_DOCKER_SERVER_IMAGE}"
+    echo "building image: ${STABLE_CI_DOCKER_SERVER_IMAGE}"
 
-cp cmd/dotmesh-server/Dockerfile target/Dockerfile
-echo 'COPY ./flexvolume /usr/local/bin/' >> target/Dockerfile
-echo 'COPY ./dotmesh-server /usr/local/bin/' >> target/Dockerfile
+    cp cmd/dotmesh-server/Dockerfile target/Dockerfile
+    echo 'COPY ./flexvolume /usr/local/bin/' >> target/Dockerfile
+    echo 'COPY ./dotmesh-server /usr/local/bin/' >> target/Dockerfile
 
-docker build -f target/Dockerfile -t "${STABLE_CI_DOCKER_SERVER_IMAGE}" target
+    docker build -f target/Dockerfile -t "${STABLE_CI_DOCKER_SERVER_IMAGE}" target
+fi
 
 if [ -n "${PUSH}" ]; then
     echo "pushing image"
