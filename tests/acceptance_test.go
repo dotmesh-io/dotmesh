@@ -2382,10 +2382,11 @@ spec:
 		pvcNames := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pvc -n dotmesh | grep pvc- | cut -f 1 -d ' '")
 		for _, pvcName := range strings.Split(pvcNames, "\n") {
 			if pvcName != "" {
-				pvcs[pvcName] = struct{}{}
+				pvcSuffix := string(pvcName[len(pvcName)-4:])
+				pvcs[pvcSuffix] = struct{}{}
 			}
 		}
-		serverPvcNames := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pods -n dotmesh | grep server- | sed s/^server-// | sed s/-node-.*//")
+		serverPvcNames := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pods -n dotmesh | grep server- | sed s/^server-pvc-// | sed s/-cluster-.*//")
 		for _, pvcName := range strings.Split(serverPvcNames, "\n") {
 			if pvcName != "" {
 				delete(pvcs, pvcName)
