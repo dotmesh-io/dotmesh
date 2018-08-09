@@ -386,8 +386,6 @@ docker run -i $rm_opt --pid=host --privileged --name=$DOTMESH_INNER_SERVER_NAME 
 
 RETVAL=$?
 
-cleanup "inner container terminating with retval=$RETVAL"
-
 docker logs $DOTMESH_INNER_SERVER_NAME > $DIR/dotmesh_server_inner_log
 
 exit $RETVAL
