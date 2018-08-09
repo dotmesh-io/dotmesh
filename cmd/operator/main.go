@@ -722,7 +722,7 @@ func (c *dotmeshController) process() error {
 
 		if status == v1.PodFailed || status == v1.PodSucceeded {
 			c.logPodInfo(dotmesh)
-
+			glog.Infof("Observing pod %s - on node found to be in status  %s", podName, boundNode, status)
 			// Broken, mark it for death
 			dotmeshesToKill[podName] = struct{}{}
 
