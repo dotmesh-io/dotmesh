@@ -3,7 +3,7 @@ Due to clashes with client-go and kubernetes, this project has multiple sections
 - `/vendor` provides the vendoring for everything excluding some clashing dependencies.
 - `/cmd/dm/vendor` provides vendoring for `cmd/dm`. Eventually any dependencies which are duplicated in this repo vs `/vendor` should be removed - some of this work has already taken place.
 
-To update dependencies we use `dep`, and to build we're using `bazel`. This means any time dependencies change (using `dep ensure -add <dependency>`/`dep ensure -update <dependency>`) you will also need to run `bazel build //:gazelle -- update-repos -from_file=Gopkg.lock` - this will need to be ran from the main directory if the change is to `/vendor` or `cmd/dm` if the change is to `/cmd/dm/vendor`
+To update dependencies we use `dep`, and to build we're using `bazel`. This means any time dependencies change, directories get added or files are moved around etc you will also need to run `bazel build //:gazelle` from the root of the repo.
 
 ## Traps and pitfalls
 - `gazelle` assumes directories beginning with `_` are to be ignored - to include these I:
