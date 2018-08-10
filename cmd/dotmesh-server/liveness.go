@@ -7,6 +7,8 @@ import (
 
 	"github.com/gorilla/mux"
 	"golang.org/x/net/context"
+
+	"github.com/dotmesh-io/dotmesh/pkg/client"
 )
 
 func (state *InMemoryState) runLivenessServer() {
@@ -58,7 +60,7 @@ func (state *InMemoryState) runLivenessServer() {
 	},
 	)
 
-	err := http.ListenAndServe(fmt.Sprintf(":%s", LIVENESS_PORT), router)
+	err := http.ListenAndServe(fmt.Sprintf(":%s", client.LIVENESS_PORT), router)
 	if err != nil {
 		log.Fatalf("Unable to listen for liveness probes: %+v", err)
 	}

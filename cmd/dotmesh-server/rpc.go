@@ -21,6 +21,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/dotmesh-io/dotmesh/pkg/auth"
+	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 
 	log "github.com/sirupsen/logrus"
@@ -1455,7 +1456,7 @@ func (d *DotmeshRPC) Transfer(
 	args *TransferRequest,
 	result *string,
 ) error {
-	client := NewJsonRpcClient(args.User, args.Peer, args.ApiKey, args.Port)
+	client := dmclient.NewJsonRpcClient(args.User, args.Peer, args.ApiKey, args.Port)
 
 	log.Printf("[Transfer] starting with %+v", safeArgs(*args))
 

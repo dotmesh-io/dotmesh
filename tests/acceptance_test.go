@@ -2385,10 +2385,14 @@ spec:
 				pvcs[pvcName] = struct{}{}
 			}
 		}
-		serverPvcNames := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pods -n dotmesh | grep server- | sed s/^server-// | sed s/-node-.*//")
-		for _, pvcName := range strings.Split(serverPvcNames, "\n") {
-			if pvcName != "" {
-				delete(pvcs, pvcName)
+		serverPvcNames := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pods -n dotmesh | grep server- | sed s/^server-pvc-// | sed s/-cluster-.*//")
+		for _, pvcNameSuffix := range strings.Split(serverPvcNames, "\n") {
+			if pvcNameSuffix != "" {
+				for pvc, _ := range pvcs {
+					if strings.Contains(pvc, pvcNameSuffix) {
+						delete(pvcs, pvc)
+					}
+				}
 			}
 		}
 

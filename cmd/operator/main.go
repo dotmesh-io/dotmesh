@@ -722,7 +722,7 @@ func (c *dotmeshController) process() error {
 
 		if status == v1.PodFailed || status == v1.PodSucceeded {
 			c.logPodInfo(dotmesh)
-
+			glog.Infof("Observing pod %s - on node found to be in status  %s", podName, boundNode, status)
 			// Broken, mark it for death
 			dotmeshesToKill[podName] = struct{}{}
 
@@ -1015,7 +1015,7 @@ nodeLoop:
 
 			// Configure the pod to use PV storage
 
-			podName = fmt.Sprintf("server-%s-node-%s", pvc, node)
+			podName = fmt.Sprintf("server-pvc-%s-%s", string(pvc[len(pvc)-4:]), node)
 			pvVolumeMounts = getDotmeshPVVolumeMounts()
 			volumeMounts = append(volumeMounts, pvVolumeMounts...)
 			pvVolumes = getDotmeshPVVolumes(pvc)
@@ -1128,7 +1128,7 @@ func (c *dotmeshController) createServerPod(podName string, node string, env []v
 }
 
 func (c *dotmeshController) createSentinelPod(pvcName string, node string) {
-	sentinelName := fmt.Sprintf("sentinel-%s-node-%s", pvcName, node)
+	sentinelName := fmt.Sprintf("sentinel-pvc-%s-%s", string(pvcName[len(pvcName)-4:]), node)
 	privileged := true
 	sentinelImage := "busybox"
 

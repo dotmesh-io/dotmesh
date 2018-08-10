@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/dotmesh-io/dotmesh/pkg/registry"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 )
@@ -96,7 +97,7 @@ func receivingState(f *fsMachine) stateFn {
 		return backoffStateWithReason(fmt.Sprintf("receivingState: Attempting to pull %s, failed to get admin user, error: %s", f.filesystemId, err))
 	}
 
-	url, err := deduceUrl(context.Background(), addresses, "internal", "admin", admin.ApiKey)
+	url, err := dmclient.DeduceUrl(context.Background(), addresses, "internal", "admin", admin.ApiKey)
 	if err != nil {
 		return backoffStateWithReason(fmt.Sprintf("receivingState: deduceUrl failed with %+v", err))
 	}

@@ -347,17 +347,26 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 				func() error {
 					return System("bash", "-c", fmt.Sprintf(`
 					set -xe
-					mkdir -p /dotmesh-test-pools
 					MOUNTPOINT=/dotmesh-test-pools
+					DOTMESH_MOUNTS=/var/lib/dotmesh-mounts
+					mkdir -p $MOUNTPOINT
+					mkdir -p $DOTMESH_MOUNTS
 					NODE=%s
 					if [ $(mount |grep $MOUNTPOINT |wc -l) -eq 0 ]; then
 						echo "Creating and bind-mounting shared $MOUNTPOINT"
-						mkdir -p $MOUNTPOINT && \
 						mount --bind $MOUNTPOINT $MOUNTPOINT && \
 						mount --make-shared $MOUNTPOINT;
 					fi
+					if [ $(mount |grep $DOTMESH_MOUNTS |wc -l) -eq 0 ]; then
+						echo "Creating and bind-mounting shared $DOTMESH_MOUNTS"
+						mount --bind $DOTMESH_MOUNTS $DOTMESH_MOUNTS && \
+						mount --make-shared $DOTMESH_MOUNTS;
+					fi
 					(cd %s
-						EXTRA_DOCKER_ARGS="-v /dotmesh-test-pools:/dotmesh-test-pools:rshared -v /var/run/docker.sock:/hostdocker.sock %s " \
+						EXTRA_DOCKER_ARGS="\
+							-v /var/lib/dotmesh-mounts:/var/lib/dotmesh-mounts:rshared \
+							-v /dotmesh-test-pools:/dotmesh-test-pools:rshared \
+							-v /var/run/docker.sock:/hostdocker.sock %s " \
 						DIND_SUBNET="192.168.0.0" \
 						DIND_SUBNET_SIZE="16" \
 						SERVICE_CIDR="%s" \
@@ -423,7 +432,7 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 					"docker exec -i $NODE systemctl stop docker ; "+
 					"docker exec -i $NODE systemctl stop kubelet ; "+
 					"docker exec -i $NODE systemctl stop systemd-journald ; "+
-					"docker rm -f %s", node))
+					"docker rm -f $NODE", node))
 
 			// as soon as this completes, add it to c.Nodes. more detail gets
 			// filled in later (eg dotmesh secrets), but it's important that
