@@ -39,11 +39,10 @@ docker run \
        -v dotmesh-go-cache:/root/go/src/github.com/dotmesh-io/dotmesh/.gocache \
        -w /root/go/src/github.com/dotmesh-io/dotmesh \
        -e "CI_DOCKER_TAG=$CI_DOCKER_TAG" \
-       -e "CI_DOCKER_SERVER_IMAGE=$CI_DOCKER_SERVER_IMAGE" \
+       -e "STABLE_CI_DOCKER_SERVER_IMAGE=$STABLE_CI_DOCKER_SERVER_IMAGE" \
        -e "CI_DOCKER_PROVISIONER_IMAGE=$CI_DOCKER_PROVISIONER_IMAGE" \
        -e "CI_DOCKER_DIND_PROVISIONER_IMAGE=$CI_DOCKER_DIND_PROVISIONER_IMAGE" \
        -e "CI_DOCKER_OPERATOR_IMAGE=$CI_DOCKER_OPERATOR_IMAGE" \
        -e "HOSTNAME=`hostname`.local" \
-       -e "PUSH=YES" \
        $BUILDER_IMAGE \
        ./rebuild_without_bazel.sh "$@"
