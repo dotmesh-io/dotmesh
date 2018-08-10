@@ -81,14 +81,28 @@ if [ -n "$CONTAINER_POOL_MNT" ]; then
     echo "$DIR seems to be mounted from $BLOCK_DEVICE"
     OUTER_DIR=`nsenter -t 1 -m -u -n -i /bin/sh -c 'mount' | grep $BLOCK_DEVICE | cut -f 3 -d ' ' | head -n 1`
     echo "$BLOCK_DEVICE seems to be mounted on $OUTER_DIR in the host"
+fi
+
+if [ -n "$CONTAINER_POOL_PVC_NAME" ]; then
+    WORK_ROOT=/var/lib/dotmesh-mounts/$CONTAINER_POOL_PVC_NAME
+    EXTRA_VOLUMES="-v $WORK_ROOT:$WORK_ROOT:rshared"
+    MOUNTPOINT=${WORK_ROOT}/mnt
+    CONTAINER_MOUNT_PREFIX=${WORK_ROOT}/container_mnt
+
+    nsenter -t 1 -m -u -n -i /bin/sh -c "$EXTRA_HOST_COMMANDS ; mkdir -p $WORK_ROOT"
+
+    echo "Using $WORK_ROOT as a mount workspace."
 else
     BLOCK_DEVICE="n/a"
     OUTER_DIR="$DIR"
-fi
+    EXTRA_VOLUMES=""
 
-# Set up paths we'll use for stuff
-MOUNTPOINT=${MOUNTPOINT:-$OUTER_DIR/mnt}
-CONTAINER_MOUNT_PREFIX=${CONTAINER_MOUNT_PREFIX:-$OUTER_DIR/container_mnt}
+    # Set up paths we'll use for stuff
+    MOUNTPOINT=${MOUNTPOINT:-$OUTER_DIR/mnt}
+    CONTAINER_MOUNT_PREFIX=${CONTAINER_MOUNT_PREFIX:-$OUTER_DIR/container_mnt}
+
+    echo "Using $OUTER_DIR as a mount workspace."
+fi
 
 # Set the shared flag on the working directory on the host. This is
 # essential; it, combined with the presence of the shared flag on the
@@ -167,6 +181,10 @@ elif [[ "$KERNEL_ZFS_VERSION" == "0.7"* ]]; then
     export ZFS_USERLAND_ROOT=/opt/zfs-0.7
 else
     echo "Kernel ZFS version ($KERNEL_ZFS_VERSION) doesn't match 0.6 or 0.7, not supported"
+    echo
+    echo "Trying to download kernel modules again and then restarting in case we're hitting"
+    echo "https://github.com/dotmesh-io/dotmesh/issues/542"
+    fetch_zfs
     exit 1
 fi
 
@@ -359,6 +377,7 @@ docker run -i $rm_opt --pid=host --privileged --name=$DOTMESH_INNER_SERVER_NAME 
     -v /run/docker/plugins:/run/docker/plugins \
     -v $OUTER_DIR:$OUTER_DIR:rshared \
     -v $FLEXVOLUME_DRIVER_DIR:/system-flexvolume \
+    $EXTRA_VOLUMES \
     $net \
     $link \
     -e "DISABLE_FLEXVOLUME=$DISABLE_FLEXVOLUME" \
@@ -381,8 +400,6 @@ docker run -i $rm_opt --pid=host --privileged --name=$DOTMESH_INNER_SERVER_NAME 
     "$@" >/dev/null
 
 RETVAL=$?
-
-cleanup "inner container terminating with retval=$RETVAL"
 
 docker logs $DOTMESH_INNER_SERVER_NAME > $DIR/dotmesh_server_inner_log
 
