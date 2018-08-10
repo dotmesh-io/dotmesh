@@ -3,9 +3,9 @@ load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 go_library(
     name = "go_default_library",
     srcs = ["flexvolume.go"],
-    importpath = "github.com/dotmesh-io/dotmesh/cmd/flexvolume",
+    importpath = "",
     visibility = ["//visibility:private"],
-    deps = ["//cmd/flexvolume/vendor/github.com/gorilla/rpc/v2/json2:go_default_library"],
+    deps = ["//github.com/gorilla/rpc/v2/json2:go_default_library"],
 )
 
 go_binary(

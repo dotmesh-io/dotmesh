@@ -6,8 +6,8 @@ go_library(
         "code.go",
         "gen.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dynamic-provisioner/vendor/golang.org/x/text/internal/gen",
-    importpath = "golang.org/x/text/internal/gen",
+    importmap = "cmd/dynamic-provisioner/vendor/golang.org/x/text/internal/gen",
+    importpath = "",
     visibility = ["//cmd/dynamic-provisioner/vendor/golang.org/x/text:__subpackages__"],
-    deps = ["//cmd/dynamic-provisioner/vendor/golang.org/x/text/unicode/cldr:go_default_library"],
+    deps = ["//golang.org/x/text/unicode/cldr:go_default_library"],
 )

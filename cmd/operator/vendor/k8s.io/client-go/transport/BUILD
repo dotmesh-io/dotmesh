@@ -10,14 +10,14 @@ go_library(
         "round_trippers.go",
         "transport.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/k8s.io/client-go/transport",
-    importpath = "k8s.io/client-go/transport",
+    importmap = "cmd/operator/vendor/k8s.io/client-go/transport",
+    importpath = "",
     deps = [
-        "//cmd/operator/vendor/github.com/golang/glog:go_default_library",
-        "//cmd/operator/vendor/github.com/gregjones/httpcache:go_default_library",
-        "//cmd/operator/vendor/github.com/gregjones/httpcache/diskcache:go_default_library",
-        "//cmd/operator/vendor/github.com/peterbourgon/diskv:go_default_library",
-        "//cmd/operator/vendor/k8s.io/apimachinery/pkg/util/net:go_default_library",
+        "//github.com/golang/glog:go_default_library",
+        "//github.com/gregjones/httpcache:go_default_library",
+        "//github.com/gregjones/httpcache/diskcache:go_default_library",
+        "//github.com/peterbourgon/diskv:go_default_library",
+        "//k8s.io/apimachinery/pkg/util/net:go_default_library",
     ],
 )
 

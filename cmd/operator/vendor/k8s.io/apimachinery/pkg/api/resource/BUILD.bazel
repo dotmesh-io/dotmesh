@@ -12,12 +12,12 @@ go_library(
         "suffix.go",
         "zz_generated.deepcopy.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/k8s.io/apimachinery/pkg/api/resource",
-    importpath = "k8s.io/apimachinery/pkg/api/resource",
+    importmap = "cmd/operator/vendor/k8s.io/apimachinery/pkg/api/resource",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//cmd/operator/vendor/github.com/gogo/protobuf/proto:go_default_library",
-        "//cmd/operator/vendor/github.com/spf13/pflag:go_default_library",
-        "//cmd/operator/vendor/gopkg.in/inf.v0:go_default_library",
+        "//github.com/gogo/protobuf/proto:go_default_library",
+        "//github.com/spf13/pflag:go_default_library",
+        "//gopkg.in/inf.v0:go_default_library",
     ],
 )

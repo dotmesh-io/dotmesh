@@ -6,7 +6,7 @@ go_library(
         "doc.go",
         "endian.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/coreos/etcd/pkg/cpuutil",
-    importpath = "github.com/coreos/etcd/pkg/cpuutil",
+    importmap = "vendor/github.com/coreos/etcd/pkg/cpuutil",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

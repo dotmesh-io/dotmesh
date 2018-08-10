@@ -16,7 +16,7 @@ go_library(
         "umask_windows.go",
         "util.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/k8s.io/client-go/pkg/util",
-    importpath = "k8s.io/client-go/pkg/util",
+    importmap = "vendor/k8s.io/client-go/pkg/util",
+    importpath = "",
     tags = ["automanaged"],
 )

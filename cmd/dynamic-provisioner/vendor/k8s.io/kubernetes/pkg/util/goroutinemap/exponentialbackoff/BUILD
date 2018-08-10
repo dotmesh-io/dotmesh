@@ -10,8 +10,8 @@ load(
 go_library(
     name = "go_default_library",
     srcs = ["exponential_backoff.go"],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dynamic-provisioner/vendor/k8s.io/kubernetes/pkg/util/goroutinemap/exponentialbackoff",
-    importpath = "k8s.io/kubernetes/pkg/util/goroutinemap/exponentialbackoff",
+    importmap = "cmd/dynamic-provisioner/vendor/k8s.io/kubernetes/pkg/util/goroutinemap/exponentialbackoff",
+    importpath = "",
     tags = ["automanaged"],
 )
 

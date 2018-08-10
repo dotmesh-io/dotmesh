@@ -18,11 +18,11 @@ go_library(
         "stat.go",
         "xfrm.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/github.com/prometheus/procfs",
-    importpath = "github.com/prometheus/procfs",
+    importmap = "cmd/operator/vendor/github.com/prometheus/procfs",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//cmd/operator/vendor/github.com/prometheus/procfs/nfs:go_default_library",
-        "//cmd/operator/vendor/github.com/prometheus/procfs/xfs:go_default_library",
+        "//github.com/prometheus/procfs/nfs:go_default_library",
+        "//github.com/prometheus/procfs/xfs:go_default_library",
     ],
 )

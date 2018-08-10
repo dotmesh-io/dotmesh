@@ -19,10 +19,10 @@ go_proto_library(
 go_library(
     name = "go_default_library",
     srcs = ["stream_chunk.pb.go"],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/grpc-ecosystem/grpc-gateway/runtime/internal",
-    importpath = "github.com/grpc-ecosystem/grpc-gateway/runtime/internal",
+    importmap = "vendor/github.com/grpc-ecosystem/grpc-gateway/runtime/internal",
+    importpath = "",
     deps = [
-        "//vendor/github.com/golang/protobuf/proto:go_default_library",
+        "//github.com/golang/protobuf/proto:go_default_library",
         "@io_bazel_rules_go//proto/wkt:any_go_proto",
     ],
 )

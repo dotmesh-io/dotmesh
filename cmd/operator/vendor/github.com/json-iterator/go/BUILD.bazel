@@ -46,11 +46,11 @@ go_library(
         "stream_int.go",
         "stream_str.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/github.com/json-iterator/go",
-    importpath = "github.com/json-iterator/go",
+    importmap = "cmd/operator/vendor/github.com/json-iterator/go",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//cmd/operator/vendor/github.com/modern-go/concurrent:go_default_library",
-        "//cmd/operator/vendor/github.com/modern-go/reflect2:go_default_library",
+        "//github.com/modern-go/concurrent:go_default_library",
+        "//github.com/modern-go/reflect2:go_default_library",
     ],
 )

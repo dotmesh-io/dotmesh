@@ -30,7 +30,7 @@ go_library(
         "rpc.go",
         "simple.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/ugorji/go/codec",
-    importpath = "github.com/ugorji/go/codec",
+    importmap = "vendor/github.com/ugorji/go/codec",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

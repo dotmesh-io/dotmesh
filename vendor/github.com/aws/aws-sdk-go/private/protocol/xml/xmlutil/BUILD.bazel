@@ -7,8 +7,8 @@ go_library(
         "unmarshal.go",
         "xml_to_struct.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/aws/aws-sdk-go/private/protocol/xml/xmlutil",
-    importpath = "github.com/aws/aws-sdk-go/private/protocol/xml/xmlutil",
+    importmap = "vendor/github.com/aws/aws-sdk-go/private/protocol/xml/xmlutil",
+    importpath = "",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/aws/aws-sdk-go/private/protocol:go_default_library"],
+    deps = ["//github.com/aws/aws-sdk-go/private/protocol:go_default_library"],
 )

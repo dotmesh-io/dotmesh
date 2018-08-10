@@ -11,7 +11,7 @@ go_library(
         "parsing.go",
         "schema.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/go-openapi/errors",
-    importpath = "github.com/go-openapi/errors",
+    importmap = "vendor/github.com/go-openapi/errors",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

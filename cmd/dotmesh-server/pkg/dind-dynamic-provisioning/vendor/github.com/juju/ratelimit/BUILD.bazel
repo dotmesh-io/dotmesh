@@ -6,7 +6,7 @@ go_library(
         "ratelimit.go",
         "reader.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/github.com/juju/ratelimit",
-    importpath = "github.com/juju/ratelimit",
+    importmap = "cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/github.com/juju/ratelimit",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

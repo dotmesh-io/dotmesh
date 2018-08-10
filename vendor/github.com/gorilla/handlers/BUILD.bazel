@@ -13,7 +13,7 @@ go_library(
         "proxy_headers.go",
         "recovery.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/gorilla/handlers",
-    importpath = "github.com/gorilla/handlers",
+    importmap = "vendor/github.com/gorilla/handlers",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

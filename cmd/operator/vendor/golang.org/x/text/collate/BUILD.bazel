@@ -9,12 +9,12 @@ go_library(
         "sort.go",
         "tables.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/golang.org/x/text/collate",
-    importpath = "golang.org/x/text/collate",
+    importmap = "cmd/operator/vendor/golang.org/x/text/collate",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//cmd/operator/vendor/golang.org/x/text/internal/colltab:go_default_library",
-        "//cmd/operator/vendor/golang.org/x/text/language:go_default_library",
-        "//cmd/operator/vendor/golang.org/x/text/unicode/norm:go_default_library",
+        "//golang.org/x/text/internal/colltab:go_default_library",
+        "//golang.org/x/text/language:go_default_library",
+        "//golang.org/x/text/unicode/norm:go_default_library",
     ],
 )

@@ -10,8 +10,8 @@ go_library(
         "trieval.go",
         "width.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/golang.org/x/text/width",
-    importpath = "golang.org/x/text/width",
+    importmap = "vendor/golang.org/x/text/width",
+    importpath = "",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/golang.org/x/text/transform:go_default_library"],
+    deps = ["//golang.org/x/text/transform:go_default_library"],
 )

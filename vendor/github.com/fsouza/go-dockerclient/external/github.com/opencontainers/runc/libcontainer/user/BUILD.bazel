@@ -8,7 +8,7 @@ go_library(
         "lookup_unsupported.go",
         "user.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/fsouza/go-dockerclient/external/github.com/opencontainers/runc/libcontainer/user",
-    importpath = "github.com/fsouza/go-dockerclient/external/github.com/opencontainers/runc/libcontainer/user",
+    importmap = "vendor/github.com/fsouza/go-dockerclient/external/github.com/opencontainers/runc/libcontainer/user",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

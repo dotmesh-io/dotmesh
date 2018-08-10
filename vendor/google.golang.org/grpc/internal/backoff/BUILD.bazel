@@ -3,8 +3,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "go_default_library",
     srcs = ["backoff.go"],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/google.golang.org/grpc/internal/backoff",
-    importpath = "google.golang.org/grpc/internal/backoff",
+    importmap = "vendor/google.golang.org/grpc/internal/backoff",
+    importpath = "",
     visibility = ["//vendor/google.golang.org/grpc:__subpackages__"],
-    deps = ["//vendor/google.golang.org/grpc/internal/grpcrand:go_default_library"],
+    deps = ["//google.golang.org/grpc/internal/grpcrand:go_default_library"],
 )

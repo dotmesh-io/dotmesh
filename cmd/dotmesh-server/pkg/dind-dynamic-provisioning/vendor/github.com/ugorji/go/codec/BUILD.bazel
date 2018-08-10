@@ -28,7 +28,7 @@ go_library(
         "simple.go",
         "time.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/github.com/ugorji/go/codec",
-    importpath = "github.com/ugorji/go/codec",
+    importmap = "cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/github.com/ugorji/go/codec",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

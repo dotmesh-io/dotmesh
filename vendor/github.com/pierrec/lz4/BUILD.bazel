@@ -11,8 +11,8 @@ go_library(
         "reader.go",
         "writer.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/pierrec/lz4",
-    importpath = "github.com/pierrec/lz4",
+    importmap = "vendor/github.com/pierrec/lz4",
+    importpath = "",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/pierrec/lz4/internal/xxh32:go_default_library"],
+    deps = ["//github.com/pierrec/lz4/internal/xxh32:go_default_library"],
 )

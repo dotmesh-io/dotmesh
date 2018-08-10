@@ -12,7 +12,7 @@ go_library(
         "opts_unix.go",
         "opts_windows.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/opts",
-    importpath = "github.com/fsouza/go-dockerclient/external/github.com/docker/docker/opts",
+    importmap = "vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/opts",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

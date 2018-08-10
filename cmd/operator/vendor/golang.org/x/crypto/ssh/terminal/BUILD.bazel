@@ -11,33 +11,33 @@ go_library(
         "util_solaris.go",
         "util_windows.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/golang.org/x/crypto/ssh/terminal",
-    importpath = "golang.org/x/crypto/ssh/terminal",
+    importmap = "cmd/operator/vendor/golang.org/x/crypto/ssh/terminal",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = select({
         "@io_bazel_rules_go//go/platform:darwin": [
-            "//cmd/operator/vendor/golang.org/x/sys/unix:go_default_library",
+            "//golang.org/x/sys/unix:go_default_library",
         ],
         "@io_bazel_rules_go//go/platform:dragonfly": [
-            "//cmd/operator/vendor/golang.org/x/sys/unix:go_default_library",
+            "//golang.org/x/sys/unix:go_default_library",
         ],
         "@io_bazel_rules_go//go/platform:freebsd": [
-            "//cmd/operator/vendor/golang.org/x/sys/unix:go_default_library",
+            "//golang.org/x/sys/unix:go_default_library",
         ],
         "@io_bazel_rules_go//go/platform:linux": [
-            "//cmd/operator/vendor/golang.org/x/sys/unix:go_default_library",
+            "//golang.org/x/sys/unix:go_default_library",
         ],
         "@io_bazel_rules_go//go/platform:netbsd": [
-            "//cmd/operator/vendor/golang.org/x/sys/unix:go_default_library",
+            "//golang.org/x/sys/unix:go_default_library",
         ],
         "@io_bazel_rules_go//go/platform:openbsd": [
-            "//cmd/operator/vendor/golang.org/x/sys/unix:go_default_library",
+            "//golang.org/x/sys/unix:go_default_library",
         ],
         "@io_bazel_rules_go//go/platform:solaris": [
-            "//cmd/operator/vendor/golang.org/x/sys/unix:go_default_library",
+            "//golang.org/x/sys/unix:go_default_library",
         ],
         "@io_bazel_rules_go//go/platform:windows": [
-            "//cmd/operator/vendor/golang.org/x/sys/windows:go_default_library",
+            "//golang.org/x/sys/windows:go_default_library",
         ],
         "//conditions:default": [],
     }),

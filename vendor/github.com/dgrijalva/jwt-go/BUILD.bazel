@@ -18,7 +18,7 @@ go_library(
         "signing_method.go",
         "token.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/dgrijalva/jwt-go",
-    importpath = "github.com/dgrijalva/jwt-go",
+    importmap = "vendor/github.com/dgrijalva/jwt-go",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

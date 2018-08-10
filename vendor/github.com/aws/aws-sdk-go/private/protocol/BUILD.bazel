@@ -8,12 +8,12 @@ go_library(
         "payload.go",
         "unmarshal.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/aws/aws-sdk-go/private/protocol",
-    importpath = "github.com/aws/aws-sdk-go/private/protocol",
+    importmap = "vendor/github.com/aws/aws-sdk-go/private/protocol",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//vendor/github.com/aws/aws-sdk-go/aws:go_default_library",
-        "//vendor/github.com/aws/aws-sdk-go/aws/client/metadata:go_default_library",
-        "//vendor/github.com/aws/aws-sdk-go/aws/request:go_default_library",
+        "//github.com/aws/aws-sdk-go/aws:go_default_library",
+        "//github.com/aws/aws-sdk-go/aws/client/metadata:go_default_library",
+        "//github.com/aws/aws-sdk-go/aws/request:go_default_library",
     ],
 )

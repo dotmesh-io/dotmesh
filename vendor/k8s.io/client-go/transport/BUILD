@@ -12,11 +12,11 @@ go_library(
         "round_trippers.go",
         "transport.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/k8s.io/client-go/transport",
-    importpath = "k8s.io/client-go/transport",
+    importmap = "vendor/k8s.io/client-go/transport",
+    importpath = "",
     tags = ["automanaged"],
     deps = [
-        "//vendor/github.com/golang/glog:go_default_library",
-        "//vendor/k8s.io/apimachinery/pkg/util/net:go_default_library",
+        "//github.com/golang/glog:go_default_library",
+        "//k8s.io/apimachinery/pkg/util/net:go_default_library",
     ],
 )

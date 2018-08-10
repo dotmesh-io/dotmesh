@@ -6,7 +6,7 @@ go_library(
         "context.go",
         "doc.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/gorilla/context",
-    importpath = "github.com/gorilla/context",
+    importmap = "vendor/github.com/gorilla/context",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

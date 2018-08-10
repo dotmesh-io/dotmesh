@@ -3,8 +3,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "go_default_library",
     srcs = ["homedir.go"],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/homedir",
-    importpath = "github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/homedir",
+    importmap = "vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/homedir",
+    importpath = "",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/fsouza/go-dockerclient/external/github.com/opencontainers/runc/libcontainer/user:go_default_library"],
+    deps = ["//github.com/fsouza/go-dockerclient/external/github.com/opencontainers/runc/libcontainer/user:go_default_library"],
 )

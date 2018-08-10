@@ -9,7 +9,7 @@ go_library(
         "patch.go",
         "uid.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/k8s.io/apimachinery/pkg/types",
-    importpath = "k8s.io/apimachinery/pkg/types",
+    importmap = "vendor/k8s.io/apimachinery/pkg/types",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

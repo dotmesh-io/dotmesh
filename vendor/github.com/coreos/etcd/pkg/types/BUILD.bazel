@@ -10,7 +10,7 @@ go_library(
         "urls.go",
         "urlsmap.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/coreos/etcd/pkg/types",
-    importpath = "github.com/coreos/etcd/pkg/types",
+    importmap = "vendor/github.com/coreos/etcd/pkg/types",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

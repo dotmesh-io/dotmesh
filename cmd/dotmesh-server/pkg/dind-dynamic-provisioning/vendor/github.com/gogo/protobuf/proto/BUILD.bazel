@@ -23,7 +23,7 @@ go_library(
         "text_gogo.go",
         "text_parser.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/github.com/gogo/protobuf/proto",
-    importpath = "github.com/gogo/protobuf/proto",
+    importmap = "cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/github.com/gogo/protobuf/proto",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

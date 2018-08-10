@@ -3,11 +3,11 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "go_default_library",
     srcs = ["crypto.go"],
-    importpath = "github.com/dotmesh-io/dotmesh/pkg/crypto",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/validator:go_default_library",
-        "//vendor/golang.org/x/crypto/scrypt:go_default_library",
+        "//github.com/dotmesh-io/dotmesh/pkg/validator:go_default_library",
+        "//golang.org/x/crypto/scrypt:go_default_library",
     ],
 )
 

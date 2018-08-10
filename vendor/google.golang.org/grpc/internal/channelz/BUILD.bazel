@@ -6,11 +6,11 @@ go_library(
         "funcs.go",
         "types.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/google.golang.org/grpc/internal/channelz",
-    importpath = "google.golang.org/grpc/internal/channelz",
+    importmap = "vendor/google.golang.org/grpc/internal/channelz",
+    importpath = "",
     visibility = ["//vendor/google.golang.org/grpc:__subpackages__"],
     deps = [
-        "//vendor/google.golang.org/grpc/connectivity:go_default_library",
-        "//vendor/google.golang.org/grpc/grpclog:go_default_library",
+        "//google.golang.org/grpc/connectivity:go_default_library",
+        "//google.golang.org/grpc/grpclog:go_default_library",
     ],
 )

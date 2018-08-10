@@ -6,7 +6,7 @@ go_library(
         "glog.go",
         "glog_file.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/golang/glog",
-    importpath = "github.com/golang/glog",
+    importmap = "vendor/github.com/golang/glog",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

@@ -6,7 +6,7 @@ go_library(
         "idna.go",
         "punycode.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dynamic-provisioner/vendor/golang.org/x/net/idna",
-    importpath = "golang.org/x/net/idna",
+    importmap = "cmd/dynamic-provisioner/vendor/golang.org/x/net/idna",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

@@ -12,8 +12,8 @@ go_library(
         "route.go",
         "test_helpers.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/gorilla/mux",
-    importpath = "github.com/gorilla/mux",
+    importmap = "vendor/github.com/gorilla/mux",
+    importpath = "",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/gorilla/context:go_default_library"],
+    deps = ["//github.com/gorilla/context:go_default_library"],
 )

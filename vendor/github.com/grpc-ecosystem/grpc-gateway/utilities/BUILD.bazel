@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -9,13 +9,6 @@ go_library(
         "pattern.go",
         "trie.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/grpc-ecosystem/grpc-gateway/utilities",
-    importpath = "github.com/grpc-ecosystem/grpc-gateway/utilities",
-)
-
-go_test(
-    name = "go_default_xtest",
-    size = "small",
-    srcs = ["trie_test.go"],
-    deps = [":go_default_library"],
+    importmap = "vendor/github.com/grpc-ecosystem/grpc-gateway/utilities",
+    importpath = "",
 )

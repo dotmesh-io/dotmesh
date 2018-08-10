@@ -42,7 +42,7 @@ go_library(
         "type.go",
         "zlib_transport.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/apache/thrift/lib/go/thrift",
-    importpath = "github.com/apache/thrift/lib/go/thrift",
+    importmap = "vendor/github.com/apache/thrift/lib/go/thrift",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

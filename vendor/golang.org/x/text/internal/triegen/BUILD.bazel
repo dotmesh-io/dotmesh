@@ -7,7 +7,7 @@ go_library(
         "print.go",
         "triegen.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/golang.org/x/text/internal/triegen",
-    importpath = "golang.org/x/text/internal/triegen",
+    importmap = "vendor/golang.org/x/text/internal/triegen",
+    importpath = "",
     visibility = ["//vendor/golang.org/x/text:__subpackages__"],
 )

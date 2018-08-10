@@ -3,8 +3,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "go_default_library",
     srcs = ["merge_logger.go"],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/coreos/etcd/pkg/logutil",
-    importpath = "github.com/coreos/etcd/pkg/logutil",
+    importmap = "vendor/github.com/coreos/etcd/pkg/logutil",
+    importpath = "",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/coreos/pkg/capnslog:go_default_library"],
+    deps = ["//github.com/coreos/pkg/capnslog:go_default_library"],
 )

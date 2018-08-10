@@ -16,8 +16,8 @@ go_library(
         "tables.go",
         "tags.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/golang.org/x/text/language",
-    importpath = "golang.org/x/text/language",
+    importmap = "vendor/golang.org/x/text/language",
+    importpath = "",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/golang.org/x/text/internal/tag:go_default_library"],
+    deps = ["//golang.org/x/text/internal/tag:go_default_library"],
 )

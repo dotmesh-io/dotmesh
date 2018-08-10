@@ -12,7 +12,7 @@ go_library(
         "utils.go",
         "validator.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/asaskevich/govalidator",
-    importpath = "github.com/asaskevich/govalidator",
+    importmap = "vendor/github.com/asaskevich/govalidator",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

@@ -9,8 +9,8 @@ go_library(
         "doc.go",
         "helper.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/apimachinery/pkg/conversion",
-    importpath = "k8s.io/apimachinery/pkg/conversion",
+    importmap = "cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/apimachinery/pkg/conversion",
+    importpath = "",
     visibility = ["//visibility:public"],
-    deps = ["//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/apimachinery/third_party/forked/golang/reflect:go_default_library"],
+    deps = ["//k8s.io/apimachinery/third_party/forked/golang/reflect:go_default_library"],
 )

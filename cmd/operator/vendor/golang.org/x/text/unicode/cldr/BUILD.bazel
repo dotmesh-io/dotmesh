@@ -11,7 +11,7 @@ go_library(
         "slice.go",
         "xml.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/golang.org/x/text/unicode/cldr",
-    importpath = "golang.org/x/text/unicode/cldr",
+    importmap = "cmd/operator/vendor/golang.org/x/text/unicode/cldr",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

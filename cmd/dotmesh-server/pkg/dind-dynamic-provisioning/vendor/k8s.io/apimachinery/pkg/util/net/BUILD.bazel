@@ -9,12 +9,12 @@ go_library(
         "port_split.go",
         "util.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/apimachinery/pkg/util/net",
-    importpath = "k8s.io/apimachinery/pkg/util/net",
+    importmap = "cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/apimachinery/pkg/util/net",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/github.com/golang/glog:go_default_library",
-        "//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/golang.org/x/net/http2:go_default_library",
-        "//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/apimachinery/pkg/util/sets:go_default_library",
+        "//github.com/golang/glog:go_default_library",
+        "//golang.org/x/net/http2:go_default_library",
+        "//k8s.io/apimachinery/pkg/util/sets:go_default_library",
     ],
 )

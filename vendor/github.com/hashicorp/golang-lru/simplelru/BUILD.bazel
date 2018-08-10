@@ -6,7 +6,7 @@ go_library(
         "lru.go",
         "lru_interface.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/hashicorp/golang-lru/simplelru",
-    importpath = "github.com/hashicorp/golang-lru/simplelru",
+    importmap = "vendor/github.com/hashicorp/golang-lru/simplelru",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

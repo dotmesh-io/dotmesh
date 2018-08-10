@@ -3,7 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "go_default_library",
     srcs = ["cleanhttp.go"],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/fsouza/go-dockerclient/external/github.com/hashicorp/go-cleanhttp",
-    importpath = "github.com/fsouza/go-dockerclient/external/github.com/hashicorp/go-cleanhttp",
+    importmap = "vendor/github.com/fsouza/go-dockerclient/external/github.com/hashicorp/go-cleanhttp",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

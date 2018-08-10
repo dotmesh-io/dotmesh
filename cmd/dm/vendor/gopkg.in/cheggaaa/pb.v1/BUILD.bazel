@@ -17,8 +17,8 @@ go_library(
         "termios_bsd.go",
         "termios_nix.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dm/vendor/gopkg.in/cheggaaa/pb.v1",
-    importpath = "gopkg.in/cheggaaa/pb.v1",
+    importmap = "cmd/dm/vendor/gopkg.in/cheggaaa/pb.v1",
+    importpath = "",
     visibility = ["//visibility:public"],
-    deps = ["//cmd/dm/vendor/github.com/mattn/go-runewidth:go_default_library"],
+    deps = ["//github.com/mattn/go-runewidth:go_default_library"],
 )

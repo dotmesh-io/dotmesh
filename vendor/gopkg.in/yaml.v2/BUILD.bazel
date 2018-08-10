@@ -17,7 +17,7 @@ go_library(
         "yamlh.go",
         "yamlprivateh.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/gopkg.in/yaml.v2",
-    importpath = "gopkg.in/yaml.v2",
+    importmap = "vendor/gopkg.in/yaml.v2",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

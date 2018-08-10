@@ -9,7 +9,7 @@ go_library(
         "log.go",
         "unbounded_executor.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/modern-go/concurrent",
-    importpath = "github.com/modern-go/concurrent",
+    importmap = "vendor/github.com/modern-go/concurrent",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

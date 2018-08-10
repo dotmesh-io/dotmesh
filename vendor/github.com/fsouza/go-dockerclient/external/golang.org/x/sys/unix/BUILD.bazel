@@ -146,7 +146,7 @@ go_library(
         "ztypes_solaris_amd64.go",
     ],
     cgo = True,
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/fsouza/go-dockerclient/external/golang.org/x/sys/unix",
-    importpath = "github.com/fsouza/go-dockerclient/external/golang.org/x/sys/unix",
+    importmap = "vendor/github.com/fsouza/go-dockerclient/external/golang.org/x/sys/unix",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

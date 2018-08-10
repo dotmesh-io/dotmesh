@@ -15,7 +15,7 @@ go_library(
         "time.go",
         "value.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/prometheus/common/model",
-    importpath = "github.com/prometheus/common/model",
+    importmap = "vendor/github.com/prometheus/common/model",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

@@ -6,11 +6,11 @@ go_library(
         "errors.go",
         "path.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/k8s.io/apimachinery/pkg/util/validation/field",
-    importpath = "k8s.io/apimachinery/pkg/util/validation/field",
+    importmap = "cmd/operator/vendor/k8s.io/apimachinery/pkg/util/validation/field",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//cmd/operator/vendor/k8s.io/apimachinery/pkg/util/errors:go_default_library",
-        "//cmd/operator/vendor/k8s.io/apimachinery/pkg/util/sets:go_default_library",
+        "//k8s.io/apimachinery/pkg/util/errors:go_default_library",
+        "//k8s.io/apimachinery/pkg/util/sets:go_default_library",
     ],
 )

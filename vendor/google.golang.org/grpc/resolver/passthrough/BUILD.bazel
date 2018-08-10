@@ -3,8 +3,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "go_default_library",
     srcs = ["passthrough.go"],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/google.golang.org/grpc/resolver/passthrough",
-    importpath = "google.golang.org/grpc/resolver/passthrough",
+    importmap = "vendor/google.golang.org/grpc/resolver/passthrough",
+    importpath = "",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/google.golang.org/grpc/resolver:go_default_library"],
+    deps = ["//google.golang.org/grpc/resolver:go_default_library"],
 )

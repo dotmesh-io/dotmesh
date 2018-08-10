@@ -3,8 +3,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "go_default_library",
     srcs = ["scrypt.go"],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/vendor/golang.org/x/crypto/scrypt",
-    importpath = "golang.org/x/crypto/scrypt",
+    importmap = "cmd/dotmesh-server/vendor/golang.org/x/crypto/scrypt",
+    importpath = "",
     visibility = ["//visibility:public"],
-    deps = ["//cmd/dotmesh-server/vendor/golang.org/x/crypto/pbkdf2:go_default_library"],
+    deps = ["//golang.org/x/crypto/pbkdf2:go_default_library"],
 )

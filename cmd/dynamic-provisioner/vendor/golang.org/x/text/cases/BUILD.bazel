@@ -11,12 +11,12 @@ go_library(
         "tables.go",
         "trieval.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dynamic-provisioner/vendor/golang.org/x/text/cases",
-    importpath = "golang.org/x/text/cases",
+    importmap = "cmd/dynamic-provisioner/vendor/golang.org/x/text/cases",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//cmd/dynamic-provisioner/vendor/golang.org/x/text/language:go_default_library",
-        "//cmd/dynamic-provisioner/vendor/golang.org/x/text/transform:go_default_library",
-        "//cmd/dynamic-provisioner/vendor/golang.org/x/text/unicode/norm:go_default_library",
+        "//golang.org/x/text/language:go_default_library",
+        "//golang.org/x/text/transform:go_default_library",
+        "//golang.org/x/text/unicode/norm:go_default_library",
     ],
 )

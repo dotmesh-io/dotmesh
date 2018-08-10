@@ -32,8 +32,8 @@ go_library(
         "web_service.go",
         "web_service_container.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/emicklei/go-restful",
-    importpath = "github.com/emicklei/go-restful",
+    importmap = "vendor/github.com/emicklei/go-restful",
+    importpath = "",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/emicklei/go-restful/log:go_default_library"],
+    deps = ["//github.com/emicklei/go-restful/log:go_default_library"],
 )

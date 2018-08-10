@@ -6,7 +6,7 @@ go_library(
         "doc.go",
         "fuzz.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/github.com/google/gofuzz",
-    importpath = "github.com/google/gofuzz",
+    importmap = "cmd/operator/vendor/github.com/google/gofuzz",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

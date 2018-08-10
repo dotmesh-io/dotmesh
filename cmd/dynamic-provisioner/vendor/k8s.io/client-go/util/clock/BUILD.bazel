@@ -3,7 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "go_default_library",
     srcs = ["clock.go"],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dynamic-provisioner/vendor/k8s.io/client-go/util/clock",
-    importpath = "k8s.io/client-go/util/clock",
+    importmap = "cmd/dynamic-provisioner/vendor/k8s.io/client-go/util/clock",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

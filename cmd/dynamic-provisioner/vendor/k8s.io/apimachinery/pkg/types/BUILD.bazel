@@ -10,7 +10,7 @@ go_library(
         "uid.go",
         "unix_user_id.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dynamic-provisioner/vendor/k8s.io/apimachinery/pkg/types",
-    importpath = "k8s.io/apimachinery/pkg/types",
+    importmap = "cmd/dynamic-provisioner/vendor/k8s.io/apimachinery/pkg/types",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

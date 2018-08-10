@@ -27,7 +27,7 @@ go_library(
         "timer.go",
         "writer.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/rcrowley/go-metrics",
-    importpath = "github.com/rcrowley/go-metrics",
+    importmap = "vendor/github.com/rcrowley/go-metrics",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

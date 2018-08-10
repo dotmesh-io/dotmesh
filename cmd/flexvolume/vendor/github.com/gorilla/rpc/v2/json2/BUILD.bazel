@@ -7,8 +7,8 @@ go_library(
         "error.go",
         "server.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/flexvolume/vendor/github.com/gorilla/rpc/v2/json2",
-    importpath = "github.com/gorilla/rpc/v2/json2",
+    importmap = "cmd/flexvolume/vendor/github.com/gorilla/rpc/v2/json2",
+    importpath = "",
     visibility = ["//visibility:public"],
-    deps = ["//cmd/flexvolume/vendor/github.com/gorilla/rpc/v2:go_default_library"],
+    deps = ["//github.com/gorilla/rpc/v2:go_default_library"],
 )

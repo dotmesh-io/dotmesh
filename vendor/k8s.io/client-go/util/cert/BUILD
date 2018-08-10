@@ -15,7 +15,7 @@ go_library(
     data = [
         "testdata/dontUseThisKey.pem",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/k8s.io/client-go/util/cert",
-    importpath = "k8s.io/client-go/util/cert",
+    importmap = "vendor/k8s.io/client-go/util/cert",
+    importpath = "",
     tags = ["automanaged"],
 )

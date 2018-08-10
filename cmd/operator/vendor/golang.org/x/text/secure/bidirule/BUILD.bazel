@@ -7,11 +7,11 @@ go_library(
         "bidirule10.0.0.go",
         "bidirule9.0.0.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/golang.org/x/text/secure/bidirule",
-    importpath = "golang.org/x/text/secure/bidirule",
+    importmap = "cmd/operator/vendor/golang.org/x/text/secure/bidirule",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//cmd/operator/vendor/golang.org/x/text/transform:go_default_library",
-        "//cmd/operator/vendor/golang.org/x/text/unicode/bidi:go_default_library",
+        "//golang.org/x/text/transform:go_default_library",
+        "//golang.org/x/text/unicode/bidi:go_default_library",
     ],
 )
