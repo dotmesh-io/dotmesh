@@ -7,10 +7,10 @@ go_library(
         "types.go",
         "volumes.go",
     ],
-    importpath = "github.com/dotmesh-io/dotmesh/pkg/types",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/auth:go_default_library",
-        "//pkg/user:go_default_library",
+        "//github.com/dotmesh-io/dotmesh/pkg/auth:go_default_library",
+        "//github.com/dotmesh-io/dotmesh/pkg/user:go_default_library",
     ],
 )

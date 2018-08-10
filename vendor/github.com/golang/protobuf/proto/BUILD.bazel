@@ -19,7 +19,7 @@ go_library(
         "text.go",
         "text_parser.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/golang/protobuf/proto",
-    importpath = "github.com/golang/protobuf/proto",
+    importmap = "vendor/github.com/golang/protobuf/proto",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

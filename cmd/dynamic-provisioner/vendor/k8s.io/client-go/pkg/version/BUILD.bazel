@@ -7,8 +7,8 @@ go_library(
         "doc.go",
         "version.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dynamic-provisioner/vendor/k8s.io/client-go/pkg/version",
-    importpath = "k8s.io/client-go/pkg/version",
+    importmap = "cmd/dynamic-provisioner/vendor/k8s.io/client-go/pkg/version",
+    importpath = "",
     visibility = ["//visibility:public"],
-    deps = ["//cmd/dynamic-provisioner/vendor/k8s.io/apimachinery/pkg/version:go_default_library"],
+    deps = ["//k8s.io/apimachinery/pkg/version:go_default_library"],
 )

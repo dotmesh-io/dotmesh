@@ -11,12 +11,12 @@ go_library(
         "util_solaris.go",
         "util_windows.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dm/vendor/golang.org/x/crypto/ssh/terminal",
-    importpath = "golang.org/x/crypto/ssh/terminal",
+    importmap = "cmd/dm/vendor/golang.org/x/crypto/ssh/terminal",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = select({
         "@io_bazel_rules_go//go/platform:solaris": [
-            "//cmd/dm/vendor/golang.org/x/sys/unix:go_default_library",
+            "//golang.org/x/sys/unix:go_default_library",
         ],
         "//conditions:default": [],
     }),

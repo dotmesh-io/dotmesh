@@ -35,8 +35,8 @@ go_library(
         "unsafe_struct.go",
         "unsafe_type.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/modern-go/reflect2",
-    importpath = "github.com/modern-go/reflect2",
+    importmap = "vendor/github.com/modern-go/reflect2",
+    importpath = "",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/modern-go/concurrent:go_default_library"],
+    deps = ["//github.com/modern-go/concurrent:go_default_library"],
 )

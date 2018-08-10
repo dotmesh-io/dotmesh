@@ -6,11 +6,11 @@ go_library(
         "errors.go",
         "util.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/k8s.io/apimachinery/pkg/util/mergepatch",
-    importpath = "k8s.io/apimachinery/pkg/util/mergepatch",
+    importmap = "vendor/k8s.io/apimachinery/pkg/util/mergepatch",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//vendor/github.com/davecgh/go-spew/spew:go_default_library",
-        "//vendor/github.com/ghodss/yaml:go_default_library",
+        "//github.com/davecgh/go-spew/spew:go_default_library",
+        "//github.com/ghodss/yaml:go_default_library",
     ],
 )

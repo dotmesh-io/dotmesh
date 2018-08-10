@@ -8,8 +8,8 @@ load(
 go_library(
     name = "go_default_library",
     srcs = ["homedir.go"],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/k8s.io/client-go/util/homedir",
-    importpath = "k8s.io/client-go/util/homedir",
+    importmap = "cmd/operator/vendor/k8s.io/client-go/util/homedir",
+    importpath = "",
 )
 
 filegroup(

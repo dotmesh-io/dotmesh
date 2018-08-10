@@ -3,7 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "go_default_library",
     srcs = ["metrics.go"],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/client-go/tools/metrics",
-    importpath = "k8s.io/client-go/tools/metrics",
+    importmap = "cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/client-go/tools/metrics",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

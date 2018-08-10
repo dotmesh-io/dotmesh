@@ -9,7 +9,7 @@ go_library(
         "map.go",
         "server.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/flexvolume/vendor/github.com/gorilla/rpc/v2",
-    importpath = "github.com/gorilla/rpc/v2",
+    importmap = "cmd/flexvolume/vendor/github.com/gorilla/rpc/v2",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

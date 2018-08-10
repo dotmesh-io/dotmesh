@@ -8,8 +8,8 @@ go_library(
         "reader.go",
         "writer.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dm/vendor/github.com/pierrec/lz4",
-    importpath = "github.com/pierrec/lz4",
+    importmap = "cmd/dm/vendor/github.com/pierrec/lz4",
+    importpath = "",
     visibility = ["//visibility:public"],
-    deps = ["//cmd/dm/vendor/github.com/pierrec/xxHash/xxHash32:go_default_library"],
+    deps = ["//github.com/pierrec/xxHash/xxHash32:go_default_library"],
 )

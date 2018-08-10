@@ -10,12 +10,12 @@ go_library(
         "backoff.go",
         "throttle.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/k8s.io/client-go/util/flowcontrol",
-    importpath = "k8s.io/client-go/util/flowcontrol",
+    importmap = "vendor/k8s.io/client-go/util/flowcontrol",
+    importpath = "",
     tags = ["automanaged"],
     deps = [
-        "//vendor/github.com/juju/ratelimit:go_default_library",
-        "//vendor/k8s.io/apimachinery/pkg/util/clock:go_default_library",
-        "//vendor/k8s.io/client-go/util/integer:go_default_library",
+        "//github.com/juju/ratelimit:go_default_library",
+        "//k8s.io/apimachinery/pkg/util/clock:go_default_library",
+        "//k8s.io/client-go/util/integer:go_default_library",
     ],
 )

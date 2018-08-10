@@ -9,12 +9,12 @@ go_library(
         "trie.go",
         "trieval.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/golang.org/x/net/idna",
-    importpath = "golang.org/x/net/idna",
+    importmap = "cmd/operator/vendor/golang.org/x/net/idna",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//cmd/operator/vendor/golang.org/x/text/secure/bidirule:go_default_library",
-        "//cmd/operator/vendor/golang.org/x/text/unicode/bidi:go_default_library",
-        "//cmd/operator/vendor/golang.org/x/text/unicode/norm:go_default_library",
+        "//golang.org/x/text/secure/bidirule:go_default_library",
+        "//golang.org/x/text/unicode/bidi:go_default_library",
+        "//golang.org/x/text/unicode/norm:go_default_library",
     ],
 )

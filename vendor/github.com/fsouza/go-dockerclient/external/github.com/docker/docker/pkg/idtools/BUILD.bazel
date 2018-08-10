@@ -9,42 +9,42 @@ go_library(
         "usergroupadd_linux.go",
         "usergroupadd_unsupported.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/idtools",
-    importpath = "github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/idtools",
+    importmap = "vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/idtools",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = select({
         "@io_bazel_rules_go//go/platform:android": [
-            "//vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system:go_default_library",
+            "//github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system:go_default_library",
         ],
         "@io_bazel_rules_go//go/platform:darwin": [
-            "//vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system:go_default_library",
+            "//github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system:go_default_library",
         ],
         "@io_bazel_rules_go//go/platform:dragonfly": [
-            "//vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system:go_default_library",
+            "//github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system:go_default_library",
         ],
         "@io_bazel_rules_go//go/platform:freebsd": [
-            "//vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system:go_default_library",
+            "//github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system:go_default_library",
         ],
         "@io_bazel_rules_go//go/platform:linux": [
-            "//vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system:go_default_library",
+            "//github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system:go_default_library",
         ],
         "@io_bazel_rules_go//go/platform:nacl": [
-            "//vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system:go_default_library",
+            "//github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system:go_default_library",
         ],
         "@io_bazel_rules_go//go/platform:netbsd": [
-            "//vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system:go_default_library",
+            "//github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system:go_default_library",
         ],
         "@io_bazel_rules_go//go/platform:openbsd": [
-            "//vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system:go_default_library",
+            "//github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system:go_default_library",
         ],
         "@io_bazel_rules_go//go/platform:plan9": [
-            "//vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system:go_default_library",
+            "//github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system:go_default_library",
         ],
         "@io_bazel_rules_go//go/platform:solaris": [
-            "//vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system:go_default_library",
+            "//github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system:go_default_library",
         ],
         "@io_bazel_rules_go//go/platform:windows": [
-            "//vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system:go_default_library",
+            "//github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system:go_default_library",
         ],
         "//conditions:default": [],
     }),

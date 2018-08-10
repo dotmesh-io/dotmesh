@@ -3,7 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "go_default_library",
     srcs = ["traceid.go"],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/openzipkin/zipkin-go-opentracing/types",
-    importpath = "github.com/openzipkin/zipkin-go-opentracing/types",
+    importmap = "vendor/github.com/openzipkin/zipkin-go-opentracing/types",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

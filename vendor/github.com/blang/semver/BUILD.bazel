@@ -9,7 +9,7 @@ go_library(
         "sort.go",
         "sql.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/blang/semver",
-    importpath = "github.com/blang/semver",
+    importmap = "vendor/github.com/blang/semver",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

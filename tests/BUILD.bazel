@@ -6,5 +6,5 @@ go_test(
         "acceptance_test.go",
         "s3_test.go",
     ],
-    deps = ["//vendor/github.com/dotmesh-io/citools:go_default_library"],
+    deps = ["//github.com/dotmesh-io/citools:go_default_library"],
 )

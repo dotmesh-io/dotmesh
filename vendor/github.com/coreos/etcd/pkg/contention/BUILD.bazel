@@ -6,7 +6,7 @@ go_library(
         "contention.go",
         "doc.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/coreos/etcd/pkg/contention",
-    importpath = "github.com/coreos/etcd/pkg/contention",
+    importmap = "vendor/github.com/coreos/etcd/pkg/contention",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

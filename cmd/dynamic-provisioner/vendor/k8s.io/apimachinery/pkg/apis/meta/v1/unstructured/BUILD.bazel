@@ -3,15 +3,15 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "go_default_library",
     srcs = ["unstructured.go"],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dynamic-provisioner/vendor/k8s.io/apimachinery/pkg/apis/meta/v1/unstructured",
-    importpath = "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured",
+    importmap = "cmd/dynamic-provisioner/vendor/k8s.io/apimachinery/pkg/apis/meta/v1/unstructured",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//cmd/dynamic-provisioner/vendor/github.com/golang/glog:go_default_library",
-        "//cmd/dynamic-provisioner/vendor/k8s.io/apimachinery/pkg/apis/meta/v1:go_default_library",
-        "//cmd/dynamic-provisioner/vendor/k8s.io/apimachinery/pkg/runtime:go_default_library",
-        "//cmd/dynamic-provisioner/vendor/k8s.io/apimachinery/pkg/runtime/schema:go_default_library",
-        "//cmd/dynamic-provisioner/vendor/k8s.io/apimachinery/pkg/types:go_default_library",
-        "//cmd/dynamic-provisioner/vendor/k8s.io/apimachinery/pkg/util/json:go_default_library",
+        "//github.com/golang/glog:go_default_library",
+        "//k8s.io/apimachinery/pkg/apis/meta/v1:go_default_library",
+        "//k8s.io/apimachinery/pkg/runtime:go_default_library",
+        "//k8s.io/apimachinery/pkg/runtime/schema:go_default_library",
+        "//k8s.io/apimachinery/pkg/types:go_default_library",
+        "//k8s.io/apimachinery/pkg/util/json:go_default_library",
     ],
 )

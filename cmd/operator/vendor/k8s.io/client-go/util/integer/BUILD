@@ -5,8 +5,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "go_default_library",
     srcs = ["integer.go"],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/k8s.io/client-go/util/integer",
-    importpath = "k8s.io/client-go/util/integer",
+    importmap = "cmd/operator/vendor/k8s.io/client-go/util/integer",
+    importpath = "",
 )
 
 filegroup(

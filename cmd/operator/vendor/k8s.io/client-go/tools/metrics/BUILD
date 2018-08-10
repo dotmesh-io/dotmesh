@@ -8,8 +8,8 @@ load(
 go_library(
     name = "go_default_library",
     srcs = ["metrics.go"],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/k8s.io/client-go/tools/metrics",
-    importpath = "k8s.io/client-go/tools/metrics",
+    importmap = "cmd/operator/vendor/k8s.io/client-go/tools/metrics",
+    importpath = "",
 )
 
 filegroup(

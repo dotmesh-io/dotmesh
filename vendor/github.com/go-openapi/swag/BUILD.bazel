@@ -14,12 +14,12 @@ go_library(
         "util.go",
         "yaml.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/go-openapi/swag",
-    importpath = "github.com/go-openapi/swag",
+    importmap = "vendor/github.com/go-openapi/swag",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//vendor/github.com/mailru/easyjson/jlexer:go_default_library",
-        "//vendor/github.com/mailru/easyjson/jwriter:go_default_library",
-        "//vendor/gopkg.in/yaml.v2:go_default_library",
+        "//github.com/mailru/easyjson/jlexer:go_default_library",
+        "//github.com/mailru/easyjson/jwriter:go_default_library",
+        "//gopkg.in/yaml.v2:go_default_library",
     ],
 )

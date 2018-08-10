@@ -5,16 +5,16 @@ load("@io_bazel_rules_docker//container:container.bzl", "container_image")
 go_library(
     name = "go_default_library",
     srcs = ["dm-provisioner.go"],
-    importpath = "github.com/dotmesh-io/dotmesh/cmd/dynamic-provisioner",
+    importpath = "",
     visibility = ["//visibility:private"],
     deps = [
-        "//cmd/dynamic-provisioner/vendor/github.com/golang/glog:go_default_library",
-        "//cmd/dynamic-provisioner/vendor/github.com/kubernetes-incubator/external-storage/lib/controller:go_default_library",
-        "//cmd/dynamic-provisioner/vendor/k8s.io/apimachinery/pkg/apis/meta/v1:go_default_library",
-        "//cmd/dynamic-provisioner/vendor/k8s.io/apimachinery/pkg/util/wait:go_default_library",
-        "//cmd/dynamic-provisioner/vendor/k8s.io/client-go/kubernetes:go_default_library",
-        "//cmd/dynamic-provisioner/vendor/k8s.io/client-go/pkg/api/v1:go_default_library",
-        "//cmd/dynamic-provisioner/vendor/k8s.io/client-go/rest:go_default_library",
+        "//github.com/golang/glog:go_default_library",
+        "//github.com/kubernetes-incubator/external-storage/lib/controller:go_default_library",
+        "//k8s.io/apimachinery/pkg/apis/meta/v1:go_default_library",
+        "//k8s.io/apimachinery/pkg/util/wait:go_default_library",
+        "//k8s.io/client-go/kubernetes:go_default_library",
+        "//k8s.io/client-go/pkg/api/v1:go_default_library",
+        "//k8s.io/client-go/rest:go_default_library",
     ],
 )
 
@@ -30,14 +30,14 @@ go_binary(
 
 container_image(
     name = "provisioner-img",
+    base = "@go_base//image",
+    cmd = ["/dynamic-provisioner"],
+    directory = "/",
     files = [
         ":dynamic-provisioner",
     ],
-    base = "@go_base//image",
-    cmd = ["/dynamic-provisioner"],
+    stamp = True,
     visibility = ["//visibility:public"],
-    directory = "/",
-    stamp = True
 )
 
 docker_push(

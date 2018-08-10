@@ -28,7 +28,7 @@ go_library(
         "timestamp.go",
         "timestamp_gogo.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/gogo/protobuf/proto",
-    importpath = "github.com/gogo/protobuf/proto",
+    importmap = "vendor/github.com/gogo/protobuf/proto",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

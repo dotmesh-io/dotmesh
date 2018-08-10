@@ -14,11 +14,11 @@ go_library(
         "swagger_builder.go",
         "swagger_webservice.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dynamic-provisioner/vendor/github.com/emicklei/go-restful/swagger",
-    importpath = "github.com/emicklei/go-restful/swagger",
+    importmap = "cmd/dynamic-provisioner/vendor/github.com/emicklei/go-restful/swagger",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//cmd/dynamic-provisioner/vendor/github.com/emicklei/go-restful:go_default_library",
-        "//cmd/dynamic-provisioner/vendor/github.com/emicklei/go-restful/log:go_default_library",
+        "//github.com/emicklei/go-restful:go_default_library",
+        "//github.com/emicklei/go-restful/log:go_default_library",
     ],
 )

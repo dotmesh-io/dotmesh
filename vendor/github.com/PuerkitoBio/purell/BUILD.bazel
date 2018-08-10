@@ -3,13 +3,13 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "go_default_library",
     srcs = ["purell.go"],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/PuerkitoBio/purell",
-    importpath = "github.com/PuerkitoBio/purell",
+    importmap = "vendor/github.com/PuerkitoBio/purell",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//vendor/github.com/PuerkitoBio/urlesc:go_default_library",
-        "//vendor/golang.org/x/net/idna:go_default_library",
-        "//vendor/golang.org/x/text/unicode/norm:go_default_library",
-        "//vendor/golang.org/x/text/width:go_default_library",
+        "//github.com/PuerkitoBio/urlesc:go_default_library",
+        "//golang.org/x/net/idna:go_default_library",
+        "//golang.org/x/text/unicode/norm:go_default_library",
+        "//golang.org/x/text/width:go_default_library",
     ],
 )

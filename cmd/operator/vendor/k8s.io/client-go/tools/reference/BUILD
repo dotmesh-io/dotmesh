@@ -8,13 +8,13 @@ load(
 go_library(
     name = "go_default_library",
     srcs = ["ref.go"],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/k8s.io/client-go/tools/reference",
-    importpath = "k8s.io/client-go/tools/reference",
+    importmap = "cmd/operator/vendor/k8s.io/client-go/tools/reference",
+    importpath = "",
     deps = [
-        "//cmd/operator/vendor/k8s.io/api/core/v1:go_default_library",
-        "//cmd/operator/vendor/k8s.io/apimachinery/pkg/api/meta:go_default_library",
-        "//cmd/operator/vendor/k8s.io/apimachinery/pkg/apis/meta/v1:go_default_library",
-        "//cmd/operator/vendor/k8s.io/apimachinery/pkg/runtime:go_default_library",
+        "//k8s.io/api/core/v1:go_default_library",
+        "//k8s.io/apimachinery/pkg/api/meta:go_default_library",
+        "//k8s.io/apimachinery/pkg/apis/meta/v1:go_default_library",
+        "//k8s.io/apimachinery/pkg/runtime:go_default_library",
     ],
 )
 

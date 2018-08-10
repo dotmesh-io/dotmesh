@@ -8,8 +8,8 @@ go_library(
         "doc.go",
         "version.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/k8s.io/kubernetes/pkg/util/version",
-    importpath = "k8s.io/kubernetes/pkg/util/version",
+    importmap = "vendor/k8s.io/kubernetes/pkg/util/version",
+    importpath = "",
 )
 
 filegroup(

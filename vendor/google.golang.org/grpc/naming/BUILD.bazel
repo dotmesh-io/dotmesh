@@ -8,11 +8,11 @@ go_library(
         "go18.go",
         "naming.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/google.golang.org/grpc/naming",
-    importpath = "google.golang.org/grpc/naming",
+    importmap = "vendor/google.golang.org/grpc/naming",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//vendor/golang.org/x/net/context:go_default_library",
-        "//vendor/google.golang.org/grpc/grpclog:go_default_library",
+        "//golang.org/x/net/context:go_default_library",
+        "//google.golang.org/grpc/grpclog:go_default_library",
     ],
 )

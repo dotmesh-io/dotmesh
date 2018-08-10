@@ -8,8 +8,8 @@ go_library(
         "requirements.go",
         "selector.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/k8s.io/apimachinery/pkg/fields",
-    importpath = "k8s.io/apimachinery/pkg/fields",
+    importmap = "cmd/operator/vendor/k8s.io/apimachinery/pkg/fields",
+    importpath = "",
     visibility = ["//visibility:public"],
-    deps = ["//cmd/operator/vendor/k8s.io/apimachinery/pkg/selection:go_default_library"],
+    deps = ["//k8s.io/apimachinery/pkg/selection:go_default_library"],
 )

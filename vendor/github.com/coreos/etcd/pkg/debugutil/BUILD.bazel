@@ -6,7 +6,7 @@ go_library(
         "doc.go",
         "pprof.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/coreos/etcd/pkg/debugutil",
-    importpath = "github.com/coreos/etcd/pkg/debugutil",
+    importmap = "vendor/github.com/coreos/etcd/pkg/debugutil",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

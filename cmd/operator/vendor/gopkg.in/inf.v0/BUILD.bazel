@@ -6,7 +6,7 @@ go_library(
         "dec.go",
         "rounder.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/gopkg.in/inf.v0",
-    importpath = "gopkg.in/inf.v0",
+    importmap = "cmd/operator/vendor/gopkg.in/inf.v0",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

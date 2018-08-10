@@ -3,11 +3,11 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "go_default_library",
     srcs = ["reference.go"],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/github.com/go-openapi/jsonreference",
-    importpath = "github.com/go-openapi/jsonreference",
+    importmap = "cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/github.com/go-openapi/jsonreference",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/github.com/PuerkitoBio/purell:go_default_library",
-        "//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/github.com/go-openapi/jsonpointer:go_default_library",
+        "//github.com/PuerkitoBio/purell:go_default_library",
+        "//github.com/go-openapi/jsonpointer:go_default_library",
     ],
 )

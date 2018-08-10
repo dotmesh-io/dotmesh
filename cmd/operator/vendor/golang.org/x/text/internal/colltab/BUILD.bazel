@@ -12,11 +12,11 @@ go_library(
         "trie.go",
         "weighter.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/golang.org/x/text/internal/colltab",
-    importpath = "golang.org/x/text/internal/colltab",
+    importmap = "cmd/operator/vendor/golang.org/x/text/internal/colltab",
+    importpath = "",
     visibility = ["//cmd/operator/vendor/golang.org/x/text:__subpackages__"],
     deps = [
-        "//cmd/operator/vendor/golang.org/x/text/language:go_default_library",
-        "//cmd/operator/vendor/golang.org/x/text/unicode/norm:go_default_library",
+        "//golang.org/x/text/language:go_default_library",
+        "//golang.org/x/text/unicode/norm:go_default_library",
     ],
 )

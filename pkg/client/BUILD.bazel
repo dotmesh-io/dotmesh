@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["client.go"],
+    importpath = "",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//github.com/gorilla/rpc/v2/json2:go_default_library",
+        "//github.com/opentracing/opentracing-go:go_default_library",
+        "//github.com/openzipkin/zipkin-go-opentracing/examples/middleware:go_default_library",
+        "//golang.org/x/net/context:go_default_library",
+    ],
+)

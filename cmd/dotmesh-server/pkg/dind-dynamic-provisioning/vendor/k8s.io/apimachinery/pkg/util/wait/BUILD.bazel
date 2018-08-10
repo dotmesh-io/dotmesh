@@ -6,8 +6,8 @@ go_library(
         "doc.go",
         "wait.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/apimachinery/pkg/util/wait",
-    importpath = "k8s.io/apimachinery/pkg/util/wait",
+    importmap = "cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/apimachinery/pkg/util/wait",
+    importpath = "",
     visibility = ["//visibility:public"],
-    deps = ["//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/apimachinery/pkg/util/runtime:go_default_library"],
+    deps = ["//k8s.io/apimachinery/pkg/util/runtime:go_default_library"],
 )

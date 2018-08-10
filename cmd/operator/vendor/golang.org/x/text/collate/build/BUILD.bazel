@@ -10,12 +10,12 @@ go_library(
         "table.go",
         "trie.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/golang.org/x/text/collate/build",
-    importpath = "golang.org/x/text/collate/build",
+    importmap = "cmd/operator/vendor/golang.org/x/text/collate/build",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//cmd/operator/vendor/golang.org/x/text/internal/colltab:go_default_library",
-        "//cmd/operator/vendor/golang.org/x/text/language:go_default_library",
-        "//cmd/operator/vendor/golang.org/x/text/unicode/norm:go_default_library",
+        "//golang.org/x/text/internal/colltab:go_default_library",
+        "//golang.org/x/text/language:go_default_library",
+        "//golang.org/x/text/unicode/norm:go_default_library",
     ],
 )

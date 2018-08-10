@@ -3,7 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "go_default_library",
     srcs = ["parse.go"],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/github.com/prometheus/procfs/internal/util",
-    importpath = "github.com/prometheus/procfs/internal/util",
+    importmap = "cmd/operator/vendor/github.com/prometheus/procfs/internal/util",
+    importpath = "",
     visibility = ["//cmd/operator/vendor/github.com/prometheus/procfs:__subpackages__"],
 )

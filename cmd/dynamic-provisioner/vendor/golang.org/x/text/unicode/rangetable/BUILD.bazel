@@ -7,7 +7,7 @@ go_library(
         "rangetable.go",
         "tables.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dynamic-provisioner/vendor/golang.org/x/text/unicode/rangetable",
-    importpath = "golang.org/x/text/unicode/rangetable",
+    importmap = "cmd/dynamic-provisioner/vendor/golang.org/x/text/unicode/rangetable",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

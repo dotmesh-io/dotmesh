@@ -7,12 +7,12 @@ go_library(
         "gen.go",
         "wire.pb.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/openzipkin/zipkin-go-opentracing/wire",
-    importpath = "github.com/openzipkin/zipkin-go-opentracing/wire",
+    importmap = "vendor/github.com/openzipkin/zipkin-go-opentracing/wire",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//vendor/github.com/gogo/protobuf/proto:go_default_library",
-        "//vendor/github.com/openzipkin/zipkin-go-opentracing/flag:go_default_library",
-        "//vendor/github.com/openzipkin/zipkin-go-opentracing/types:go_default_library",
+        "//github.com/gogo/protobuf/proto:go_default_library",
+        "//github.com/openzipkin/zipkin-go-opentracing/flag:go_default_library",
+        "//github.com/openzipkin/zipkin-go-opentracing/types:go_default_library",
     ],
 )

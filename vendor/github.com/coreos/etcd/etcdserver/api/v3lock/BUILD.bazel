@@ -6,12 +6,12 @@ go_library(
         "doc.go",
         "lock.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/coreos/etcd/etcdserver/api/v3lock",
-    importpath = "github.com/coreos/etcd/etcdserver/api/v3lock",
+    importmap = "vendor/github.com/coreos/etcd/etcdserver/api/v3lock",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//vendor/github.com/coreos/etcd/clientv3:go_default_library",
-        "//vendor/github.com/coreos/etcd/clientv3/concurrency:go_default_library",
-        "//vendor/github.com/coreos/etcd/etcdserver/api/v3lock/v3lockpb:go_default_library",
+        "//github.com/coreos/etcd/clientv3:go_default_library",
+        "//github.com/coreos/etcd/clientv3/concurrency:go_default_library",
+        "//github.com/coreos/etcd/etcdserver/api/v3lock/v3lockpb:go_default_library",
     ],
 )

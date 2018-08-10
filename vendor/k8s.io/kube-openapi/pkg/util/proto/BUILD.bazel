@@ -7,11 +7,11 @@ go_library(
         "document.go",
         "openapi.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/k8s.io/kube-openapi/pkg/util/proto",
-    importpath = "k8s.io/kube-openapi/pkg/util/proto",
+    importmap = "vendor/k8s.io/kube-openapi/pkg/util/proto",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//vendor/github.com/googleapis/gnostic/OpenAPIv2:go_default_library",
-        "//vendor/gopkg.in/yaml.v2:go_default_library",
+        "//github.com/googleapis/gnostic/OpenAPIv2:go_default_library",
+        "//gopkg.in/yaml.v2:go_default_library",
     ],
 )

@@ -6,7 +6,7 @@ go_library(
         "doc.go",
         "schedule.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/coreos/etcd/pkg/schedule",
-    importpath = "github.com/coreos/etcd/pkg/schedule",
+    importmap = "vendor/github.com/coreos/etcd/pkg/schedule",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

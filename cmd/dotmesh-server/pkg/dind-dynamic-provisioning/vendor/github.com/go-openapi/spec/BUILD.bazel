@@ -25,12 +25,12 @@ go_library(
         "tag.go",
         "xml_object.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/github.com/go-openapi/spec",
-    importpath = "github.com/go-openapi/spec",
+    importmap = "cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/github.com/go-openapi/spec",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/github.com/go-openapi/jsonpointer:go_default_library",
-        "//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/github.com/go-openapi/jsonreference:go_default_library",
-        "//cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/github.com/go-openapi/swag:go_default_library",
+        "//github.com/go-openapi/jsonpointer:go_default_library",
+        "//github.com/go-openapi/jsonreference:go_default_library",
+        "//github.com/go-openapi/swag:go_default_library",
     ],
 )

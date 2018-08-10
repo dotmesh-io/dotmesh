@@ -6,14 +6,14 @@ go_library(
         "registry.go",
         "types.go",
     ],
-    importpath = "github.com/dotmesh-io/dotmesh/pkg/registry",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/auth:go_default_library",
-        "//pkg/types:go_default_library",
-        "//pkg/user:go_default_library",
-        "//vendor/github.com/coreos/etcd/client:go_default_library",
-        "//vendor/github.com/sirupsen/logrus:go_default_library",
+        "//github.com/coreos/etcd/client:go_default_library",
+        "//github.com/dotmesh-io/dotmesh/pkg/auth:go_default_library",
+        "//github.com/dotmesh-io/dotmesh/pkg/types:go_default_library",
+        "//github.com/dotmesh-io/dotmesh/pkg/user:go_default_library",
+        "//github.com/sirupsen/logrus:go_default_library",
     ],
 )
 
@@ -22,10 +22,10 @@ go_test(
     srcs = ["registry_test.go"],
     embed = [":go_default_library"],
     deps = [
-        "//pkg/auth:go_default_library",
-        "//pkg/kv:go_default_library",
-        "//pkg/testutil:go_default_library",
-        "//pkg/types:go_default_library",
-        "//pkg/user:go_default_library",
+        "//github.com/dotmesh-io/dotmesh/pkg/auth:go_default_library",
+        "//github.com/dotmesh-io/dotmesh/pkg/kv:go_default_library",
+        "//github.com/dotmesh-io/dotmesh/pkg/testutil:go_default_library",
+        "//github.com/dotmesh-io/dotmesh/pkg/types:go_default_library",
+        "//github.com/dotmesh-io/dotmesh/pkg/user:go_default_library",
     ],
 )

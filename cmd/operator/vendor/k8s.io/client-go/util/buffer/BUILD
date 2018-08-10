@@ -3,8 +3,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "go_default_library",
     srcs = ["ring_growing.go"],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/k8s.io/client-go/util/buffer",
-    importpath = "k8s.io/client-go/util/buffer",
+    importmap = "cmd/operator/vendor/k8s.io/client-go/util/buffer",
+    importpath = "",
     visibility = ["//visibility:public"],
 )
 

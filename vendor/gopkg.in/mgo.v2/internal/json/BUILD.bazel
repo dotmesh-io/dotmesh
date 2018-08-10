@@ -12,7 +12,7 @@ go_library(
         "stream.go",
         "tags.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/gopkg.in/mgo.v2/internal/json",
-    importpath = "gopkg.in/mgo.v2/internal/json",
+    importmap = "vendor/gopkg.in/mgo.v2/internal/json",
+    importpath = "",
     visibility = ["//vendor/gopkg.in/mgo.v2:__subpackages__"],
 )

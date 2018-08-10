@@ -35,12 +35,12 @@ go_library(
         "xattrs_linux.go",
         "xattrs_unsupported.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system",
-    importpath = "github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system",
+    importmap = "vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = select({
         "@io_bazel_rules_go//go/platform:linux": [
-            "//vendor/github.com/fsouza/go-dockerclient/external/github.com/docker/go-units:go_default_library",
+            "//github.com/fsouza/go-dockerclient/external/github.com/docker/go-units:go_default_library",
         ],
         "//conditions:default": [],
     }),

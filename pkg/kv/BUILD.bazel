@@ -6,12 +6,12 @@ go_library(
         "idx.go",
         "kv.go",
     ],
-    importpath = "github.com/dotmesh-io/dotmesh/pkg/kv",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/validator:go_default_library",
-        "//vendor/github.com/coreos/etcd/client:go_default_library",
-        "//vendor/github.com/sirupsen/logrus:go_default_library",
+        "//github.com/coreos/etcd/client:go_default_library",
+        "//github.com/dotmesh-io/dotmesh/pkg/validator:go_default_library",
+        "//github.com/sirupsen/logrus:go_default_library",
     ],
 )
 
@@ -19,5 +19,5 @@ go_test(
     name = "go_default_test",
     srcs = ["kv_test.go"],
     embed = [":go_default_library"],
-    deps = ["//pkg/testutil:go_default_library"],
+    deps = ["//github.com/dotmesh-io/dotmesh/pkg/testutil:go_default_library"],
 )

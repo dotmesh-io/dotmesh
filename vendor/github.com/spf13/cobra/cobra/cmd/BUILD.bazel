@@ -13,8 +13,8 @@ go_library(
         "license_mit.go",
         "licenses.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/spf13/cobra/cobra/cmd",
-    importpath = "github.com/spf13/cobra/cobra/cmd",
+    importmap = "vendor/github.com/spf13/cobra/cobra/cmd",
+    importpath = "",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_spf13_viper//:go_default_library"],
+    deps = ["//github.com/spf13/viper:go_default_library"],
 )

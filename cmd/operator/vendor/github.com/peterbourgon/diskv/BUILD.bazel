@@ -7,8 +7,8 @@ go_library(
         "diskv.go",
         "index.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/github.com/peterbourgon/diskv",
-    importpath = "github.com/peterbourgon/diskv",
+    importmap = "cmd/operator/vendor/github.com/peterbourgon/diskv",
+    importpath = "",
     visibility = ["//visibility:public"],
-    deps = ["//cmd/operator/vendor/github.com/google/btree:go_default_library"],
+    deps = ["//github.com/google/btree:go_default_library"],
 )

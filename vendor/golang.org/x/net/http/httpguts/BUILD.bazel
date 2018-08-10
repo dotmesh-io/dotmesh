@@ -6,8 +6,8 @@ go_library(
         "guts.go",
         "httplex.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/golang.org/x/net/http/httpguts",
-    importpath = "golang.org/x/net/http/httpguts",
+    importmap = "vendor/golang.org/x/net/http/httpguts",
+    importpath = "",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/golang.org/x/net/idna:go_default_library"],
+    deps = ["//golang.org/x/net/idna:go_default_library"],
 )

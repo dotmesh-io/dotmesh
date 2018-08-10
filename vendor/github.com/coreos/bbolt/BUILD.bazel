@@ -28,12 +28,12 @@ go_library(
         "page.go",
         "tx.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/coreos/bbolt",
-    importpath = "github.com/coreos/bbolt",
+    importmap = "vendor/github.com/coreos/bbolt",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = select({
         "@io_bazel_rules_go//go/platform:solaris": [
-            "//vendor/golang.org/x/sys/unix:go_default_library",
+            "//golang.org/x/sys/unix:go_default_library",
         ],
         "//conditions:default": [],
     }),

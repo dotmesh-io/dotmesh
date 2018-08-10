@@ -7,7 +7,7 @@ go_library(
         "runewidth_posix.go",
         "runewidth_windows.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dm/vendor/github.com/mattn/go-runewidth",
-    importpath = "github.com/mattn/go-runewidth",
+    importmap = "cmd/dm/vendor/github.com/mattn/go-runewidth",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

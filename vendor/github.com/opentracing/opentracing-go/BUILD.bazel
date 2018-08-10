@@ -10,11 +10,11 @@ go_library(
         "span.go",
         "tracer.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/opentracing/opentracing-go",
-    importpath = "github.com/opentracing/opentracing-go",
+    importmap = "vendor/github.com/opentracing/opentracing-go",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//vendor/github.com/opentracing/opentracing-go/log:go_default_library",
-        "//vendor/golang.org/x/net/context:go_default_library",
+        "//github.com/opentracing/opentracing-go/log:go_default_library",
+        "//golang.org/x/net/context:go_default_library",
     ],
 )

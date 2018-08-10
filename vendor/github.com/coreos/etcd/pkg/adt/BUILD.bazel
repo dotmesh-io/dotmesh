@@ -6,7 +6,7 @@ go_library(
         "doc.go",
         "interval_tree.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/coreos/etcd/pkg/adt",
-    importpath = "github.com/coreos/etcd/pkg/adt",
+    importmap = "vendor/github.com/coreos/etcd/pkg/adt",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

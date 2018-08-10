@@ -9,11 +9,11 @@ go_library(
         "matchers.go",
         "patricia.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/soheilhy/cmux",
-    importpath = "github.com/soheilhy/cmux",
+    importmap = "vendor/github.com/soheilhy/cmux",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//vendor/golang.org/x/net/http2:go_default_library",
-        "//vendor/golang.org/x/net/http2/hpack:go_default_library",
+        "//golang.org/x/net/http2:go_default_library",
+        "//golang.org/x/net/http2/hpack:go_default_library",
     ],
 )

@@ -3,7 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "go_default_library",
     srcs = ["homedir.go"],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/mitchellh/go-homedir",
-    importpath = "github.com/mitchellh/go-homedir",
+    importmap = "vendor/github.com/mitchellh/go-homedir",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

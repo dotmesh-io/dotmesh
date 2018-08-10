@@ -11,8 +11,8 @@ go_library(
         "header_value.go",
         "message.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/aws/aws-sdk-go/private/protocol/eventstream",
-    importpath = "github.com/aws/aws-sdk-go/private/protocol/eventstream",
+    importmap = "vendor/github.com/aws/aws-sdk-go/private/protocol/eventstream",
+    importpath = "",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/aws/aws-sdk-go/aws:go_default_library"],
+    deps = ["//github.com/aws/aws-sdk-go/aws:go_default_library"],
 )

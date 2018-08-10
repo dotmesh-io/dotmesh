@@ -16,8 +16,8 @@ go_library(
         "storage.go",
         "util.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/coreos/etcd/raft",
-    importpath = "github.com/coreos/etcd/raft",
+    importmap = "vendor/github.com/coreos/etcd/raft",
+    importpath = "",
     visibility = ["//visibility:public"],
-    deps = ["//vendor/github.com/coreos/etcd/raft/raftpb:go_default_library"],
+    deps = ["//github.com/coreos/etcd/raft/raftpb:go_default_library"],
 )

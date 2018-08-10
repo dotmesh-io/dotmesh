@@ -6,7 +6,7 @@ go_library(
         "deep_equal.go",
         "type.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/apimachinery/third_party/forked/golang/reflect",
-    importpath = "k8s.io/apimachinery/third_party/forked/golang/reflect",
+    importmap = "cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/apimachinery/third_party/forked/golang/reflect",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

@@ -6,7 +6,7 @@ go_library(
         "convert.go",
         "doc.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/apimachinery/pkg/conversion/queryparams",
-    importpath = "k8s.io/apimachinery/pkg/conversion/queryparams",
+    importmap = "cmd/dotmesh-server/pkg/dind-dynamic-provisioning/vendor/k8s.io/apimachinery/pkg/conversion/queryparams",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

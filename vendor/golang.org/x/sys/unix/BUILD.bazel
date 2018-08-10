@@ -202,7 +202,7 @@ go_library(
         "ztypes_solaris_amd64.go",
     ],
     cgo = True,
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/golang.org/x/sys/unix",
-    importpath = "golang.org/x/sys/unix",
+    importmap = "vendor/golang.org/x/sys/unix",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

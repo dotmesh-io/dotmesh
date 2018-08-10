@@ -10,7 +10,7 @@ go_library(
         "int64.go",
         "string.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dynamic-provisioner/vendor/k8s.io/apimachinery/pkg/util/sets",
-    importpath = "k8s.io/apimachinery/pkg/util/sets",
+    importmap = "cmd/dynamic-provisioner/vendor/k8s.io/apimachinery/pkg/util/sets",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

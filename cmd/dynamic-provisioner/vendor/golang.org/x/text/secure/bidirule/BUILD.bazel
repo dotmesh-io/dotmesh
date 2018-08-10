@@ -3,11 +3,11 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "go_default_library",
     srcs = ["bidirule.go"],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/dynamic-provisioner/vendor/golang.org/x/text/secure/bidirule",
-    importpath = "golang.org/x/text/secure/bidirule",
+    importmap = "cmd/dynamic-provisioner/vendor/golang.org/x/text/secure/bidirule",
+    importpath = "",
     visibility = ["//visibility:public"],
     deps = [
-        "//cmd/dynamic-provisioner/vendor/golang.org/x/text/transform:go_default_library",
-        "//cmd/dynamic-provisioner/vendor/golang.org/x/text/unicode/bidi:go_default_library",
+        "//golang.org/x/text/transform:go_default_library",
+        "//golang.org/x/text/unicode/bidi:go_default_library",
     ],
 )

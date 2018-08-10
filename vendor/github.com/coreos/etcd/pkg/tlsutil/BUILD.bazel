@@ -7,7 +7,7 @@ go_library(
         "doc.go",
         "tlsutil.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/coreos/etcd/pkg/tlsutil",
-    importpath = "github.com/coreos/etcd/pkg/tlsutil",
+    importmap = "vendor/github.com/coreos/etcd/pkg/tlsutil",
+    importpath = "",
     visibility = ["//visibility:public"],
 )

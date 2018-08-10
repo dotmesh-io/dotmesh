@@ -3,7 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "go_default_library",
     srcs = ["pki.go"],
-    importpath = "github.com/dotmesh-io/dotmesh/cmd/dm/pkg/pki",
+    importpath = "",
     visibility = ["//visibility:public"],
-    deps = ["//cmd/dm/pkg/cert:go_default_library"],
+    deps = ["//github.com/dotmesh-io/dotmesh/cmd/dm/pkg/cert:go_default_library"],
 )
