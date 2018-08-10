@@ -25,5 +25,6 @@ go_test(
     deps = [
         "//pkg/kv:go_default_library",
         "//pkg/testutil:go_default_library",
+        "//vendor/github.com/nu7hatch/gouuid:go_default_library",
     ],
 )

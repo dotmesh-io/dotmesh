@@ -35,21 +35,23 @@ go_binary(
     goos = "linux",
     importpath = "github.com/dotmesh-io/dotmesh/cmd/operator",
     pure = "on",
-    x_defs = {"main.DOTMESH_VERSION": "{STABLE_VERSION}",
-    "main.DOTMESH_IMAGE": "{STABLE_CI_DOCKER_SERVER_IMAGE}"},
     visibility = ["//visibility:public"],
+    x_defs = {
+        "main.DOTMESH_VERSION": "{STABLE_VERSION}",
+        "main.DOTMESH_IMAGE": "{STABLE_CI_DOCKER_SERVER_IMAGE}",
+    },
 )
 
 # have to use container image in order to get the timestamping
 container_image(
     name = "operator-img",
+    base = "@go_base//image",
+    entrypoint = ["/operator"],
     files = [
         ":operator",
     ],
-    base = "@go_base//image",
-    entrypoint = ["/operator"],
+    stamp = True,
     visibility = ["//visibility:public"],
-    stamp = True
 )
 
 docker_push(

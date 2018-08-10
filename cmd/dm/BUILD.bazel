@@ -15,10 +15,12 @@ go_library(
 go_binary(
     name = "dm",
     embed = [":go_default_library"],
+    static = "on",
     visibility = ["//visibility:public"],
-    x_defs = {"main.clientVersion": "{STABLE_VERSION}",
-    "main.dockerTag": "{STABLE_DOCKERTAG}"},
-    static = "on"
+    x_defs = {
+        "main.clientVersion": "{STABLE_VERSION}",
+        "main.dockerTag": "{STABLE_DOCKERTAG}",
+    },
 )
 
 load("@bazel_gazelle//:def.bzl", "gazelle")
