@@ -19,6 +19,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/satori/go.uuid"
+
+	"github.com/dotmesh-io/dotmesh/pkg/client"
 )
 
 const REQUEST_ID = "X-Request-Id"
@@ -134,14 +136,14 @@ func (state *InMemoryState) runServer() {
 
 	if os.Getenv("PRINT_HTTP_LOGS") != "" {
 		loggingRouter := handlers.LoggingHandler(getLogfile("requests"), router)
-		err = http.ListenAndServe(fmt.Sprintf(":%s", SERVER_PORT), loggingRouter)
+		err = http.ListenAndServe(fmt.Sprintf(":%s", client.SERVER_PORT), loggingRouter)
 	} else {
-		err = http.ListenAndServe(fmt.Sprintf(":%s", SERVER_PORT), router)
+		err = http.ListenAndServe(fmt.Sprintf(":%s", client.SERVER_PORT), router)
 	}
 
 	if err != nil {
-		out(fmt.Sprintf("Unable to listen on port %s: '%s'\n", SERVER_PORT, err))
-		log.Fatalf("Unable to listen on port %s: '%s'", SERVER_PORT, err)
+		out(fmt.Sprintf("Unable to listen on port %s: '%s'\n", client.SERVER_PORT, err))
+		log.Fatalf("Unable to listen on port %s: '%s'", client.SERVER_PORT, err)
 	}
 }
 

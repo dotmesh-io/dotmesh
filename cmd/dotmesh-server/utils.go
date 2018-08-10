@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"compress/gzip"
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -21,43 +20,6 @@ import (
 	//niobuffer "github.com/djherbis/buffer"
 	//"github.com/djherbis/nio"
 )
-
-func deduceUrl(ctx context.Context, hostnames []string, mode, user, apiKey string) (string, error) {
-	// "mode" is "internal" if you're trying to connect within a cluster (e.g.
-	// directly to another node's IP address), or "external" if you're trying
-	// to connect an external cluster.
-
-	var errs []error
-	for _, hostname := range hostnames {
-		var urlsToTry []string
-		if mode == "external" && (hostname == "saas.dotmesh.io" || hostname == "dothub.com") {
-			urlsToTry = []string{
-				fmt.Sprintf("https://%s:443", hostname),
-			}
-		} else {
-			urlsToTry = []string{
-				fmt.Sprintf("http://%s:%s", hostname, SERVER_PORT),
-				fmt.Sprintf("http://%s:%s", hostname, SERVER_PORT_OLD),
-			}
-		}
-
-		for _, urlToTry := range urlsToTry {
-			// hostname (2nd arg) doesn't matter because we're just calling
-			// reallyCallRemote which doesn't use it.
-			j := NewJsonRpcClient(user, "", apiKey, 0)
-			var result bool
-			err := j.reallyCallRemote(ctx, "DotmeshRPC.Ping", nil, &result, urlToTry+"/rpc")
-			if err == nil {
-				return urlToTry, nil
-			} else {
-				errs = append(errs, err)
-			}
-		}
-	}
-
-	return "", fmt.Errorf("Unable to connect to any of the addresses attempted: %+v, errs: %v", hostnames, errs)
-
-}
 
 // NB: It's important that the following includes characters _not_ included in
 // the base64 alphabet. https://en.wikipedia.org/wiki/Base64

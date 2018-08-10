@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"strings"
 
+	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 	"github.com/gorilla/mux"
 )
@@ -50,7 +51,7 @@ func (z ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if master != z.state.myNodeId {
 		addresses := z.state.addressesFor(master)
-		url, err := deduceUrl(context.Background(), addresses, "internal", "admin", admin.ApiKey) // FIXME, need master->name mapping, see how handover works normally
+		url, err := dmclient.DeduceUrl(context.Background(), addresses, "internal", "admin", admin.ApiKey) // FIXME, need master->name mapping, see how handover works normally
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(fmt.Sprintf("%s", err)))
@@ -253,7 +254,7 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		addresses := z.state.addressesFor(master)
 
-		url, err := deduceUrl(context.Background(), addresses, "internal", "admin", admin.ApiKey)
+		url, err := dmclient.DeduceUrl(context.Background(), addresses, "internal", "admin", admin.ApiKey)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(fmt.Sprintf("%s", err)))

@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"golang.org/x/net/context"
+
+	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
 )
 
 func pushInitiatorState(f *fsMachine) stateFn {
@@ -54,7 +56,7 @@ func pushInitiatorState(f *fsMachine) stateFn {
 	}
 	// Also RPC to remote cluster to set up a similar record there.
 	// TODO retries
-	client := NewJsonRpcClient(
+	client := dmclient.NewJsonRpcClient(
 		transferRequest.User,
 		transferRequest.Peer,
 		transferRequest.ApiKey,
@@ -72,7 +74,7 @@ func pushInitiatorState(f *fsMachine) stateFn {
 	responseEvent, nextState := f.applyPath(path, func(f *fsMachine,
 		fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
 		transferRequestId string, pollResult *TransferPollResult,
-		client *JsonRpcClient, transferRequest *TransferRequest,
+		client *dmclient.JsonRpcClient, transferRequest *TransferRequest,
 	) (*Event, stateFn) {
 		return f.retryPush(
 			fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
@@ -93,7 +95,7 @@ func (f *fsMachine) push(
 	transferRequest *TransferRequest,
 	transferRequestId *string,
 	pollResult *TransferPollResult,
-	client *JsonRpcClient,
+	client *dmclient.JsonRpcClient,
 	ctx context.Context,
 ) (responseEvent *Event, nextState stateFn) {
 
@@ -119,7 +121,7 @@ func (f *fsMachine) push(
 
 	var url string
 	if transferRequest.Port == 0 {
-		url, err = deduceUrl(
+		url, err = dmclient.DeduceUrl(
 			ctx,
 			[]string{transferRequest.Peer},
 			// pushes are between clusters, so use external address where
@@ -407,7 +409,7 @@ func (f *fsMachine) push(
 func (f *fsMachine) retryPush(
 	fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
 	transferRequestId string, pollResult *TransferPollResult,
-	client *JsonRpcClient, transferRequest *TransferRequest, ctx context.Context,
+	client *dmclient.JsonRpcClient, transferRequest *TransferRequest, ctx context.Context,
 ) (*Event, stateFn) {
 	// Let's go!
 	var retry int

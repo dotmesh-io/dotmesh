@@ -8,6 +8,7 @@ import (
 
 	"github.com/coreos/etcd/client"
 
+	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 )
@@ -78,7 +79,7 @@ type transferFn func(
 	f *fsMachine,
 	fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
 	transferRequestId string, pollResult *TransferPollResult,
-	client *JsonRpcClient, transferRequest *TransferRequest,
+	client *dmclient.JsonRpcClient, transferRequest *TransferRequest,
 ) (*Event, stateFn)
 
 // Defaults are specified in main.go

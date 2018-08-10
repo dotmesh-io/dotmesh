@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"log"
+
+	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
 )
 
 // stuff used to do transfers, both for DM and S3
@@ -68,7 +70,7 @@ func transferRequestify(in interface{}) (TransferRequest, error) {
 func (f *fsMachine) applyPath(
 	path PathToTopLevelFilesystem, transferFn transferFn,
 	transferRequestId string, pollResult *TransferPollResult,
-	client *JsonRpcClient, transferRequest *TransferRequest,
+	client *dmclient.JsonRpcClient, transferRequest *TransferRequest,
 ) (*Event, stateFn) {
 	/*
 		Case 1: single master filesystem

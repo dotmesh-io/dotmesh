@@ -1,4 +1,4 @@
-package main
+package client
 
 import (
 	"bytes"
@@ -14,6 +14,10 @@ import (
 )
 
 // RPC client for inter-cluster operation
+
+const SERVER_PORT = "32607"
+const LIVENESS_PORT = "32608"
+const SERVER_PORT_OLD = "6969"
 
 type JsonRpcClient struct {
 	User     string
@@ -40,7 +44,7 @@ func (j *JsonRpcClient) CallRemote(
 	var url string
 	var err error
 	if j.Port == 0 {
-		url, err = deduceUrl(ctx, []string{j.Hostname}, "external", j.User, j.ApiKey)
+		url, err = DeduceUrl(ctx, []string{j.Hostname}, "external", j.User, j.ApiKey)
 		if err != nil {
 			return err
 		}
@@ -105,4 +109,41 @@ func (j *JsonRpcClient) reallyCallRemote(
 		return fmt.Errorf("Response '%s' yields error %s", string(b), err)
 	}
 	return nil
+}
+
+func DeduceUrl(ctx context.Context, hostnames []string, mode, user, apiKey string) (string, error) {
+	// "mode" is "internal" if you're trying to connect within a cluster (e.g.
+	// directly to another node's IP address), or "external" if you're trying
+	// to connect an external cluster.
+
+	var errs []error
+	for _, hostname := range hostnames {
+		var urlsToTry []string
+		if mode == "external" && hostname == "dothub.com" {
+			urlsToTry = []string{
+				fmt.Sprintf("https://%s:443", hostname),
+			}
+		} else {
+			urlsToTry = []string{
+				fmt.Sprintf("http://%s:%s", hostname, SERVER_PORT),
+				fmt.Sprintf("http://%s:%s", hostname, SERVER_PORT_OLD),
+			}
+		}
+
+		for _, urlToTry := range urlsToTry {
+			// hostname (2nd arg) doesn't matter because we're just calling
+			// reallyCallRemote which doesn't use it.
+			j := NewJsonRpcClient(user, "", apiKey, 0)
+			var result bool
+			err := j.reallyCallRemote(ctx, "DotmeshRPC.Ping", nil, &result, urlToTry+"/rpc")
+			if err == nil {
+				return urlToTry, nil
+			} else {
+				errs = append(errs, err)
+			}
+		}
+	}
+
+	return "", fmt.Errorf("Unable to connect to any of the addresses attempted: %+v, errs: %v", hostnames, errs)
+
 }

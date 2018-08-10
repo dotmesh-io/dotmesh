@@ -27,9 +27,6 @@ import (
 const ROOT_FS = "dmfs"
 const META_KEY_PREFIX = "io.dotmesh:meta-"
 const ETCD_PREFIX = "/dotmesh.io"
-const SERVER_PORT = "32607"
-const LIVENESS_PORT = "32608"
-const SERVER_PORT_OLD = "6969"
 
 var ZFS string
 var MOUNT_ZFS string

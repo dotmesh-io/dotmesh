@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os/exec"
 	"time"
+
+	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
 )
 
 func pullInitiatorState(f *fsMachine) stateFn {
@@ -40,7 +42,7 @@ func pullInitiatorState(f *fsMachine) stateFn {
 	transferRequestId := f.lastTransferRequestId
 
 	// TODO dedupe what follows wrt pushInitiatorState!
-	client := NewJsonRpcClient(
+	client := dmclient.NewJsonRpcClient(
 		transferRequest.User,
 		transferRequest.Peer,
 		transferRequest.ApiKey,
@@ -86,7 +88,7 @@ func pullInitiatorState(f *fsMachine) stateFn {
 	responseEvent, nextState := f.applyPath(path, func(f *fsMachine,
 		fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
 		transferRequestId string, pollResult *TransferPollResult,
-		client *JsonRpcClient, transferRequest *TransferRequest,
+		client *dmclient.JsonRpcClient, transferRequest *TransferRequest,
 	) (*Event, stateFn) {
 		return f.retryPull(
 			fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
@@ -104,7 +106,7 @@ func (f *fsMachine) pull(
 	transferRequest *TransferRequest,
 	transferRequestId *string,
 	pollResult *TransferPollResult,
-	client *JsonRpcClient,
+	client *dmclient.JsonRpcClient,
 ) (responseEvent *Event, nextState stateFn) {
 	// IMPORTANT NOTE:
 
@@ -167,7 +169,7 @@ func (f *fsMachine) pull(
 	// push does it.
 	var url string
 	if transferRequest.Port == 0 {
-		url, err = deduceUrl(
+		url, err = dmclient.DeduceUrl(
 			context.Background(),
 			[]string{transferRequest.Peer},
 			// pulls are between clusters, so use external address where
@@ -321,7 +323,7 @@ func (f *fsMachine) pull(
 func (f *fsMachine) retryPull(
 	fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
 	transferRequestId string, pollResult *TransferPollResult,
-	client *JsonRpcClient, transferRequest *TransferRequest,
+	client *dmclient.JsonRpcClient, transferRequest *TransferRequest,
 ) (*Event, stateFn) {
 	// TODO refactor the following with respect to retryPush!
 
