@@ -19,6 +19,9 @@ export DEBUG_MODE=1
 export CONFIG=/tmp/smoke_test_$$.dmconfig
 export REMOTE="smoke_test_`date +%s`"
 
+
+VERSION=`cd cmd/versioner; go run versioner.go`
+
 function delete_lingering_dots() {
 	platform=`uname`
 	DOTS=`"$DM" -c "$CONFIG" list | grep "volume" | cut -d ' ' -f 3` || true
@@ -63,7 +66,12 @@ echo "### Fetching client"
 
 mkdir -p $SMOKE_TEST_DIR
 
-curl -sSL -o $SMOKE_TEST_DIR/dm https://get.dotmesh.io/unstable/$CI_COMMIT_REF_NAME/$(uname -s)/dm
+if [[ $CI_COMMIT_REF_NAME = *"release"* ]]; then
+    curl -sSL -o $SMOKE_TEST_DIR/dm https://get.dotmesh.io/$VERSION/$(uname -s)/dm
+else
+    curl -sSL -o $SMOKE_TEST_DIR/dm https://get.dotmesh.io/unstable/$CI_COMMIT_REF_NAME/$(uname -s)/dm
+fi
+
 chmod +x $SMOKE_TEST_DIR/dm
 
 sudo "$DM" -c "$CONFIG" cluster reset || (sleep 10; sudo "$DM" cluster reset) || true
