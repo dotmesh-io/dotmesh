@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_binary", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 load("@io_bazel_rules_docker//docker:docker.bzl", "docker_push")
 load("@io_bazel_rules_docker//container:container.bzl", "container_image")
 
@@ -9,7 +9,6 @@ go_library(
         "auth_handler.go",
         "backoffstate.go",
         "checkupdates.go",
-        "client.go",
         "communications.go",
         "controller.go",
         "discoveringstate.go",
@@ -50,6 +49,7 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/auth:go_default_library",
+        "//pkg/client:go_default_library",
         "//pkg/kv:go_default_library",
         "//pkg/registry:go_default_library",
         "//pkg/types:go_default_library",
@@ -92,13 +92,13 @@ go_binary(
 container_image(
     name = "dotmesh-server-img",
     base = "//:dotmesh-base.tar",
+    directory = "/usr/local/bin",
     files = [
-        "//cmd/dotmesh-server:dotmesh-server",
+        "//cmd/dotmesh-server",
         "//cmd/flexvolume",
     ],
-    directory = "/usr/local/bin",
+    stamp = True,
     visibility = ["//visibility:public"],
-    stamp = True
 )
 
 docker_push(
@@ -108,10 +108,4 @@ docker_push(
     repository = "{CI_REPOSITORY}/dotmesh-server",
     stamp = 1,
     tag = "{STABLE_DOCKERTAG}",
-)
-
-go_test(
-    name = "go_default_test",
-    srcs = ["rpc_test.go"],
-    embed = [":go_default_library"],
 )

@@ -30,14 +30,14 @@ go_binary(
 
 container_image(
     name = "provisioner-img",
+    base = "@go_base//image",
+    cmd = ["/dynamic-provisioner"],
+    directory = "/",
     files = [
         ":dynamic-provisioner",
     ],
-    base = "@go_base//image",
-    cmd = ["/dynamic-provisioner"],
+    stamp = True,
     visibility = ["//visibility:public"],
-    directory = "/",
-    stamp = True
 )
 
 docker_push(
