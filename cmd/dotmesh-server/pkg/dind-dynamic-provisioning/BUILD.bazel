@@ -37,9 +37,3 @@ docker_push(
     stamp = 1,
     tag = "{DOCKERTAG}",
 )
-
-go_binary(
-    name = "dind-dynamic-provisioning",
-    embed = [":go_default_library"],
-    visibility = ["//visibility:public"],
-)
