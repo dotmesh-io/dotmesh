@@ -48,6 +48,10 @@ func activeState(f *fsMachine) stateFn {
 				}
 			}
 			return activeState
+		} else if e.Name == "put-file" {
+			filename := (*e.Args)["key"].(string)
+			data := (*e.Args)["data"].([]byte)
+			return f.saveFile(filename, data)
 		} else if e.Name == "transfer" {
 
 			// TODO dedupe

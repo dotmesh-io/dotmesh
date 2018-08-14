@@ -148,6 +148,27 @@ func missingState(f *fsMachine) stateFn {
 				}
 				return backoffState
 			}
+		} else if e.Name == "put-file" {
+			logZFSCommand(f.filesystemId, fmt.Sprintf("%s %s %s", ZFS, "create", fq(f.filesystemId)))
+			out, err := exec.Command(ZFS, "create", fq(f.filesystemId)).CombinedOutput()
+			if err != nil {
+				log.Printf("%v while trying to create %s", err, fq(f.filesystemId))
+				f.innerResponses <- &Event{
+					Name: "failed-create",
+					Args: &EventArgs{"err": err, "combined-output": string(out)},
+				}
+				return backoffState
+			}
+			responseEvent, _ := f.mount()
+			if responseEvent.Name == "mounted" {
+				filename := (*e.Args)["key"].(string)
+				data := (*e.Args)["data"].([]byte)
+				return f.saveFile(filename, data)
+			} else {
+				f.innerResponses <- responseEvent
+				return backoffState
+			}
+
 		} else if e.Name == "peer-transfer" {
 			// A transfer has been registered. Try to go into the appropriate
 			// state.
