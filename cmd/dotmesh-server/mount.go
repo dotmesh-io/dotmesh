@@ -140,7 +140,7 @@ func (f *fsMachine) mountSnap(snapId string, readonly bool) (responseEvent *Even
 	// mounted
 	f.snapshotsLock.Lock()
 	defer f.snapshotsLock.Unlock()
-	return &Event{Name: "mounted", Args: &EventArgs{}}, activeState
+	return &Event{Name: "mounted", Args: &EventArgs{"mount-path": mountPath}}, activeState
 }
 
 func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {

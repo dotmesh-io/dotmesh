@@ -159,6 +159,11 @@ func activeState(f *fsMachine) stateFn {
 			response, state := f.snapshot(e)
 			f.innerResponses <- response
 			return state
+		} else if e.Name == "mount-snapshot" {
+			snapId := (*e.Args)["snapId"].(string)
+			response, state := f.mountSnap(snapId, true)
+			f.innerResponses <- response
+			return state
 		} else if e.Name == "rollback" {
 			// roll back to given snapshot
 			rollbackTo := (*e.Args)["rollbackTo"].(string)

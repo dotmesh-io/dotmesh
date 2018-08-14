@@ -862,6 +862,54 @@ func (d *DotmeshRPC) Commit(
 	return nil
 }
 
+func (d *DotmeshRPC) MountCommit(
+	r *http.Request,
+	args *struct{ FilesystemId, CommitId string },
+	result *string,
+) error {
+
+	// check that a filesystem with that id exists
+	_, _, err := d.state.registry.LookupFilesystemById(args.FilesystemId)
+
+	if err != nil {
+		return err
+	}
+
+	snapshots, err := d.state.snapshotsForCurrentMaster(args.FilesystemId)
+	if err != nil {
+		return err
+	}
+
+	foundSnapshot := false
+	for _, snapshot := range snapshots {
+		if snapshot.Id == args.CommitId {
+			foundSnapshot = true
+		}
+	}
+
+	if !foundSnapshot {
+		return fmt.Errorf("Cannot find commit with id %s for filesystem %s", args.CommitId, args.FilesystemId)
+	}
+
+	responseChan, err := d.state.globalFsRequest(
+		args.FilesystemId,
+		&Event{Name: "mount-snapshot",
+			Args: &EventArgs{"snapId": args.CommitId}},
+	)
+	if err != nil {
+		return err
+	}
+
+	e := <-responseChan
+	if e.Name == "mounted" {
+		log.Printf("snapshot mounted %s for filesystem %s", args.CommitId, args.FilesystemId)
+		*result = (*e.Args)["mount-path"].(string)
+	} else {
+		return maybeError(e)
+	}
+	return nil
+}
+
 // Rollback a specific filesystem to the specified snapshot_id on the master.
 func (d *DotmeshRPC) Rollback(
 	r *http.Request,
