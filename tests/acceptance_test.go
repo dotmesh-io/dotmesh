@@ -6,7 +6,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
-	"regexp"
+	//"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -229,629 +229,706 @@ func TestSingleNode(t *testing.T) {
 		t.Fatal(err)
 	}
 	node1 := f[0].GetNode(0).Container
-
-	// Sub-tests, to reuse common setup code.
-	t.Run("Init", func(t *testing.T) {
-		fsname := citools.UniqName()
-		citools.RunOnNode(t, node1, "dm init "+fsname)
-		resp := citools.OutputFromRunOnNode(t, node1, "dm list")
-		if !strings.Contains(resp, fsname) {
-			t.Error("unable to find volume name in ouput")
-		}
-	})
-
-	t.Run("InitDuplicate", func(t *testing.T) {
-		fsname := citools.UniqName()
-		citools.RunOnNode(t, node1, "dm init "+fsname)
-
-		resp := citools.OutputFromRunOnNode(t, node1, "if dm init "+fsname+"; then false; else true; fi ")
-		if !strings.Contains(resp, fmt.Sprintf("Error: %s exists already", fsname)) {
-			t.Error("Didn't get an error when attempting to re-create the volume")
-		}
-
-		resp = citools.OutputFromRunOnNode(t, node1, "dm list")
-
-		if !strings.Contains(resp, fsname) {
-			t.Error("unable to find volume name in ouput")
-		}
-	})
-
-	t.Run("InitCrashSafety", func(t *testing.T) {
-		fsname := citools.UniqName()
-
-		_, err := citools.DoSetDebugFlag(f[0].GetNode(0).IP, "admin", f[0].GetNode(0).ApiKey, "PartialFailCreateFilesystem", "true")
-		if err != nil {
-			t.Error(err)
-		}
-
-		resp := citools.OutputFromRunOnNode(t, node1, "if dm init "+fsname+"; then false; else true; fi ")
-
-		if !strings.Contains(resp, "Injected fault") {
-			t.Error("Couldn't inject fault into CreateFilesystem")
-		}
-
-		_, err = citools.DoSetDebugFlag(f[0].GetNode(0).IP, "admin", f[0].GetNode(0).ApiKey, "PartialFailCreateFilesystem", "false")
-		if err != nil {
-			t.Error(err)
-		}
-
-		// Now try again, and check it recovers and creates the volume
-		citools.RunOnNode(t, node1, "dm init "+fsname)
-
-		resp = citools.OutputFromRunOnNode(t, node1, "dm list")
-
-		if !strings.Contains(resp, fsname) {
-			t.Error("unable to find volume name in ouput")
-		}
-	})
-
-	t.Run("Version", func(t *testing.T) {
-		var parsedResponse []string
-		var validVersion = regexp.MustCompile(`[A-Za-z-.0-9]+`)
-		var validRemote = regexp.MustCompile(`^Current remote: `)
-
-		serverResponse := citools.OutputFromRunOnNode(t, node1, "dm version")
-		fmt.Sprintf("Server response: %s\n", serverResponse)
-
-		lines := strings.Split(serverResponse, "\n")
-
-		remoteInfo := lines[0]
-		versionInfo := lines[1:]
-
-		if !validRemote.MatchString(remoteInfo) {
-			t.Errorf("unable to find current remote in version string: %v", remoteInfo)
-		}
-
-		for _, versionBit := range versionInfo {
-			parsedResponse = append(parsedResponse, strings.Fields(strings.TrimSpace(versionBit))...)
-		}
-
-		if len(parsedResponse) != 6 {
-			t.Fatalf("dm version response has the wrong number of lines in versionInfo (found %d):\n%s\n%#v\n", len(parsedResponse), serverResponse, parsedResponse)
-		}
-
-		if (parsedResponse[0] != "Client:") || parsedResponse[1] != "Version:" {
-			t.Errorf("unable to find all parts of Client version in ouput: %v %v", parsedResponse[0], parsedResponse[1])
-		}
-		if !validVersion.MatchString(parsedResponse[2]) {
-			t.Errorf("unable to find all client version params in ouput: %v", serverResponse)
-		}
-		if parsedResponse[3] != "Server:" || parsedResponse[4] != "Version:" {
-			t.Errorf("unable to find all version params in ouput: %v %v", parsedResponse[3], parsedResponse[4])
-		}
-
-		if !validVersion.MatchString(parsedResponse[5]) {
-			t.Errorf("unable to find valid server version in ouput: %v", parsedResponse[5])
-		}
-
-		if citools.Contains(versionInfo, "uninitialized") {
-			t.Errorf("Version was uninitialized: %v", versionInfo)
-		}
-	})
-
-	t.Run("Commit", func(t *testing.T) {
-		fsname := citools.UniqName()
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/X")
-		citools.RunOnNode(t, node1, "dm switch "+fsname)
-		citools.RunOnNode(t, node1, "dm commit -m 'hello'")
-		resp := citools.OutputFromRunOnNode(t, node1, "dm log")
-		if !strings.Contains(resp, "hello") {
-			t.Error("unable to find commit message in log output")
-		}
-	})
-
-	t.Run("Branch", func(t *testing.T) {
-		fsname := citools.UniqName()
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/X")
-		citools.RunOnNode(t, node1, "dm switch "+fsname)
-		citools.RunOnNode(t, node1, "dm commit -m 'hello'")
-		citools.RunOnNode(t, node1, "dm checkout -b branch1")
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/Y")
-		citools.RunOnNode(t, node1, "dm commit -m 'there'")
-		resp := citools.OutputFromRunOnNode(t, node1, "dm log")
-		if !strings.Contains(resp, "there") {
-			t.Error("unable to find commit message in log output")
-		}
-		citools.RunOnNode(t, node1, "dm checkout master")
-		resp = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" ls /foo/")
-		if strings.Contains(resp, "Y") {
-			t.Error("failed to switch filesystem")
-		}
-		citools.RunOnNode(t, node1, "dm checkout branch1")
-		resp = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" ls /foo/")
-		if !strings.Contains(resp, "Y") {
-			t.Error("failed to switch filesystem")
-		}
-	})
-
-	t.Run("DotShow", func(t *testing.T) {
-		fsname := citools.UniqName()
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/X")
-		citools.RunOnNode(t, node1, "dm switch "+fsname)
-		citools.RunOnNode(t, node1, "dm commit -m 'hello'")
-		citools.RunOnNode(t, node1, "dm checkout -b branch1")
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/Y")
-		citools.RunOnNode(t, node1, "dm commit -m 'there'")
-		resp := citools.OutputFromRunOnNode(t, node1, "dm dot show")
-		if !strings.Contains(resp, "master") {
-			t.Error("failed to show master status")
-		}
-		if !strings.Contains(resp, "branch1") {
-			t.Error("failed to show branch status")
-		}
-		re, _ := regexp.Compile(`server.*up to date`)
-		matches := re.FindAllStringSubmatch(resp, -1)
-		if len(matches) < 2 {
-			t.Error("Unrecognisable result from `dm dot show`: %s, regexp matches: %#v", resp, matches)
-		} else {
-			masterReplicationStatus := matches[0][0]
-			branchReplicationStatus := matches[1][0]
-			if masterReplicationStatus == branchReplicationStatus {
-				t.Error("master and branch replication statusse are suspiciously similar")
-			}
-		}
-
-	})
-
-	t.Run("Reset", func(t *testing.T) {
-		fsname := citools.UniqName()
-		// Run a container in the background so that we can observe it get
-		// restarted.
-		citools.RunOnNode(t, node1,
-			citools.DockerRun(fsname, "-d --name sleeper")+" sleep 100",
-		)
-		initialStart := citools.OutputFromRunOnNode(t, node1,
-			"docker inspect sleeper |jq .[0].State.StartedAt",
-		)
-
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/X")
-		citools.RunOnNode(t, node1, "dm switch "+fsname)
-		citools.RunOnNode(t, node1, "dm commit -m 'hello'")
-		resp := citools.OutputFromRunOnNode(t, node1, "dm log")
-		if !strings.Contains(resp, "hello") {
-			t.Error("unable to find commit message in log output")
-		}
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/Y")
-		citools.RunOnNode(t, node1, "dm commit -m 'again'")
-		resp = citools.OutputFromRunOnNode(t, node1, "dm log")
-		if !strings.Contains(resp, "again") {
-			t.Error("unable to find commit message in log output")
-		}
-		citools.RunOnNode(t, node1, "dm reset --hard HEAD^")
-		resp = citools.OutputFromRunOnNode(t, node1, "dm log")
-		if strings.Contains(resp, "again") {
-			t.Error("found 'again' in dm log when i shouldn't have")
-		}
-		// check filesystem got rolled back
-		resp = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" ls /foo/")
-		if strings.Contains(resp, "Y") {
-			t.Error("failed to roll back filesystem")
-		}
-		newStart := citools.OutputFromRunOnNode(t, node1,
-			"docker inspect sleeper |jq .[0].State.StartedAt",
-		)
-		if initialStart == newStart {
-			t.Errorf("container was not restarted during rollback (initialStart %v == newStart %v)", strings.TrimSpace(initialStart), strings.TrimSpace(newStart))
-		}
-
-	})
-
-	t.Run("RunningContainersListed", func(t *testing.T) {
-		fsname := citools.UniqName()
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname, "-d --name tester")+" sleep 100")
-		err := citools.TryUntilSucceeds(func() error {
+	/*
+		// Sub-tests, to reuse common setup code.
+		t.Run("Init", func(t *testing.T) {
+			fsname := citools.UniqName()
+			citools.RunOnNode(t, node1, "dm init "+fsname)
 			resp := citools.OutputFromRunOnNode(t, node1, "dm list")
-			if !strings.Contains(resp, "tester") {
-				return fmt.Errorf("container running not listed")
+			if !strings.Contains(resp, fsname) {
+				t.Error("unable to find volume name in ouput")
 			}
-			return nil
-		}, "listing containers")
-		if err != nil {
-			t.Error(err)
-		}
-	})
+		})
 
-	// TODO test AllDotsAndBranches
-	t.Run("AllDotsAndBranches", func(t *testing.T) {
-		resp := citools.OutputFromRunOnNode(t, node1, "dm debug AllDotsAndBranches")
-		fmt.Printf("AllDotsAndBranches response: %v\n", resp)
-	})
+		t.Run("InitDuplicate", func(t *testing.T) {
+			fsname := citools.UniqName()
+			citools.RunOnNode(t, node1, "dm init "+fsname)
 
-	// Exercise the import functionality which should already exists in Docker
-	t.Run("ImportDockerImage", func(t *testing.T) {
-		fsname := citools.UniqName()
-		resp := citools.OutputFromRunOnNode(t, node1,
-			// Mount the volume at /etc in the container. Docker should copy the
-			// contents of /etc in the image over the top of the new blank volume.
-			citools.DockerRun(fsname, "--name import-test", "busybox", "/etc")+" cat /etc/passwd",
-		)
-		// "root" normally shows up in /etc/passwd
-		if !strings.Contains(resp, "root") {
-			t.Error("unable to find 'root' in expected output")
-		}
-		// If we reuse the volume, we should find the contents of /etc
-		// imprinted therein.
-		resp = citools.OutputFromRunOnNode(t, node1,
-			citools.DockerRun(fsname, "--name import-test-2", "busybox", "/foo")+" cat /foo/passwd",
-		)
-		// "root" normally shows up in /etc/passwd
-		if !strings.Contains(resp, "root") {
-			t.Error("unable to find 'root' in expected output")
-		}
-	})
-	// XXX This test doesn't fail on Docker 1.12.6, which is used
-	// by dind, but it does fail without using
-	// `fs.StringWithoutAdmin()` in docker.go due to manual testing
-	// on docker 17.06.2-ce. Need to improve the test suite to use
-	// a variety of versions of docker in dind environments.
-	t.Run("RunningContainerTwice", func(t *testing.T) {
-		fsname := citools.UniqName()
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/HELLO")
-		st := citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" ls /foo/HELLO")
-		if !strings.Contains(st, "HELLO") {
-			t.Errorf("Data did not persist between two instanciations of the same volume on the same host: %v", st)
-		}
-	})
+			resp := citools.OutputFromRunOnNode(t, node1, "if dm init "+fsname+"; then false; else true; fi ")
+			if !strings.Contains(resp, fmt.Sprintf("Error: %s exists already", fsname)) {
+				t.Error("Didn't get an error when attempting to re-create the volume")
+			}
 
-	t.Run("BranchPinning", func(t *testing.T) {
-		fsname := citools.UniqName()
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/HELLO-ORIGINAL")
-		citools.RunOnNode(t, node1, "dm switch "+fsname)
-		citools.RunOnNode(t, node1, "dm commit -m original")
+			resp = citools.OutputFromRunOnNode(t, node1, "dm list")
 
-		citools.RunOnNode(t, node1, "dm checkout -b branch1")
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/HELLO-BRANCH1")
-		citools.RunOnNode(t, node1, "dm commit -m branch1commit1")
+			if !strings.Contains(resp, fsname) {
+				t.Error("unable to find volume name in ouput")
+			}
+		})
 
-		citools.RunOnNode(t, node1, "dm checkout master")
-		citools.RunOnNode(t, node1, "dm checkout -b branch2")
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/HELLO-BRANCH2")
-		citools.RunOnNode(t, node1, "dm commit -m branch2commit1")
+		t.Run("InitCrashSafety", func(t *testing.T) {
+			fsname := citools.UniqName()
 
-		citools.RunOnNode(t, node1, "dm checkout master")
-		citools.RunOnNode(t, node1, "dm checkout -b branch3")
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/HELLO-BRANCH3")
-		citools.RunOnNode(t, node1, "dm commit -m branch3commit1")
+			_, err := citools.DoSetDebugFlag(f[0].GetNode(0).IP, "admin", f[0].GetNode(0).ApiKey, "PartialFailCreateFilesystem", "true")
+			if err != nil {
+				t.Error(err)
+			}
 
-		st := citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname+"@branch1")+" ls /foo")
-		if st != "HELLO-BRANCH1\nHELLO-ORIGINAL\n" {
-			t.Errorf("Wrong content in branch 1: '%s'", st)
-		}
+			resp := citools.OutputFromRunOnNode(t, node1, "if dm init "+fsname+"; then false; else true; fi ")
 
-		st = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname+"@branch2")+" ls /foo")
-		if st != "HELLO-BRANCH2\nHELLO-ORIGINAL\n" {
-			t.Errorf("Wrong content in branch 2: '%s'", st)
-		}
+			if !strings.Contains(resp, "Injected fault") {
+				t.Error("Couldn't inject fault into CreateFilesystem")
+			}
 
-		st = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname+"@branch3")+" ls /foo")
-		if st != "HELLO-BRANCH3\nHELLO-ORIGINAL\n" {
-			t.Errorf("Wrong content in branch 3: '%s'", st)
-		}
-	})
+			_, err = citools.DoSetDebugFlag(f[0].GetNode(0).IP, "admin", f[0].GetNode(0).ApiKey, "PartialFailCreateFilesystem", "false")
+			if err != nil {
+				t.Error(err)
+			}
 
-	t.Run("Subdots", func(t *testing.T) {
-		fsname := citools.UniqName()
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname+".frogs")+" touch /foo/HELLO-FROGS")
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname+".eat")+" touch /foo/HELLO-EAT")
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname+".flies")+" touch /foo/HELLO-FLIES")
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname+".__root__")+" touch /foo/HELLO-ROOT")
-		st := citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname+".__root__")+" find /foo -type f | sort")
-		if st != "/foo/HELLO-ROOT\n/foo/eat/HELLO-EAT\n/foo/flies/HELLO-FLIES\n/foo/frogs/HELLO-FROGS\n" {
-			t.Errorf("Subdots didn't work out: %s", st)
-		}
-	})
+			// Now try again, and check it recovers and creates the volume
+			citools.RunOnNode(t, node1, "dm init "+fsname)
 
-	t.Run("DefaultSubdot", func(t *testing.T) {
-		fsname := citools.UniqName()
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/HELLO-DEFAULT")
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname+".__root__")+" touch /foo/HELLO-ROOT")
-		st := citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname+".__root__")+" find /foo -type f | sort")
-		if st != "/foo/HELLO-ROOT\n/foo/__default__/HELLO-DEFAULT\n" {
-			t.Errorf("Subdots didn't work out: %s", st)
-		}
-	})
+			resp = citools.OutputFromRunOnNode(t, node1, "dm list")
 
-	t.Run("ConcurrentSubdots", func(t *testing.T) {
-		fsname := citools.UniqName()
+			if !strings.Contains(resp, fsname) {
+				t.Error("unable to find volume name in ouput")
+			}
+		})
 
-		citools.RunOnNode(t, node1, citools.DockerRunDetached(fsname+".frogs")+" sh -c 'touch /foo/HELLO-FROGS; sleep 30'")
-		citools.RunOnNode(t, node1, citools.DockerRunDetached(fsname+".eat")+" sh -c 'touch /foo/HELLO-EAT; sleep 30'")
-		citools.RunOnNode(t, node1, citools.DockerRunDetached(fsname+".flies")+" sh -c 'touch /foo/HELLO-FLIES; sleep 30'")
-		citools.RunOnNode(t, node1, citools.DockerRunDetached(fsname+".__root__")+" sh -c 'touch /foo/HELLO-ROOT; sleep 30'")
-		// Let everything get started
-		time.Sleep(5)
+		t.Run("Version", func(t *testing.T) {
+			var parsedResponse []string
+			var validVersion = regexp.MustCompile(`[A-Za-z-.0-9]+`)
+			var validRemote = regexp.MustCompile(`^Current remote: `)
 
-		st := citools.OutputFromRunOnNode(t, node1, "dm list")
-		matched, err := regexp.MatchString("/[a-z]+_[a-z]+,/[a-z]+_[a-z]+,/[a-z]+_[a-z]+,/[a-z]+_[a-z]+", st)
-		if err != nil {
-			t.Error(err)
-		}
-		if !matched {
-			t.Errorf("Couldn't find four containers attached to the dot: %+v", st)
-		}
+			serverResponse := citools.OutputFromRunOnNode(t, node1, "dm version")
+			fmt.Sprintf("Server response: %s\n", serverResponse)
 
-		// Check combined state
-		st = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname+".__root__")+" find /foo -type f | sort")
-		if st != "/foo/HELLO-ROOT\n/foo/eat/HELLO-EAT\n/foo/flies/HELLO-FLIES\n/foo/frogs/HELLO-FROGS\n" {
-			t.Errorf("Subdots didn't work out: %s", st)
-		}
+			lines := strings.Split(serverResponse, "\n")
 
-		// Check commits and branches work
-		citools.RunOnNode(t, node1, "dm switch "+fsname)
-		citools.RunOnNode(t, node1, "dm commit -m pod-commit")
-		citools.RunOnNode(t, node1, "dm checkout -b branch") // Restarts the containers
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname+"@branch.again")+" touch /foo/HELLO-AGAIN")
-		citools.RunOnNode(t, node1, "dm commit -m branch-commit")
+			remoteInfo := lines[0]
+			versionInfo := lines[1:]
 
-		// Check branch state
-		st = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname+"@branch.__root__")+" find /foo -type f | sort")
+			if !validRemote.MatchString(remoteInfo) {
+				t.Errorf("unable to find current remote in version string: %v", remoteInfo)
+			}
 
-		if st != "/foo/HELLO-ROOT\n/foo/again/HELLO-AGAIN\n/foo/eat/HELLO-EAT\n/foo/flies/HELLO-FLIES\n/foo/frogs/HELLO-FROGS\n" {
-			t.Errorf("Subdots didn't work out on branch: %s", st)
-		}
+			for _, versionBit := range versionInfo {
+				parsedResponse = append(parsedResponse, strings.Fields(strings.TrimSpace(versionBit))...)
+			}
 
-		// Check master state
-		citools.RunOnNode(t, node1, "dm checkout master") // Restarts the containers
-		st = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname+".__root__")+" find /foo -type f | sort")
+			if len(parsedResponse) != 6 {
+				t.Fatalf("dm version response has the wrong number of lines in versionInfo (found %d):\n%s\n%#v\n", len(parsedResponse), serverResponse, parsedResponse)
+			}
 
-		if st != "/foo/HELLO-ROOT\n/foo/eat/HELLO-EAT\n/foo/flies/HELLO-FLIES\n/foo/frogs/HELLO-FROGS\n" {
-			t.Errorf("Subdots didn't work out back on master: %s", st)
-		}
+			if (parsedResponse[0] != "Client:") || parsedResponse[1] != "Version:" {
+				t.Errorf("unable to find all parts of Client version in ouput: %v %v", parsedResponse[0], parsedResponse[1])
+			}
+			if !validVersion.MatchString(parsedResponse[2]) {
+				t.Errorf("unable to find all client version params in ouput: %v", serverResponse)
+			}
+			if parsedResponse[3] != "Server:" || parsedResponse[4] != "Version:" {
+				t.Errorf("unable to find all version params in ouput: %v %v", parsedResponse[3], parsedResponse[4])
+			}
 
-		// Check containers all got restarted
-		st = citools.OutputFromRunOnNode(t, node1, "docker ps | grep 'touch /foo' | wc -l")
-		if st != "4\n" {
-			t.Errorf("Subdot containers didn't get restarted")
-			citools.RunOnNode(t, node1, "docker ps")
-		}
-	})
+			if !validVersion.MatchString(parsedResponse[5]) {
+				t.Errorf("unable to find valid server version in ouput: %v", parsedResponse[5])
+			}
 
-	t.Run("SubdotSwitch", func(t *testing.T) {
-		fsname := citools.UniqName()
+			if citools.Contains(versionInfo, "uninitialized") {
+				t.Errorf("Version was uninitialized: %v", versionInfo)
+			}
+		})
 
-		citools.RunOnNode(t, node1, "dm init "+fsname)
-		citools.RunOnNode(t, node1, "dm switch "+fsname)
-		citools.RunOnNode(t, node1, "dm commit -m 'initial empty commit'")
+		t.Run("Commit", func(t *testing.T) {
+			fsname := citools.UniqName()
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/X")
+			citools.RunOnNode(t, node1, "dm switch "+fsname)
+			citools.RunOnNode(t, node1, "dm commit -m 'hello'")
+			resp := citools.OutputFromRunOnNode(t, node1, "dm log")
+			if !strings.Contains(resp, "hello") {
+				t.Error("unable to find commit message in log output")
+			}
+		})
 
-		// Set up branch A
-		citools.RunOnNode(t, node1, "dm checkout -b branch_A")
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname+"@branch_A.frogs")+" sh -c 'echo A_FROGS > /foo/HELLO'")
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname+"@branch_A")+" sh -c 'echo A_DEFAULT > /foo/HELLO'")
-		citools.RunOnNode(t, node1, "dm commit -m 'branch A commit'")
-		time.Sleep(5)
+		t.Run("Branch", func(t *testing.T) {
+			fsname := citools.UniqName()
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/X")
+			citools.RunOnNode(t, node1, "dm switch "+fsname)
+			citools.RunOnNode(t, node1, "dm commit -m 'hello'")
+			citools.RunOnNode(t, node1, "dm checkout -b branch1")
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/Y")
+			citools.RunOnNode(t, node1, "dm commit -m 'there'")
+			resp := citools.OutputFromRunOnNode(t, node1, "dm log")
+			if !strings.Contains(resp, "there") {
+				t.Error("unable to find commit message in log output")
+			}
+			citools.RunOnNode(t, node1, "dm checkout master")
+			resp = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" ls /foo/")
+			if strings.Contains(resp, "Y") {
+				t.Error("failed to switch filesystem")
+			}
+			citools.RunOnNode(t, node1, "dm checkout branch1")
+			resp = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" ls /foo/")
+			if !strings.Contains(resp, "Y") {
+				t.Error("failed to switch filesystem")
+			}
+		})
 
-		// Set up branch B
-		citools.RunOnNode(t, node1, "dm checkout master")
-		citools.RunOnNode(t, node1, "dm checkout -b branch_B")
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname+"@branch_B.frogs")+" sh -c 'echo B_FROGS > /foo/HELLO'")
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname+"@branch_B")+" sh -c 'echo B_DEFAULT > /foo/HELLO'")
-		citools.RunOnNode(t, node1, "dm commit -m 'branch B commit'")
+		t.Run("DotShow", func(t *testing.T) {
+			fsname := citools.UniqName()
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/X")
+			citools.RunOnNode(t, node1, "dm switch "+fsname)
+			citools.RunOnNode(t, node1, "dm commit -m 'hello'")
+			citools.RunOnNode(t, node1, "dm checkout -b branch1")
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/Y")
+			citools.RunOnNode(t, node1, "dm commit -m 'there'")
+			resp := citools.OutputFromRunOnNode(t, node1, "dm dot show")
+			if !strings.Contains(resp, "master") {
+				t.Error("failed to show master status")
+			}
+			if !strings.Contains(resp, "branch1") {
+				t.Error("failed to show branch status")
+			}
+			re, _ := regexp.Compile(`server.*up to date`)
+			matches := re.FindAllStringSubmatch(resp, -1)
+			if len(matches) < 2 {
+				t.Error("Unrecognisable result from `dm dot show`: %s, regexp matches: %#v", resp, matches)
+			} else {
+				masterReplicationStatus := matches[0][0]
+				branchReplicationStatus := matches[1][0]
+				if masterReplicationStatus == branchReplicationStatus {
+					t.Error("master and branch replication statusse are suspiciously similar")
+				}
+			}
 
-		// Switch back to master
-		citools.RunOnNode(t, node1, "dm checkout master")
+		})
 
-		// Start up a long sleep container on each, that we can docker exec into
-		frogsContainer := fsname + "_frogs"
-		defaultContainer := fsname + "_default"
-		citools.RunOnNode(t, node1, citools.DockerRunDetached(fsname+".frogs", "--name "+frogsContainer)+" sh -c 'sleep 30'")
-		citools.RunOnNode(t, node1, citools.DockerRunDetached(fsname, "--name "+defaultContainer)+" sh -c 'sleep 30'")
+		t.Run("Reset", func(t *testing.T) {
+			fsname := citools.UniqName()
+			// Run a container in the background so that we can observe it get
+			// restarted.
+			citools.RunOnNode(t, node1,
+				citools.DockerRun(fsname, "-d --name sleeper")+" sleep 100",
+			)
+			initialStart := citools.OutputFromRunOnNode(t, node1,
+				"docker inspect sleeper |jq .[0].State.StartedAt",
+			)
 
-		// Check returns branch B content
-		citools.RunOnNode(t, node1, "dm checkout branch_B") // Restarts container
-		st := citools.OutputFromRunOnNode(t, node1, "docker exec "+frogsContainer+" cat /foo/HELLO")
-		if st != "B_FROGS\n" {
-			t.Errorf("Expected B_FROGS, got %+v", st)
-		}
-		st = citools.OutputFromRunOnNode(t, node1, "docker exec "+defaultContainer+" cat /foo/HELLO")
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/X")
+			citools.RunOnNode(t, node1, "dm switch "+fsname)
+			citools.RunOnNode(t, node1, "dm commit -m 'hello'")
+			resp := citools.OutputFromRunOnNode(t, node1, "dm log")
+			if !strings.Contains(resp, "hello") {
+				t.Error("unable to find commit message in log output")
+			}
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/Y")
+			citools.RunOnNode(t, node1, "dm commit -m 'again'")
+			resp = citools.OutputFromRunOnNode(t, node1, "dm log")
+			if !strings.Contains(resp, "again") {
+				t.Error("unable to find commit message in log output")
+			}
+			citools.RunOnNode(t, node1, "dm reset --hard HEAD^")
+			resp = citools.OutputFromRunOnNode(t, node1, "dm log")
+			if strings.Contains(resp, "again") {
+				t.Error("found 'again' in dm log when i shouldn't have")
+			}
+			// check filesystem got rolled back
+			resp = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" ls /foo/")
+			if strings.Contains(resp, "Y") {
+				t.Error("failed to roll back filesystem")
+			}
+			newStart := citools.OutputFromRunOnNode(t, node1,
+				"docker inspect sleeper |jq .[0].State.StartedAt",
+			)
+			if initialStart == newStart {
+				t.Errorf("container was not restarted during rollback (initialStart %v == newStart %v)", strings.TrimSpace(initialStart), strings.TrimSpace(newStart))
+			}
 
-		if st != "B_DEFAULT\n" {
-			t.Errorf("Expected B_DEFAULT, got %+v", st)
-		}
+		})
 
-		// Check returns branch A content
-		citools.RunOnNode(t, node1, "dm checkout branch_A") // Restarts container
-		st = citools.OutputFromRunOnNode(t, node1, "docker exec "+frogsContainer+" cat /foo/HELLO")
-		if st != "A_FROGS\n" {
-			t.Errorf("Expected A_FROGS, got %+v", st)
-		}
-		st = citools.OutputFromRunOnNode(t, node1, "docker exec "+defaultContainer+" cat /foo/HELLO")
-		if st != "A_DEFAULT\n" {
-			t.Errorf("Expected A_DEFAULT, got %+v", st)
-		}
-	})
+		t.Run("RunningContainersListed", func(t *testing.T) {
+			fsname := citools.UniqName()
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname, "-d --name tester")+" sleep 100")
+			err := citools.TryUntilSucceeds(func() error {
+				resp := citools.OutputFromRunOnNode(t, node1, "dm list")
+				if !strings.Contains(resp, "tester") {
+					return fmt.Errorf("container running not listed")
+				}
+				return nil
+			}, "listing containers")
+			if err != nil {
+				t.Error(err)
+			}
+		})
 
-	t.Run("InstrumentationMiddleware", func(t *testing.T) {
-		fsname := citools.UniqName()
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/whatever")
-		metrics := citools.OutputFromRunOnNode(t, node1, "docker exec -t dotmesh-server-inner curl localhost:32607/metrics")
-		if !strings.Contains(metrics, "dm_req_total") {
-			t.Error("unable to find data on total request counter on /metrics")
-		}
-		if !strings.Contains(metrics, "dm_req_duration_seconds") {
-			t.Error("unable to find data on duration of requests on /metrics")
-		}
-		if !strings.Contains(metrics, "dm_state_transition_total") {
-			t.Error("unable to find data on duration of state transitinos on /metrics")
-		}
-		if !strings.Contains(metrics, "dm_zpool_usage_percentage") {
-			t.Error("unable to find data on zpool capacity used on /metrics")
-		}
-		if !strings.Contains(metrics, "dm_rpc_req_duration_seconds") {
-			t.Error("unable to find data on rpc request duration on /metrics")
-		}
-	})
+		// TODO test AllDotsAndBranches
+		t.Run("AllDotsAndBranches", func(t *testing.T) {
+			resp := citools.OutputFromRunOnNode(t, node1, "dm debug AllDotsAndBranches")
+			fmt.Printf("AllDotsAndBranches response: %v\n", resp)
+		})
 
-	t.Run("MountExistingDot", func(t *testing.T) {
-		fsname := citools.UniqName()
+		// Exercise the import functionality which should already exists in Docker
+		t.Run("ImportDockerImage", func(t *testing.T) {
+			fsname := citools.UniqName()
+			resp := citools.OutputFromRunOnNode(t, node1,
+				// Mount the volume at /etc in the container. Docker should copy the
+				// contents of /etc in the image over the top of the new blank volume.
+				citools.DockerRun(fsname, "--name import-test", "busybox", "/etc")+" cat /etc/passwd",
+			)
+			// "root" normally shows up in /etc/passwd
+			if !strings.Contains(resp, "root") {
+				t.Error("unable to find 'root' in expected output")
+			}
+			// If we reuse the volume, we should find the contents of /etc
+			// imprinted therein.
+			resp = citools.OutputFromRunOnNode(t, node1,
+				citools.DockerRun(fsname, "--name import-test-2", "busybox", "/foo")+" cat /foo/passwd",
+			)
+			// "root" normally shows up in /etc/passwd
+			if !strings.Contains(resp, "root") {
+				t.Error("unable to find 'root' in expected output")
+			}
+		})
+		// XXX This test doesn't fail on Docker 1.12.6, which is used
+		// by dind, but it does fail without using
+		// `fs.StringWithoutAdmin()` in docker.go due to manual testing
+		// on docker 17.06.2-ce. Need to improve the test suite to use
+		// a variety of versions of docker in dind environments.
+		t.Run("RunningContainerTwice", func(t *testing.T) {
+			fsname := citools.UniqName()
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/HELLO")
+			st := citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" ls /foo/HELLO")
+			if !strings.Contains(st, "HELLO") {
+				t.Errorf("Data did not persist between two instanciations of the same volume on the same host: %v", st)
+			}
+		})
 
-		// make a nice fresh dot with a commit
-		citools.RunOnNode(t, node1, "dm init "+fsname)
-		citools.RunOnNode(t, node1, "dm switch "+fsname)
+		t.Run("BranchPinning", func(t *testing.T) {
+			fsname := citools.UniqName()
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/HELLO-ORIGINAL")
+			citools.RunOnNode(t, node1, "dm switch "+fsname)
+			citools.RunOnNode(t, node1, "dm commit -m original")
 
-		citools.RunOnNode(t, node1, "dm commit -m 'initial empty commit'")
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo hello > /foo/file.txt'")
-		citools.RunOnNode(t, node1, "dm commit -m 'commit with some data'")
+			citools.RunOnNode(t, node1, "dm checkout -b branch1")
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/HELLO-BRANCH1")
+			citools.RunOnNode(t, node1, "dm commit -m branch1commit1")
 
-		// mount the dot on a local path
-		citools.RunOnNode(t, node1, "dm mount "+fsname+" /tmp/mounted-"+fsname)
+			citools.RunOnNode(t, node1, "dm checkout master")
+			citools.RunOnNode(t, node1, "dm checkout -b branch2")
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/HELLO-BRANCH2")
+			citools.RunOnNode(t, node1, "dm commit -m branch2commit1")
 
-		// check we can see the dot data from the local path
-		st := citools.OutputFromRunOnNode(t, node1, "cat /tmp/mounted-"+fsname+"/file.txt")
-		if st != "hello\n" {
-			t.Errorf("Expected hello, got %+v", st)
-		}
-	})
+			citools.RunOnNode(t, node1, "dm checkout master")
+			citools.RunOnNode(t, node1, "dm checkout -b branch3")
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/HELLO-BRANCH3")
+			citools.RunOnNode(t, node1, "dm commit -m branch3commit1")
 
-	t.Run("MountNewDot", func(t *testing.T) {
-		fsname := citools.UniqName()
+			st := citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname+"@branch1")+" ls /foo")
+			if st != "HELLO-BRANCH1\nHELLO-ORIGINAL\n" {
+				t.Errorf("Wrong content in branch 1: '%s'", st)
+			}
 
-		// mount a created dot on a local path
-		citools.RunOnNode(t, node1, "dm mount --create "+fsname+" /tmp/mounted-"+fsname)
+			st = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname+"@branch2")+" ls /foo")
+			if st != "HELLO-BRANCH2\nHELLO-ORIGINAL\n" {
+				t.Errorf("Wrong content in branch 2: '%s'", st)
+			}
 
-		// write data to the local dot path
-		citools.RunOnNode(t, node1, "sh -c 'echo hello > /tmp/mounted-"+fsname+"/file.txt'")
+			st = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname+"@branch3")+" ls /foo")
+			if st != "HELLO-BRANCH3\nHELLO-ORIGINAL\n" {
+				t.Errorf("Wrong content in branch 3: '%s'", st)
+			}
+		})
 
-		// check we can read the data from a container dot
-		st := citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'cat /foo/file.txt'")
-		if st != "hello\n" {
-			t.Errorf("Expected hello, got %+v", st)
-		}
-	})
+		t.Run("Subdots", func(t *testing.T) {
+			fsname := citools.UniqName()
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname+".frogs")+" touch /foo/HELLO-FROGS")
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname+".eat")+" touch /foo/HELLO-EAT")
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname+".flies")+" touch /foo/HELLO-FLIES")
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname+".__root__")+" touch /foo/HELLO-ROOT")
+			st := citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname+".__root__")+" find /foo -type f | sort")
+			if st != "/foo/HELLO-ROOT\n/foo/eat/HELLO-EAT\n/foo/flies/HELLO-FLIES\n/foo/frogs/HELLO-FROGS\n" {
+				t.Errorf("Subdots didn't work out: %s", st)
+			}
+		})
 
-	t.Run("MountNewDotFailure", func(t *testing.T) {
-		fsname := citools.UniqName()
+		t.Run("DefaultSubdot", func(t *testing.T) {
+			fsname := citools.UniqName()
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/HELLO-DEFAULT")
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname+".__root__")+" touch /foo/HELLO-ROOT")
+			st := citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname+".__root__")+" find /foo -type f | sort")
+			if st != "/foo/HELLO-ROOT\n/foo/__default__/HELLO-DEFAULT\n" {
+				t.Errorf("Subdots didn't work out: %s", st)
+			}
+		})
 
-		// fail to make a dot because no --create flag
-		st := citools.OutputFromRunOnNode(t, node1, "if dm mount "+fsname+" /tmp/mounted-"+fsname+"; then false; else true; fi")
+		t.Run("ConcurrentSubdots", func(t *testing.T) {
+			fsname := citools.UniqName()
 
-		if !strings.Contains(st, fmt.Sprintf("Dot %s does not exist.", fsname)) {
-			t.Error(fmt.Sprintf("We didn't get an error when the --create flag was not used: %+v", st))
-		}
-	})
+			citools.RunOnNode(t, node1, citools.DockerRunDetached(fsname+".frogs")+" sh -c 'touch /foo/HELLO-FROGS; sleep 30'")
+			citools.RunOnNode(t, node1, citools.DockerRunDetached(fsname+".eat")+" sh -c 'touch /foo/HELLO-EAT; sleep 30'")
+			citools.RunOnNode(t, node1, citools.DockerRunDetached(fsname+".flies")+" sh -c 'touch /foo/HELLO-FLIES; sleep 30'")
+			citools.RunOnNode(t, node1, citools.DockerRunDetached(fsname+".__root__")+" sh -c 'touch /foo/HELLO-ROOT; sleep 30'")
+			// Let everything get started
+			time.Sleep(5)
 
-	t.Run("CommitMetadata", func(t *testing.T) {
-		fsname := citools.UniqName()
+			st := citools.OutputFromRunOnNode(t, node1, "dm list")
+			matched, err := regexp.MatchString("/[a-z]+_[a-z]+,/[a-z]+_[a-z]+,/[a-z]+_[a-z]+,/[a-z]+_[a-z]+", st)
+			if err != nil {
+				t.Error(err)
+			}
+			if !matched {
+				t.Errorf("Couldn't find four containers attached to the dot: %+v", st)
+			}
 
-		citools.RunOnNode(t, node1, "dm init "+fsname)
-		citools.RunOnNode(t, node1, "dm switch "+fsname)
-		citools.RunOnNode(t, node1, "dm commit -m \"commit message\" --metadata apples=green")
-		st := citools.OutputFromRunOnNode(t, node1, "dm log")
+			// Check combined state
+			st = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname+".__root__")+" find /foo -type f | sort")
+			if st != "/foo/HELLO-ROOT\n/foo/eat/HELLO-EAT\n/foo/flies/HELLO-FLIES\n/foo/frogs/HELLO-FROGS\n" {
+				t.Errorf("Subdots didn't work out: %s", st)
+			}
 
-		if !strings.Contains(st, "apples: green") {
-			t.Error(fmt.Sprintf("We didn't get the metadata back from dm log: %+v", st))
-		}
-	})
+			// Check commits and branches work
+			citools.RunOnNode(t, node1, "dm switch "+fsname)
+			citools.RunOnNode(t, node1, "dm commit -m pod-commit")
+			citools.RunOnNode(t, node1, "dm checkout -b branch") // Restarts the containers
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname+"@branch.again")+" touch /foo/HELLO-AGAIN")
+			citools.RunOnNode(t, node1, "dm commit -m branch-commit")
 
-	t.Run("CommitMetadataUppercaseFailure", func(t *testing.T) {
-		fsname := citools.UniqName()
+			// Check branch state
+			st = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname+"@branch.__root__")+" find /foo -type f | sort")
 
-		citools.RunOnNode(t, node1, "dm init "+fsname)
-		citools.RunOnNode(t, node1, "dm switch "+fsname)
+			if st != "/foo/HELLO-ROOT\n/foo/again/HELLO-AGAIN\n/foo/eat/HELLO-EAT\n/foo/flies/HELLO-FLIES\n/foo/frogs/HELLO-FROGS\n" {
+				t.Errorf("Subdots didn't work out on branch: %s", st)
+			}
 
-		// fail to commit a dot because we used an uppercase metadata fieldname
-		st := citools.OutputFromRunOnNode(t, node1, "if dm commit -m \"commit message\" --metadata Apples=green; then false; else true; fi")
+			// Check master state
+			citools.RunOnNode(t, node1, "dm checkout master") // Restarts the containers
+			st = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname+".__root__")+" find /foo -type f | sort")
 
-		if !strings.Contains(st, fmt.Sprintf("Metadata field names must start with lowercase characters: Apples")) {
-			t.Error(fmt.Sprintf("We didn't get an error when we used an uppercase metadata fieldname: %+v", st))
-		}
-	})
+			if st != "/foo/HELLO-ROOT\n/foo/eat/HELLO-EAT\n/foo/flies/HELLO-FLIES\n/foo/frogs/HELLO-FROGS\n" {
+				t.Errorf("Subdots didn't work out back on master: %s", st)
+			}
 
-	t.Run("CommitMetadataNoEqualsFailure", func(t *testing.T) {
-		fsname := citools.UniqName()
+			// Check containers all got restarted
+			st = citools.OutputFromRunOnNode(t, node1, "docker ps | grep 'touch /foo' | wc -l")
+			if st != "4\n" {
+				t.Errorf("Subdot containers didn't get restarted")
+				citools.RunOnNode(t, node1, "docker ps")
+			}
+		})
 
-		citools.RunOnNode(t, node1, "dm init "+fsname)
-		citools.RunOnNode(t, node1, "dm switch "+fsname)
+		t.Run("SubdotSwitch", func(t *testing.T) {
+			fsname := citools.UniqName()
 
-		// fail to commit a dot because we used an uppercase metadata fieldname
-		st := citools.OutputFromRunOnNode(t, node1, "if dm commit -m \"commit message\" --metadata Applesgreen; then false; else true; fi")
+			citools.RunOnNode(t, node1, "dm init "+fsname)
+			citools.RunOnNode(t, node1, "dm switch "+fsname)
+			citools.RunOnNode(t, node1, "dm commit -m 'initial empty commit'")
 
-		if !strings.Contains(st, fmt.Sprintf("Each metadata value must be a name=value pair: Applesgreen")) {
-			t.Error(fmt.Sprintf("We didn't get an error when we didn't use an equals sign in the metadata string: %+v", st))
-		}
-	})
+			// Set up branch A
+			citools.RunOnNode(t, node1, "dm checkout -b branch_A")
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname+"@branch_A.frogs")+" sh -c 'echo A_FROGS > /foo/HELLO'")
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname+"@branch_A")+" sh -c 'echo A_DEFAULT > /foo/HELLO'")
+			citools.RunOnNode(t, node1, "dm commit -m 'branch A commit'")
+			time.Sleep(5)
 
-	t.Run("ApiKeys", func(t *testing.T) {
+			// Set up branch B
+			citools.RunOnNode(t, node1, "dm checkout master")
+			citools.RunOnNode(t, node1, "dm checkout -b branch_B")
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname+"@branch_B.frogs")+" sh -c 'echo B_FROGS > /foo/HELLO'")
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname+"@branch_B")+" sh -c 'echo B_DEFAULT > /foo/HELLO'")
+			citools.RunOnNode(t, node1, "dm commit -m 'branch B commit'")
+
+			// Switch back to master
+			citools.RunOnNode(t, node1, "dm checkout master")
+
+			// Start up a long sleep container on each, that we can docker exec into
+			frogsContainer := fsname + "_frogs"
+			defaultContainer := fsname + "_default"
+			citools.RunOnNode(t, node1, citools.DockerRunDetached(fsname+".frogs", "--name "+frogsContainer)+" sh -c 'sleep 30'")
+			citools.RunOnNode(t, node1, citools.DockerRunDetached(fsname, "--name "+defaultContainer)+" sh -c 'sleep 30'")
+
+			// Check returns branch B content
+			citools.RunOnNode(t, node1, "dm checkout branch_B") // Restarts container
+			st := citools.OutputFromRunOnNode(t, node1, "docker exec "+frogsContainer+" cat /foo/HELLO")
+			if st != "B_FROGS\n" {
+				t.Errorf("Expected B_FROGS, got %+v", st)
+			}
+			st = citools.OutputFromRunOnNode(t, node1, "docker exec "+defaultContainer+" cat /foo/HELLO")
+
+			if st != "B_DEFAULT\n" {
+				t.Errorf("Expected B_DEFAULT, got %+v", st)
+			}
+
+			// Check returns branch A content
+			citools.RunOnNode(t, node1, "dm checkout branch_A") // Restarts container
+			st = citools.OutputFromRunOnNode(t, node1, "docker exec "+frogsContainer+" cat /foo/HELLO")
+			if st != "A_FROGS\n" {
+				t.Errorf("Expected A_FROGS, got %+v", st)
+			}
+			st = citools.OutputFromRunOnNode(t, node1, "docker exec "+defaultContainer+" cat /foo/HELLO")
+			if st != "A_DEFAULT\n" {
+				t.Errorf("Expected A_DEFAULT, got %+v", st)
+			}
+		})
+
+		t.Run("InstrumentationMiddleware", func(t *testing.T) {
+			fsname := citools.UniqName()
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/whatever")
+			metrics := citools.OutputFromRunOnNode(t, node1, "docker exec -t dotmesh-server-inner curl localhost:32607/metrics")
+			if !strings.Contains(metrics, "dm_req_total") {
+				t.Error("unable to find data on total request counter on /metrics")
+			}
+			if !strings.Contains(metrics, "dm_req_duration_seconds") {
+				t.Error("unable to find data on duration of requests on /metrics")
+			}
+			if !strings.Contains(metrics, "dm_state_transition_total") {
+				t.Error("unable to find data on duration of state transitinos on /metrics")
+			}
+			if !strings.Contains(metrics, "dm_zpool_usage_percentage") {
+				t.Error("unable to find data on zpool capacity used on /metrics")
+			}
+			if !strings.Contains(metrics, "dm_rpc_req_duration_seconds") {
+				t.Error("unable to find data on rpc request duration on /metrics")
+			}
+		})
+
+		t.Run("MountExistingDot", func(t *testing.T) {
+			fsname := citools.UniqName()
+
+			// make a nice fresh dot with a commit
+			citools.RunOnNode(t, node1, "dm init "+fsname)
+			citools.RunOnNode(t, node1, "dm switch "+fsname)
+
+			citools.RunOnNode(t, node1, "dm commit -m 'initial empty commit'")
+			citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo hello > /foo/file.txt'")
+			citools.RunOnNode(t, node1, "dm commit -m 'commit with some data'")
+
+			// mount the dot on a local path
+			citools.RunOnNode(t, node1, "dm mount "+fsname+" /tmp/mounted-"+fsname)
+
+			// check we can see the dot data from the local path
+			st := citools.OutputFromRunOnNode(t, node1, "cat /tmp/mounted-"+fsname+"/file.txt")
+			if st != "hello\n" {
+				t.Errorf("Expected hello, got %+v", st)
+			}
+		})
+
+		t.Run("MountNewDot", func(t *testing.T) {
+			fsname := citools.UniqName()
+
+			// mount a created dot on a local path
+			citools.RunOnNode(t, node1, "dm mount --create "+fsname+" /tmp/mounted-"+fsname)
+
+			// write data to the local dot path
+			citools.RunOnNode(t, node1, "sh -c 'echo hello > /tmp/mounted-"+fsname+"/file.txt'")
+
+			// check we can read the data from a container dot
+			st := citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'cat /foo/file.txt'")
+			if st != "hello\n" {
+				t.Errorf("Expected hello, got %+v", st)
+			}
+		})
+
+		t.Run("MountNewDotFailure", func(t *testing.T) {
+			fsname := citools.UniqName()
+
+			// fail to make a dot because no --create flag
+			st := citools.OutputFromRunOnNode(t, node1, "if dm mount "+fsname+" /tmp/mounted-"+fsname+"; then false; else true; fi")
+
+			if !strings.Contains(st, fmt.Sprintf("Dot %s does not exist.", fsname)) {
+				t.Error(fmt.Sprintf("We didn't get an error when the --create flag was not used: %+v", st))
+			}
+		})
+	*/
+	t.Run("MountCommit", func(t *testing.T) {
 		apiKey := f[0].GetNode(0).ApiKey
-		password := f[0].GetNode(0).Password
+		fsname := citools.UniqName()
 
-		var resp struct {
-			ApiKey string
-		}
+		// make a dot with a second commit that has a file we can test the mount for
+		citools.RunOnNode(t, node1, "dm init "+fsname)
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+		citools.RunOnNode(t, node1, "dm commit -m 'initial empty commit'")
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo APPLES > /foo/HELLO'")
+		citools.RunOnNode(t, node1, "dm commit -m 'second commit with some data'")
 
-		err := citools.DoRPC(f[0].GetNode(0).IP, "admin", apiKey,
-			"DotmeshRPC.GetApiKey",
-			struct {
-			}{},
-			&resp)
-		if err != nil {
-			t.Error(err)
-		}
-		if resp.ApiKey != apiKey {
-			t.Errorf("Got API key %v, expected %v", resp.ApiKey, apiKey)
+		// get a list of commits so we have the id of the commit we will mount
+		var commitIds []struct {
+			Id string
 		}
 
 		err = citools.DoRPC(f[0].GetNode(0).IP, "admin", apiKey,
-			"DotmeshRPC.ResetApiKey",
+			"DotmeshRPC.Commits",
 			struct {
-			}{},
-			&resp)
-		if err == nil {
-			t.Errorf("Was able to reset API key without a password")
-		}
+				Namespace string
+				Name      string
+			}{
+				Namespace: "admin",
+				Name:      fsname,
+			},
+			&commitIds)
 
-		err = citools.DoRPC(f[0].GetNode(0).IP, "admin", password,
-			"DotmeshRPC.ResetApiKey",
-			struct {
-			}{},
-			&resp)
 		if err != nil {
 			t.Error(err)
 		}
-		if resp.ApiKey == apiKey {
-			t.Errorf("Got API key %v, expected a new one (got %v)!", resp.ApiKey, apiKey)
+
+		if len(commitIds) != 2 {
+			t.Errorf("Expected 2 commit ids, got %d", len(commitIds))
 		}
 
-		var user struct {
-			Id          string
-			Name        string
-			Email       string
-			EmailHash   string
-			CustomerId  string
-			CurrentPlan string
-		}
+		commitToMountId := commitIds[1].Id
 
-		fmt.Printf("About to expect failure...\n")
-		// Use old API key, expect failure
+		// get the id of the dot
+		var filesystemId string
+
 		err = citools.DoRPC(f[0].GetNode(0).IP, "admin", apiKey,
-			"DotmeshRPC.CurrentUser",
+			"DotmeshRPC.Lookup",
 			struct {
-			}{},
-			&resp)
-		if err == nil {
-			t.Errorf("Successfully used old API key")
-		}
+				Namespace string
+				Name      string
+			}{
+				Namespace: "admin",
+				Name:      fsname,
+			},
+			&filesystemId)
 
-		fmt.Printf("About to expect success...\n")
-		// Use new API key, expect success
-		err = citools.DoRPC(f[0].GetNode(0).IP, "admin", resp.ApiKey,
-			"DotmeshRPC.CurrentUser",
-			struct {
-			}{},
-			&user)
 		if err != nil {
 			t.Error(err)
 		}
 
-		// UGLY HACK: This test must be LAST in the suite, as it leaves
-		// the API key out of synch with what's in .dotmesh/config and
-		// f[0].GetNode(0).ApiKey
+		// mount the commit and get the mounted path
+		var mountPath string
 
-		// FIXME: Update GetNode(0).ApiKey and on-disk remote API key so
-		// later tests don't fail! We can do a "citools.RunOnNode(t, node1, sed -i
-		// s/old/new/ /root/.dotmesh/config)" but we can't mutate
-		// GetNode(0).ApiKey from here.
+		err = citools.DoRPC(f[0].GetNode(0).IP, "admin", apiKey,
+			"DotmeshRPC.MountCommit",
+			struct {
+				FilesystemId string
+				CommitId     string
+			}{
+				FilesystemId: filesystemId,
+				CommitId:     commitToMountId,
+			},
+			&mountPath)
+
+		// check the contents of the file on the mounted path
+		st := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("cat %s/__default__/HELLO", mountPath))
+
+		if st != "APPLES\n" {
+			t.Errorf("Expected APPLES, got %+v", st)
+		}
 	})
+	/*
+		t.Run("CommitMetadata", func(t *testing.T) {
+			fsname := citools.UniqName()
 
+			citools.RunOnNode(t, node1, "dm init "+fsname)
+			citools.RunOnNode(t, node1, "dm switch "+fsname)
+			citools.RunOnNode(t, node1, "dm commit -m \"commit message\" --metadata apples=green")
+			st := citools.OutputFromRunOnNode(t, node1, "dm log")
+
+			if !strings.Contains(st, "apples: green") {
+				t.Error(fmt.Sprintf("We didn't get the metadata back from dm log: %+v", st))
+			}
+		})
+
+		t.Run("CommitMetadataUppercaseFailure", func(t *testing.T) {
+			fsname := citools.UniqName()
+
+			citools.RunOnNode(t, node1, "dm init "+fsname)
+			citools.RunOnNode(t, node1, "dm switch "+fsname)
+
+			// fail to commit a dot because we used an uppercase metadata fieldname
+			st := citools.OutputFromRunOnNode(t, node1, "if dm commit -m \"commit message\" --metadata Apples=green; then false; else true; fi")
+
+			if !strings.Contains(st, fmt.Sprintf("Metadata field names must start with lowercase characters: Apples")) {
+				t.Error(fmt.Sprintf("We didn't get an error when we used an uppercase metadata fieldname: %+v", st))
+			}
+		})
+
+		t.Run("CommitMetadataNoEqualsFailure", func(t *testing.T) {
+			fsname := citools.UniqName()
+
+			citools.RunOnNode(t, node1, "dm init "+fsname)
+			citools.RunOnNode(t, node1, "dm switch "+fsname)
+
+			// fail to commit a dot because we used an uppercase metadata fieldname
+			st := citools.OutputFromRunOnNode(t, node1, "if dm commit -m \"commit message\" --metadata Applesgreen; then false; else true; fi")
+
+			if !strings.Contains(st, fmt.Sprintf("Each metadata value must be a name=value pair: Applesgreen")) {
+				t.Error(fmt.Sprintf("We didn't get an error when we didn't use an equals sign in the metadata string: %+v", st))
+			}
+		})
+
+		t.Run("ApiKeys", func(t *testing.T) {
+			apiKey := f[0].GetNode(0).ApiKey
+			password := f[0].GetNode(0).Password
+
+			var resp struct {
+				ApiKey string
+			}
+
+			err := citools.DoRPC(f[0].GetNode(0).IP, "admin", apiKey,
+				"DotmeshRPC.GetApiKey",
+				struct {
+				}{},
+				&resp)
+			if err != nil {
+				t.Error(err)
+			}
+			if resp.ApiKey != apiKey {
+				t.Errorf("Got API key %v, expected %v", resp.ApiKey, apiKey)
+			}
+
+			err = citools.DoRPC(f[0].GetNode(0).IP, "admin", apiKey,
+				"DotmeshRPC.ResetApiKey",
+				struct {
+				}{},
+				&resp)
+			if err == nil {
+				t.Errorf("Was able to reset API key without a password")
+			}
+
+			err = citools.DoRPC(f[0].GetNode(0).IP, "admin", password,
+				"DotmeshRPC.ResetApiKey",
+				struct {
+				}{},
+				&resp)
+			if err != nil {
+				t.Error(err)
+			}
+			if resp.ApiKey == apiKey {
+				t.Errorf("Got API key %v, expected a new one (got %v)!", resp.ApiKey, apiKey)
+			}
+
+			var user struct {
+				Id          string
+				Name        string
+				Email       string
+				EmailHash   string
+				CustomerId  string
+				CurrentPlan string
+			}
+
+			fmt.Printf("About to expect failure...\n")
+			// Use old API key, expect failure
+			err = citools.DoRPC(f[0].GetNode(0).IP, "admin", apiKey,
+				"DotmeshRPC.CurrentUser",
+				struct {
+				}{},
+				&resp)
+			if err == nil {
+				t.Errorf("Successfully used old API key")
+			}
+
+			fmt.Printf("About to expect success...\n")
+			// Use new API key, expect success
+			err = citools.DoRPC(f[0].GetNode(0).IP, "admin", resp.ApiKey,
+				"DotmeshRPC.CurrentUser",
+				struct {
+				}{},
+				&user)
+			if err != nil {
+				t.Error(err)
+			}
+
+			// UGLY HACK: This test must be LAST in the suite, as it leaves
+			// the API key out of synch with what's in .dotmesh/config and
+			// f[0].GetNode(0).ApiKey
+
+			// FIXME: Update GetNode(0).ApiKey and on-disk remote API key so
+			// later tests don't fail! We can do a "citools.RunOnNode(t, node1, sed -i
+			// s/old/new/ /root/.dotmesh/config)" but we can't mutate
+			// GetNode(0).ApiKey from here.
+		})
+	*/
 }
 
 func checkDeletionWorked(t *testing.T, fsname string, delay time.Duration, node1 string, node2 string) {
