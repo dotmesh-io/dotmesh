@@ -21,8 +21,8 @@ func (s3 *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
 
 	volName := VolumeName{
-		Name:      vars["dotname"],
-		Namespace: vars["dotNamespace"],
+		Name:      vars["name"],
+		Namespace: vars["namespace"],
 	}
 	localFilesystemId := s3.state.registry.Exists(
 		volName, "master",

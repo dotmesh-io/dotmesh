@@ -111,7 +111,7 @@ func (state *InMemoryState) runServer() {
 			),
 		).Methods("POST")
 
-		router.Handle("/s3/{dotname}/{key}", middleware.FromHTTPRequest(tracer, "s3")(Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager)))).Methods("PUT")
+		router.Handle("/s3/{namespace}-{name}/{key}", middleware.FromHTTPRequest(tracer, "s3")(Instrument(state)(NewS3Handler(state)))).Methods("PUT")
 
 	} else {
 		router.Handle("/rpc", Instrument(state)(NewAuthHandler(r, state.userManager)))
@@ -125,7 +125,7 @@ func (state *InMemoryState) runServer() {
 			"/filesystems/{filesystem}/{fromSnap}/{toSnap}",
 			Instrument(state)(NewAuthHandler(state.NewZFSReceivingServer(), state.userManager)),
 		).Methods("POST")
-		router.Handle("/s3/{dotname}/{key}", Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager))).Methods("PUT")
+		router.Handle("/s3/{namespace}-{name}/{key}", Instrument(state)(NewS3Handler(state))).Methods("PUT")
 
 	}
 
