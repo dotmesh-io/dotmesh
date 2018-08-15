@@ -49,9 +49,18 @@ func activeState(f *fsMachine) stateFn {
 			}
 			return activeState
 		} else if e.Name == "put-file" {
-			filename := (*e.Args)["key"].(string)
-			data := (*e.Args)["data"].([]byte)
-			return f.saveFile(filename, data)
+			//filename := (*e.Args)["key"].(string)
+			log.Println(e.Args)
+			s3ApiRequest, err := s3ApiRequestify((*e.Args)["S3Request"])
+			if err != nil {
+				log.Printf("%v while trying to cast to s3request", err)
+				f.innerResponses <- &Event{
+					Name: "failed-s3apirequest-cast",
+					Args: &EventArgs{"err": err},
+				}
+				return backoffState
+			}
+			return f.saveFile(s3ApiRequest)
 		} else if e.Name == "transfer" {
 
 			// TODO dedupe

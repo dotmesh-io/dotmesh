@@ -18,17 +18,22 @@ func NewS3Handler(state *InMemoryState) http.Handler {
 }
 
 func (s3 *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
+	log.Printf("[s3Handler] request %#v", req.Header.Get("Authorization"))
 	vars := mux.Vars(req)
-
+	log.Printf("entered s3 handler, vars: %#v", vars)
 	volName := VolumeName{
 		Name:      vars["name"],
 		Namespace: vars["namespace"],
 	}
+	branch, ok := vars["branch"]
+	if !ok || branch == "master" {
+		branch = ""
+	}
 	localFilesystemId := s3.state.registry.Exists(
-		volName, "master",
+		volName, branch,
 	)
 	if localFilesystemId != "" {
-		log.Println("CREATE OBJECT: %#v, %s", volName, vars["key"])
+		log.Println("CREATE OBJECT:", volName, vars["key"])
 		body, err := ioutil.ReadAll(req.Body)
 		if err != nil {
 			// todo better erroring
@@ -38,8 +43,11 @@ func (s3 *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 			localFilesystemId,
 			&Event{Name: "put-file",
 				Args: &EventArgs{
-					"key":  vars["key"],
-					"data": body,
+					"S3Request": S3ApiRequest{
+						Filename: vars["key"],
+						Data: body,
+						RequestType: "PUT",
+					},
 				},
 			},
 		)

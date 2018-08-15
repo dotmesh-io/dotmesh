@@ -35,6 +35,8 @@ go_library(
         "replication.go",
         "rpc.go",
         "s3.go",
+        "s3_handlers.go",
+        "s3api.go",
         "s3pullinitiatorstate.go",
         "s3pushinitiatorstate.go",
         "snapshotlogic.go",

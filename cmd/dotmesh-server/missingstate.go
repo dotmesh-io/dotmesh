@@ -161,9 +161,16 @@ func missingState(f *fsMachine) stateFn {
 			}
 			responseEvent, _ := f.mount()
 			if responseEvent.Name == "mounted" {
-				filename := (*e.Args)["key"].(string)
-				data := (*e.Args)["data"].([]byte)
-				return f.saveFile(filename, data)
+				s3ApiRequest, err := s3ApiRequestify((*e.Args)["S3Request"])
+				if err != nil {
+					log.Printf("%v while trying to cast to s3request", err)
+					f.innerResponses <- &Event{
+						Name: "failed-s3apirequest-cast",
+						Args: &EventArgs{"err": err},
+					}
+					return backoffState
+				}
+				return f.saveFile(s3ApiRequest)
 			} else {
 				f.innerResponses <- responseEvent
 				return backoffState
