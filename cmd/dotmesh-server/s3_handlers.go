@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/gorilla/mux"
 	"io/ioutil"
 	"log"
@@ -18,16 +19,17 @@ func NewS3Handler(state *InMemoryState) http.Handler {
 }
 
 func (s3 *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
-	log.Printf("[s3Handler] request %#v", req.Header.Get("Authorization"))
 	vars := mux.Vars(req)
-	log.Printf("entered s3 handler, vars: %#v", vars)
 	volName := VolumeName{
 		Name:      vars["name"],
 		Namespace: vars["namespace"],
 	}
 	branch, ok := vars["branch"]
+	bucketName := fmt.Sprintf("%s-%s", vars["name"], vars["namespace"])
 	if !ok || branch == "master" {
 		branch = ""
+	} else {
+		bucketName += "-" + branch
 	}
 	localFilesystemId := s3.state.registry.Exists(
 		volName, branch,
@@ -64,6 +66,9 @@ func (s3 *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(200)
 		resp.Header().Set("Access-Control-Allow-Origin", "*")
 		resp.Write([]byte{})
+	} else {
+		resp.WriteHeader(404)
+		resp.Write([]byte(fmt.Sprintf("Bucket %s does not exist", bucketName)))
 	}
 
 }
