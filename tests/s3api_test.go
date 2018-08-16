@@ -29,10 +29,10 @@ func TestS3Api(t *testing.T) {
 		citools.RunOnNode(t, node1, "echo helloworld > newfile.txt")
 		citools.RunOnNode(t, node1, cmd)
 		resp := citools.OutputFromRunOnNode(t, node1, citools.DockerRun(dotName)+" ls /foo/")
-		if !strings.Contains(resp, "newfile.txt") {
+		if !strings.Contains(resp, "newfile") {
 			t.Error("failed to create file")
 		}
-		resp = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(dotName)+" cat /foo/newfile.txt")
+		resp = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(dotName)+" cat /foo/newfile")
 		if !strings.Contains(resp, "helloworld") {
 			t.Error("failed to upload file")
 		}
