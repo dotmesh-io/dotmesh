@@ -41,3 +41,7 @@ sudo mv ./kubectl /usr/local/bin/kubectl
 
 curl -L -o /usr/local/bin/dep https://github.com/golang/dep/releases/download/v0.4.1/dep-linux-amd64
 chmod a+x /usr/local/bin/dep
+
+apt-get -y install pkg-config zip g++ zlib1g-dev unzip python git-core
+curl -L -o bazel-installer.sh https://github.com/bazelbuild/bazel/releases/download/0.15.2/bazel-0.15.2-installer-linux-x86_64.sh
+chmod +x bazel-installer.sh && ./bazel-installer.sh --user

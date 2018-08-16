@@ -24,7 +24,10 @@ if [ -z "${GOPATH}" ]; then
   sudo ln -s  /usr/lib/go-1.10/bin/go /usr/local/bin/go
   sudo ln -s  /usr/lib/go-1.10/bin/gofmt /usr/local/bin/gofmt
   export GOPATH=/home/vagrant/gocode
+  export PATH=/home/vagrant/bin:$PATH
   echo "export GOPATH=${GOPATH}" >> $HOME/.bash_profile
+  echo "export PATH=\$PATH/bin:\$PATH" >> $HOME/.bash_profile
+  echo "export DM_FOLDER=$GOPATH/src/github.com/dotmesh-io/dotmesh" >> $HOME/.bash_profile
 fi
 
 mkdir -p $GOPATH

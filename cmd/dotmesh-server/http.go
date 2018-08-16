@@ -111,6 +111,11 @@ func (state *InMemoryState) runServer() {
 			),
 		).Methods("POST")
 
+		// put file into master
+		router.Handle("/s3/{namespace}-{name}/{key}", middleware.FromHTTPRequest(tracer, "s3")(Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager)))).Methods("PUT")
+
+		// put file into other branch
+		router.Handle("/s3/{namespace}-{name}-{branch}/{key}", middleware.FromHTTPRequest(tracer, "s3")(Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager)))).Methods("PUT")
 	} else {
 		router.Handle("/rpc", Instrument(state)(NewAuthHandler(r, state.userManager)))
 
@@ -124,6 +129,10 @@ func (state *InMemoryState) runServer() {
 			Instrument(state)(NewAuthHandler(state.NewZFSReceivingServer(), state.userManager)),
 		).Methods("POST")
 
+		// put file into master
+		router.Handle("/s3/{namespace}-{name}/{key}", Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager))).Methods("PUT")
+		// put file into other branch
+		router.Handle("/s3/{namespace}-{name}-{branch}/{key}", Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager))).Methods("PUT")
 	}
 
 	router.HandleFunc("/check",

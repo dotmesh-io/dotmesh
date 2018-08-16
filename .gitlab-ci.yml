@@ -443,7 +443,7 @@ linux_two_double_node_clusters:
     except:
         - schedules
 
-.linux_s3:
+.linux_s3remote:
     retry: 2
     stage: test
     dependencies:
@@ -453,6 +453,23 @@ linux_two_double_node_clusters:
         - fast
     script:
         - ./test.sh -run TestS3Remote
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
+    except:
+        - schedules
+
+linux_s3api:
+    retry: 2
+    stage: test
+    dependencies:
+        - build_client_linux
+    tags:
+        - ubuntu-bionic
+        - fast
+    script:
+        - ./test.sh -run TestS3Api
     artifacts:
         paths:
         - extracted_logs
