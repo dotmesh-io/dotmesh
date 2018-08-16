@@ -1,17 +1,18 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
+	"log"
 	"os"
 	"strings"
-	"log"
 )
 
 // functions to make dotmesh server act like an S3 server
 
 type S3ApiRequest struct {
-	Filename string
-	Data []byte
+	Filename    string
+	Data        []byte
 	RequestType string
 }
 
@@ -23,14 +24,17 @@ func s3ApiRequestify(in interface{}) (S3ApiRequest, error) {
 			"Unable to cast %s to map[string]interface{}", in,
 		)
 	}
-	data, ok := typed["Data"].([]interface{})
-	var byteData []byte
-	for _, entry := range data {
-		byteData = append(byteData, entry.(byte))
+	data, ok := typed["Data"].(string)
+	if !ok {
+		return S3ApiRequest{}, fmt.Errorf("Could not cast %#v to string", typed["Data"])
+	}
+	bytes, err := base64.StdEncoding.DecodeString(data)
+	if err != nil {
+		return S3ApiRequest{}, fmt.Errorf("Unable to decode data %s to bytes", data)
 	}
 	return S3ApiRequest{
-		Filename: typed["Filename"].(string),
-		Data: byteData,
+		Filename:    typed["Filename"].(string),
+		Data:        bytes,
 		RequestType: "put",
 	}, nil
 }

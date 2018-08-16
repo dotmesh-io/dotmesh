@@ -44,8 +44,8 @@ func (s3 *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 			&Event{Name: "put-file",
 				Args: &EventArgs{
 					"S3Request": S3ApiRequest{
-						Filename: vars["key"],
-						Data: body,
+						Filename:    vars["key"],
+						Data:        body,
 						RequestType: "PUT",
 					},
 				},
