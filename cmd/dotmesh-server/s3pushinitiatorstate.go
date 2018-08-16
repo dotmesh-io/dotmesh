@@ -37,6 +37,11 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 	mountPoint := mnt(fmt.Sprintf("%s@%s", f.filesystemId, latestSnap.Id))
 
 	snaps, err := f.state.snapshotsForCurrentMaster(f.filesystemId)
+	if len(snaps) == 0 {
+		f.innerResponses <- event
+		updateUser("No commits to push!", transferRequestId, pollResult)
+		return backoffState
+	}
 	metadataSnap := snaps[len(snaps)-1]
 	pathToS3Metadata := fmt.Sprintf("%s@%s/dm.s3-versions/%s", mnt(f.filesystemId), metadataSnap.Id, latestSnap.Id)
 	log.Printf("[s3PushInitiatorState] path to s3 metadata: %s", pathToS3Metadata)
