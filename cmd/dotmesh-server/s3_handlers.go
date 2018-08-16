@@ -27,6 +27,10 @@ func (s3 *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	isAdmin, err := AuthenticatedUserIsNamespaceAdministrator(req.Context(), volName.Namespace)
 	if err != nil {
 		resp.WriteHeader(401)
+		resp.Write([]byte(err.Error()))
+	}
+	if !isAdmin {
+		resp.WriteHeader(401)
 		resp.Write([]byte("User is not the administrator of namespace " + volName.Namespace))
 	}
 	branch, ok := vars["branch"]
