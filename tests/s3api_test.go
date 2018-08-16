@@ -22,9 +22,9 @@ func TestS3Api(t *testing.T) {
 	host := f[0].GetNode(0)
 	node1 := host.Container
 
-	// TODO not sure the s3 mock used here actually cares for authentication so this may not be enough. Also probably doesn't support versioning...
 	t.Run("Put", func(t *testing.T) {
 		dotName := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm dot init "+dotName)
 		cmd := fmt.Sprintf("curl -T newfile.txt -u admin:%s %s:32607/s3/admin-%s/newfile", host.ApiKey, host.IP, dotName)
 		citools.RunOnNode(t, node1, "echo helloworld > newfile.txt")
 		citools.RunOnNode(t, node1, cmd)
@@ -35,6 +35,16 @@ func TestS3Api(t *testing.T) {
 		resp = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(dotName)+" cat /foo/newfile")
 		if !strings.Contains(resp, "helloworld") {
 			t.Error("failed to upload file")
+		}
+	})
+
+	t.Run("PutDotDoesntExist", func(t *testing.T) {
+		dotName := citools.UniqName()
+		cmd := fmt.Sprintf("curl -T newfile.txt -u admin:%s %s:32607/s3/admin-%s/newfile", host.ApiKey, host.IP, dotName)
+		citools.RunOnNode(t, node1, "echo helloworld > newfile.txt")
+		resp := citools.OutputFromRunOnNode(t, node1, cmd)
+		if !strings.Contains(resp, fmt.Sprintf("Bucket admin-%s does not exist", dotName)) {
+			t.Error("Did not respond with error msg")
 		}
 	})
 }
