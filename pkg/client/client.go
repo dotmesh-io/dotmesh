@@ -119,7 +119,7 @@ func DeduceUrl(ctx context.Context, hostnames []string, mode, user, apiKey strin
 	var errs []error
 	for _, hostname := range hostnames {
 		var urlsToTry []string
-		if mode == "external" && hostname == "dothub.com" {
+		if mode == "external" && (hostname == "dothub.com" || hostname == "cloud.dotscience.net" || hostname == "cloud.dotscience.com") {
 			urlsToTry = []string{
 				fmt.Sprintf("https://%s:443", hostname),
 			}
