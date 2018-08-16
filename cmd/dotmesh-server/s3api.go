@@ -77,7 +77,7 @@ func (f *fsMachine) saveFile(request S3ApiRequest) stateFn {
 		return backoffState
 	}
 	response, _ := f.snapshot(&Event{Name: "snapshot",
-		Args: &EventArgs{"metadata": metadata{"message": "saving file put by s3 api " + reqest.Filename}}})
+		Args: &EventArgs{"metadata": metadata{"message": "saving file put by s3 api " + request.Filename}}})
 	if response.Name != "snapshotted" {
 		f.innerResponses <- response
 		return backoffState
