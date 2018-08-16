@@ -285,7 +285,7 @@ linux_two_nodes_same_cluster:
     except:
         - schedules
 
-linux_kubernetes_volumes:
+.linux_kubernetes_volumes:
     retry: 2
     stage: test
     dependencies:
@@ -303,7 +303,7 @@ linux_kubernetes_volumes:
     except:
         - schedules
 
-linux_kubernetes_operator_dynamic_provisioning:
+.linux_kubernetes_operator_dynamic_provisioning:
     retry: 2
     stage: test
     dependencies:
@@ -322,7 +322,7 @@ linux_kubernetes_operator_dynamic_provisioning:
     except:
         - schedules
 
-linux_kubernetes_operator_PVC:
+.linux_kubernetes_operator_PVC:
     retry: 2
     stage: test
     dependencies:
