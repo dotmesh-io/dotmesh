@@ -24,6 +24,11 @@ func (s3 *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		Name:      vars["name"],
 		Namespace: vars["namespace"],
 	}
+	isAdmin, err := AuthenticatedUserIsNamespaceAdministrator(req.Context(), volName.Namespace)
+	if err != nil {
+		resp.WriteHeader(401)
+		resp.Write([]byte("User is not the administrator of namespace "+volName.Namespace))
+	}
 	branch, ok := vars["branch"]
 	bucketName := fmt.Sprintf("%s-%s", vars["name"], vars["namespace"])
 	if !ok || branch == "master" {
