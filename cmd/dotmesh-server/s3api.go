@@ -82,5 +82,6 @@ func (f *fsMachine) saveFile(request S3ApiRequest) stateFn {
 		f.innerResponses <- response
 		return backoffState
 	}
-	return discoveringState
+	f.innerResponses <- &Event{Name: "saved", Args: &EventArgs{"filename": request.Filename}}
+	return activeState
 }
