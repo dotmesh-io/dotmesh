@@ -910,7 +910,6 @@ func (s *InMemoryState) GetListOfVolumes(ctx context.Context) ([]DotmeshVolume, 
 		if err != nil {
 			switch err := err.(type) {
 			case PermissionDenied:
-				log.Printf("[GetListOfVoumes] permission denied reading %v", fs)
 				continue
 			default:
 				log.Printf("[GetListOfVolumes] err: %v", err)
