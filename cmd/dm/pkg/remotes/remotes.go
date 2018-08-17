@@ -546,7 +546,7 @@ func (j *JsonRpcClient) CallRemote(
 	addressesToTry := []Address{}
 	var err error
 	if j.Port == 0 {
-		if j.Hostname == "saas.dotmesh.io" || j.Hostname == "dothub.com" {
+		if j.Hostname == "dothub.com" || j.Hostname == "cloud.dotscience.com" || j.Hostname == "cloud.dotscience.net" {
 			scheme := "https"
 			port := 443
 			addressesToTry = append(addressesToTry, Address{scheme, j.Hostname, port})
