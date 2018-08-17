@@ -153,5 +153,6 @@ func (s3 *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, nam
 	} else {
 		// todo error here
 		log.Println(e)
+		resp.WriteHeader(500)
 	}
 }
