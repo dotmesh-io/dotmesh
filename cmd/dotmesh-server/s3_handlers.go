@@ -135,7 +135,7 @@ func (s3 *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, nam
 	if e.Name == "mounted" {
 		log.Printf("snapshot mounted %s for filesystem %s", lastSnapshot.Id, filesystemId)
 		result := (*e.Args)["mount-path"].(string)
-		keys, _, _ := getKeysForDir(result, "") // todo err handling
+		keys, _, _ := getKeysForDir(result + "__default__", "") // todo err handling
 		bucket := ListBucketResult{
 			Name:     name,
 			Contents: []BucketObject{},
