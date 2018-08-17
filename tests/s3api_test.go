@@ -58,4 +58,16 @@ func TestS3Api(t *testing.T) {
 			t.Error("Did not respond with error msg")
 		}
 	})
+	t.Run("List", func(t *testing.T) {
+		dotName := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm init "+dotName)
+		cmd := fmt.Sprintf("curl -T newfile.txt -u admin:%s 127.0.0.1:32607/s3/admin-%s/newfile", host.Password, dotName)
+		citools.RunOnNode(t, node1, "echo helloworld > newfile.txt")
+		citools.RunOnNode(t, node1, cmd)
+		resp := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin-%s", host.Password, dotName))
+		if !strings.Contains(resp, "newfile") {
+			fmt.Printf(resp)
+			t.Error("failed to include file")
+		}
+	})
 }
