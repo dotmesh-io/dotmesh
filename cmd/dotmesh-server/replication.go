@@ -41,15 +41,15 @@ func (z ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	master := z.state.masterFor(z.filesystem)
 
-	admin, err := z.state.userManager.Get(&user.Query{Ref: "admin"})
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(fmt.Sprintf("Can't establish API key to proxy pull: %+v.\n", err)))
-		log.Printf("[ZFSSender:%s] Can't establish API key to proxy pull: %+v.", z.filesystem, err)
-		return
-	}
-
 	if master != z.state.myNodeId {
+		admin, err := z.state.userManager.Get(&user.Query{Ref: "admin"})
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(fmt.Sprintf("Can't establish API key to proxy pull: %+v.\n", err)))
+			log.Printf("[ZFSSender:%s] Can't establish API key to proxy pull: %+v.", z.filesystem, err)
+			return
+		}
+
 		addresses := z.state.addressesFor(master)
 		url, err := dmclient.DeduceUrl(context.Background(), addresses, "internal", "admin", admin.ApiKey) // FIXME, need master->name mapping, see how handover works normally
 		if err != nil {
@@ -215,13 +215,6 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	z.filesystem = vars["filesystem"]
 	_ = make([]byte, BUF_LEN)
 
-	admin, err := z.state.userManager.Get(&user.Query{Ref: "admin"})
-	if err != nil {
-		w.Write([]byte(fmt.Sprintf("Can't establish API key to proxy push: %+v.\n", err)))
-		log.Printf("[ZFSReceiver:ServeHTTP:%s] Can't establish API key to proxy push: %+v", z.filesystem, err)
-		return
-	}
-
 	// TODO: add a coarse grained lock to start with: stop other writers from
 	// writing to this filesystem (unlike readers, this is strictly
 	// one-at-a-time), and also stop us moving this filesystem to another node
@@ -251,6 +244,13 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// below: a sort of proxy layer so that pushes can make it to the right
 		// master, even if they land on the wrong server.
+
+		admin, err := z.state.userManager.Get(&user.Query{Ref: "admin"})
+		if err != nil {
+			w.Write([]byte(fmt.Sprintf("Can't establish API key to proxy push: %+v.\n", err)))
+			log.Printf("[ZFSReceiver:ServeHTTP:%s] Can't establish API key to proxy push: %+v", z.filesystem, err)
+			return
+		}
 
 		addresses := z.state.addressesFor(master)
 
