@@ -62,7 +62,7 @@ func writeS3Metadata(path string, versions map[string]string) error {
 	return nil
 }
 
-func getKeysForDir(parentPath string, subPath string) (map[string]int64, int64, error) {
+func getKeysForDir(parentPath string, subPath string) (map[string]os.FileInfo, int64, error) {
 	// given a directory, recurse it creating s3 style keys for all the files in it (aka relative paths from that directory)
 	// send back a map of keys -> file sizes, and the whole directory's size
 	path := parentPath
@@ -74,7 +74,7 @@ func getKeysForDir(parentPath string, subPath string) (map[string]int64, int64, 
 		return nil, 0, err
 	}
 	var dirSize int64
-	keys := make(map[string]int64)
+	keys := make(map[string]os.FileInfo)
 	for _, fileInfo := range files {
 		if fileInfo.IsDir() {
 			paths, size, err := getKeysForDir(path, fileInfo.Name())
@@ -90,7 +90,7 @@ func getKeysForDir(parentPath string, subPath string) (map[string]int64, int64, 
 			if subPath != "" {
 				keyPath = subPath + "/" + keyPath
 			}
-			keys[keyPath] = fileInfo.Size()
+			keys[keyPath] = fileInfo
 			dirSize += fileInfo.Size()
 		}
 	}
@@ -232,7 +232,7 @@ func downloadS3Object(downloader *s3manager.Downloader, key, versionId, bucket, 
 	return nil
 }
 
-func removeOldS3Files(keyToVersionIds map[string]string, paths map[string]int64, bucket string, prefixes []string, svc *s3.S3) (map[string]string, error) {
+func removeOldS3Files(keyToVersionIds map[string]string, paths map[string]os.FileInfo, bucket string, prefixes []string, svc *s3.S3) (map[string]string, error) {
 	if len(prefixes) == 0 {
 		return removeOldPrefixedS3Files(keyToVersionIds, paths, bucket, "", svc)
 	}
@@ -245,7 +245,7 @@ func removeOldS3Files(keyToVersionIds map[string]string, paths map[string]int64,
 	}
 	return keyToVersionIds, nil
 }
-func removeOldPrefixedS3Files(keyToVersionIds map[string]string, paths map[string]int64, bucket, prefix string, svc *s3.S3) (map[string]string, error) {
+func removeOldPrefixedS3Files(keyToVersionIds map[string]string, paths map[string]os.FileInfo, bucket, prefix string, svc *s3.S3) (map[string]string, error) {
 	// get a list of the objects in s3, if there's anything there that isn't in our list of files in dotmesh, delete it.
 	params := &s3.ListObjectsV2Input{Bucket: aws.String(bucket)}
 	if prefix != "" {
@@ -276,11 +276,11 @@ func removeOldPrefixedS3Files(keyToVersionIds map[string]string, paths map[strin
 	return keyToVersionIds, nil
 }
 
-func updateS3Files(keyToVersionIds map[string]string, paths map[string]int64, pathToMount, transferRequestId, bucket string, prefixes []string, svc *s3.S3, pollResult TransferPollResult) (map[string]string, error) {
+func updateS3Files(keyToVersionIds map[string]string, paths map[string]os.FileInfo, pathToMount, transferRequestId, bucket string, prefixes []string, svc *s3.S3, pollResult TransferPollResult) (map[string]string, error) {
 	// push every key up to s3 and then send back a map of object key -> s3 version id
 	uploader := s3manager.NewUploaderWithClient(svc)
 	// filter out any paths we don't care about in an S3 remote
-	filtered := make(map[string]int64)
+	filtered := make(map[string]os.FileInfo)
 	for _, elem := range prefixes {
 		for key, size := range paths {
 			if strings.HasPrefix(key, elem) {
@@ -288,7 +288,7 @@ func updateS3Files(keyToVersionIds map[string]string, paths map[string]int64, pa
 			}
 		}
 	}
-	for key, size := range filtered {
+	for key, fileInfo := range filtered {
 		path := fmt.Sprintf("%s/%s", pathToMount, key)
 		file, err := os.Open(path)
 		pollResult.Index += 1
@@ -305,7 +305,7 @@ func updateS3Files(keyToVersionIds map[string]string, paths map[string]int64, pa
 			return nil, err
 		}
 		keyToVersionIds[key] = *output.VersionID
-		pollResult.Sent += size
+		pollResult.Sent += fileInfo.Size()
 		updatePollResult(transferRequestId, pollResult)
 		err = file.Close()
 		if err != nil {

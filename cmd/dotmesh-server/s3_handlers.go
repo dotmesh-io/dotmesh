@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"time"
 )
 
 type S3Handler struct {
@@ -106,9 +107,9 @@ type ListBucketResult struct {
 }
 
 type BucketObject struct {
-	Key string
-	//LastModified string
-	Size int64
+	Key          string
+	LastModified time.Time
+	Size         int64
 }
 
 func (s3 *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name string, filesystemId string) {
@@ -140,10 +141,11 @@ func (s3 *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, nam
 			Name:     name,
 			Contents: []BucketObject{},
 		}
-		for key, size := range keys {
+		for key, info := range keys {
 			object := BucketObject{
-				Key:  key,
-				Size: size,
+				Key:          key,
+				Size:         info.Size(),
+				LastModified: info.ModTime(),
 			}
 			bucket.Contents = append(bucket.Contents, object)
 		}
