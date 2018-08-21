@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/xml"
 	"fmt"
+	"github.com/dotmesh-io/dotmesh/pkg/auth"
 	"github.com/gorilla/mux"
 	"io/ioutil"
 	"log"
