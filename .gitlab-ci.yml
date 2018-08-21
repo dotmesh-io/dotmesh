@@ -460,7 +460,7 @@ linux_two_double_node_clusters:
     except:
         - schedules
 
-.linux_s3api:
+linux_s3api:
     retry: 2
     stage: test
     dependencies:
