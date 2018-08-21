@@ -74,10 +74,7 @@ func (s3 *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, file
 		// todo better erroring
 		resp.WriteHeader(400)
 	}
-	user, err := auth.GetUserFromCtx(req.Context())
-	if err != nil {
-		resp.WriteHeader(400)
-	}
+	user := auth.GetUserFromCtx(req.Context())
 	responseChan, _, err := s3.state.globalFsRequestId(
 		filesystemId,
 		&Event{Name: "put-file",
