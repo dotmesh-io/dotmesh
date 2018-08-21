@@ -14,6 +14,7 @@ type S3ApiRequest struct {
 	Filename    string
 	Data        []byte
 	RequestType string
+	User        string
 }
 
 func s3ApiRequestify(in interface{}) (S3ApiRequest, error) {
@@ -35,7 +36,8 @@ func s3ApiRequestify(in interface{}) (S3ApiRequest, error) {
 	return S3ApiRequest{
 		Filename:    typed["Filename"].(string),
 		Data:        bytes,
-		RequestType: "put",
+		RequestType: typed["RequestType"].(string),
+		User:        typed["User"].(string),
 	}, nil
 }
 
@@ -77,7 +79,7 @@ func (f *fsMachine) saveFile(request S3ApiRequest) stateFn {
 		return backoffState
 	}
 	response, _ := f.snapshot(&Event{Name: "snapshot",
-		Args: &EventArgs{"metadata": metadata{"message": "saving file put by s3 api " + request.Filename}}})
+		Args: &EventArgs{"metadata": metadata{"message": "saving file put by s3 api " + request.Filename, "author": request.User}}})
 	if response.Name != "snapshotted" {
 		f.innerResponses <- response
 		return backoffState

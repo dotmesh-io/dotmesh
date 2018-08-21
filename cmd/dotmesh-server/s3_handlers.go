@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/xml"
 	"fmt"
+	"github.com/dotmesh-io/dotmesh/pkg/auth"
 	"github.com/gorilla/mux"
 	"io/ioutil"
 	"log"
@@ -73,6 +74,7 @@ func (s3 *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, file
 		// todo better erroring
 		resp.WriteHeader(400)
 	}
+	user := auth.GetUserFromCtx(req.Context())
 	responseChan, _, err := s3.state.globalFsRequestId(
 		filesystemId,
 		&Event{Name: "put-file",
@@ -81,6 +83,7 @@ func (s3 *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, file
 					Filename:    filename,
 					Data:        body,
 					RequestType: "PUT",
+					User:        user.Name,
 				},
 			},
 		},
