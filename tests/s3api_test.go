@@ -37,6 +37,10 @@ func TestS3Api(t *testing.T) {
 		if !strings.Contains(resp, "helloworld") {
 			t.Error("failed to upload file")
 		}
+		resp = citools.OutputFromRunOnNode(t, node1, "dm log")
+		if !strings.Contains(resp, "author: admin") {
+			t.Error("Did not set author correctly")
+		}
 	})
 
 	t.Run("PutDotDoesntExist", func(t *testing.T) {
