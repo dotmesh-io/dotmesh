@@ -82,7 +82,11 @@ func getKeysForDir(parentPath string, subPath string) (map[string]os.FileInfo, i
 				return nil, 0, err
 			}
 			for k, v := range paths {
-				keys[k] = v
+				if subPath == "" {
+					keys[k] = v
+				} else {
+					keys[subPath+"/"+k] = v
+				}
 			}
 			dirSize += size
 		} else {
