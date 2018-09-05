@@ -285,6 +285,9 @@ func updateS3Files(keyToVersionIds map[string]string, paths map[string]os.FileIn
 	uploader := s3manager.NewUploaderWithClient(svc)
 	// filter out any paths we don't care about in an S3 remote
 	filtered := make(map[string]os.FileInfo)
+	if len(prefixes) == 0 {
+		filtered = paths
+	}
 	for _, elem := range prefixes {
 		for key, size := range paths {
 			if strings.HasPrefix(key, elem) {
