@@ -60,8 +60,6 @@ func NewCmdS3(out io.Writer) *cobra.Command {
 				if err != nil {
 					return fmt.Errorf("Could not establish connection with AWS using supplied credentials")
 				}
-				// I don't think region actually matters, but if none is supplied the client complains
-				svc := s3.New(sess, aws.NewConfig().WithRegion("us-east-1"))
 				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
