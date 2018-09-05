@@ -382,7 +382,7 @@ func TestSingleNode(t *testing.T) {
 		re, _ := regexp.Compile(`server.*up to date`)
 		matches := re.FindAllStringSubmatch(resp, -1)
 		if len(matches) < 2 {
-			t.Error("Unrecognisable result from `dm dot show`: %s, regexp matches: %#v", resp, matches)
+			t.Errorf("Unrecognisable result from `dm dot show`: %s, regexp matches: %#v", resp, matches)
 		} else {
 			masterReplicationStatus := matches[0][0]
 			branchReplicationStatus := matches[1][0]
@@ -2430,7 +2430,7 @@ spec:
 
 		finalPvcs := citools.OutputFromRunOnNode(t, node1.Container, "kubectl get pvc -n dotmesh | cut -f 1 -d ' ' | sort")
 		if initialPvcs != finalPvcs {
-			t.Error("Didn't end up with the same PVCs as we started with. Before: %+v After: %+v", initialPvcs, finalPvcs)
+			t.Errorf("Didn't end up with the same PVCs as we started with. Before: %+v After: %+v", initialPvcs, finalPvcs)
 		}
 	})
 
