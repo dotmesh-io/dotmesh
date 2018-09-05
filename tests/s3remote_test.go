@@ -264,8 +264,6 @@ func TestS3Remote(t *testing.T) {
 	})
 
 	t.Run("InitThenPush", func(t *testing.T) {
-		// todo
-		// create a dot
 		fsname := citools.UniqName()
 		citools.RunOnNode(t, node1, "dm init "+fsname)
 		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/pushed-file.txt")
