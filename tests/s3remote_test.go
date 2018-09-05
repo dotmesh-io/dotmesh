@@ -257,4 +257,20 @@ func TestS3Remote(t *testing.T) {
 		// clone a bucket without specifying a local name
 		// check that the volume locally doesn't end up being some weird dotmesh subdot config/ dots are removed from the local name
 	})
+
+	t.Run("InitThenPush", func(t *testing.T) {
+		// todo
+		// create a dot
+		// set up an s3 remote
+		// try pushing to it
+	})
+
+	t.Run("InitThenPushPull", func(t *testing.T) {
+		// todo
+		// create a dot
+		// set up an s3 remote
+		// try pushing to it
+		// change something on s3
+		// pull it
+	})
 }

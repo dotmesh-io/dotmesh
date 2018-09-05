@@ -1075,7 +1075,7 @@ func (d *DotmeshRPC) Branch(
 	if e.Name == "cloned" {
 		log.Printf(
 			"Cloned %s:%s@%s (%s) to %s", args.Name,
-			args.SourceBranch, args.SourceCommitId, originFilesystemId,
+			args.SourceBranch, args.SourceCommitId, originFilesystemId, (*e.Args)["NewFilesystemId"].(string),
 		)
 		*result = true
 	} else {
@@ -1647,7 +1647,7 @@ func (d *DotmeshRPC) Transfer(
 				if err != nil {
 					return err
 				}
-				log.Printf("[TransferIt] for %s, got dotmesh volume: %s", filesystemId, v)
+				log.Printf("[TransferIt] for %s, got dotmesh volume: %v", filesystemId, v)
 				dirtyBytes = v.DirtyBytes
 				log.Printf("[TransferIt] got %d dirty bytes for %s from peer", dirtyBytes, filesystemId)
 
@@ -1675,7 +1675,6 @@ func (d *DotmeshRPC) Transfer(
 			}
 
 			if len(containersRunning) > 0 {
-
 				return fmt.Errorf(
 					"Aborting because there are active containers running on "+
 						"volume where data would be written: %s. Stop the containers.",

@@ -305,7 +305,7 @@ func activeState(f *fsMachine) stateFn {
 
 			f.innerResponses <- &Event{
 				Name: "cloned",
-				Args: &EventArgs{},
+				Args: &EventArgs{"newFilesystemId": newCloneFilesystemId},
 			}
 			return activeState
 		} else if e.Name == "mount" {

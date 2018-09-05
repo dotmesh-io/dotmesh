@@ -718,10 +718,10 @@ func (s *InMemoryState) deserializeDispatchAndRespond(fs string, node *client.No
 	if err != nil {
 		return err
 	}
-	log.Printf("Got response chan %v, %s for %s", c, err, fs)
+	log.Printf("Got response chan %v, %s for %v", c, err, fs)
 	go func() {
 		internalResponse := <-c
-		log.Printf("Done putting it into internalResponse (%s, %v)", fs, c)
+		log.Printf("Done putting it into internalResponse (%v, %v)", fs, c)
 
 		serialized, err := s.serializeEvent(internalResponse)
 		// TODO think more about handling error cases here, lest we cause deadlocks
