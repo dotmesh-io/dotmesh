@@ -1075,7 +1075,7 @@ func (d *DotmeshRPC) Branch(
 	if e.Name == "cloned" {
 		log.Printf(
 			"Cloned %s:%s@%s (%s) to %s", args.Name,
-			args.SourceBranch, args.SourceCommitId, originFilesystemId, (*e.Args)["NewFilesystemId"].(string),
+			args.SourceBranch, args.SourceCommitId, originFilesystemId, (*e.Args)["newFilesystemId"].(string),
 		)
 		*result = true
 	} else {
