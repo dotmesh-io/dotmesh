@@ -65,9 +65,14 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 		// go back to the one before it until we find one that isn't that type
 		err := loadS3Meta(f.filesystemId, latestSnap.Id, &latestMeta)
 
-		if err != nil && !os.IsNotExist(err) {
-			f.errorDuringTransfer("s3-pull-initiator-cant-read-metadata", err)
-			return backoffState
+		if err != nil {
+			if os.IsNotExist(err) {
+				f.errorDuringTransfer("must push before pulling!", err)
+				return backoffState
+			} else {
+				f.errorDuringTransfer("s3-pull-initiator-cant-read-metadata", err)
+				return backoffState
+			}
 		}
 	}
 	bucketChanged, keyVersions, err := downloadS3Bucket(svc, transferRequest.RemoteName, destPath, transferRequestId, transferRequest.Prefixes, &pollResult, latestMeta)
