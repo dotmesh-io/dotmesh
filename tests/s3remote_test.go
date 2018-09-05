@@ -280,6 +280,22 @@ func TestS3Remote(t *testing.T) {
 		}
 	})
 
+	t.Run("InitThenPull", func(t *testing.T) {
+		// todo
+		// create a dot
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm init "+fsname)
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+		citools.RunOnNode(t, node1, "dm commit -m 'initial commit'")
+		// try pulling from s3
+		citools.RunOnNode(t, node1, "dm pull test-real-s3 --remote-name=test.dotmesh "+fsname)
+		// check the file got created
+		resp := citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" ls /foo/")
+		if !strings.Contains(resp, "hello-world.txt") {
+			t.Error("failed to pull s3 bucket")
+		}
+	})
+
 	t.Run("InitThenPushPull", func(t *testing.T) {
 		// todo
 		// create a dot
