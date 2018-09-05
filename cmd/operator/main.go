@@ -262,15 +262,15 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 		// Callback Functions to trigger on add/update/delete
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				glog.V(3).Info("NODE ADD %#v", obj)
+				glog.V(3).Infof("NODE ADD %#v", obj)
 				rc.scheduleUpdate()
 			},
 			UpdateFunc: func(old, new interface{}) {
-				glog.V(3).Info("NODE UPDATE %#v -> %#v", old, new)
+				glog.V(3).Infof("NODE UPDATE %#v -> %#v", old, new)
 				rc.scheduleUpdate()
 			},
 			DeleteFunc: func(obj interface{}) {
-				glog.V(3).Info("NODE DELETE %#v", obj)
+				glog.V(3).Infof("NODE DELETE %#v", obj)
 				rc.scheduleUpdate()
 			},
 		},
@@ -307,15 +307,15 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 		// Callback Functions to trigger on add/update/delete
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				glog.V(3).Info("SENTINEL ADD %#v", obj)
+				glog.V(3).Infof("SENTINEL ADD %#v", obj)
 				rc.scheduleUpdate()
 			},
 			UpdateFunc: func(old, new interface{}) {
-				glog.V(3).Info("SENTINEL UPDATE %#v -> %#v", old, new)
+				glog.V(3).Infof("SENTINEL UPDATE %#v -> %#v", old, new)
 				rc.scheduleUpdate()
 			},
 			DeleteFunc: func(obj interface{}) {
-				glog.V(3).Info("SENTINEL DELETE %#v", obj)
+				glog.V(3).Infof("SENTINEL DELETE %#v", obj)
 				rc.scheduleUpdate()
 			},
 		},
@@ -352,15 +352,15 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 		// Callback Functions to trigger on add/update/delete
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				glog.V(3).Info("POD ADD %#v", obj)
+				glog.V(3).Infof("POD ADD %#v", obj)
 				rc.scheduleUpdate()
 			},
 			UpdateFunc: func(old, new interface{}) {
-				glog.V(3).Info("POD UPDATE %#v -> %#v", old, new)
+				glog.V(3).Infof("POD UPDATE %#v -> %#v", old, new)
 				rc.scheduleUpdate()
 			},
 			DeleteFunc: func(obj interface{}) {
-				glog.V(3).Info("POD DELETE %#v", obj)
+				glog.V(3).Infof("POD DELETE %#v", obj)
 				rc.scheduleUpdate()
 			},
 		},
@@ -397,15 +397,15 @@ func newDotmeshController(client kubernetes.Interface) *dotmeshController {
 		// Callback Functions to trigger on add/update/delete
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				glog.V(3).Info("PVC ADD %#v", obj)
+				glog.V(3).Infof("PVC ADD %#v", obj)
 				rc.scheduleUpdate()
 			},
 			UpdateFunc: func(old, new interface{}) {
-				glog.V(3).Info("PVC UPDATE %#v -> %#v", old, new)
+				glog.V(3).Infof("PVC UPDATE %#v -> %#v", old, new)
 				rc.scheduleUpdate()
 			},
 			DeleteFunc: func(obj interface{}) {
-				glog.V(3).Info("PVC DELETE %#v", obj)
+				glog.V(3).Infof("PVC DELETE %#v", obj)
 				rc.scheduleUpdate()
 			},
 		},
@@ -678,7 +678,7 @@ func (c *dotmeshController) process() error {
 
 		// Find the image this pod is running
 		if len(dotmesh.Spec.Containers) != 1 {
-			glog.Infof("Observing pod %s - it has %d containers, should be 1", len(dotmesh.Spec.Containers))
+			glog.Infof("Observing pod %s - it has %d containers, should be 1", podName, len(dotmesh.Spec.Containers))
 			// Weird and strange, mark it for death
 			dotmeshesToKill[podName] = struct{}{}
 			// But don't try starting any new dotmesh on the node it's SUPPOSED to be on until it's gone
@@ -722,7 +722,7 @@ func (c *dotmeshController) process() error {
 
 		if status == v1.PodFailed || status == v1.PodSucceeded {
 			c.logPodInfo(dotmesh)
-			glog.Infof("Observing pod %s - on node found to be in status  %s", podName, boundNode, status)
+			glog.Infof("Observing pod %s - on node %s found to be in status %s", podName, boundNode, status)
 			// Broken, mark it for death
 			dotmeshesToKill[podName] = struct{}{}
 
@@ -745,7 +745,7 @@ func (c *dotmeshController) process() error {
 				if pvcAttachedToPod != "" {
 					c.createSentinelPod(pvcAttachedToPod, runningNode)
 				} else {
-					glog.Infof("No PVC attached to Pod and pod is in pvcPerNodeMode, scheduling pod ot be killed. PodName %s on Node : ", podName, runningNode)
+					glog.Infof("No PVC attached to Pod and pod is in pvcPerNodeMode, scheduling pod ot be killed. PodName %s on Node : %s", podName, runningNode)
 					dotmeshesToKill[podName] = struct{}{}
 				}
 			}
@@ -1283,7 +1283,7 @@ func (c *dotmeshController) logPodInfo(pod *v1.Pod) {
 			}
 			if err != nil {
 				if err == io.EOF {
-					glog.Infof("Failed pod %s log ends", podName, line)
+					glog.Infof("Failed pod %s log ends %s", podName, line)
 					return // Only from inner func
 				} else {
 					glog.Errorf("Failed pod %s - error reading logs - %#v", podName, err)

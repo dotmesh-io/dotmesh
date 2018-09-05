@@ -2796,8 +2796,6 @@ spec:
 `)
 
 		citools.LogTiming("DynamicProvisioning: PV Claim")
-
-		var dindPvc string
 		err := citools.TryUntilSucceeds(func() error {
 			result := citools.OutputFromRunOnNode(t, node1.Container, "(kubectl get pv |grep default/dind-pvc-test) || true")
 			// We really want a line like:
@@ -2805,7 +2803,6 @@ spec:
 			if !strings.Contains(result, "default/dind-pvc-test") {
 				return fmt.Errorf("dind PV didn't get created")
 			}
-			dindPvc = strings.Split(result, " ")[0]
 			return nil
 		}, "finding the dind-pv-test PV")
 		if err != nil {
