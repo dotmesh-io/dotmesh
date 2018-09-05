@@ -96,7 +96,13 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 		// }
 		// check if there is anything in s3 that isn't in this list - if there is, delete it
 		// create a file under the last commit id in the appropriate place + dump out the new versions to it
-		dirtyPathToS3Meta := fmt.Sprintf("%s/dm.s3-versions/%s", mnt(f.filesystemId), latestSnap.Id)
+		directoryPath := fmt.Sprintf("%s/dm.s3-versions", mnt(f.filesystemId))
+		dirtyPathToS3Meta := fmt.Sprintf("%s/%s", directoryPath, latestSnap.Id)
+		err = os.MkdirAll(directoryPath, 0775)
+		if err != nil {
+			f.errorDuringTransfer("couldnt-create-metadata-subdot", err)
+			return backoffState
+		}
 		err = writeS3Metadata(dirtyPathToS3Meta, keyToVersionIds)
 		if err != nil {
 			f.errorDuringTransfer("couldnt-write-s3-metadata-push", err)
