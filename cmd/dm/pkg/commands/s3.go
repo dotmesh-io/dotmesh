@@ -55,7 +55,7 @@ func NewCmdS3(out io.Writer) *cobra.Command {
 				if endpoint != "" {
 					config.Endpoint = &endpoint
 				}
-				sess, err := session.NewSession(config)
+				_, err := session.NewSession(config)
 				if err != nil {
 					return fmt.Errorf("Could not establish connection with AWS using supplied credentials")
 				}
