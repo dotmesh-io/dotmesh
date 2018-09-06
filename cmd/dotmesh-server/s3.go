@@ -287,6 +287,7 @@ func updateS3Files(keyToVersionIds map[string]string, paths map[string]os.FileIn
 	filtered := make(map[string]os.FileInfo)
 	if len(prefixes) == 0 {
 		filtered = paths
+		log.Infof("[updateS3Files] files: %#v", filtered)
 	}
 	for _, elem := range prefixes {
 		for key, size := range paths {
