@@ -298,27 +298,32 @@ func updateS3Files(keyToVersionIds map[string]string, paths map[string]os.FileIn
 	}
 	for key, fileInfo := range filtered {
 		path := fmt.Sprintf("%s/%s", pathToMount, key)
-		file, err := os.Open(path)
+		versionId, err := uploadFileToS3(path)
+		if err != nil {
+			return nil, err
+		}
+		keyToVersionIds[key] = versionId
 		pollResult.Index += 1
-
-		if err != nil {
-			return nil, err
-		}
-		output, err := uploader.Upload(&s3manager.UploadInput{
-			Bucket: aws.String(bucket),
-			Key:    aws.String(key),
-			Body:   file,
-		})
-		if err != nil {
-			return nil, err
-		}
-		keyToVersionIds[key] = *output.VersionID
 		pollResult.Sent += fileInfo.Size()
 		updatePollResult(transferRequestId, pollResult)
-		err = file.Close()
-		if err != nil {
-			return nil, err
-		}
 	}
 	return keyToVersionIds, nil
+}
+
+func uploadFileToS3(path string, uploader *s3.Uploader) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	output, err := uploader.Upload(&s3manager.UploadInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+		Body:   file,
+	})
+	if err != nil {
+		return "", err
+	}
+	return *output.VersionID, nil
 }
