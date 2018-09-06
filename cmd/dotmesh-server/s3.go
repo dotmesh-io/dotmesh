@@ -298,7 +298,7 @@ func updateS3Files(keyToVersionIds map[string]string, paths map[string]os.FileIn
 	}
 	for key, fileInfo := range filtered {
 		path := fmt.Sprintf("%s/%s", pathToMount, key)
-		versionId, err := uploadFileToS3(path)
+		versionId, err := uploadFileToS3(path, key, bucket, uploader)
 		if err != nil {
 			return nil, err
 		}
