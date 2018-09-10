@@ -718,10 +718,10 @@ func (s *InMemoryState) deserializeDispatchAndRespond(fs string, node *client.No
 	if err != nil {
 		return err
 	}
-	log.Printf("Got response chan %s, %s for %s", c, err, fs)
+	log.Printf("Got response chan %v, %s for %v", c, err, fs)
 	go func() {
 		internalResponse := <-c
-		log.Printf("Done putting it into internalResponse (%s, %s)", fs, c)
+		log.Printf("Done putting it into internalResponse (%v, %v)", fs, c)
 
 		serialized, err := s.serializeEvent(internalResponse)
 		// TODO think more about handling error cases here, lest we cause deadlocks
@@ -785,7 +785,7 @@ func (s *InMemoryState) updateSnapshotsFromKnownState(
 
 			latest := (*snapshots)[len(*snapshots)-1]
 			log.Printf(
-				"[updateSnapshots] publishing latest snapshot %s on %s",
+				"[updateSnapshots] publishing latest snapshot %v on %s",
 				latest, filesystem,
 			)
 			go func() {

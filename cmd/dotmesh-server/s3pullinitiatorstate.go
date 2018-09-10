@@ -34,6 +34,12 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 		f.errorDuringTransfer("cannot-create-default-dir", err)
 		return backoffState
 	}
+	versionsPath := fmt.Sprintf("%s/%s", mnt(f.filesystemId), "dm.s3-versions")
+	err = os.MkdirAll(versionsPath, 0775)
+	if err != nil {
+		f.errorDuringTransfer("cannot-create-versions-metadata-dir", err)
+		return backoffState
+	}
 	svc, err := getS3Client(transferRequest)
 	if err != nil {
 		f.errorDuringTransfer("couldnt-create-s3-client", err)
@@ -58,9 +64,15 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 		// if "type" == "metadata-only" in commit ignore it
 		// go back to the one before it until we find one that isn't that type
 		err := loadS3Meta(f.filesystemId, latestSnap.Id, &latestMeta)
+
 		if err != nil {
-			f.errorDuringTransfer("s3-pull-initiator-cant-read-metadata", err)
-			return backoffState
+			if os.IsNotExist(err) {
+				f.errorDuringTransfer("must push before pulling!", err)
+				return backoffState
+			} else {
+				f.errorDuringTransfer("s3-pull-initiator-cant-read-metadata", err)
+				return backoffState
+			}
 		}
 	}
 	bucketChanged, keyVersions, err := downloadS3Bucket(svc, transferRequest.RemoteName, destPath, transferRequestId, transferRequest.Prefixes, &pollResult, latestMeta)

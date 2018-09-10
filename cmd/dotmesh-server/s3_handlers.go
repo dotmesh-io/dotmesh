@@ -31,10 +31,12 @@ func (s3 *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		resp.WriteHeader(401)
 		resp.Write([]byte(err.Error()))
+		return
 	}
 	if !isAdmin {
 		resp.WriteHeader(401)
 		resp.Write([]byte("User is not the administrator of namespace " + volName.Namespace))
+		return
 	}
 	branch, ok := vars["branch"]
 	bucketName := fmt.Sprintf("%s-%s", vars["namespace"], vars["name"])
@@ -73,6 +75,7 @@ func (s3 *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, file
 	if err != nil {
 		// todo better erroring
 		resp.WriteHeader(400)
+		return
 	}
 	user := auth.GetUserFromCtx(req.Context())
 	responseChan, _, err := s3.state.globalFsRequestId(
@@ -91,6 +94,7 @@ func (s3 *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, file
 	if err != nil {
 		// todo better erroring
 		resp.WriteHeader(400)
+		return
 	}
 	go func() {
 		// asynchronously throw away the response, transfers can be polled via
@@ -120,8 +124,9 @@ func (s3 *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, nam
 	if len(snapshots) == 0 {
 		// throw up an error?
 		log.Println("no snaps")
-		resp.Write([]byte("No snaps to mount - commit before listing."))
 		resp.WriteHeader(400)
+		resp.Write([]byte("No snaps to mount - commit before listing."))
+
 		return
 	}
 	lastSnapshot := snapshots[len(snapshots)-1]
@@ -133,6 +138,7 @@ func (s3 *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, nam
 	if err != nil {
 		// error here
 		log.Println(err)
+		return
 	}
 
 	e := <-responseChan

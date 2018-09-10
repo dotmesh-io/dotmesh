@@ -8,7 +8,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/dotmesh-io/dotmesh/cmd/dm/pkg/remotes"
 	"github.com/spf13/cobra"
 )
@@ -56,16 +55,9 @@ func NewCmdS3(out io.Writer) *cobra.Command {
 				if endpoint != "" {
 					config.Endpoint = &endpoint
 				}
-				sess, err := session.NewSession(config)
+				_, err := session.NewSession(config)
 				if err != nil {
 					return fmt.Errorf("Could not establish connection with AWS using supplied credentials")
-				}
-				// I don't think region actually matters, but if none is supplied the client complains
-				svc := s3.New(sess, aws.NewConfig().WithRegion("us-east-1"))
-				_, err = svc.ListBuckets(nil)
-				if err != nil {
-					fmt.Printf("Error: %#v", err)
-					return fmt.Errorf("Could not list accessible buckets using supplied credentials")
 				}
 				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {

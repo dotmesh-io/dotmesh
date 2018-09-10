@@ -73,6 +73,7 @@ func getKeysForDir(parentPath string, subPath string) (map[string]os.FileInfo, i
 	if err != nil {
 		return nil, 0, err
 	}
+	log.Printf("[getKeysForDir] Files: %#v", files)
 	var dirSize int64
 	keys := make(map[string]os.FileInfo)
 	for _, fileInfo := range files {
@@ -82,7 +83,11 @@ func getKeysForDir(parentPath string, subPath string) (map[string]os.FileInfo, i
 				return nil, 0, err
 			}
 			for k, v := range paths {
-				keys[k] = v
+				if subPath == "" {
+					keys[k] = v
+				} else {
+					keys[subPath+"/"+k] = v
+				}
 			}
 			dirSize += size
 		} else {
@@ -281,6 +286,10 @@ func updateS3Files(keyToVersionIds map[string]string, paths map[string]os.FileIn
 	uploader := s3manager.NewUploaderWithClient(svc)
 	// filter out any paths we don't care about in an S3 remote
 	filtered := make(map[string]os.FileInfo)
+	if len(prefixes) == 0 {
+		filtered = paths
+		log.Printf("[updateS3Files] files: %#v", filtered)
+	}
 	for _, elem := range prefixes {
 		for key, size := range paths {
 			if strings.HasPrefix(key, elem) {
@@ -290,27 +299,32 @@ func updateS3Files(keyToVersionIds map[string]string, paths map[string]os.FileIn
 	}
 	for key, fileInfo := range filtered {
 		path := fmt.Sprintf("%s/%s", pathToMount, key)
-		file, err := os.Open(path)
+		versionId, err := uploadFileToS3(path, key, bucket, uploader)
+		if err != nil {
+			return nil, err
+		}
+		keyToVersionIds[key] = versionId
 		pollResult.Index += 1
-
-		if err != nil {
-			return nil, err
-		}
-		output, err := uploader.Upload(&s3manager.UploadInput{
-			Bucket: aws.String(bucket),
-			Key:    aws.String(key),
-			Body:   file,
-		})
-		if err != nil {
-			return nil, err
-		}
-		keyToVersionIds[key] = *output.VersionID
 		pollResult.Sent += fileInfo.Size()
 		updatePollResult(transferRequestId, pollResult)
-		err = file.Close()
-		if err != nil {
-			return nil, err
-		}
 	}
 	return keyToVersionIds, nil
+}
+
+func uploadFileToS3(path, key, bucket string, uploader *s3manager.Uploader) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	output, err := uploader.Upload(&s3manager.UploadInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+		Body:   file,
+	})
+	if err != nil {
+		return "", err
+	}
+	return *output.VersionID, nil
 }

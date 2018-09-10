@@ -68,6 +68,10 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 		// list everything in the main directory
 		pathToMount := fmt.Sprintf("%s/__default__", mountPoint)
 		paths, dirSize, err := getKeysForDir(pathToMount, "")
+		if err != nil {
+			f.sendEvent(&EventArgs{"err": err, "path": pathToMount}, "cant-get-keys-for-directory", "")
+			return backoffState
+		}
 		// push everything to s3
 		pollResult.Total = len(paths)
 		pollResult.Size = dirSize
@@ -96,7 +100,13 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 		// }
 		// check if there is anything in s3 that isn't in this list - if there is, delete it
 		// create a file under the last commit id in the appropriate place + dump out the new versions to it
-		dirtyPathToS3Meta := fmt.Sprintf("%s/dm.s3-versions/%s", mnt(f.filesystemId), latestSnap.Id)
+		directoryPath := fmt.Sprintf("%s/dm.s3-versions", mnt(f.filesystemId))
+		dirtyPathToS3Meta := fmt.Sprintf("%s/%s", directoryPath, latestSnap.Id)
+		err = os.MkdirAll(directoryPath, 0775)
+		if err != nil {
+			f.errorDuringTransfer("couldnt-create-metadata-subdot", err)
+			return backoffState
+		}
 		err = writeS3Metadata(dirtyPathToS3Meta, keyToVersionIds)
 		if err != nil {
 			f.errorDuringTransfer("couldnt-write-s3-metadata-push", err)

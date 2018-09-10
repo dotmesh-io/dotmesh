@@ -26,6 +26,10 @@ func makeS3File(node, filename, contents, bucket string) {
 	citools.RunOnNodeErr(node, s3cmd(fmt.Sprintf("put %s s3://%s", filename, bucket)))
 }
 
+func EmptyBucket(node string) {
+	citools.RunOnNodeErr(node, s3cmd("rm s3://test.dotmesh.empty/pushed-file.txt"))
+}
+
 func TestS3Remote(t *testing.T) {
 	citools.TeardownFinishedTestRuns()
 
@@ -47,6 +51,7 @@ func TestS3Remote(t *testing.T) {
 	citools.RunOnNode(t, node1, "dm s3 remote add test-real-s3 "+s3AccessKey+":"+s3SecretKey)
 	citools.RunOnNode(t, node1, "dm s3 remote add test-s3 FAKEKEY:FAKESECRET@http://127.0.0.1:4569")
 	PutBackS3Files(node1)
+	EmptyBucket(node1)
 	t.Run("remote", func(t *testing.T) {
 		resp := citools.OutputFromRunOnNode(t, node1, "dm remote")
 		if !strings.Contains(resp, "test-s3") {
@@ -256,5 +261,43 @@ func TestS3Remote(t *testing.T) {
 		// todo
 		// clone a bucket without specifying a local name
 		// check that the volume locally doesn't end up being some weird dotmesh subdot config/ dots are removed from the local name
+	})
+
+	t.Run("InitThenPush", func(t *testing.T) {
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm init "+fsname)
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/pushed-file.txt")
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+		citools.RunOnNode(t, node1, "dm commit -m 'initial commit'")
+		// try pushing to s3
+		citools.RunOnNode(t, node1, "dm push test-real-s3 --remote-name=test.dotmesh.empty "+fsname)
+		// check the file got created
+		resp := citools.OutputFromRunOnNode(t, node1, s3cmd("ls s3://test.dotmesh.empty"))
+		if !strings.Contains(resp, "pushed-file.txt") {
+			t.Error("Did not push new file to S3")
+		}
+	})
+
+	t.Run("InitThenPull", func(t *testing.T) {
+		// todo
+		// create a dot
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm init "+fsname)
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+		citools.RunOnNode(t, node1, "dm commit -m 'initial commit'")
+		// try pulling from s3
+		_, err = citools.RunOnNodeErr(node1, "dm pull test-real-s3 --remote-name=test.dotmesh "+fsname)
+		if err == nil {
+			t.Error("Pull command did not detect extra commits")
+		}
+	})
+
+	t.Run("InitThenPushPull", func(t *testing.T) {
+		// todo
+		// create a dot
+		// set up an s3 remote
+		// try pushing to it
+		// change something on s3
+		// pull it
 	})
 }

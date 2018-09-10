@@ -21,7 +21,7 @@ variables:
     CI_DOCKER_OPERATOR_IMAGE: $CI_REGISTRY/$CI_REPOSITORY/dotmesh-operator:$CI_COMMIT_SHA
     CI_DOCKER_DIND_PROVISIONER_IMAGE: $CI_REGISTRY/$CI_REPOSITORY/dind-dynamic-provisioner:$CI_COMMIT_SHA
 
-    CI_SERVICE_BEING_TESTED: dotmesh
+    CI_SERVICE_BEING_TESTED: dotmesh-server
 
     DOTMESH_TEST_CLEANUP: always
     DOTMESH_TEST_TIMEOUT: 10m
@@ -443,7 +443,7 @@ linux_two_double_node_clusters:
     except:
         - schedules
 
-.linux_s3remote:
+linux_s3remote:
     retry: 2
     stage: test
     dependencies:
@@ -555,8 +555,8 @@ trigger_e2e_test:
         - ubuntu-bionic
         - fast
     script:
-        - echo - curl -X POST -F "token=$E2E_TRIGGER_TOKEN" -F "ref=master" -F "variables[DOTMESH_CI_COMMIT_SHA]=$CI_COMMIT_SHA" -F "variables[DOTMESH_CI_BUILD_REF_NAME]=$CI_BUILD_REF_NAME" https://gitlab.dotmesh.com/api/v4/projects/31/trigger/pipeline
-        - curl -X POST -F "token=$E2E_TRIGGER_TOKEN" -F "ref=master" -F "variables[DOTMESH_CI_COMMIT_SHA]=$CI_COMMIT_SHA" -F "variables[DOTMESH_CI_BUILD_REF_NAME]=$CI_BUILD_REF_NAME" https://gitlab.dotmesh.com/api/v4/projects/31/trigger/pipeline
+        - echo - curl -X POST -F "token=$E2E_TRIGGER_TOKEN" -F "ref=master" -F "variables[CI_DOCKER_TAG]=$CI_COMMIT_SHA" -F "variables[CI_SERVICE_BEING_TESTED]=$CI_SERVICE_BEING_TESTED" -F "variables[DOTMESH_CI_BUILD_REF_NAME]=$CI_BUILD_REF_NAME" https://gitlab.dotmesh.com/api/v4/projects/46/trigger/pipeline
+        - curl -X POST -F "token=$E2E_TRIGGER_TOKEN" -F "ref=master" -F "variables[CI_DOCKER_TAG]=$CI_COMMIT_SHA" -F "variables[CI_SERVICE_BEING_TESTED]=$CI_SERVICE_BEING_TESTED" -F "variables[DOTMESH_CI_BUILD_REF_NAME]=$CI_BUILD_REF_NAME" https://gitlab.dotmesh.com/api/v4/projects/46/trigger/pipeline
     only:
         - master
     except:
