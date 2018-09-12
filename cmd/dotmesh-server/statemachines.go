@@ -281,11 +281,17 @@ func (f *fsMachine) updateEtcdAboutSnapshots() error {
 	)
 
 	// wait until the state machine notifies us that it's changed the
-	// snapshots, but have a timeout in case this filesystem is deleted so we don't block forever
+	// snapshots, but have an escape clause in case this filesystem is
+	// deleted so we don't block forever
+	deathChan := make(chan interface{})
+	deathObserver.Subscribe(f.filesystemId, deathChan)
+	defer deathObserver.Unsubscribe(f.filesystemId, deathChan)
+
 	select {
 	case _ = <-f.snapshotsModified:
 		log.Printf("[updateEtcdAboutSnapshots] going 'round the loop")
-	case <-time.After(60 * time.Second):
+	case _ = <-deathChan:
+		log.Printf("[updateEtcdAboutSnapshots] terminating due to filesystem death")
 	}
 
 	return nil
