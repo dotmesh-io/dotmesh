@@ -480,7 +480,7 @@ func (d *DotmeshRPC) List(
 			submap[v.Name.Name] = v
 		}
 	}
-	log.Printf("[List] gather = %+v", gather)
+
 	*result = gather
 	return nil
 }
