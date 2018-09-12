@@ -944,12 +944,12 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		server := pieces[4]
 		filesystem := pieces[5]
 
-		if server == state.myNodeId {
+		if server == s.myNodeId {
 			// Don't listen to updates from etcd about ourselves -
 			// because we update that by calling
 			// updateSnapshotsFromKnownState from the discovery code, and
 			// that's better information.
-			return
+			return nil
 		}
 
 		snapshots := &[]snapshot{}
