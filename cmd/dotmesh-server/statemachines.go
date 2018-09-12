@@ -272,11 +272,8 @@ func (f *fsMachine) updateEtcdAboutSnapshots() error {
 	if err != nil {
 		return err
 	}
-	// ISSUE: We don't always hear the echo in time, see
-	// issue https://github.com/dotmesh-io/dotmesh/issues/54
 	log.Printf(
-		"[updateEtcdAboutSnapshots] successfully set new snaps for %s on %s,"+
-			" will we hear an echo?",
+		"[updateEtcdAboutSnapshots] successfully set new snaps for %s on %s",
 		f.filesystemId, f.state.myNodeId,
 	)
 
@@ -410,7 +407,6 @@ func (f *fsMachine) snapshot(e *Event) (responseEvent *Event, nextState stateFn)
 			Name: "failed-snapshot",
 			Args: &EventArgs{"err": err, "combined-output": string(out)},
 		}, backoffState
-
 	}
 	log.Printf("[snapshot] listed snapshot: '%q'", strconv.Quote(string(list)))
 	func() {
@@ -422,7 +418,14 @@ func (f *fsMachine) snapshot(e *Event) (responseEvent *Event, nextState stateFn)
 		f.filesystem.snapshots = append(f.filesystem.snapshots,
 			&snapshot{Id: snapshotId, Metadata: &meta})
 	}()
-	f.snapshotsModified <- true
+	err = f.snapshotsChanged()
+	if err != nil {
+		log.Printf("[snapshot] %v while trying to inform that snapshots changed %s (%s)", err, fq(f.filesystemId), args)
+		return &Event{
+			Name: "failed-snapshot-changed",
+			Args: &EventArgs{"err": err},
+		}, backoffState
+	}
 	return &Event{Name: "snapshotted", Args: &EventArgs{"SnapshotId": snapshotId}}, activeState
 }
 
@@ -539,7 +542,10 @@ func (f *fsMachine) discover() error {
 		defer f.snapshotsLock.Unlock()
 		f.filesystem = filesystem
 	}()
+	return f.snapshotsChanged()
+}
 
+func (f *fsMachine) snapshotsChanged() error {
 	// quite probably we just learned about some snapshots we didn't know about
 	// before
 	f.snapshotsModified <- true
@@ -552,7 +558,7 @@ func (f *fsMachine) discover() error {
 	func() {
 		f.snapshotsLock.Lock()
 		defer f.snapshotsLock.Unlock()
-		snaps = filesystem.snapshots
+		snaps = f.filesystem.snapshots
 	}()
 
 	// []*snapshot => []snapshot, gah
@@ -560,7 +566,6 @@ func (f *fsMachine) discover() error {
 	for _, snap := range snaps {
 		snapsAlternate = append(snapsAlternate, *snap)
 	}
-
 	return f.state.updateSnapshotsFromKnownState(
 		f.state.myNodeId, f.filesystemId, &snapsAlternate,
 	)
