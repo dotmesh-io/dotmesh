@@ -1215,6 +1215,18 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 			}
 		}
 	}
+
+	if masters != nil {
+		for _, node := range masters.Nodes {
+			modified := updateMine(node)
+			if modified {
+				if err = s.handleOneFilesystemMaster(node); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
 	if registryFilesystems != nil {
 		for _, namespace := range registryFilesystems.Nodes {
 			for _, topLevelFilesystem := range namespace.Nodes {
@@ -1233,6 +1245,16 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 			}
 		}
 	}
+	if serverSnapshots != nil {
+		for _, servers := range serverSnapshots.Nodes {
+			for _, filesystem := range servers.Nodes {
+				if err = updateSnapshots(filesystem); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
 	if dirtyFilesystems != nil {
 		for _, filesystem := range dirtyFilesystems.Nodes {
 			for _, dirty := range filesystem.Nodes {
@@ -1255,25 +1277,6 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		for _, node := range interclusterTransfers.Nodes {
 			if err = updateTransfers(node); err != nil {
 				return err
-			}
-		}
-	}
-	if serverSnapshots != nil {
-		for _, servers := range serverSnapshots.Nodes {
-			for _, filesystem := range servers.Nodes {
-				if err = updateSnapshots(filesystem); err != nil {
-					return err
-				}
-			}
-		}
-	}
-	if masters != nil {
-		for _, node := range masters.Nodes {
-			modified := updateMine(node)
-			if modified {
-				if err = s.handleOneFilesystemMaster(node); err != nil {
-					return err
-				}
 			}
 		}
 	}
