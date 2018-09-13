@@ -25,7 +25,7 @@ variables:
 
     DOTMESH_TEST_CLEANUP: always
     DOTMESH_TEST_TIMEOUT: 10m
-    CI_IMAGE_PAIRS="{\"$CI_SERVICE_BEING_TESTED\": \"$CI_DOCKER_TAG\"}"
+    CI_IMAGE_PAIRS="{\"dotmesh-server\": \"$CI_DOCKER_TAG\"}"
 
 stages:
     - build
