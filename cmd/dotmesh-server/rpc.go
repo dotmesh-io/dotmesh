@@ -480,7 +480,7 @@ func (d *DotmeshRPC) List(
 			submap[v.Name.Name] = v
 		}
 	}
-	log.Printf("[List] gather = %+v", gather)
+
 	*result = gather
 	return nil
 }
@@ -970,12 +970,17 @@ func (d *DotmeshRPC) Rollback(
 }
 
 func maybeError(e *Event) error {
-	log.Printf("Unexpected response %s - %s", e.Name, e.Args)
+	log.Printf("Unexpected response %s - %#v", e.Name, e.Args)
 	err, ok := (*e.Args)["err"]
 	if ok {
-		return err.(error)
+		castedErr, ok2 := err.(error)
+		if ok2 {
+			return castedErr
+		} else {
+			return fmt.Errorf("Unknown error %s - %#v", e.Name, e.Args)
+		}
 	} else {
-		return fmt.Errorf("Unexpected response %s - %s", e.Name, e.Args)
+		return fmt.Errorf("Unexpected response %s - %#v", e.Name, e.Args)
 	}
 }
 

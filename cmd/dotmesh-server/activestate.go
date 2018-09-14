@@ -230,7 +230,15 @@ func activeState(f *fsMachine) stateFn {
 					defer f.snapshotsLock.Unlock()
 					f.filesystem.snapshots = f.filesystem.snapshots[:sliceIndex]
 				}()
-				f.snapshotsModified <- true
+				err = f.snapshotsChanged()
+				if err != nil {
+					log.Printf("%v while trying to report that snapshots have changed %s", err, fq(f.filesystemId))
+					f.innerResponses <- &Event{
+						Name: "failed-rollback-snapshots-changed",
+						Args: &EventArgs{"err": err},
+					}
+					return backoffState
+				}
 				log.Printf("snapshots after %+v", f.filesystem.snapshots)
 			} else {
 				f.innerResponses <- &Event{

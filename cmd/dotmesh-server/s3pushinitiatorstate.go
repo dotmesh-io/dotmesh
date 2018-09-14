@@ -68,6 +68,10 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 		// list everything in the main directory
 		pathToMount := fmt.Sprintf("%s/__default__", mountPoint)
 		paths, dirSize, err := getKeysForDir(pathToMount, "")
+		if err != nil {
+			f.sendEvent(&EventArgs{"err": err, "path": pathToMount}, "cant-get-keys-for-directory", "")
+			return backoffState
+		}
 		// push everything to s3
 		pollResult.Total = len(paths)
 		pollResult.Size = dirSize

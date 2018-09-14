@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 )
 
@@ -227,12 +228,22 @@ func missingState(f *fsMachine) stateFn {
 			}
 			responseEvent, nextState := f.mount()
 			if responseEvent.Name == "mounted" {
-				f.innerResponses <- &Event{Name: "created"}
-				return activeState
+				subvolPath := fmt.Sprintf("%s/__default__", mnt(f.filesystemId))
+				if err := os.MkdirAll(subvolPath, 0777); err != nil {
+					f.innerResponses <- &Event{
+						Name: "failed-create-default-subdot",
+						Args: &EventArgs{"err": err},
+					}
+					return backoffState
+				} else {
+					f.innerResponses <- &Event{Name: "created"}
+					return activeState
+				}
 			} else {
 				f.innerResponses <- responseEvent
 				return nextState
 			}
+
 		} else if e.Name == "mount" {
 			f.innerResponses <- &Event{
 				Name: "nothing-to-mount",
