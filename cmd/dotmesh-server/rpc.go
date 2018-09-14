@@ -519,7 +519,7 @@ func (d *DotmeshRPC) ListWithContainers(
 			}
 		}
 	}
-	log.Printf("[List] gather = %+v", gather)
+	log.Printf("[List] gather got %d elements", len(gather))
 	*result = gather
 	return nil
 }
