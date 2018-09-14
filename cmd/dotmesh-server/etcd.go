@@ -570,7 +570,6 @@ func (s *InMemoryState) globalFsRequestId(fs string, e *Event) (chan *Event, str
 	if err != nil {
 		return nil, "", err
 	}
-	log.Printf("globalFsRequest %s %s", fs, e)
 	serialized, err := s.serializeEvent(e)
 	if err != nil {
 		log.Printf("globalFsRequest - error serializing %s: %s", e, err)
