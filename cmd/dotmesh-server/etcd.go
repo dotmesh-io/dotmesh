@@ -572,16 +572,21 @@ func (s *InMemoryState) globalFsRequestId(fs string, e *Event) (chan *Event, str
 	}
 	serialized, err := s.serializeEvent(e)
 	if err != nil {
-		log.Printf("globalFsRequest - error serializing %s: %s", e, err)
+		log.Printf("globalFsRequest - error serializing %#v: %#v", e, err)
 		return nil, "", err
 	}
+	if serialized == "" {
+		log.Printf("globalFsRequest - serialization produced an empty string %#v", e)
+		return nil, "", fmt.Errorf("Serialization of %#v produced an empty string", e)
+	}
+	key := fmt.Sprintf("%s/filesystems/requests/%s/%s", ETCD_PREFIX, fs, requestId)
 	log.Printf("globalFsRequest: setting '%s' to '%s'",
-		fmt.Sprintf("%s/filesystems/requests/%s/%s", ETCD_PREFIX, fs, requestId),
+		key,
 		serialized,
 	)
 	resp, err := kapi.Set(
 		context.Background(),
-		fmt.Sprintf("%s/filesystems/requests/%s/%s", ETCD_PREFIX, fs, requestId),
+		key,
 		serialized,
 		&client.SetOptions{PrevExist: client.PrevNoExist, TTL: 604800 * time.Second},
 	)
@@ -669,19 +674,38 @@ func (s *InMemoryState) deserializeEvent(node *client.Node) (*Event, error) {
 	return e, nil
 }
 
+func (s *InMemoryState) respondToEvent(fs, requestId string, response *Event, kapi client.KeysAPI) error {
+	serialized, err := s.serializeEvent(response)
+	// TODO think more about handling error cases here, lest we cause deadlocks
+	// when the network is imperfect
+	// TODO can we make all etcd requests idempotent, e.g. by generating the id
+	// for a new snapshot in the requester?
+	if err != nil {
+		log.Printf("Error while serializing an event response: %s", err)
+		return err
+	}
+	_, err = kapi.Set(
+		context.Background(),
+		fmt.Sprintf("%s/filesystems/responses/%s/%s", ETCD_PREFIX, fs, requestId),
+		serialized,
+		&client.SetOptions{PrevExist: client.PrevNoExist, TTL: 604800 * time.Second},
+	)
+	if err != nil {
+		log.Printf("Error while setting event response in etcd: %s", err)
+		return err
+	}
+	return nil
+}
+
 func (s *InMemoryState) deserializeDispatchAndRespond(fs string, node *client.Node, kapi client.KeysAPI) error {
 	// TODO 2-phase commit to avoid doubling up events after
 	// reading them, performing them, and then getting disconnected
 	// before cleaning them up?
-	e, err := s.deserializeEvent(node)
-	if err != nil {
-		return err
-	}
 	pieces := strings.Split(node.Key, "/")
 	requestId := pieces[len(pieces)-1]
 
 	// check that there isn't a stale response already. if so, do nothing.
-	_, err = kapi.Get(
+	_, err := kapi.Get(
 		context.Background(),
 		fmt.Sprintf("%s/filesystems/responses/%s/%s", ETCD_PREFIX, fs, requestId),
 		nil,
@@ -695,6 +719,15 @@ func (s *InMemoryState) deserializeDispatchAndRespond(fs string, node *client.No
 	if !client.IsKeyNotFound(err) {
 		// Some error other than key not found. The key-not-found is the
 		// expected, happy path.
+		return err
+	}
+
+	e, err := s.deserializeEvent(node)
+	if err != nil || e == nil {
+		// Respond to invalid events
+		_ = s.respondToEvent(fs, requestId,
+			&Event{Name: "invalid-request", Args: &EventArgs{"error": err, "request": e}},
+			kapi)
 		return err
 	}
 
@@ -712,7 +745,7 @@ func (s *InMemoryState) deserializeDispatchAndRespond(fs string, node *client.No
 	// etcd and anyone waiting for it will be waiting on the response key to
 	// show up, not on the return of this function.
 
-	log.Printf("About to dispatch %s to %s", e, fs)
+	log.Printf("About to dispatch %#v to %s", e, fs)
 	c, err := s.dispatchEvent(fs, e, requestId)
 	if err != nil {
 		return err
@@ -722,25 +755,7 @@ func (s *InMemoryState) deserializeDispatchAndRespond(fs string, node *client.No
 		internalResponse := <-c
 		log.Printf("Done putting it into internalResponse (%v, %v)", fs, c)
 
-		serialized, err := s.serializeEvent(internalResponse)
-		// TODO think more about handling error cases here, lest we cause deadlocks
-		// when the network is imperfect
-		// TODO can we make all etcd requests idempotent, e.g. by generating the id
-		// for a new snapshot in the requester?
-		if err != nil {
-			log.Printf("Error while serializing an event response: %s", err)
-			return
-		}
-		_, err = kapi.Set(
-			context.Background(),
-			fmt.Sprintf("%s/filesystems/responses/%s/%s", ETCD_PREFIX, fs, requestId),
-			serialized,
-			&client.SetOptions{PrevExist: client.PrevNoExist, TTL: 604800 * time.Second},
-		)
-		if err != nil {
-			log.Printf("Error while setting event response in etcd: %s", err)
-			return
-		}
+		_ = s.respondToEvent(fs, requestId, internalResponse, kapi)
 	}()
 	return nil
 }
