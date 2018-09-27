@@ -15,5 +15,6 @@ go_library(
         "//vendor/github.com/opentracing/opentracing-go:go_default_library",
         "//vendor/github.com/opentracing/opentracing-go/log:go_default_library",
         "//vendor/github.com/openzipkin/zipkin-go-opentracing/examples/middleware:go_default_library",
+        "github.com/dotmesh-io/dotmesh/pkg/types:go_default_library",
     ],
 )
