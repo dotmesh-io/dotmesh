@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"os"
 	"regexp"
@@ -13,6 +14,10 @@ import (
 	"time"
 
 	"github.com/dotmesh-io/citools"
+
+	natsServer "github.com/nats-io/gnatsd/server"
+	natsTest "github.com/nats-io/gnatsd/test"
+	nats "github.com/nats-io/go-nats"
 )
 
 /*
@@ -212,6 +217,157 @@ func TestRecoverFromUnmountedDotOnMaster(t *testing.T) {
 		assertMountState(t, fsId, true)
 
 	})
+}
+
+func TestPubSub(t *testing.T) {
+	// single node tests
+	citools.TeardownFinishedTestRuns()
+
+	f := citools.Federation{citools.NewCluster(1)}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
+
+	citools.StartTiming()
+	err := f.Start(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	node1 := f[0].GetNode(0).Container
+
+	natsIP, err := citools.FindAHostIP()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Random port, to try and avoid clashing with concurrent test runs
+	natsPort := 30000 + rand.Intn(1000)
+
+	// Random username and password picked, just in case third parties find our open port
+	natsUsername := fmt.Sprintf("%d", rand.Int31())
+	natsPassword := fmt.Sprintf("%d", rand.Int31())
+	natsSubject := "testCommit"
+
+	defaultNatsTestOptions := &natsServer.Options{
+		Host:           natsIP,
+		Port:           natsPort,
+		Username:       natsUsername,
+		Password:       natsPassword,
+		NoLog:          true,
+		NoSigs:         true,
+		MaxControlLine: 256,
+	}
+
+	natsSrv := natsTest.RunServer(defaultNatsTestOptions)
+
+	natsUrl := fmt.Sprintf("nats://%s:%d", natsIP, natsPort)
+
+	natsCli, err := nats.Connect(natsUrl, nats.UserInfo(natsUsername, natsPassword))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	natsEnc, err := nats.NewEncodedConn(natsCli, nats.GOB_ENCODER)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("Commit", func(t *testing.T) {
+		fsname := citools.UniqName()
+
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/X")
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+
+		fsId := strings.TrimSpace(
+			citools.OutputFromRunOnNode(t, node1, "dm dot show -H | grep masterBranchId | cut -f 2"),
+		)
+
+		received := make(chan string)
+
+		subs, err := natsEnc.Subscribe(natsSubject, func(msg *struct {
+			FilesystemId string
+			Namespace    string
+			Name         string
+			Branch       string
+			CommitId     string
+			Metadata     map[string]string
+		}) {
+			check := func(wanted, got, name string) {
+				if wanted != got {
+					t.Errorf("Notification %s mismatch: Wanted %s, got %s", name, wanted, got)
+				}
+			}
+
+			check(fsId, msg.FilesystemId, "filesystem ID")
+			check("admin", msg.Namespace, "namespace")
+			check(fsname, msg.Name, "name")
+			check("", msg.Branch, "branch")
+			check("hello", msg.Metadata["message"], "commit message")
+			check("admin", msg.Metadata["author"], "commit author")
+
+			received <- msg.CommitId
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var result bool
+		err = citools.DoRPC(f[0].GetNode(0).IP, "admin", f[0].GetNode(0).ApiKey,
+			"DotmeshRPC.SubscribeForCommits",
+			struct {
+				Url, Username, Password, Subject string
+			}{
+				natsUrl,
+				natsUsername,
+				natsPassword,
+				natsSubject,
+			},
+			&result,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		citools.RunOnNode(t, node1, "dm commit -m 'hello'")
+
+		// get a list of commits so we have the id of the commit
+		var commitIds []struct {
+			Id string
+		}
+
+		err = citools.DoRPC(f[0].GetNode(0).IP, "admin", f[0].GetNode(0).ApiKey,
+			"DotmeshRPC.Commits",
+			struct {
+				Namespace string
+				Name      string
+			}{
+				Namespace: "admin",
+				Name:      fsname,
+			},
+			&commitIds)
+
+		if err != nil {
+			t.Error(err)
+		}
+
+		if len(commitIds) != 1 {
+			t.Errorf("Expected 1 commit ids, got %d", len(commitIds))
+		}
+
+		commitId := commitIds[0].Id
+
+		select {
+		case <-time.After(10 * time.Second):
+			t.Error("Failed to receive notification after ten seconds!")
+		case notificationCommitId := <-received:
+			// Ok, cool, it arrived
+			if commitId != notificationCommitId {
+				t.Errorf("Received notification commit ID was %s, but expected %s", notificationCommitId, commitId)
+			}
+		}
+		subs.Unsubscribe()
+	})
+
+	natsSrv.Shutdown()
 }
 
 func TestSingleNode(t *testing.T) {

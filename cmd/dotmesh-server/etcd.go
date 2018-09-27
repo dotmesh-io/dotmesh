@@ -785,6 +785,7 @@ func (s *InMemoryState) updateSnapshotsFromKnownState(
 	if _, ok := s.globalSnapshotCache[server]; !ok {
 		s.globalSnapshotCache[server] = map[string][]snapshot{}
 	}
+	oldSnapshots := s.globalSnapshotCache[server][filesystem]
 	s.globalSnapshotCache[server][filesystem] = *snapshots
 	s.globalSnapshotCacheLock.Unlock()
 
@@ -802,6 +803,24 @@ func (s *InMemoryState) updateSnapshotsFromKnownState(
 				"[updateSnapshots] publishing latest snapshot %v on %s",
 				latest, filesystem,
 			)
+
+			// External pubsub
+			if len(*snapshots) > len(oldSnapshots) {
+				tlf, branch, err := s.registry.LookupFilesystemById(filesystem)
+				if err != nil {
+					return err
+				}
+
+				namespace := tlf.MasterBranch.Name.Namespace
+				name := tlf.MasterBranch.Name.Name
+				go func() {
+					for _, ss := range (*snapshots)[len(oldSnapshots):] {
+						s.pubSub.PublishCommit(filesystem, namespace, name, branch, ss.Id, *(ss.Metadata))
+					}
+				}()
+			}
+
+			// Internal pubsub
 			go func() {
 				err := s.newSnapsOnMaster.Publish(filesystem, latest)
 				if err != nil {

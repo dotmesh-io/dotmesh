@@ -2854,3 +2854,36 @@ func (d *DotmeshRPC) CheckNameIsValid(
 	*result = ""
 	return nil
 }
+
+func (d *DotmeshRPC) SubscribeForCommits(
+	r *http.Request,
+	args *struct{ Url, Username, Password, Subject string },
+	result *bool,
+) error {
+	// FIXME: Just calling this on the local node won't work so well in multi-node clusters.
+
+	// 1) All subscriptions get lost if this node shuts down.
+
+	// 2) The corresponding UnsubscribeForCommits has to come to this node.
+
+	err := d.state.pubSub.SubscribeForCommits(args.Url, args.Username, args.Password, args.Subject)
+
+	*result = (err == nil)
+
+	return err
+}
+
+func (d *DotmeshRPC) UnsubscribeForCommits(
+	r *http.Request,
+	args *struct{ Url, Username, Subject string },
+	result *bool,
+) error {
+	// FIXME: Just calling this on the local node won't work so well in
+	// multi-node clusters. It needs to be called on the same node that
+	// the subscription happened on!
+
+	err := d.state.pubSub.UnsubscribeForCommits(args.Url, args.Username, args.Subject)
+
+	*result = (err == nil)
+	return err
+}
