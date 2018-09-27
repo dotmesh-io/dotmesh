@@ -8,10 +8,11 @@ import (
 )
 
 var cloneLocalVolume string
+var stash bool
 
 func NewCmdClone(out io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "clone <remote> [<dot> [<branch>]] [--local-name=<dot>]",
+		Use:   "clone <remote> [<dot> [<branch>]] [--local-name=<dot>] [--stash-on-divergence]",
 		Short: `Make a complete copy of a remote dot`,
 		// XXX should this specify a branch?
 		Long: `Make a complete copy on the current active cluster of the given
@@ -43,6 +44,7 @@ Online help: https://docs.dotmesh.com/references/cli/#clone-dm-clone-local-name-
 					cloneLocalVolume, branchName,
 					filesystemName, branchName,
 					nil,
+					stash,
 					// TODO also switch to the remote?
 				)
 				if err != nil {
@@ -60,6 +62,6 @@ Online help: https://docs.dotmesh.com/references/cli/#clone-dm-clone-local-name-
 
 	cmd.PersistentFlags().StringVarP(&cloneLocalVolume, "local-name", "", "",
 		"Local dot name to create")
-
+	cmd.PersistentFlags().BoolVarP(&stash, "stash-on-divergence", false, "stash any divergence on a branch and continue")
 	return cmd
 }

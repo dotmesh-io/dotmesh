@@ -105,7 +105,8 @@ type TransferRequest struct {
 	RemoteName       string
 	RemoteBranchName string
 	// TODO could also include SourceSnapshot here
-	TargetCommit string // optional, "" means "latest"
+	TargetCommit    string // optional, "" means "latest"
+	StashDivergence bool
 }
 
 func (transferRequest TransferRequest) String() string {

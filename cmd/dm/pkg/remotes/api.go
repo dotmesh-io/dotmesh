@@ -12,6 +12,7 @@ import (
 
 	"golang.org/x/net/context"
 	pb "gopkg.in/cheggaaa/pb.v1"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 )
 
 const DEFAULT_BRANCH string = "master"
@@ -870,33 +871,6 @@ push
 
 */
 
-type TransferRequest struct {
-	Peer             string
-	User             string
-	Port             int
-	ApiKey           string
-	Direction        string
-	LocalNamespace   string
-	LocalName        string
-	LocalBranchName  string
-	RemoteNamespace  string
-	RemoteName       string
-	RemoteBranchName string
-	TargetCommit     string
-}
-
-type S3TransferRequest struct {
-	KeyID           string
-	SecretKey       string
-	Prefixes        []string
-	Endpoint        string
-	Direction       string
-	LocalNamespace  string
-	LocalName       string
-	LocalBranchName string
-	RemoteName      string
-}
-
 // attempt to get the latest commits in filesystemId (which may be a branch)
 // from fromRemote to toRemote as a one-off.
 //
@@ -907,6 +881,7 @@ func (dm *DotmeshAPI) RequestTransfer(
 	localFilesystemName, localBranchName,
 	remoteFilesystemName, remoteBranchName string,
 	prefixes []string,
+	stashDivergence bool
 ) (string, error) {
 	connectionInitiator := dm.Configuration.CurrentRemote
 
@@ -1029,7 +1004,7 @@ func (dm *DotmeshAPI) RequestTransfer(
 	dmRemote, ok := remote.(*DMRemote)
 
 	if ok {
-		transferRequest := TransferRequest{
+		transferRequest := types.TransferRequest{
 			Peer:             dmRemote.Hostname,
 			User:             dmRemote.User,
 			Port:             dmRemote.Port,
@@ -1041,6 +1016,7 @@ func (dm *DotmeshAPI) RequestTransfer(
 			RemoteNamespace:  remoteNamespace,
 			RemoteName:       remoteVolume,
 			RemoteBranchName: deMasterify(remoteBranchName),
+			StashDivergence: stashDivergence,
 			// TODO add TargetSnapshot here, to support specifying "push to a given
 			// snapshot" rather than just "push all snapshots up to the latest"
 		}
@@ -1061,7 +1037,7 @@ func (dm *DotmeshAPI) RequestTransfer(
 				dm.Configuration.SetPrefixesFor(peer, localNamespace, localVolume, prefixes)
 			}
 			prefixes, _ = s3Remote.PrefixesFor(localNamespace, localVolume)
-			transferRequest := S3TransferRequest{
+			transferRequest := types.S3TransferRequest{
 				KeyID:           s3Remote.KeyID,
 				SecretKey:       s3Remote.SecretKey,
 				Endpoint:        s3Remote.Endpoint,
@@ -1073,6 +1049,7 @@ func (dm *DotmeshAPI) RequestTransfer(
 				RemoteName:      remoteVolume,
 				// TODO add TargetSnapshot here, to support specifying "push to a given
 				// snapshot" rather than just "push all snapshots up to the latest"
+				// todo is stash divergence needed here?? (issue dotscience-agent#88)
 			}
 
 			if debugMode {
