@@ -49,6 +49,7 @@ Online help: https://docs.dotmesh.com/references/cli/#pull-dm-pull-remote-dot-br
 					filesystemName, branchName,
 					pullRemoteVolume, branchName,
 					nil,
+					false,
 				)
 				if err != nil {
 					return err
