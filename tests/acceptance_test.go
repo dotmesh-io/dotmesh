@@ -1783,6 +1783,15 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		}
 	})
 
+	t.Run("CloneStashDivergence", func(t *testing.T) {
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node2, citools.DockerRun(fsname)+" touch /foo/X")
+		citools.RunOnNode(t, node2, "dm switch "+fsname)
+		citools.RunOnNode(t, node2, "dm commit -m 'hello'")
+
+		citools.RunOnNode(t, node2, citools.DockerRun(fsname)+" touch /foo/Y")
+		citools.RunOnNode(t, node1, "dm clone --stash-on-divergence cluster_1 "+fsname)
+	})
 	t.Run("Bug74MissingMetadata", func(t *testing.T) {
 		fsname := citools.UniqName()
 
