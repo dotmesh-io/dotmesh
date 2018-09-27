@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"golang.org/x/net/context"
 	pb "gopkg.in/cheggaaa/pb.v1"
-	"github.com/dotmesh-io/dotmesh/pkg/types"
 )
 
 const DEFAULT_BRANCH string = "master"
@@ -881,7 +881,7 @@ func (dm *DotmeshAPI) RequestTransfer(
 	localFilesystemName, localBranchName,
 	remoteFilesystemName, remoteBranchName string,
 	prefixes []string,
-	stashDivergence bool
+	stashDivergence bool,
 ) (string, error) {
 	connectionInitiator := dm.Configuration.CurrentRemote
 
@@ -1016,7 +1016,7 @@ func (dm *DotmeshAPI) RequestTransfer(
 			RemoteNamespace:  remoteNamespace,
 			RemoteName:       remoteVolume,
 			RemoteBranchName: deMasterify(remoteBranchName),
-			StashDivergence: stashDivergence,
+			StashDivergence:  stashDivergence,
 			// TODO add TargetSnapshot here, to support specifying "push to a given
 			// snapshot" rather than just "push all snapshots up to the latest"
 		}
