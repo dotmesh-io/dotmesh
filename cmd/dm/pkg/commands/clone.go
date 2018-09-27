@@ -62,6 +62,6 @@ Online help: https://docs.dotmesh.com/references/cli/#clone-dm-clone-local-name-
 
 	cmd.PersistentFlags().StringVarP(&cloneLocalVolume, "local-name", "", "",
 		"Local dot name to create")
-	cmd.PersistentFlags().BoolVarP(&stash, "stash-on-divergence", false, "stash any divergence on a branch and continue")
+	cmd.PersistentFlags().BoolVarP(&stash, "stash-on-divergence", "", false, "stash any divergence on a branch and continue")
 	return cmd
 }
