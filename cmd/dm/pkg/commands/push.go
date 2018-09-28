@@ -10,7 +10,6 @@ import (
 )
 
 var pushRemoteVolume string
-var stash bool
 
 func NewCmdPush(out io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
