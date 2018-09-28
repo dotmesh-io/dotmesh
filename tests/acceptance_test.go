@@ -1784,13 +1784,20 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 	})
 
 	t.Run("CloneStashDivergence", func(t *testing.T) {
+		//node1$ dm init foo
 		fsname := citools.UniqName()
-		citools.RunOnNode(t, node2, citools.DockerRun(fsname)+" touch /foo/X")
-		citools.RunOnNode(t, node2, "dm switch "+fsname)
+		citools.RunOnNode(t, node1, "dm init "+fsname)
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/X")
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+		citools.RunOnNode(t, node1, "dm commit -m 'hello'")
+		citools.RunOnNode(t, node2, "dm clone cluster_0 "+fsname)
 		citools.RunOnNode(t, node2, "dm commit -m 'hello'")
-
-		citools.RunOnNode(t, node2, citools.DockerRun(fsname)+" touch /foo/Y")
-		citools.RunOnNode(t, node1, "dm clone --stash-on-divergence cluster_1 "+fsname)
+		citools.RunOnNode(t, node2, "dm commit -m 'hello2'")
+		citools.RunOnNode(t, node2, "dm clone --stash-on-divergence cluster_0 "+fsname)
+		output := citools.OutputFromRunOnNode(t, node2, "dm branch")
+		if !strings.Contains(output, "master-DIVERGED-") {
+			t.Error("Stashed clone did not create divergent branch")
+		}
 	})
 	t.Run("Bug74MissingMetadata", func(t *testing.T) {
 		fsname := citools.UniqName()
