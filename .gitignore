@@ -22,5 +22,5 @@ cmd/dotmesh-server/pkg/dynamic-provisioning/dm-provisioner
 LAST_IMAGE_BUILD
 tests/config.sh
 bazel-*
-.vs_code/*
+.vscode/*
 .gocache
