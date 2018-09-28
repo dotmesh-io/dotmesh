@@ -1,0 +1,45 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "auth.go",
+        "ciphersuites.go",
+        "client.go",
+        "const.go",
+        "errors.go",
+        "log.go",
+        "monitor.go",
+        "monitor_sort_opts.go",
+        "opts.go",
+        "parser.go",
+        "reload.go",
+        "ring.go",
+        "route.go",
+        "server.go",
+        "service.go",
+        "service_windows.go",
+        "signal.go",
+        "signal_windows.go",
+        "sublist.go",
+        "util.go",
+    ],
+    importmap = "github.com/dotmesh-io/dotmesh/tests/vendor/github.com/nats-io/gnatsd/server",
+    importpath = "github.com/nats-io/gnatsd/server",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//tests/vendor/github.com/nats-io/gnatsd/conf:go_default_library",
+        "//tests/vendor/github.com/nats-io/gnatsd/logger:go_default_library",
+        "//tests/vendor/github.com/nats-io/gnatsd/server/pse:go_default_library",
+        "//tests/vendor/github.com/nats-io/gnatsd/util:go_default_library",
+        "//tests/vendor/github.com/nats-io/nuid:go_default_library",
+        "//tests/vendor/golang.org/x/crypto/bcrypt:go_default_library",
+    ] + select({
+        "@io_bazel_rules_go//go/platform:windows": [
+            "//tests/vendor/golang.org/x/sys/windows/svc:go_default_library",
+            "//tests/vendor/golang.org/x/sys/windows/svc/debug:go_default_library",
+            "//tests/vendor/golang.org/x/sys/windows/svc/mgr:go_default_library",
+        ],
+        "//conditions:default": [],
+    }),
+)

@@ -1,0 +1,13 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "default_enc.go",
+        "gob_enc.go",
+        "json_enc.go",
+    ],
+    importmap = "github.com/dotmesh-io/dotmesh/tests/vendor/github.com/nats-io/go-nats/encoders/builtin",
+    importpath = "github.com/nats-io/go-nats/encoders/builtin",
+    visibility = ["//visibility:public"],
+)
