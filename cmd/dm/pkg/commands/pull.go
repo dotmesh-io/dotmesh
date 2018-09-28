@@ -10,6 +10,7 @@ import (
 )
 
 var pullRemoteVolume string
+var stash bool
 
 func NewCmdPull(out io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
@@ -49,7 +50,7 @@ Online help: https://docs.dotmesh.com/references/cli/#pull-dm-pull-remote-dot-br
 					filesystemName, branchName,
 					pullRemoteVolume, branchName,
 					nil,
-					false,
+					stash,
 				)
 				if err != nil {
 					return err
@@ -69,6 +70,6 @@ Online help: https://docs.dotmesh.com/references/cli/#pull-dm-pull-remote-dot-br
 
 	cmd.PersistentFlags().StringVarP(&pullRemoteVolume, "remote-name", "", "",
 		"Remote dot name to pull from")
-
+	cmd.PersistentFlags().BoolVarP(&stash, "stash-on-divergence", "", false, "stash any divergence on a branch and continue")
 	return cmd
 }

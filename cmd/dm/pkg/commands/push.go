@@ -10,6 +10,7 @@ import (
 )
 
 var pushRemoteVolume string
+var stash bool
 
 func NewCmdPush(out io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
@@ -44,7 +45,7 @@ Online help: https://docs.dotmesh.com/references/cli/#push-dm-push-remote-remote
 					return err
 				}
 				transferId, err := dm.RequestTransfer(
-					"push", peer, filesystemName, branchName, pushRemoteVolume, "", nil, false,
+					"push", peer, filesystemName, branchName, pushRemoteVolume, "", nil, stash,
 				)
 				if err != nil {
 					return err
@@ -63,5 +64,6 @@ Online help: https://docs.dotmesh.com/references/cli/#push-dm-push-remote-remote
 	}
 	cmd.PersistentFlags().StringVarP(&pushRemoteVolume, "remote-name", "", "",
 		"Remote dot name to push to, including remote namespace e.g. alice/apples")
+	cmd.PersistentFlags().BoolVarP(&stash, "stash-on-divergence", "", false, "stash any divergence on a branch and continue")
 	return cmd
 }
