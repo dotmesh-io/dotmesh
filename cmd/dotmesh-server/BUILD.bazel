@@ -53,6 +53,7 @@ go_library(
         "//pkg/auth:go_default_library",
         "//pkg/client:go_default_library",
         "//pkg/kv:go_default_library",
+        "//pkg/pubsub:go_default_library",
         "//pkg/registry:go_default_library",
         "//pkg/types:go_default_library",
         "//pkg/user:go_default_library",

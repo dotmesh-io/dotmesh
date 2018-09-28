@@ -1,0 +1,3 @@
+package pubsub
+
+// No tests?
