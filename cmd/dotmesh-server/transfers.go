@@ -50,6 +50,13 @@ func transferRequestify(in interface{}) (types.TransferRequest, error) {
 	} else {
 		port = int(typed["Port"].(float64))
 	}
+
+	var stash bool
+	if typed["StashDivergence"] == nil {
+		stash = false
+	} else {
+		stash = typed["StashDivergence"].(bool)
+	}
 	return types.TransferRequest{
 		Peer:             typed["Peer"].(string),
 		User:             typed["User"].(string),
@@ -63,7 +70,7 @@ func transferRequestify(in interface{}) (types.TransferRequest, error) {
 		RemoteName:       typed["RemoteName"].(string),
 		RemoteBranchName: typed["RemoteBranchName"].(string),
 		TargetCommit:     typed["TargetCommit"].(string),
-		StashDivergence:  typed["StashDivergence"].(bool),
+		StashDivergence:  stash,
 	}, nil
 }
 
