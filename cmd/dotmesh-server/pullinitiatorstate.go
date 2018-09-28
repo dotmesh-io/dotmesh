@@ -381,7 +381,7 @@ func (f *fsMachine) retryPull(
 	}
 	snapRange, err := canApply(remoteSnaps, localSnaps)
 	if err != nil {
-		switch err.(type) {
+		switch err := err.(type) {
 		case *ToSnapsUpToDate:
 			// no action, we're up-to-date for this filesystem
 			pollResult.Status = "finished"
@@ -398,22 +398,38 @@ func (f *fsMachine) retryPull(
 			}, backoffState
 		case *ToSnapsAhead:
 			if transferRequest.StashDivergence {
-
+				e := f.recoverFromDivergence(err.latestCommonSnapshot)
+				if e != nil {
+					return &Event{
+						Name: "failed-stashing",
+						Args: &EventArgs{"err": e},
+					}, backoffState
+				}
+			} else {
+				return &Event{
+					Name: "error-in-canapply-when-pulling", Args: &EventArgs{"err": err},
+				}, backoffState
 			}
-			// 	// TODO:
-			// 	// if StashDiverged == true
-			// 	// 1. Start a branch with the new snaps
-			// 	// 1. Roll back to the latest common snap on our current branch (should be in the error)
-			// 	// 2. stick the new ones in on top
-			// 	return &Event{
-			// 		Name: "peer-up-to-date",
-			// 	}, backoffState
-			// case *ToSnapsDiverged:
-			// do some other things
+		case *ToSnapsDiverged:
+			if transferRequest.StashDivergence {
+				e := f.recoverFromDivergence(err.latestCommonSnapshot)
+				if e != nil {
+					return &Event{
+						Name: "failed-stashing",
+						Args: &EventArgs{"err": e},
+					}, backoffState
+				}
+			} else {
+				return &Event{
+					Name: "error-in-canapply-when-pulling", Args: &EventArgs{"err": err},
+				}, backoffState
+			}
+		default:
+			return &Event{
+				Name: "error-in-canapply-when-pulling", Args: &EventArgs{"err": err},
+			}, backoffState
 		}
-		return &Event{
-			Name: "error-in-canapply-when-pulling", Args: &EventArgs{"err": err},
-		}, backoffState
+
 	}
 	var fromSnap string
 	// XXX dedupe this wrt calculateSendArgs/predictSize
