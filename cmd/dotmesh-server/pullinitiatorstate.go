@@ -10,6 +10,7 @@ import (
 	"time"
 
 	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 )
 
 func pullInitiatorState(f *fsMachine) stateFn {
@@ -88,7 +89,7 @@ func pullInitiatorState(f *fsMachine) stateFn {
 	responseEvent, nextState := f.applyPath(path, func(f *fsMachine,
 		fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
 		transferRequestId string, pollResult *TransferPollResult,
-		client *dmclient.JsonRpcClient, transferRequest *TransferRequest,
+		client *dmclient.JsonRpcClient, transferRequest *types.TransferRequest,
 	) (*Event, stateFn) {
 		return f.retryPull(
 			fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
@@ -103,7 +104,7 @@ func pullInitiatorState(f *fsMachine) stateFn {
 func (f *fsMachine) pull(
 	fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
 	snapRange *snapshotRange,
-	transferRequest *TransferRequest,
+	transferRequest *types.TransferRequest,
 	transferRequestId *string,
 	pollResult *TransferPollResult,
 	client *dmclient.JsonRpcClient,
@@ -323,7 +324,7 @@ func (f *fsMachine) pull(
 func (f *fsMachine) retryPull(
 	fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
 	transferRequestId string, pollResult *TransferPollResult,
-	client *dmclient.JsonRpcClient, transferRequest *TransferRequest,
+	client *dmclient.JsonRpcClient, transferRequest *types.TransferRequest,
 ) (*Event, stateFn) {
 	// TODO refactor the following with respect to retryPush!
 
@@ -395,6 +396,20 @@ func (f *fsMachine) retryPull(
 			return &Event{
 				Name: "peer-up-to-date",
 			}, backoffState
+		case *ToSnapsAhead:
+			if transferRequest.StashDivergence {
+
+			}
+			// 	// TODO:
+			// 	// if StashDiverged == true
+			// 	// 1. Start a branch with the new snaps
+			// 	// 1. Roll back to the latest common snap on our current branch (should be in the error)
+			// 	// 2. stick the new ones in on top
+			// 	return &Event{
+			// 		Name: "peer-up-to-date",
+			// 	}, backoffState
+			// case *ToSnapsDiverged:
+			// do some other things
 		}
 		return &Event{
 			Name: "error-in-canapply-when-pulling", Args: &EventArgs{"err": err},

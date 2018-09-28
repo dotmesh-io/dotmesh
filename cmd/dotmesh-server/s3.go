@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"golang.org/x/net/context"
 	"io/ioutil"
 	"log"
@@ -102,7 +103,7 @@ func getKeysForDir(parentPath string, subPath string) (map[string]os.FileInfo, i
 	return keys, dirSize, nil
 }
 
-func getS3Client(transferRequest S3TransferRequest) (*s3.S3, error) {
+func getS3Client(transferRequest types.S3TransferRequest) (*s3.S3, error) {
 	config := &aws.Config{Credentials: credentials.NewStaticCredentials(transferRequest.KeyID, transferRequest.SecretKey, "")}
 	if transferRequest.Endpoint != "" {
 		config.Endpoint = &transferRequest.Endpoint

@@ -5,15 +5,16 @@ import (
 	"log"
 
 	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 )
 
 // stuff used to do transfers, both for DM and S3
 
-func s3TransferRequestify(in interface{}) (S3TransferRequest, error) {
+func s3TransferRequestify(in interface{}) (types.S3TransferRequest, error) {
 	typed, ok := in.(map[string]interface{})
 	if !ok {
 		log.Printf("[s3TransferRequestify] Unable to cast %s to map[string]interface{}", in)
-		return S3TransferRequest{}, fmt.Errorf(
+		return types.S3TransferRequest{}, fmt.Errorf(
 			"Unable to cast %s to map[string]interface{}", in,
 		)
 	}
@@ -22,7 +23,7 @@ func s3TransferRequestify(in interface{}) (S3TransferRequest, error) {
 	for _, pref := range prefixInter {
 		prefixes = append(prefixes, pref.(string))
 	}
-	return S3TransferRequest{
+	return types.S3TransferRequest{
 		KeyID:           typed["KeyID"].(string),
 		SecretKey:       typed["SecretKey"].(string),
 		Endpoint:        typed["Endpoint"].(string),
@@ -35,11 +36,11 @@ func s3TransferRequestify(in interface{}) (S3TransferRequest, error) {
 	}, nil
 }
 
-func transferRequestify(in interface{}) (TransferRequest, error) {
+func transferRequestify(in interface{}) (types.TransferRequest, error) {
 	typed, ok := in.(map[string]interface{})
 	if !ok {
 		log.Printf("[transferRequestify] Unable to cast %s to map[string]interface{}", in)
-		return TransferRequest{}, fmt.Errorf(
+		return types.TransferRequest{}, fmt.Errorf(
 			"Unable to cast %s to map[string]interface{}", in,
 		)
 	}
@@ -49,7 +50,7 @@ func transferRequestify(in interface{}) (TransferRequest, error) {
 	} else {
 		port = int(typed["Port"].(float64))
 	}
-	return TransferRequest{
+	return types.TransferRequest{
 		Peer:             typed["Peer"].(string),
 		User:             typed["User"].(string),
 		ApiKey:           typed["ApiKey"].(string),
@@ -62,6 +63,7 @@ func transferRequestify(in interface{}) (TransferRequest, error) {
 		RemoteName:       typed["RemoteName"].(string),
 		RemoteBranchName: typed["RemoteBranchName"].(string),
 		TargetCommit:     typed["TargetCommit"].(string),
+		StashDivergence:  typed["StashDivergence"].(bool),
 	}, nil
 }
 
@@ -70,7 +72,7 @@ func transferRequestify(in interface{}) (TransferRequest, error) {
 func (f *fsMachine) applyPath(
 	path PathToTopLevelFilesystem, transferFn transferFn,
 	transferRequestId string, pollResult *TransferPollResult,
-	client *dmclient.JsonRpcClient, transferRequest *TransferRequest,
+	client *dmclient.JsonRpcClient, transferRequest *types.TransferRequest,
 ) (*Event, stateFn) {
 	/*
 		Case 1: single master filesystem
@@ -245,7 +247,7 @@ func (f *fsMachine) applyPath(
 
 func TransferPollResultFromTransferRequest(
 	transferRequestId string,
-	transferRequest TransferRequest,
+	transferRequest types.TransferRequest,
 	nodeId string,
 	index, total int,
 	status string,

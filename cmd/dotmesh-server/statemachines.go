@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/client"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/nu7hatch/gouuid"
 	"golang.org/x/net/context"
 )
@@ -40,7 +41,7 @@ func newFilesystemMachine(filesystemId string, s *InMemoryState) *fsMachine {
 		status:                  "",
 		lastTransitionTimestamp: time.Now().UnixNano(),
 		transitionObserver:      NewObserver(fmt.Sprintf("transitionObserver:%s", filesystemId)),
-		lastTransferRequest:     TransferRequest{},
+		lastTransferRequest:     types.TransferRequest{},
 		// In the case where we're receiving a push (pushPeerState), it's the
 		// POST handler on our http server which handles the receiving of the
 		// snapshot. We need to coordinate with it so that we know when to
