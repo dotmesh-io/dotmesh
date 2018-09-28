@@ -732,6 +732,11 @@ func (transferPollResult TransferPollResult) String() string {
 	return toString
 }
 
+type pollTransferInternalResult struct {
+	result TransferPollResult
+	err    error
+}
+
 func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 
 	out.Write([]byte("Calculating...\n"))
@@ -746,9 +751,8 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 			out.Write([]byte("DEBUG About to sleep for 1s...\n"))
 		}
 		time.Sleep(time.Second)
-		result := &TransferPollResult{}
 
-		rpcError := make(chan error, 1)
+		rpcResult := make(chan pollTransferInternalResult, 1)
 
 		ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
 		defer cancel()
@@ -757,41 +761,52 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 			if debugMode {
 				out.Write([]byte(fmt.Sprintf("DEBUG Calling GetTransfer(%s)...\n", transferId)))
 			}
-			err := dm.client.CallRemote(
-				ctx, "DotmeshRPC.GetTransfer", transferId, result,
+
+			var result pollTransferInternalResult
+			result.err = dm.client.CallRemote(
+				ctx, "DotmeshRPC.GetTransfer", transferId, &(result.result),
 			)
 			if debugMode {
 				out.Write([]byte(fmt.Sprintf(
 					"DEBUG done GetTransfer(%s), got err %#v and result %#v...\n",
-					transferId, err, result,
+					transferId, result.err, result.result,
 				)))
 			}
-			rpcError <- err
+			rpcResult <- result
 			if debugMode {
-				out.Write([]byte("DEBUG rpcError consumed!\n"))
+				out.Write([]byte("DEBUG rpcResult consumed!\n"))
 			}
 		}()
 
 		if debugMode {
 			out.Write([]byte("DEBUG About to select...\n"))
 		}
+		var result pollTransferInternalResult
 		select {
 		case <-ctx.Done():
 			out.Write([]byte(fmt.Sprintf("Got timeout error from API, trying again: %s\n", ctx.Err())))
-			// TODO: should we asynchronously read from rpcError here?
-		case err := <-rpcError:
+
+			// Asynchronoulsy discard rpcResult's message when it arrives, so as to not leak the goroutine.
+			go func() {
+				<-rpcResult
+			}()
+
+			// Proceed with result at its default value.
+		case result = <-rpcResult:
 			if debugMode {
-				out.Write([]byte(fmt.Sprintf("DEBUG Got err: %s\n", err)))
+				out.Write([]byte(fmt.Sprintf("DEBUG Got result: %s / %#v\n", result.err, result.result)))
 			}
-			if err != nil {
-				if !strings.Contains(fmt.Sprintf("%s", err), "No such intercluster transfer") {
-					out.Write([]byte(fmt.Sprintf("Got error, trying again: %s\n", err)))
+			if result.err != nil {
+				// Suppress display of "No such intercluster transfer" errors,
+				// which we get at the start before the transfer has started.
+				if !strings.Contains(fmt.Sprintf("%s", result.err), "No such intercluster transfer") {
+					out.Write([]byte(fmt.Sprintf("Got error, trying again: %s\n", result.err)))
 				}
 			}
 		}
 
 		if !started {
-			bar = pb.New64(result.Size)
+			bar = pb.New64(result.result.Size)
 			bar.ShowFinalTime = false
 			bar.SetMaxWidth(80)
 			bar.SetUnits(pb.U_BYTES)
@@ -799,32 +814,36 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 			started = true
 		}
 
-		if result.Size != 0 {
-			bar.Total = result.Size
+		if result.result.Size != 0 {
+			bar.Total = result.result.Size
 		}
 		// Numbers reported by data transferred thru dotmesh versus size
 		// of stream reported by 'zfs send -nP' are off by a few kilobytes,
 		// fudge it (maybe no one will notice).
-		if result.Sent > result.Size {
-			bar.Set64(result.Size)
+		if result.result.Sent > result.result.Size {
+			bar.Set64(result.result.Size)
 		} else {
-			bar.Set64(result.Sent)
+			bar.Set64(result.result.Sent)
 		}
-		bar.Prefix(result.Status)
+		bar.Prefix(result.result.Status)
 		var speed string
-		if result.NanosecondsElapsed > 0 {
+		if result.result.NanosecondsElapsed > 0 {
 			speed = fmt.Sprintf(" %.2f MiB/s",
 				// mib/sec
-				(float64(result.Sent)/(1024*1024))/
-					(float64(result.NanosecondsElapsed)/(1000*1000*1000)),
+				(float64(result.result.Sent)/(1024*1024))/
+					(float64(result.result.NanosecondsElapsed)/(1000*1000*1000)),
 			)
 		} else {
 			speed = " ? MiB/s"
 		}
-		quotient := fmt.Sprintf(" (%d/%d)", result.Index, result.Total)
+		quotient := fmt.Sprintf(" (%d/%d)", result.result.Index, result.result.Total)
 		bar.Postfix(speed + quotient)
 
-		if result.Index == result.Total && result.Status == "finished" {
+		if debugMode {
+			out.Write([]byte(fmt.Sprintf("DEBUG status %d / %d : %s\n", result.result.Index, result.result.Total, result.result.Status)))
+		}
+
+		if result.result.Index == result.result.Total && result.result.Status == "finished" {
 			if started {
 				bar.FinishPrint("Done!")
 			}
@@ -840,14 +859,14 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 			time.Sleep(time.Second)
 			return nil
 		}
-		if result.Status == "error" {
+		if result.result.Status == "error" {
 			if started {
-				bar.FinishPrint(fmt.Sprintf("error: %s", result.Message))
+				bar.FinishPrint(fmt.Sprintf("error: %s", result.result.Message))
 			}
-			out.Write([]byte(result.Message + "\n"))
+			out.Write([]byte(result.result.Message + "\n"))
 			// A similarly terrible hack. See comment above.
 			time.Sleep(time.Second)
-			return fmt.Errorf(result.Message)
+			return fmt.Errorf(result.result.Message)
 		}
 	}
 }
