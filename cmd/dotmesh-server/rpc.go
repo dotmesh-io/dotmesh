@@ -22,6 +22,7 @@ import (
 
 	"github.com/dotmesh-io/dotmesh/pkg/auth"
 	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 
 	log "github.com/sirupsen/logrus"
@@ -1291,7 +1292,7 @@ func (d *DotmeshRPC) GetTransfer(
 
 func (d *DotmeshRPC) S3Transfer(
 	r *http.Request,
-	args *S3TransferRequest,
+	args *types.S3TransferRequest,
 	result *string,
 ) error {
 	localVolumeName := VolumeName{args.LocalNamespace, args.LocalName}
@@ -1506,7 +1507,7 @@ func (d *DotmeshRPC) dirtyDataAndRunningContainers(ctx context.Context, filesyst
 // completion
 func (d *DotmeshRPC) Transfer(
 	r *http.Request,
-	args *TransferRequest,
+	args *types.TransferRequest,
 	result *string,
 ) error {
 	client := dmclient.NewJsonRpcClient(args.User, args.Peer, args.ApiKey, args.Port)
@@ -1728,12 +1729,12 @@ func (d *DotmeshRPC) Transfer(
 	return nil
 }
 
-func safeS3(t S3TransferRequest) S3TransferRequest {
+func safeS3(t types.S3TransferRequest) types.S3TransferRequest {
 	t.SecretKey = "<redacted>"
 	return t
 }
 
-func safeArgs(t TransferRequest) TransferRequest {
+func safeArgs(t types.TransferRequest) types.TransferRequest {
 	t.ApiKey = "<redacted>"
 	return t
 }

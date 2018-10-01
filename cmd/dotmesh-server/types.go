@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"reflect"
 	"strings"
 	"sync"
 
@@ -79,7 +78,7 @@ type transferFn func(
 	f *fsMachine,
 	fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
 	transferRequestId string, pollResult *TransferPollResult,
-	client *dmclient.JsonRpcClient, transferRequest *TransferRequest,
+	client *dmclient.JsonRpcClient, transferRequest *types.TransferRequest,
 ) (*Event, stateFn)
 
 // Defaults are specified in main.go
@@ -145,69 +144,13 @@ type fsMachine struct {
 	status                  string
 	lastTransitionTimestamp int64
 	transitionObserver      *Observer
-	lastS3TransferRequest   S3TransferRequest
-	lastTransferRequest     TransferRequest
+	lastS3TransferRequest   types.S3TransferRequest
+	lastTransferRequest     types.TransferRequest
 	lastTransferRequestId   string
 	pushCompleted           chan bool
 	dirtyDelta              int64
 	sizeBytes               int64
 	lastPollResult          *TransferPollResult
-}
-
-type S3TransferRequest struct {
-	KeyID           string
-	SecretKey       string
-	Prefixes        []string
-	Endpoint        string
-	Direction       string
-	LocalNamespace  string
-	LocalName       string
-	LocalBranchName string
-	RemoteName      string
-}
-
-func (transferRequest S3TransferRequest) String() string {
-	v := reflect.ValueOf(transferRequest)
-	toString := ""
-	for i := 0; i < v.NumField(); i++ {
-		fieldName := v.Type().Field(i).Name
-		if fieldName == "SecretKey" {
-			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, "****")
-		} else {
-			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, v.Field(i).Interface())
-		}
-	}
-	return toString
-}
-
-type TransferRequest struct {
-	Peer             string // hostname
-	User             string
-	Port             int
-	ApiKey           string //protected value in toString
-	Direction        string // "push" or "pull"
-	LocalNamespace   string
-	LocalName        string
-	LocalBranchName  string
-	RemoteNamespace  string
-	RemoteName       string
-	RemoteBranchName string
-	// TODO could also include SourceSnapshot here
-	TargetCommit string // optional, "" means "latest"
-}
-
-func (transferRequest TransferRequest) String() string {
-	v := reflect.ValueOf(transferRequest)
-	toString := ""
-	for i := 0; i < v.NumField(); i++ {
-		fieldName := v.Type().Field(i).Name
-		if fieldName == "ApiKey" {
-			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, "****")
-		} else {
-			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, v.Field(i).Interface())
-		}
-	}
-	return toString
 }
 
 type EventArgs map[string]interface{}

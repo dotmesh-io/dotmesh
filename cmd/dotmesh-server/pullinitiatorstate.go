@@ -10,6 +10,7 @@ import (
 	"time"
 
 	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 )
 
 func pullInitiatorState(f *fsMachine) stateFn {
@@ -88,7 +89,7 @@ func pullInitiatorState(f *fsMachine) stateFn {
 	responseEvent, nextState := f.applyPath(path, func(f *fsMachine,
 		fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
 		transferRequestId string, pollResult *TransferPollResult,
-		client *dmclient.JsonRpcClient, transferRequest *TransferRequest,
+		client *dmclient.JsonRpcClient, transferRequest *types.TransferRequest,
 	) (*Event, stateFn) {
 		return f.retryPull(
 			fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
@@ -103,7 +104,7 @@ func pullInitiatorState(f *fsMachine) stateFn {
 func (f *fsMachine) pull(
 	fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
 	snapRange *snapshotRange,
-	transferRequest *TransferRequest,
+	transferRequest *types.TransferRequest,
 	transferRequestId *string,
 	pollResult *TransferPollResult,
 	client *dmclient.JsonRpcClient,
@@ -323,7 +324,7 @@ func (f *fsMachine) pull(
 func (f *fsMachine) retryPull(
 	fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
 	transferRequestId string, pollResult *TransferPollResult,
-	client *dmclient.JsonRpcClient, transferRequest *TransferRequest,
+	client *dmclient.JsonRpcClient, transferRequest *types.TransferRequest,
 ) (*Event, stateFn) {
 	// TODO refactor the following with respect to retryPush!
 
@@ -380,7 +381,7 @@ func (f *fsMachine) retryPull(
 	}
 	snapRange, err := canApply(remoteSnaps, localSnaps)
 	if err != nil {
-		switch err.(type) {
+		switch err := err.(type) {
 		case *ToSnapsUpToDate:
 			// no action, we're up-to-date for this filesystem
 			pollResult.Status = "finished"
@@ -395,10 +396,40 @@ func (f *fsMachine) retryPull(
 			return &Event{
 				Name: "peer-up-to-date",
 			}, backoffState
+		case *ToSnapsAhead:
+			if transferRequest.StashDivergence {
+				e := f.recoverFromDivergence(err.latestCommonSnapshot)
+				if e != nil {
+					return &Event{
+						Name: "failed-stashing",
+						Args: &EventArgs{"err": e},
+					}, backoffState
+				}
+			} else {
+				return &Event{
+					Name: "error-in-canapply-when-pulling", Args: &EventArgs{"err": err},
+				}, backoffState
+			}
+		case *ToSnapsDiverged:
+			if transferRequest.StashDivergence {
+				e := f.recoverFromDivergence(err.latestCommonSnapshot)
+				if e != nil {
+					return &Event{
+						Name: "failed-stashing",
+						Args: &EventArgs{"err": e},
+					}, backoffState
+				}
+			} else {
+				return &Event{
+					Name: "error-in-canapply-when-pulling", Args: &EventArgs{"err": err},
+				}, backoffState
+			}
+		default:
+			return &Event{
+				Name: "error-in-canapply-when-pulling", Args: &EventArgs{"err": err},
+			}, backoffState
 		}
-		return &Event{
-			Name: "error-in-canapply-when-pulling", Args: &EventArgs{"err": err},
-		}, backoffState
+
 	}
 	var fromSnap string
 	// XXX dedupe this wrt calculateSendArgs/predictSize

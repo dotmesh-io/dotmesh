@@ -93,6 +93,7 @@ func NewCmdS3(out io.Writer) *cobra.Command {
 					localVolumeName, branchName,
 					filesystemName, branchName,
 					prefixes,
+					false,
 					// TODO also switch to the remote?
 				)
 				if err != nil {

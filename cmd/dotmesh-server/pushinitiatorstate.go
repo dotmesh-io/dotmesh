@@ -13,6 +13,7 @@ import (
 	"golang.org/x/net/context"
 
 	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 )
 
 func pushInitiatorState(f *fsMachine) stateFn {
@@ -74,7 +75,7 @@ func pushInitiatorState(f *fsMachine) stateFn {
 	responseEvent, nextState := f.applyPath(path, func(f *fsMachine,
 		fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
 		transferRequestId string, pollResult *TransferPollResult,
-		client *dmclient.JsonRpcClient, transferRequest *TransferRequest,
+		client *dmclient.JsonRpcClient, transferRequest *types.TransferRequest,
 	) (*Event, stateFn) {
 		return f.retryPush(
 			fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
@@ -92,7 +93,7 @@ func pushInitiatorState(f *fsMachine) stateFn {
 func (f *fsMachine) push(
 	fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
 	snapRange *snapshotRange,
-	transferRequest *TransferRequest,
+	transferRequest *types.TransferRequest,
 	transferRequestId *string,
 	pollResult *TransferPollResult,
 	client *dmclient.JsonRpcClient,
@@ -409,7 +410,7 @@ func (f *fsMachine) push(
 func (f *fsMachine) retryPush(
 	fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
 	transferRequestId string, pollResult *TransferPollResult,
-	client *dmclient.JsonRpcClient, transferRequest *TransferRequest, ctx context.Context,
+	client *dmclient.JsonRpcClient, transferRequest *types.TransferRequest, ctx context.Context,
 ) (*Event, stateFn) {
 	// Let's go!
 	var retry int
