@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/client"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/nu7hatch/gouuid"
 	"golang.org/x/net/context"
 
@@ -815,7 +816,21 @@ func (s *InMemoryState) updateSnapshotsFromKnownState(
 				name := tlf.MasterBranch.Name.Name
 				go func() {
 					for _, ss := range (*snapshots)[len(oldSnapshots):] {
-						s.pubSub.PublishCommit(filesystem, namespace, name, branch, ss.Id, *(ss.Metadata))
+						err := s.publisher.PublishCommit(&types.CommitNotification{
+							FilesystemId: filesystem,
+							Namespace:    namespace,
+							Name:         name,
+							Branch:       branch,
+							CommitId:     ss.Id,
+							Metadata:     *ss.Metadata,
+						})
+						if err != nil {
+							log.WithFields(log.Fields{
+								"error":         err,
+								"filesystem_id": filesystem,
+								"commit_id":     ss.Id,
+							}).Error("[updateSnapshots] failed to publish ")
+						}
 					}
 				}()
 			}

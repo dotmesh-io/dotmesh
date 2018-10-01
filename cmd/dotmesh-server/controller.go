@@ -15,7 +15,7 @@ import (
 	"github.com/nu7hatch/gouuid"
 	"golang.org/x/net/context"
 
-	"github.com/dotmesh-io/dotmesh/pkg/pubsub"
+	"github.com/dotmesh-io/dotmesh/pkg/notification"
 	"github.com/dotmesh-io/dotmesh/pkg/registry"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 
@@ -51,7 +51,7 @@ type InMemoryState struct {
 	globalDirtyCacheLock       *sync.RWMutex
 	globalDirtyCache           map[string]dirtyInfo
 	userManager                user.UserManager
-	pubSub                     *pubsub.PubSubManager
+	publisher                  notification.Publisher
 
 	debugPartialFailCreateFilesystem bool
 	versionInfo                      *VersionInfo
@@ -105,7 +105,7 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 		globalDirtyCacheLock:      &sync.RWMutex{},
 		globalDirtyCache:          make(map[string]dirtyInfo),
 		userManager:               config.UserManager,
-		pubSub:                    pubsub.NewPubSubManager(),
+		publisher:                 notification.New(context.Background()),
 		versionInfo:               &VersionInfo{InstalledVersion: serverVersion},
 	}
 	// a registry of names of filesystems and branches (clones) mapping to
