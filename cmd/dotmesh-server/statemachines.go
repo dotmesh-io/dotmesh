@@ -48,9 +48,10 @@ func newFilesystemMachine(filesystemId string, s *InMemoryState) *fsMachine {
 		// reload the list of snapshots, update etcd and coordinate our own
 		// state changes, which we do via the POST handler sending on this
 		// channel.
-		pushCompleted: make(chan bool),
-		dirtyDelta:    0,
-		sizeBytes:     0,
+		pushCompleted:   make(chan bool),
+		dirtyDelta:      0,
+		sizeBytes:       0,
+		transferUpdates: make(chan TransferUpdate),
 	}
 }
 
@@ -109,6 +110,13 @@ func (f *fsMachine) run() {
 	go runWhileFilesystemLives(
 		f.updateEtcdAboutSnapshots,
 		"updateEtcdAboutSnapshots",
+		f.filesystemId,
+		1*time.Second,
+		0*time.Second,
+	)
+	go runWhileFilesystemLives(
+		f.updateEtcdAboutTransfers,
+		"updateEtcdAboutTransfers",
 		f.filesystemId,
 		1*time.Second,
 		0*time.Second,

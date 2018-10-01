@@ -110,6 +110,20 @@ type filesystem struct {
 	origin Origin
 }
 
+type TransferUpdateKind int
+
+const (
+	TransferStart TransferUpdateKind = iota
+	TransferProgress
+	TransferFinished
+	TransferError
+)
+
+type TransferUpdate struct {
+	Kind TransferUpdateKind
+	// TODO
+}
+
 // a "filesystem machine" or "filesystem state machine"
 type fsMachine struct {
 	// which ZFS filesystem this statemachine is operating on
@@ -150,7 +164,9 @@ type fsMachine struct {
 	pushCompleted           chan bool
 	dirtyDelta              int64
 	sizeBytes               int64
-	lastPollResult          *TransferPollResult
+	transferUpdates         chan TransferUpdate
+	// only to be accessed via the updateEtcdAboutTransfers goroutine!
+	currentPollResult *TransferPollResult
 }
 
 type EventArgs map[string]interface{}
