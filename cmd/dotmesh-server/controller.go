@@ -105,9 +105,18 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 		globalDirtyCacheLock:      &sync.RWMutex{},
 		globalDirtyCache:          make(map[string]dirtyInfo),
 		userManager:               config.UserManager,
-		publisher:                 notification.New(context.Background()),
-		versionInfo:               &VersionInfo{InstalledVersion: serverVersion},
+		// publisher:                 ,
+		versionInfo: &VersionInfo{InstalledVersion: serverVersion},
 	}
+
+	publisher := notification.New(context.Background())
+	_, err := publisher.Configure(&notification.Config{Attempts: 5})
+	if err != nil {
+		log.WithFields(log.Fields{
+			"error": err,
+		}).Fatal("inMemoryState: failed to configure notification publisher")
+	}
+	s.publisher = publisher
 	// a registry of names of filesystems and branches (clones) mapping to
 	// their ids
 	s.registry = registry.NewRegistry(config.UserManager, config.EtcdClient, ETCD_PREFIX)

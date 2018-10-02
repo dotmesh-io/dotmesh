@@ -89,7 +89,7 @@ func (p *DefaultNotificationPublisher) Configure(config *Config) (bool, error) {
 	// Configure registered notifiers.
 	for publisherName, publisher := range p.Publishers() {
 		if configured, err := publisher.Configure(config); configured {
-			log.WithField(logPublisherName, publisherName).Info("notificationSender: publisher configured")
+			log.WithField(logPublisherName, publisherName).Info("notification publisher: publisher configured")
 		} else {
 			p.UnregisterPublisher(publisherName)
 			if err != nil {
