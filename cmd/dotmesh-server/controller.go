@@ -110,7 +110,7 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 	}
 
 	publisher := notification.New(context.Background())
-	_, err := publisher.Configure(&notification.Config{Attempts: 5})
+	_, err = publisher.Configure(&notification.Config{Attempts: 5})
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error": err,
