@@ -178,8 +178,8 @@ func activeState(f *fsMachine) stateFn {
 			f.innerResponses <- response
 			return state
 		} else if e.Name == "stash" {
-			snapshot := (*e.Args)["snapshot"].(snapshot)
-			e := f.recoverFromDivergence(snapshot)
+			snapshotId := (*e.Args)["snapshotId"].(string)
+			e := f.recoverFromDivergence(snapshotId)
 			if e != nil {
 				f.innerResponses <- &Event{
 					Name: "failed-stash",

@@ -776,20 +776,15 @@ func (d *DotmeshRPC) CommitsById(
 	return nil
 }
 
-type StashRequest struct {
-	filesystemId string
-	snapshot     snapshot
-}
-
 func (d *DotmeshRPC) StashAfter(
 	r *http.Request,
-	args *StashRequest,
+	args *types.StashRequest,
 	newBranch *string,
 ) error {
 	responseChan, err := d.state.globalFsRequest(
-		args.filesystemId,
+		args.FilesystemId,
 		&Event{Name: "stash",
-			Args: &EventArgs{"snapshot": args.snapshot}},
+			Args: &EventArgs{"snapshotId": args.SnapshotId}},
 	)
 	if err != nil {
 		// meh, maybe REST *would* be nicer
@@ -800,7 +795,7 @@ func (d *DotmeshRPC) StashAfter(
 	// this response should have a timeout associated with it.
 	e := <-responseChan
 	if e.Name == "stashed" {
-		log.Printf("Stashed %s", args.filesystemId)
+		log.Printf("Stashed %s", args.FilesystemId)
 	} else {
 		return maybeError(e)
 	}

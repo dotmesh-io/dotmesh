@@ -504,9 +504,9 @@ func (f *fsMachine) retryPush(
 						e := client.CallRemote(
 							ctx,
 							"DotmeshRPC.StashAfter",
-							StashRequest{
-								filesystemId: toFilesystemId,
-								snapshot:     err.latestCommonSnapshot,
+							types.StashRequest{
+								FilesystemId: toFilesystemId,
+								SnapshotId:   err.latestCommonSnapshot.Id,
 							},
 							&newBranch,
 						)
