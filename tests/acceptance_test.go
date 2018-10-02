@@ -1868,7 +1868,7 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 
 		// test incremental push
 		citools.RunOnNode(t, node2, "dm commit -m 'node2 commit'")
-		citools.RunOnNode(t, node2, "dm push --stash-on-divergence cluster_0") // an error code is ok
+		citools.RunOnNode(t, node2, "dm push --stash-on-divergence cluster_0")
 
 		output := citools.OutputFromRunOnNode(t, node1, "dm branch")
 		if !strings.Contains(output, "master-DIVERGED-") {
