@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "log.go",
+        "syslog.go",
+        "syslog_windows.go",
+    ],
+    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/nats-io/gnatsd/logger",
+    importpath = "github.com/nats-io/gnatsd/logger",
+    visibility = ["//visibility:public"],
+    deps = select({
+        "@io_bazel_rules_go//go/platform:windows": [
+            "//vendor/golang.org/x/sys/windows/svc/eventlog:go_default_library",
+        ],
+        "//conditions:default": [],
+    }),
+)
