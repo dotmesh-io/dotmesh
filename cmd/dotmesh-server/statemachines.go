@@ -702,7 +702,7 @@ func (f *fsMachine) snapshotsChanged() error {
 // step 4: Make dotmesh aware of the new branch
 // ...something something fsmachine something etcd...
 
-func (f *fsMachine) recoverFromDivergence(rollbackTo snapshot) error {
+func (f *fsMachine) recoverFromDivergence(rollbackToId string) error {
 	// Mint an ID for the new branch
 	id, err := uuid.NewV4()
 	if err != nil {
@@ -711,7 +711,7 @@ func (f *fsMachine) recoverFromDivergence(rollbackTo snapshot) error {
 	newFilesystemId := id.String()
 
 	// Roll back the filesystem to rollbackTo, but leaving the new filesystem pointing to its original state
-	err = stashBranch(f.filesystemId, newFilesystemId, rollbackTo.Id)
+	err = stashBranch(f.filesystemId, newFilesystemId, rollbackToId)
 	if err != nil {
 		return err
 	}
@@ -730,7 +730,7 @@ func (f *fsMachine) recoverFromDivergence(rollbackTo snapshot) error {
 		newBranchName = fmt.Sprintf("%s-DIVERGED-%s", parentBranchName, strings.Replace(t.Format(time.RFC3339), ":", "-", -1))
 	}
 
-	errorName, err := activateClone(f.state, topLevelFilesystemId, f.filesystemId, rollbackTo.Id, newFilesystemId, newBranchName)
+	errorName, err := activateClone(f.state, topLevelFilesystemId, f.filesystemId, rollbackToId, newFilesystemId, newBranchName)
 
 	if err != nil {
 		return fmt.Errorf("Error recovering from divergence: %+v in %s", err, errorName)

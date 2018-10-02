@@ -776,6 +776,33 @@ func (d *DotmeshRPC) CommitsById(
 	return nil
 }
 
+func (d *DotmeshRPC) StashAfter(
+	r *http.Request,
+	args *types.StashRequest,
+	newBranch *string,
+) error {
+	responseChan, err := d.state.globalFsRequest(
+		args.FilesystemId,
+		&Event{Name: "stash",
+			Args: &EventArgs{"snapshotId": args.SnapshotId}},
+	)
+	if err != nil {
+		// meh, maybe REST *would* be nicer
+		return err
+	}
+
+	// TODO this may never succeed, if the master for it never shows up. maybe
+	// this response should have a timeout associated with it.
+	e := <-responseChan
+	if e.Name == "stashed" {
+		log.Printf("Stashed %s", args.FilesystemId)
+	} else {
+		return maybeError(e)
+	}
+	*newBranch = (*e.Args)["NewBranchName"].(string)
+	return nil
+}
+
 // Acknowledge that an authenticated connection had been successfully established.
 func (d *DotmeshRPC) Ping(r *http.Request, args *struct{}, result *bool) error {
 	*result = true
@@ -2851,37 +2878,4 @@ func (d *DotmeshRPC) CheckNameIsValid(
 
 	*result = ""
 	return nil
-}
-
-func (d *DotmeshRPC) SubscribeForCommits(
-	r *http.Request,
-	args *struct{ Url, Username, Password, Subject string },
-	result *bool,
-) error {
-	// FIXME: Just calling this on the local node won't work so well in multi-node clusters.
-
-	// 1) All subscriptions get lost if this node shuts down.
-
-	// 2) The corresponding UnsubscribeForCommits has to come to this node.
-
-	err := d.state.pubSub.SubscribeForCommits(args.Url, args.Username, args.Password, args.Subject)
-
-	*result = (err == nil)
-
-	return err
-}
-
-func (d *DotmeshRPC) UnsubscribeForCommits(
-	r *http.Request,
-	args *struct{ Url, Username, Subject string },
-	result *bool,
-) error {
-	// FIXME: Just calling this on the local node won't work so well in
-	// multi-node clusters. It needs to be called on the same node that
-	// the subscription happened on!
-
-	err := d.state.pubSub.UnsubscribeForCommits(args.Url, args.Username, args.Subject)
-
-	*result = (err == nil)
-	return err
 }

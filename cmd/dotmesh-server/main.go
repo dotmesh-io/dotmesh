@@ -19,6 +19,9 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/kv"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 
+	// notification provider
+	_ "github.com/dotmesh-io/dotmesh/pkg/notification/nats"
+
 	"github.com/opentracing/opentracing-go"
 	zipkin "github.com/openzipkin/zipkin-go-opentracing"
 )

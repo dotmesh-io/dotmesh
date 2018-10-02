@@ -202,12 +202,6 @@
 
 [[projects]]
   branch = "master"
-  name = "github.com/dotmesh-io/citools"
-  packages = ["."]
-  revision = "14e71646510553cb13fb9bcef71b056e94513764"
-
-[[projects]]
-  branch = "master"
   name = "github.com/dotmesh-io/go-checkpoint"
   packages = ["."]
   revision = "edad9decbae8e2e2e58a64b18f7bd5efa76deb5a"
@@ -556,6 +550,35 @@
   version = "1.0.1"
 
 [[projects]]
+  name = "github.com/nats-io/gnatsd"
+  packages = [
+    "conf",
+    "logger",
+    "server",
+    "server/pse",
+    "test",
+    "util"
+  ]
+  revision = "eed4fbc1458ce110ad1aa1adf904229bc8fda2a7"
+  version = "v1.3.0"
+
+[[projects]]
+  name = "github.com/nats-io/go-nats"
+  packages = [
+    ".",
+    "encoders/builtin",
+    "util"
+  ]
+  revision = "fb0396ee0bdb8018b0fef30d6d1de798ce99cd05"
+  version = "v1.6.0"
+
+[[projects]]
+  name = "github.com/nats-io/nuid"
+  packages = ["."]
+  revision = "289cccf02c178dc782430d534e3c1f5b72af807f"
+  version = "v1.0.0"
+
+[[projects]]
   branch = "master"
   name = "github.com/nu7hatch/gouuid"
   packages = ["."]
@@ -726,7 +749,12 @@
   name = "golang.org/x/sys"
   packages = [
     "unix",
-    "windows"
+    "windows",
+    "windows/registry",
+    "windows/svc",
+    "windows/svc/debug",
+    "windows/svc/eventlog",
+    "windows/svc/mgr"
   ]
   revision = "7138fd3d9dc8335c567ca206f4333fb75eb05d56"
 
@@ -986,6 +1014,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "451a62954ae215121a4a4c1eb97265daa2eaa101f5e95f849f3d23551dbbc8d5"
+  inputs-digest = "89c0bd9aee0514a4a9194006188ce87b6a68a096e4c82d22062efd99e93e391e"
   solver-name = "gps-cdcl"
   solver-version = 1
