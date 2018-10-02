@@ -123,6 +123,11 @@ func (transferRequest TransferRequest) String() string {
 	return toString
 }
 
+type StashRequest struct {
+	FilesystemId string
+	SnapshotId   string
+}
+
 type EventArgs map[string]interface{}
 type Event struct {
 	Name string
