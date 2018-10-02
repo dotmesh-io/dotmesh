@@ -407,6 +407,25 @@ func (f *fsMachine) push(
 	}, discoveringState
 }
 
+func stash(filesystemId, snapId string, client *dmclient.JsonRpcClient, ctx context.Context) (*Event, stateFn) {
+	var newBranch string
+	e := client.CallRemote(
+		ctx,
+		"DotmeshRPC.StashAfter",
+		types.StashRequest{
+			FilesystemId: filesystemId,
+			SnapshotId:   snapId,
+		},
+		&newBranch,
+	)
+	if e != nil {
+		return &Event{
+			Name: "failed-stashing-remote-end", Args: &EventArgs{"err": e},
+		}, backoffState
+	}
+	return nil, discoveringState
+}
+
 func (f *fsMachine) retryPush(
 	fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
 	transferRequestId string, pollResult *TransferPollResult,
@@ -481,7 +500,7 @@ func (f *fsMachine) retryPush(
 			}
 			snapRange, err := canApply(localSnaps, remoteSnaps)
 			if err != nil {
-				switch err.(type) {
+				switch err := err.(type) {
 				case *ToSnapsUpToDate:
 					// no action, we're up-to-date for this filesystem
 					pollResult.Status = "finished"
@@ -496,10 +515,26 @@ func (f *fsMachine) retryPush(
 					return &Event{
 						Name: "peer-up-to-date",
 					}, backoffState
+				// here we tell the other end to get it's house in order, then return an error so we go round the loop again to get the commit list etc.
+				case *ToSnapsDiverged:
+					if transferRequest.StashDivergence {
+						event, state := stash(toFilesystemId, err.latestCommonSnapshot.Id, client, ctx)
+						if event != nil {
+							return event, state
+						}
+					}
+				case *ToSnapsAhead:
+					if transferRequest.StashDivergence {
+						event, state := stash(toFilesystemId, err.latestCommonSnapshot.Id, client, ctx)
+						if event != nil {
+							return event, state
+						}
+					}
 				}
 				return &Event{
 					Name: "error-in-canapply-when-pushing", Args: &EventArgs{"err": err},
 				}, backoffState
+
 			}
 			// TODO peer may error out of pushPeerState, wouldn't we like to get them
 			// back into it somehow? we could attempt to do that with by sending a new

@@ -398,7 +398,7 @@ func (f *fsMachine) retryPull(
 			}, backoffState
 		case *ToSnapsAhead:
 			if transferRequest.StashDivergence {
-				e := f.recoverFromDivergence(err.latestCommonSnapshot)
+				e := f.recoverFromDivergence(err.latestCommonSnapshot.Id)
 				if e != nil {
 					return &Event{
 						Name: "failed-stashing",
@@ -412,7 +412,7 @@ func (f *fsMachine) retryPull(
 			}
 		case *ToSnapsDiverged:
 			if transferRequest.StashDivergence {
-				e := f.recoverFromDivergence(err.latestCommonSnapshot)
+				e := f.recoverFromDivergence(err.latestCommonSnapshot.Id)
 				if e != nil {
 					return &Event{
 						Name: "failed-stashing",
