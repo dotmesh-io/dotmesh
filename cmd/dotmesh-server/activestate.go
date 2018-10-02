@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/nu7hatch/gouuid"
 	"log"
 	"os/exec"
+
+	"github.com/nu7hatch/gouuid"
 )
 
 func activeState(f *fsMachine) stateFn {
@@ -49,6 +50,8 @@ func activeState(f *fsMachine) stateFn {
 			}
 			return activeState
 		} else if e.Name == "put-file" {
+			// TODO(karolis): maybe delete
+
 			//filename := (*e.Args)["key"].(string)
 			log.Println(e.Args)
 			s3ApiRequest, err := s3ApiRequestify((*e.Args)["S3Request"])

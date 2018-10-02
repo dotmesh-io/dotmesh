@@ -1,27 +1,94 @@
 package main
 
 import (
+	"context"
 	"encoding/xml"
 	"fmt"
-	"github.com/dotmesh-io/dotmesh/pkg/auth"
-	"github.com/gorilla/mux"
 	"io/ioutil"
-	"log"
+	"strings"
+	// "log"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"time"
+
+	"github.com/dotmesh-io/dotmesh/pkg/auth"
+	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
+	"github.com/dotmesh-io/dotmesh/pkg/user"
+	"github.com/gorilla/mux"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type S3Handler struct {
 	state *InMemoryState
+	httputil.ReverseProxy
 }
 
 func NewS3Handler(state *InMemoryState) http.Handler {
-	return &S3Handler{
+	h := &S3Handler{
 		state: state,
+	}
+
+	h.ReverseProxy.Director = h.Director
+
+	return h
+}
+
+func (s *S3Handler) Director(req *http.Request) {
+	target, ok := ctxGetAddress(req.Context())
+	if !ok || target == "" {
+		log.WithFields(log.Fields{
+			"host": req.Host,
+		}).Error("no target")
+
+		_, cancel := context.WithCancel(req.Context())
+		cancel()
+
+		return
+	}
+
+	if !strings.HasPrefix(target, "http://") && !strings.HasPrefix(target, "https://") {
+		target = "http://" + target
+	}
+
+	u, err := url.Parse(target)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"host":  req.Host,
+			"error": err,
+		}).Error("failed to parse URL")
+		return
+	}
+
+	req.URL.Scheme = u.Scheme
+	req.URL.Host = u.Host
+
+	if _, ok := req.Header["User-Agent"]; !ok {
+		// explicitly disable User-Agent so it's not set to default value
+		req.Header.Set("User-Agent", "")
 	}
 }
 
-func (s3 *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
+type ctxKey string
+
+const (
+	ctxKeyTarget ctxKey = "target"
+)
+
+func ctxSetAddress(ctx context.Context, address string) context.Context {
+	return context.WithValue(ctx, ctxKeyTarget, address)
+}
+
+func ctxGetAddress(ctx context.Context) (string, bool) {
+	val := ctx.Value(ctxKeyTarget)
+	if val == nil {
+		return "", false
+	}
+	return val.(string), true
+}
+
+func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
 	volName := VolumeName{
 		Name:      vars["name"],
@@ -29,13 +96,11 @@ func (s3 *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	}
 	isAdmin, err := AuthenticatedUserIsNamespaceAdministrator(req.Context(), volName.Namespace)
 	if err != nil {
-		resp.WriteHeader(401)
-		resp.Write([]byte(err.Error()))
+		http.Error(resp, err.Error(), 401)
 		return
 	}
 	if !isAdmin {
-		resp.WriteHeader(401)
-		resp.Write([]byte("User is not the administrator of namespace " + volName.Namespace))
+		http.Error(resp, "User is not the administrator of namespace "+volName.Namespace, 401)
 		return
 	}
 	branch, ok := vars["branch"]
@@ -45,7 +110,7 @@ func (s3 *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	} else {
 		bucketName += "-" + branch
 	}
-	localFilesystemId := s3.state.registry.Exists(
+	localFilesystemId := s.state.registry.Exists(
 		volName, branch,
 	)
 	if localFilesystemId != "" {
@@ -53,13 +118,35 @@ func (s3 *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		if ok {
 			switch req.Method {
 			case "PUT":
-				s3.putObject(resp, req, localFilesystemId, key)
+
+				master := s.state.masterFor(localFilesystemId)
+				if master != s.state.myNodeId {
+					admin, err := s.state.userManager.Get(&user.Query{Ref: "admin"})
+					if err != nil {
+						http.Error(resp, fmt.Sprintf("Can't get API key to proxy s3 request: %+v.\n", err), 500)
+						log.Errorf("can't get API key to proxy s3: %+v.", err)
+						return
+					}
+
+					addresses := s.state.addressesFor(master)
+					target, err := dmclient.DeduceUrl(context.Background(), addresses, "internal", "admin", admin.ApiKey) // FIXME, need master->name mapping, see how handover works normally
+					if err != nil {
+						http.Error(resp, err.Error(), 500)
+						log.Errorf("can't establish URL to proxy s3: %+v.", localFilesystemId, err)
+						return
+					}
+
+					s.ServeHTTP(resp, req.WithContext(ctxSetAddress(req.Context(), target)))
+					return
+				}
+
+				s.putObject(resp, req, localFilesystemId, key)
 			}
 
 		} else {
 			switch req.Method {
 			case "GET":
-				s3.listBucket(resp, req, bucketName, localFilesystemId)
+				s.listBucket(resp, req, bucketName, localFilesystemId)
 			}
 		}
 
@@ -67,18 +154,23 @@ func (s3 *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		resp.WriteHeader(404)
 		resp.Write([]byte(fmt.Sprintf("Bucket %s does not exist", bucketName)))
 	}
+}
+
+func (s *S3Handler) proxyConn(resp http.ResponseWriter, req *http.Request) {
 
 }
 
-func (s3 *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, filesystemId, filename string) {
+func (s *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, filesystemId, filename string) {
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		// todo better erroring
 		resp.WriteHeader(400)
 		return
 	}
+
+	// TODO(karolis): delete, need to write directly to the filesystem
 	user := auth.GetUserFromCtx(req.Context())
-	responseChan, _, err := s3.state.globalFsRequestId(
+	responseChan, _, err := s.state.globalFsRequestId(
 		filesystemId,
 		&Event{Name: "put-file",
 			Args: &EventArgs{
@@ -91,6 +183,16 @@ func (s3 *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, file
 			},
 		},
 	)
+
+	// s.state.filesystemsLock.Lock()
+	// fsMachine, ok := s.state.filesystems[filesystemId]
+	// if !ok {		
+		fsMachine = s.state.initFilesystemMachine(filesystemId)
+	// }
+	// s.state.filesystemsLock.Unlock()
+
+	fsMachine.innerRequests <- 
+
 	if err != nil {
 		// todo better erroring
 		resp.WriteHeader(400)
@@ -119,8 +221,8 @@ type BucketObject struct {
 	Size         int64
 }
 
-func (s3 *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name string, filesystemId string) {
-	snapshots, err := s3.state.snapshotsForCurrentMaster(filesystemId)
+func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name string, filesystemId string) {
+	snapshots, err := s.state.snapshotsForCurrentMaster(filesystemId)
 	if len(snapshots) == 0 {
 		// throw up an error?
 		log.Println("no snaps")
@@ -130,7 +232,7 @@ func (s3 *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, nam
 		return
 	}
 	lastSnapshot := snapshots[len(snapshots)-1]
-	responseChan, err := s3.state.globalFsRequest(
+	responseChan, err := s.state.globalFsRequest(
 		filesystemId,
 		&Event{Name: "mount-snapshot",
 			Args: &EventArgs{"snapId": lastSnapshot.Id}},

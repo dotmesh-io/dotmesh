@@ -18,6 +18,7 @@ type S3ApiRequest struct {
 }
 
 func s3ApiRequestify(in interface{}) (S3ApiRequest, error) {
+	// TODO(karolis): maybe delete
 	typed, ok := in.(map[string]interface{})
 	if !ok {
 		log.Printf("[s3ApiRequestify] Unable to cast %s to map[string]interface{}", in)
@@ -42,6 +43,8 @@ func s3ApiRequestify(in interface{}) (S3ApiRequest, error) {
 }
 
 func (f *fsMachine) saveFile(request S3ApiRequest) stateFn {
+	// TODO(karolis): rewrite
+
 	log.Printf("Saving file %s", request.Filename)
 	// create the default paths
 	destPath := fmt.Sprintf("%s/%s/%s", mnt(f.filesystemId), "__default__", request.Filename)
