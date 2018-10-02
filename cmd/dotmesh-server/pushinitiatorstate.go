@@ -480,8 +480,9 @@ func (f *fsMachine) retryPush(
 				}, backoffState
 			}
 			snapRange, err := canApply(localSnaps, remoteSnaps)
+			returnErr := true
 			if err != nil {
-				switch err.(type) {
+				switch err := err.(type) {
 				case *ToSnapsUpToDate:
 					// no action, we're up-to-date for this filesystem
 					pollResult.Status = "finished"
@@ -496,10 +497,46 @@ func (f *fsMachine) retryPush(
 					return &Event{
 						Name: "peer-up-to-date",
 					}, backoffState
+				case *ToSnapsDiverged:
+					if transferRequest.StashDivergence {
+						returnErr = false
+						var newBranch string
+						e := client.CallRemote(
+							ctx,
+							"DotmeshRPC.StashAfter",
+							StashRequest{
+								filesystemId: toFilesystemId,
+								snapshot:     err.latestCommonSnapshot,
+							},
+							&newBranch,
+						)
+						if e != nil {
+							return &Event{
+								Name: "failed-stashing-remote-end", Args: &EventArgs{"err": e},
+							}, backoffState
+						}
+						// could also re-fetch the remote end commits here
+						remoteSnaps, e := restrictSnapshots(remoteSnaps, err.latestCommonSnapshot.Id)
+						if e != nil {
+							return &Event{
+								Name: "restrict-snapshots-error",
+								Args: &EventArgs{"err": e, "filesystemId": toFilesystemId},
+							}, backoffState
+						}
+						snapRange, e = canApply(localSnaps, remoteSnaps)
+						if err != nil {
+							return &Event{
+								Name: "failed-canapply-after-stash",
+								Args: &EventArgs{"err": e},
+							}, backoffState
+						}
+					}
 				}
-				return &Event{
-					Name: "error-in-canapply-when-pushing", Args: &EventArgs{"err": err},
-				}, backoffState
+				if returnErr {
+					return &Event{
+						Name: "error-in-canapply-when-pushing", Args: &EventArgs{"err": err},
+					}, backoffState
+				}
 			}
 			// TODO peer may error out of pushPeerState, wouldn't we like to get them
 			// back into it somehow? we could attempt to do that with by sending a new
