@@ -10,20 +10,13 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 	f.transitionedTo("s3PullInitiatorState", "requesting")
 	transferRequest := f.lastS3TransferRequest
 	transferRequestId := f.lastTransferRequestId
-	pollResult := TransferPollResult{
-		TransferRequestId: transferRequestId,
-		Direction:         transferRequest.Direction,
-		InitiatorNodeId:   f.state.myNodeId,
-		Index:             1,
-		Status:            "starting",
-	}
 	containers, err := f.containersRunning()
 	if err != nil {
 		f.errorDuringTransfer("error-listing-containers-during-pull", err)
 		return backoffState
 	}
 	if len(containers) > 0 {
-		f.sendArgsEventUpdateUser(&EventArgs{"containers": containers}, "cannot-pull-while-containers-running", "Can't pull into filesystem while containers are using it", pollResult)
+		f.sendArgsEventUpdateUser(&EventArgs{"containers": containers}, "cannot-pull-while-containers-running", "Can't pull into filesystem while containers are using it")
 		return backoffState
 	}
 
@@ -46,11 +39,15 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 		return backoffState
 	}
 
-	f.lastPollResult = &pollResult
-	err = updatePollResult(transferRequestId, pollResult)
-	if err != nil {
-		f.sendEvent(&EventArgs{"err": err}, "s3-pull-initiator-cant-write-to-etcd", "cannot write to etcd")
-		return backoffState
+	f.transferUpdates <- TransferUpdate{
+		Kind: TransferStart,
+		Changes: TransferPollResult{
+			TransferRequestId: transferRequestId,
+			Direction:         transferRequest.Direction,
+			InitiatorNodeId:   f.state.myNodeId,
+			Index:             1,
+			Status:            "starting",
+		},
 	}
 
 	latestMeta := make(map[string]string)
@@ -75,7 +72,7 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 			}
 		}
 	}
-	bucketChanged, keyVersions, err := downloadS3Bucket(svc, transferRequest.RemoteName, destPath, transferRequestId, transferRequest.Prefixes, &pollResult, latestMeta)
+	bucketChanged, keyVersions, err := downloadS3Bucket(svc, transferRequest.RemoteName, destPath, transferRequestId, transferRequest.Prefixes, latestMeta)
 	if err != nil {
 		f.errorDuringTransfer("cant-pull-from-s3", err)
 		return backoffState
@@ -103,23 +100,18 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 				"snapshotId": snapshotId}})
 		if response.Name != "snapshotted" {
 			f.innerResponses <- response
-			err = updateUser("Could not take snapshot", transferRequestId, pollResult)
+			err = f.updateUser("Could not take snapshot")
 			if err != nil {
 				f.sendEvent(&EventArgs{"err": err}, "cant-write-to-etcd", "cant write to etcd")
 			}
 			return backoffState
 		}
 	}
-	pollResult.Status = "finished"
-	pollResult.Index = pollResult.Total
-	err = updatePollResult(transferRequestId, pollResult)
-	if err != nil {
-		f.innerResponses <- &Event{
-			Name: "s3-pull-initiator-cant-write-to-etcd",
-			Args: &EventArgs{"err": err},
-		}
-		return backoffState
+
+	f.transferUpdates <- TransferUpdate{
+		Kind: TransferFinished,
 	}
+
 	f.innerResponses <- &Event{
 		Name: "s3-transferred",
 		Args: &EventArgs{},

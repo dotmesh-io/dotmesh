@@ -120,16 +120,16 @@ func getS3Client(transferRequest types.S3TransferRequest) (*s3.S3, error) {
 	return svc, nil
 }
 
-func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string, prefixes []string, pollResult *TransferPollResult, currentKeyVersions map[string]string) (bool, map[string]string, error) {
+func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string, prefixes []string, currentKeyVersions map[string]string) (bool, map[string]string, error) {
 	log.Printf("Prefixes: %#v, len: %d", prefixes, len(prefixes))
 	if len(prefixes) == 0 {
-		return downloadPartialS3Bucket(svc, bucketName, destPath, transferRequestId, "", pollResult, currentKeyVersions)
+		return downloadPartialS3Bucket(svc, bucketName, destPath, transferRequestId, "", currentKeyVersions)
 	}
 	var changed bool
 	var err error
 	for _, prefix := range prefixes {
 		log.Printf("[downloadS3Bucket] Pulling down objects prefixed %s", prefix)
-		changed, currentKeyVersions, err = downloadPartialS3Bucket(svc, bucketName, destPath, transferRequestId, prefix, pollResult, currentKeyVersions)
+		changed, currentKeyVersions, err = downloadPartialS3Bucket(svc, bucketName, destPath, transferRequestId, prefix, currentKeyVersions)
 		if err != nil {
 			return false, nil, err
 		}
@@ -138,7 +138,7 @@ func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string
 	return changed, currentKeyVersions, nil
 }
 
-func downloadPartialS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId, prefix string, pollResult *TransferPollResult, currentKeyVersions map[string]string) (bool, map[string]string, error) {
+func downloadPartialS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId, prefix string, currentKeyVersions map[string]string) (bool, map[string]string, error) {
 	// for every version in the bucket
 	// 1. Delete anything locally that's been deleted in S3.
 	// 2. Download new versions of things that have changed
@@ -174,25 +174,25 @@ func downloadPartialS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId
 				latestMeta, _ := currentKeyVersions[*item.Key]
 				if *item.IsLatest && latestMeta != *item.VersionId {
 					log.Printf("Got object: %#v, key: %s", item, *item.Key)
-					pollResult.Index += 1
-					pollResult.Total += 1
-					pollResult.Size = *item.Size
-					pollResult.Status = "Pulling"
-					// ERROR CATCHING?
-					innerError = updatePollResult(transferRequestId, *pollResult)
-					if innerError != nil {
-						return false
+
+					f.transferUpdates <- TransferUpdate{
+						Kind: TransferNextS3File,
+						Changes: TransferPollResult{
+							Status: "Pulling",
+							Size:   *item.Size,
+						},
 					}
+					// ERROR CATCHING?
 					innerError = downloadS3Object(downloader, *item.Key, *item.VersionId, bucketName, destPath)
 					if innerError != nil {
 						return false
 					}
-					pollResult.Sent = *item.Size
-					pollResult.Status = "Pulled file successfully"
-					// todo error catching
-					innerError = updatePollResult(transferRequestId, *pollResult)
-					if innerError != nil {
-						return false
+					f.transferUpdates <- TransferUpdate{
+						Kind: TransferNextS3File,
+						Changes: TransferPollResult{
+							Status: "Pulled file successfully",
+							Sent:   *item.Size,
+						},
 					}
 					currentKeyVersions[*item.Key] = *item.VersionId
 					bucketChanged = true
@@ -201,10 +201,6 @@ func downloadPartialS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId
 			}
 			return !lastPage
 		})
-	if pollResult.Total == pollResult.Index {
-		pollResult.Status = "finished"
-		updatePollResult(transferRequestId, *pollResult)
-	}
 
 	if err != nil {
 		return bucketChanged, nil, err
@@ -282,7 +278,7 @@ func removeOldPrefixedS3Files(keyToVersionIds map[string]string, paths map[strin
 	return keyToVersionIds, nil
 }
 
-func updateS3Files(keyToVersionIds map[string]string, paths map[string]os.FileInfo, pathToMount, transferRequestId, bucket string, prefixes []string, svc *s3.S3, pollResult TransferPollResult) (map[string]string, error) {
+func updateS3Files(keyToVersionIds map[string]string, paths map[string]os.FileInfo, pathToMount, transferRequestId, bucket string, prefixes []string, svc *s3.S3) (map[string]string, error) {
 	// push every key up to s3 and then send back a map of object key -> s3 version id
 	uploader := s3manager.NewUploaderWithClient(svc)
 	// filter out any paths we don't care about in an S3 remote
@@ -305,9 +301,13 @@ func updateS3Files(keyToVersionIds map[string]string, paths map[string]os.FileIn
 			return nil, err
 		}
 		keyToVersionIds[key] = versionId
-		pollResult.Index += 1
-		pollResult.Sent += fileInfo.Size()
-		updatePollResult(transferRequestId, pollResult)
+
+		f.transferUpdates <- TransferUpdate{
+			Kind: TransferIncrementIndex,
+			Changes: TransferPollResult{
+				Sent: fileInfo.Size(),
+			},
+		}
 	}
 	return keyToVersionIds, nil
 }

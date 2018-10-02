@@ -77,7 +77,7 @@ type VersionInfo struct {
 type transferFn func(
 	f *fsMachine,
 	fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
-	transferRequestId string, pollResult *TransferPollResult,
+	transferRequestId string,
 	client *dmclient.JsonRpcClient, transferRequest *types.TransferRequest,
 ) (*Event, stateFn)
 
@@ -114,14 +114,25 @@ type TransferUpdateKind int
 
 const (
 	TransferStart TransferUpdateKind = iota
+	TransferGotIds
+	TransferCalculatedSize
+	TransferTotalAndSize
 	TransferProgress
+	TransferIncrementIndex
+	TransferNextS3File
+	TransferSent
 	TransferFinished
-	TransferError
+	TransferStatus
+
+	TransferGetCurrentPollResult
 )
 
 type TransferUpdate struct {
 	Kind TransferUpdateKind
-	// TODO
+
+	Changes TransferPollResult
+
+	GetResult chan TransferPollResult
 }
 
 // a "filesystem machine" or "filesystem state machine"
@@ -166,7 +177,7 @@ type fsMachine struct {
 	sizeBytes               int64
 	transferUpdates         chan TransferUpdate
 	// only to be accessed via the updateEtcdAboutTransfers goroutine!
-	currentPollResult *TransferPollResult
+	currentPollResult TransferPollResult
 }
 
 type EventArgs map[string]interface{}

@@ -2361,9 +2361,6 @@ func (d *DotmeshRPC) DumpInternalState(
 			resultChan <- []string{fmt.Sprintf("filesystems.%s.lastTransferRequestId", id), fs.lastTransferRequestId}
 			resultChan <- []string{fmt.Sprintf("filesystems.%s.dirtyDelta", id), fmt.Sprintf("%d", fs.dirtyDelta)}
 			resultChan <- []string{fmt.Sprintf("filesystems.%s.sizeBytes", id), fmt.Sprintf("%d", fs.sizeBytes)}
-			if fs.lastPollResult != nil {
-				resultChan <- []string{fmt.Sprintf("filesystems.%s.lastPollResult", id), toJsonString(*fs.lastPollResult)}
-			}
 			if fs.handoffRequest != nil {
 				resultChan <- []string{fmt.Sprintf("filesystems.%s.handoffRequest", id), toJsonString(*fs.handoffRequest)}
 			}
