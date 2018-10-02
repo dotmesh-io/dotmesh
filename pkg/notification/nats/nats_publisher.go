@@ -28,6 +28,7 @@ type publisher struct {
 	client        *nats.Conn
 	encodedClient *nats.EncodedConn
 	subject       string
+	initialized   bool
 }
 
 type config struct {
@@ -91,6 +92,8 @@ func (p *publisher) Configure(c *notification.Config) (bool, error) {
 		p.subject = types.NATSPublishCommitsSubject
 	}
 
+	p.initialized = true
+
 	return true, nil
 }
 
@@ -127,5 +130,8 @@ func (p *publisher) connect(cfg *config) (*nats.Conn, error) {
 
 // PublishCommit - publish commit to NATS
 func (p *publisher) PublishCommit(event *types.CommitNotification) error {
-	return p.encodedClient.Publish(p.subject, event)
+	if p.initialized {
+		return p.encodedClient.Publish(p.subject, event)
+	}
+	return nil
 }
