@@ -4,7 +4,6 @@ go_library(
     name = "go_default_library",
     srcs = [
         "nats_publisher.go",
-        "nats_publisher_test.1.go",
     ],
     importpath = "github.com/dotmesh-io/dotmesh/pkg/notification/nats",
     visibility = ["//visibility:public"],
