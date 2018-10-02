@@ -776,6 +776,38 @@ func (d *DotmeshRPC) CommitsById(
 	return nil
 }
 
+type StashRequest struct {
+	filesystemId string
+	snapshot     snapshot
+}
+
+func (d *DotmeshRPC) StashAfter(
+	r *http.Request,
+	args *StashRequest,
+	newBranch *string,
+) error {
+	responseChan, err := d.state.globalFsRequest(
+		args.filesystemId,
+		&Event{Name: "stash",
+			Args: &EventArgs{"snapshot": args.snapshot}},
+	)
+	if err != nil {
+		// meh, maybe REST *would* be nicer
+		return err
+	}
+
+	// TODO this may never succeed, if the master for it never shows up. maybe
+	// this response should have a timeout associated with it.
+	e := <-responseChan
+	if e.Name == "stashed" {
+		log.Printf("Stashed %s", args.filesystemId)
+	} else {
+		return maybeError(e)
+	}
+	*newBranch = (*e.Args)["NewBranchName"].(string)
+	return nil
+}
+
 // Acknowledge that an authenticated connection had been successfully established.
 func (d *DotmeshRPC) Ping(r *http.Request, args *struct{}, result *bool) error {
 	*result = true
