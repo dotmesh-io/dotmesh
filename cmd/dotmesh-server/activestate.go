@@ -177,7 +177,23 @@ func activeState(f *fsMachine) stateFn {
 			response, state := f.mountSnap(snapId, true)
 			f.innerResponses <- response
 			return state
-		} else if e.Name == "rollback" {
+		} else if e.Name == "stash" {
+			snapshot := (*e.Args)["snapshot"].(snapshot)
+			e := f.recoverFromDivergence(snapshot)
+			if e != nil {
+				f.innerResponses <- &Event{
+					Name: "failed-stash",
+					Args: &EventArgs{"err": e},
+				}
+				return backoffState
+			}
+			f.innerResponses <- &Event{
+				Name: "stashed",
+				Args: &EventArgs{"NewBranchName": "TODO"},
+			}
+			return discoveringState
+			}
+			else if e.Name == "rollback" {
 			// roll back to given snapshot
 			rollbackTo := (*e.Args)["rollbackTo"].(string)
 			// TODO also roll back slaves (i.e., support doing this in unmounted state)
