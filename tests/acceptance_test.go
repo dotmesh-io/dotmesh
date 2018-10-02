@@ -1850,31 +1850,31 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 			)
 		}
 	})
-	// t.Run("PushStashDiverged", func(t *testing.T) {
-	// 	fsname := citools.UniqName()
-	// 	citools.RunOnNode(t, node2, citools.DockerRun(fsname)+" touch /foo/X")
-	// 	citools.RunOnNode(t, node2, "dm switch "+fsname)
-	// 	citools.RunOnNode(t, node2, "dm commit -m 'hello'")
-	// 	citools.RunOnNode(t, node2, "dm push cluster_0")
+	t.Run("PushStashDiverged", func(t *testing.T) {
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node2, citools.DockerRun(fsname)+" touch /foo/X")
+		citools.RunOnNode(t, node2, "dm switch "+fsname)
+		citools.RunOnNode(t, node2, "dm commit -m 'hello'")
+		citools.RunOnNode(t, node2, "dm push cluster_0")
 
-	// 	citools.RunOnNode(t, node1, "dm switch "+fsname)
-	// 	resp := citools.OutputFromRunOnNode(t, node1, "dm log")
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+		resp := citools.OutputFromRunOnNode(t, node1, "dm log")
 
-	// 	if !strings.Contains(resp, "hello") {
-	// 		t.Error("unable to find commit message remote's log output")
-	// 	}
-	// 	// now make a commit that will diverge the filesystems
-	// 	citools.RunOnNode(t, node1, "dm commit -m 'node1 commit'")
+		if !strings.Contains(resp, "hello") {
+			t.Error("unable to find commit message remote's log output")
+		}
+		// now make a commit that will diverge the filesystems
+		citools.RunOnNode(t, node1, "dm commit -m 'node1 commit'")
 
-	// 	// test incremental push
-	// 	citools.RunOnNode(t, node2, "dm commit -m 'node2 commit'")
-	// 	citools.RunOnNode(t, node2, "dm push --stash-on-divergence cluster_0") // an error code is ok
+		// test incremental push
+		citools.RunOnNode(t, node2, "dm commit -m 'node2 commit'")
+		citools.RunOnNode(t, node2, "dm push --stash-on-divergence cluster_0") // an error code is ok
 
-	// 	output := citools.OutputFromRunOnNode(t, node1, "dm branch")
-	// 	if !strings.Contains(output, "master-DIVERGED-") {
-	// 		t.Error("Stashed push did not create divergent branch")
-	// 	}
-	// })
+		output := citools.OutputFromRunOnNode(t, node1, "dm branch")
+		if !strings.Contains(output, "master-DIVERGED-") {
+			t.Error("Stashed push did not create divergent branch")
+		}
+	})
 	t.Run("ResetAfterPushThenPushMySQL", func(t *testing.T) {
 		fsname := citools.UniqName()
 		citools.RunOnNode(t, node2, citools.DockerRun(
