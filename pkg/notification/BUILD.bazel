@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["notification.go"],
+    importpath = "github.com/dotmesh-io/dotmesh/pkg/notification",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/stopper:go_default_library",
+        "//pkg/timeutil:go_default_library",
+        "//pkg/types:go_default_library",
+        "//vendor/github.com/sirupsen/logrus:go_default_library",
+    ],
+)
