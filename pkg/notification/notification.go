@@ -79,6 +79,7 @@ type DefaultNotificationPublisher struct {
 func New(ctx context.Context) *DefaultNotificationPublisher {
 	return &DefaultNotificationPublisher{
 		stopper: stopper.NewStopper(ctx),
+		config:  &Config{Attempts: 5},
 	}
 }
 
