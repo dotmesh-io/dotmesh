@@ -192,8 +192,7 @@ func activeState(f *fsMachine) stateFn {
 				Args: &EventArgs{"NewBranchName": "TODO"},
 			}
 			return discoveringState
-			}
-			else if e.Name == "rollback" {
+		} else if e.Name == "rollback" {
 			// roll back to given snapshot
 			rollbackTo := (*e.Args)["rollbackTo"].(string)
 			// TODO also roll back slaves (i.e., support doing this in unmounted state)
