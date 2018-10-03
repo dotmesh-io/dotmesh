@@ -340,15 +340,6 @@ func (f *fsMachine) updateEtcdAboutTransfers() error {
 		if err != nil {
 			return err
 		}
-		log.Printf( // FIXME: Get rid of this once working
-			"[updateEtcdAboutTransfers] => %s, serialized: %s",
-			fmt.Sprintf(
-				"%s/filesystems/transfers/%s",
-				ETCD_PREFIX,
-				pollResult.TransferRequestId,
-			),
-			string(serialized),
-		)
 		_, err = kapi.Set(
 			context.Background(),
 			fmt.Sprintf("%s/filesystems/transfers/%s", ETCD_PREFIX, pollResult.TransferRequestId),
