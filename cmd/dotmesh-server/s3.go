@@ -120,16 +120,16 @@ func getS3Client(transferRequest types.S3TransferRequest) (*s3.S3, error) {
 	return svc, nil
 }
 
-func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string, prefixes []string, currentKeyVersions map[string]string) (bool, map[string]string, error) {
+func downloadS3Bucket(f *fsMachine, svc *s3.S3, bucketName, destPath, transferRequestId string, prefixes []string, currentKeyVersions map[string]string) (bool, map[string]string, error) {
 	log.Printf("Prefixes: %#v, len: %d", prefixes, len(prefixes))
 	if len(prefixes) == 0 {
-		return downloadPartialS3Bucket(svc, bucketName, destPath, transferRequestId, "", currentKeyVersions)
+		return downloadPartialS3Bucket(f, svc, bucketName, destPath, transferRequestId, "", currentKeyVersions)
 	}
 	var changed bool
 	var err error
 	for _, prefix := range prefixes {
 		log.Printf("[downloadS3Bucket] Pulling down objects prefixed %s", prefix)
-		changed, currentKeyVersions, err = downloadPartialS3Bucket(svc, bucketName, destPath, transferRequestId, prefix, currentKeyVersions)
+		changed, currentKeyVersions, err = downloadPartialS3Bucket(f, svc, bucketName, destPath, transferRequestId, prefix, currentKeyVersions)
 		if err != nil {
 			return false, nil, err
 		}
@@ -138,7 +138,7 @@ func downloadS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId string
 	return changed, currentKeyVersions, nil
 }
 
-func downloadPartialS3Bucket(svc *s3.S3, bucketName, destPath, transferRequestId, prefix string, currentKeyVersions map[string]string) (bool, map[string]string, error) {
+func downloadPartialS3Bucket(f *fsMachine, svc *s3.S3, bucketName, destPath, transferRequestId, prefix string, currentKeyVersions map[string]string) (bool, map[string]string, error) {
 	// for every version in the bucket
 	// 1. Delete anything locally that's been deleted in S3.
 	// 2. Download new versions of things that have changed
@@ -278,7 +278,7 @@ func removeOldPrefixedS3Files(keyToVersionIds map[string]string, paths map[strin
 	return keyToVersionIds, nil
 }
 
-func updateS3Files(keyToVersionIds map[string]string, paths map[string]os.FileInfo, pathToMount, transferRequestId, bucket string, prefixes []string, svc *s3.S3) (map[string]string, error) {
+func updateS3Files(f *fsMachine, keyToVersionIds map[string]string, paths map[string]os.FileInfo, pathToMount, transferRequestId, bucket string, prefixes []string, svc *s3.S3) (map[string]string, error) {
 	// push every key up to s3 and then send back a map of object key -> s3 version id
 	uploader := s3manager.NewUploaderWithClient(svc)
 	// filter out any paths we don't care about in an S3 remote

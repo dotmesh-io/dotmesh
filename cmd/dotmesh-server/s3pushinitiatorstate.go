@@ -82,7 +82,7 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 		}
 
 		keyToVersionIds := make(map[string]string)
-		keyToVersionIds, err = updateS3Files(keyToVersionIds, paths, pathToMount, transferRequestId, transferRequest.RemoteName, transferRequest.Prefixes, svc)
+		keyToVersionIds, err = updateS3Files(f, keyToVersionIds, paths, pathToMount, transferRequestId, transferRequest.RemoteName, transferRequest.Prefixes, svc)
 		if err != nil {
 			f.errorDuringTransfer("error-updating-s3-objects", err)
 			return backoffState
