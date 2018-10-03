@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 
@@ -115,6 +116,9 @@ type fsMachine struct {
 	// which ZFS filesystem this statemachine is operating on
 	filesystemId string
 	filesystem   *filesystem
+
+	fileIO chan *File
+
 	// channel of requests going in to the state machine
 	requests chan *Event
 	// inner versions of the above
@@ -157,6 +161,14 @@ type EventArgs map[string]interface{}
 type Event struct {
 	Name string
 	Args *EventArgs
+}
+
+// File is used to write files to the disk on the local node.
+type File struct {
+	Filename string
+	Contents io.Reader
+	User     string
+	Response chan *Event
 }
 
 func (ea EventArgs) String() string {
