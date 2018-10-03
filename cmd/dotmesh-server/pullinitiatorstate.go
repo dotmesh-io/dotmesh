@@ -116,6 +116,12 @@ func (f *fsMachine) pull(
 	// maybe this belongs in the metadata prenegotiation phase)
 	f.updateTransfer("calculating size", "")
 
+	// XXX This shouldn't be deduced here _and_ passed in as an argument (which
+	// is then thrown away), it just makes the code confusing.
+	pr := f.getCurrentPollResult()
+	toFilesystemId = pr.FilesystemId
+	fromSnapshotId = pr.StartingCommit
+
 	// 1. Do an RPC to estimate the send size and update pollResult
 	// accordingly.
 	var size int64

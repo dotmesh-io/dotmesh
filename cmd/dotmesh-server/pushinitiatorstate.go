@@ -92,9 +92,8 @@ func (f *fsMachine) push(
 	client *dmclient.JsonRpcClient,
 	ctx context.Context,
 ) (responseEvent *Event, nextState stateFn) {
-
-	filesystemId := fromFilesystemId
-
+	filesystemId := toFilesystemId
+	fromSnapshotId = f.getCurrentPollResult().StartingCommit
 	f.updateTransfer("calculating size", "")
 
 	postReader, postWriter := io.Pipe()
