@@ -131,7 +131,7 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 					target, err := dmclient.DeduceUrl(context.Background(), addresses, "internal", "admin", admin.ApiKey) // FIXME, need master->name mapping, see how handover works normally
 					if err != nil {
 						http.Error(resp, err.Error(), 500)
-						log.Errorf("can't establish URL to proxy s3: %+v.", localFilesystemId, err)
+						log.Errorf("can't establish URL to proxy s3: %+v.", err)
 						return
 					}
 					log.Infof("[S3Handler.ServeHTTP] proxying PUT request to node: %s", target)
