@@ -31,6 +31,7 @@ func newFilesystemMachine(filesystemId string, s *InMemoryState) *fsMachine {
 		requests:                make(chan *Event),
 		innerRequests:           make(chan *Event),
 		innerResponses:          make(chan *Event),
+		fileIO:                  make(chan *File),
 		responses:               map[string]chan *Event{},
 		responsesLock:           &sync.Mutex{},
 		snapshotsModified:       make(chan bool),

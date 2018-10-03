@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
-	"io/ioutil"
 	"strings"
 	// "log"
 	"net/http"
@@ -94,6 +93,7 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		Name:      vars["name"],
 		Namespace: vars["namespace"],
 	}
+
 	isAdmin, err := AuthenticatedUserIsNamespaceAdministrator(req.Context(), volName.Namespace)
 	if err != nil {
 		http.Error(resp, err.Error(), 401)
@@ -118,7 +118,6 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		if ok {
 			switch req.Method {
 			case "PUT":
-
 				master := s.state.masterFor(localFilesystemId)
 				if master != s.state.myNodeId {
 					admin, err := s.state.userManager.Get(&user.Query{Ref: "admin"})
@@ -135,7 +134,7 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 						log.Errorf("can't establish URL to proxy s3: %+v.", localFilesystemId, err)
 						return
 					}
-
+					log.Infof("[S3Handler.ServeHTTP] proxying PUT request to node: %s", target)
 					s.ServeHTTP(resp, req.WithContext(ctxSetAddress(req.Context(), target)))
 					return
 				}
@@ -151,62 +150,37 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		}
 
 	} else {
-		resp.WriteHeader(404)
-		resp.Write([]byte(fmt.Sprintf("Bucket %s does not exist", bucketName)))
+		http.Error(resp, fmt.Sprintf("Bucket %s does not exist", bucketName), 404)
 	}
-}
-
-func (s *S3Handler) proxyConn(resp http.ResponseWriter, req *http.Request) {
-
 }
 
 func (s *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, filesystemId, filename string) {
-	body, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		// todo better erroring
-		resp.WriteHeader(400)
-		return
-	}
-
-	// TODO(karolis): delete, need to write directly to the filesystem
 	user := auth.GetUserFromCtx(req.Context())
-	responseChan, _, err := s.state.globalFsRequestId(
-		filesystemId,
-		&Event{Name: "put-file",
-			Args: &EventArgs{
-				"S3Request": S3ApiRequest{
-					Filename:    filename,
-					Data:        body,
-					RequestType: "PUT",
-					User:        user.Name,
-				},
-			},
-		},
-	)
+	fsm := s.state.initFilesystemMachine(filesystemId)
 
-	// s.state.filesystemsLock.Lock()
-	// fsMachine, ok := s.state.filesystems[filesystemId]
-	// if !ok {		
-		fsMachine = s.state.initFilesystemMachine(filesystemId)
-	// }
-	// s.state.filesystemsLock.Unlock()
-
-	fsMachine.innerRequests <- 
-
-	if err != nil {
-		// todo better erroring
-		resp.WriteHeader(400)
-		return
+	defer req.Body.Close()
+	respCh := make(chan *Event)
+	fsm.fileIO <- &File{
+		Filename: filename,
+		Contents: req.Body,
+		User:     user.Name,
+		Response: respCh,
 	}
-	go func() {
-		// asynchronously throw away the response, transfers can be polled via
-		// their own entries in etcd
-		e := <-responseChan
-		log.Printf("finished saving %s, %+v", filename, e)
-	}()
-	resp.WriteHeader(200)
-	resp.Header().Set("Access-Control-Allow-Origin", "*")
-	resp.Write([]byte{})
+
+	result := <-respCh
+
+	switch result.Name {
+	case eventNameSaveFailed:
+		e, ok := (*result.Args)["err"].(string)
+		if ok {
+
+			http.Error(resp, e, 500)
+		}
+		http.Error(resp, "upload failed", 500)
+	default:
+		resp.WriteHeader(200)
+		resp.Header().Set("Access-Control-Allow-Origin", "*")
+	}
 }
 
 type ListBucketResult struct {
@@ -225,10 +199,7 @@ func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name
 	snapshots, err := s.state.snapshotsForCurrentMaster(filesystemId)
 	if len(snapshots) == 0 {
 		// throw up an error?
-		log.Println("no snaps")
-		resp.WriteHeader(400)
-		resp.Write([]byte("No snaps to mount - commit before listing."))
-
+		http.Error(resp, "No snaps to mount - commit before listing.", 400)
 		return
 	}
 	lastSnapshot := snapshots[len(snapshots)-1]
@@ -245,9 +216,13 @@ func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name
 
 	e := <-responseChan
 	if e.Name == "mounted" {
-		log.Printf("snapshot mounted %s for filesystem %s", lastSnapshot.Id, filesystemId)
 		result := (*e.Args)["mount-path"].(string)
-		keys, _, _ := getKeysForDir(result+"/__default__", "") // todo err handling
+		keys, _, err := getKeysForDir(result+"/__default__", "")
+		if err != nil {
+			http.Error(resp, "failed to get keys for dir: "+err.Error(), 500)
+			return
+		}
+
 		bucket := ListBucketResult{
 			Name:     name,
 			Contents: []BucketObject{},
@@ -260,12 +235,20 @@ func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name
 			}
 			bucket.Contents = append(bucket.Contents, object)
 		}
-		response, _ := xml.Marshal(bucket) // todo err handling
+		response, err := xml.Marshal(bucket)
+		if err != nil {
+			http.Error(resp, fmt.Sprintf("failed to marshal response body: %s", err), 500)
+			return
+		}
 		resp.WriteHeader(200)
 		resp.Write(response)
 	} else {
-		// todo error here
+
 		log.Println(e)
-		resp.WriteHeader(500)
+		log.WithFields(log.Fields{
+			"event":      e,
+			"filesystem": filesystemId,
+		}).Error("mount failed, returned event is not 'mounted'")
+		http.Error(resp, fmt.Sprintf("failed to mount filesystem (%s), check logs", e.Name), 500)
 	}
 }
