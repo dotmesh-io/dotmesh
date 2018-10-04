@@ -1699,12 +1699,36 @@ func (d *DotmeshRPC) Transfer(
 			}
 
 			if dirtyBytes > 0 {
-				// TODO backoff and retry above
-				return fmt.Errorf(
-					"Aborting because there are %.2f MiB of uncommitted changes on volume "+
-						"where data would be written. Use 'dm reset' to roll back.",
-					float64(dirtyBytes)/(1024*1024),
-				)
+				if args.StashDivergence {
+					user, _, _ := r.BasicAuth()
+					meta := metadata{"message": "committing dirty data ready for stashing", "author": user}
+					responseChan, err := d.state.globalFsRequest(
+						filesystemId,
+						&Event{Name: "snapshot",
+							Args: &EventArgs{"metadata": meta}},
+					)
+					if err != nil {
+						// meh, maybe REST *would* be nicer
+						return err
+					}
+
+					// TODO this may never succeed, if the master for it never shows up. maybe
+					// this response should have a timeout associated with it.
+					e := <-responseChan
+					if e.Name == "snapshotted" {
+						log.Printf("Stash on diverge requested with dirty data so snapshotted %s", filesystemId)
+					} else {
+						return maybeError(e)
+					}
+				} else {
+					// TODO backoff and retry above
+					return fmt.Errorf(
+						"Aborting because there are %.2f MiB of uncommitted changes on volume "+
+							"where data would be written. Use 'dm reset' to roll back.",
+						float64(dirtyBytes)/(1024*1024),
+					)
+				}
+
 			}
 
 			if len(containersRunning) > 0 {
