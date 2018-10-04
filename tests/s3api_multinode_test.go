@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dotmesh-io/citools"
 )
@@ -34,6 +35,9 @@ func TestS3ApiMultiNode(t *testing.T) {
 	t.Run("Put", func(t *testing.T) {
 		dotName := citools.UniqName()
 		citools.RunOnNode(t, node1, "dm init "+dotName)
+
+		// It's asynch, so wait
+		time.Sleep(5 * time.Second)
 
 		// creating file on node2
 		cmd := fmt.Sprintf("curl -T newfile.txt -u admin:%s 127.0.0.1:32607/s3/admin:%s/newfile", host1.Password, dotName)
