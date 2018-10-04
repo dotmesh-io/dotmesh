@@ -113,6 +113,9 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	localFilesystemId := s.state.registry.Exists(
 		volName, branch,
 	)
+
+	log.Infof("[S3Handler.ServeHTTP] request got for filesystem %s", localFilesystemId)
+
 	if localFilesystemId != "" {
 		key, ok := vars["key"]
 		if ok {
