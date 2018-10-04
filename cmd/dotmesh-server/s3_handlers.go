@@ -139,6 +139,8 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 					return
 				}
 
+				log.Infof("[S3Handler.ServeHTTP] node is a master node for fs %s, handling", localFilesystemId)
+
 				s.putObject(resp, req, localFilesystemId, key)
 			}
 
