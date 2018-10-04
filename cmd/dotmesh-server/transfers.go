@@ -78,7 +78,7 @@ func transferRequestify(in interface{}) (types.TransferRequest, error) {
 // doesn't, transfer it.
 func (f *fsMachine) applyPath(
 	path PathToTopLevelFilesystem, transferFn transferFn,
-	transferRequestId string, pollResult *TransferPollResult,
+	transferRequestId string,
 	client *dmclient.JsonRpcClient, transferRequest *types.TransferRequest,
 ) (*Event, stateFn) {
 	/*
@@ -173,7 +173,7 @@ func (f *fsMachine) applyPath(
 	)
 	responseEvent, nextState = transferFn(f,
 		"", "", path.TopLevelFilesystemId, firstSnapshot,
-		transferRequestId, pollResult, client, transferRequest,
+		transferRequestId, client, transferRequest,
 	)
 	if !(responseEvent.Name == "finished-push" ||
 		responseEvent.Name == "finished-pull" || responseEvent.Name == "peer-up-to-date") {
@@ -195,7 +195,7 @@ func (f *fsMachine) applyPath(
 			Args: &EventArgs{"error": err, "filesystemId": path.TopLevelFilesystemId},
 		}, backoffState
 	}
-	err = f.incrementPollResultIndex(transferRequestId, pollResult)
+	err = f.incrementPollResultIndex()
 	if err != nil {
 		return &Event{Name: "error-incrementing-poll-result",
 			Args: &EventArgs{"error": err}}, backoffState
@@ -220,7 +220,7 @@ func (f *fsMachine) applyPath(
 		responseEvent, nextState = transferFn(f,
 			clone.Clone.Origin.FilesystemId, clone.Clone.Origin.SnapshotId,
 			clone.Clone.FilesystemId, nextOrigin.SnapshotId,
-			transferRequestId, pollResult, client, transferRequest,
+			transferRequestId, client, transferRequest,
 		)
 		if !(responseEvent.Name == "finished-push" ||
 			responseEvent.Name == "finished-pull" || responseEvent.Name == "peer-up-to-date") {
@@ -243,7 +243,7 @@ func (f *fsMachine) applyPath(
 				Args: &EventArgs{"error": err, "filesystemId": clone.Clone.FilesystemId},
 			}, backoffState
 		}
-		err = f.incrementPollResultIndex(transferRequestId, pollResult)
+		err = f.incrementPollResultIndex()
 		if err != nil {
 			return &Event{Name: "error-incrementing-poll-result"},
 				backoffState

@@ -10,19 +10,18 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 	f.transitionedTo("s3PushInitiatorState", "requesting")
 	transferRequest := f.lastS3TransferRequest
 	transferRequestId := f.lastTransferRequestId
-	pollResult := TransferPollResult{
-		TransferRequestId: transferRequestId,
-		Direction:         transferRequest.Direction,
-		InitiatorNodeId:   f.state.myNodeId,
-		Index:             0,
-		Status:            "starting",
+
+	f.transferUpdates <- TransferUpdate{
+		Kind: TransferStart,
+		Changes: TransferPollResult{
+			TransferRequestId: transferRequestId,
+			Direction:         transferRequest.Direction,
+			InitiatorNodeId:   f.state.myNodeId,
+			Index:             0,
+			Status:            "starting",
+		},
 	}
-	f.lastPollResult = &pollResult
-	err := updatePollResult(transferRequestId, pollResult)
-	if err != nil {
-		f.sendEvent(&EventArgs{"err": err}, "cant-write-to-etcd", "S3 push initiator couldn't write to etcd")
-		return backoffState
-	}
+
 	latestSnap, err := f.getLastNonMetadataSnapshot()
 	if err != nil {
 		f.errorDuringTransfer("s3-push-initiator-cant-get-snapshot-data", err)
@@ -31,7 +30,7 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 	event, _ := f.mountSnap(latestSnap.Id, true)
 	if event.Name != "mounted" {
 		f.innerResponses <- event
-		updateUser("Could not mount filesystem@commit readonly", transferRequestId, pollResult)
+		f.updateUser("Could not mount filesystem@commit readonly")
 		return backoffState
 	}
 	mountPoint := mnt(fmt.Sprintf("%s@%s", f.filesystemId, latestSnap.Id))
@@ -39,7 +38,7 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 	snaps, err := f.state.snapshotsForCurrentMaster(f.filesystemId)
 	if len(snaps) == 0 {
 		f.innerResponses <- event
-		updateUser("No commits to push!", transferRequestId, pollResult)
+		f.updateUser("No commits to push!")
 		return backoffState
 	}
 	metadataSnap := snaps[len(snaps)-1]
@@ -48,12 +47,12 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 	event, _ = f.mountSnap(metadataSnap.Id, true)
 	if event.Name != "mounted" {
 		f.innerResponses <- event
-		updateUser("Could not mount filesystem@commit readonly", transferRequestId, pollResult)
+		f.updateUser("Could not mount filesystem@commit readonly")
 		return backoffState
 	}
 	if latestSnap != nil {
 		if _, err := os.Stat(pathToS3Metadata); err == nil {
-			f.sendArgsEventUpdateUser(&EventArgs{"path": pathToS3Metadata}, "commit-already-in-s3", "Found s3 metadata for latest snap - nothing to push!", pollResult)
+			f.sendArgsEventUpdateUser(&EventArgs{"path": pathToS3Metadata}, "commit-already-in-s3", "Found s3 metadata for latest snap - nothing to push!")
 			return discoveringState
 		} else if !os.IsNotExist(err) {
 			f.errorDuringTransfer("couldnt-stat-s3-meta-file", err)
@@ -73,16 +72,17 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 			return backoffState
 		}
 		// push everything to s3
-		pollResult.Total = len(paths)
-		pollResult.Size = dirSize
-		pollResult.Status = "beginning upload"
-		err = updatePollResult(transferRequestId, pollResult)
-		if err != nil {
-			f.sendEvent(&EventArgs{"err": err}, "cant-write-etcd", "")
-			return backoffState
+		f.transferUpdates <- TransferUpdate{
+			Kind: TransferTotalAndSize,
+			Changes: TransferPollResult{
+				Status: "beginning upload",
+				Total:  len(paths),
+				Size:   dirSize,
+			},
 		}
+
 		keyToVersionIds := make(map[string]string)
-		keyToVersionIds, err = updateS3Files(keyToVersionIds, paths, pathToMount, transferRequestId, transferRequest.RemoteName, transferRequest.Prefixes, svc, pollResult)
+		keyToVersionIds, err = updateS3Files(f, keyToVersionIds, paths, pathToMount, transferRequestId, transferRequest.RemoteName, transferRequest.Prefixes, svc)
 		if err != nil {
 			f.errorDuringTransfer("error-updating-s3-objects", err)
 			return backoffState
@@ -124,7 +124,7 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 		})
 		if response.Name != "snapshotted" {
 			f.innerResponses <- response
-			err = updateUser("Could not take snapshot", transferRequestId, pollResult)
+			err = f.updateUser("Could not take snapshot")
 			if err != nil {
 				f.sendEvent(&EventArgs{"err": err}, "cant-write-to-etcd", "cant write to etcd")
 			}
@@ -135,14 +135,10 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 		// put something in S3 to let us know the filesystem ID/other dotmesh details in case we need to recover at a later stage
 	}
 	// todo set this to something more reasonable and do stuff with all of the above
-	pollResult.Status = "finished"
-	pollResult.Total = pollResult.Index
-	f.lastPollResult = &pollResult
-	err = updatePollResult(transferRequestId, pollResult)
-	if err != nil {
-		f.sendEvent(&EventArgs{"err": err}, "cant-write-to-etcd", "S3 push initiator couldn't write to etcd")
-		return backoffState
+	f.transferUpdates <- TransferUpdate{
+		Kind: TransferFinished,
 	}
+
 	f.innerResponses <- &Event{
 		Name: "s3-pushed",
 	}

@@ -41,20 +41,14 @@ func pushInitiatorState(f *fsMachine) stateFn {
 		return backoffState
 	}
 
-	pollResult := TransferPollResultFromTransferRequest(
-		transferRequestId, transferRequest, f.state.myNodeId,
-		1, 1+len(path.Clones), "syncing metadata",
-	)
-	f.lastPollResult = &pollResult
-
-	err = updatePollResult(transferRequestId, pollResult)
-	if err != nil {
-		f.innerResponses <- &Event{
-			Name: "push-initiator-cant-write-to-etcd",
-			Args: &EventArgs{"err": err},
-		}
-		return backoffState
+	f.transferUpdates <- TransferUpdate{
+		Kind: TransferStart,
+		Changes: TransferPollResultFromTransferRequest(
+			transferRequestId, transferRequest, f.state.myNodeId,
+			1, 1+len(path.Clones), "syncing metadata",
+		),
 	}
+
 	// Also RPC to remote cluster to set up a similar record there.
 	// TODO retries
 	client := dmclient.NewJsonRpcClient(
@@ -74,14 +68,14 @@ func pushInitiatorState(f *fsMachine) stateFn {
 	defer cancel()
 	responseEvent, nextState := f.applyPath(path, func(f *fsMachine,
 		fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
-		transferRequestId string, pollResult *TransferPollResult,
+		transferRequestId string,
 		client *dmclient.JsonRpcClient, transferRequest *types.TransferRequest,
 	) (*Event, stateFn) {
 		return f.retryPush(
 			fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
-			transferRequestId, pollResult, client, transferRequest, ctx,
+			transferRequestId, client, transferRequest, ctx,
 		)
-	}, transferRequestId, &pollResult, client, &transferRequest)
+	}, transferRequestId, client, &transferRequest)
 
 	f.innerResponses <- responseEvent
 	if nextState == nil {
@@ -95,25 +89,12 @@ func (f *fsMachine) push(
 	snapRange *snapshotRange,
 	transferRequest *types.TransferRequest,
 	transferRequestId *string,
-	pollResult *TransferPollResult,
 	client *dmclient.JsonRpcClient,
 	ctx context.Context,
 ) (responseEvent *Event, nextState stateFn) {
-
-	filesystemId := pollResult.FilesystemId
-
-	// XXX This shouldn't be deduced here _and_ passed in as an argument (which
-	// is then thrown away), it just makes the code confusing.
-	fromSnapshotId = pollResult.StartingCommit
-
-	pollResult.Status = "calculating size"
-	err := updatePollResult(*transferRequestId, *pollResult)
-	if err != nil {
-		return &Event{
-			Name: "push-initiator-cant-write-to-etcd",
-			Args: &EventArgs{"err": err},
-		}, backoffState
-	}
+	filesystemId := toFilesystemId
+	fromSnapshotId = f.getCurrentPollResult().StartingCommit
+	f.updateTransfer("calculating size", "")
 
 	postReader, postWriter := io.Pipe()
 
@@ -121,6 +102,7 @@ func (f *fsMachine) push(
 	defer postReader.Close()
 
 	var url string
+	var err error
 	if transferRequest.Port == 0 {
 		url, err = dmclient.DeduceUrl(
 			ctx,
@@ -200,14 +182,13 @@ func (f *fsMachine) push(
 	}
 
 	log.Printf("[actualPush:%s] size: %d", filesystemId, size)
-	pollResult.Size = size
-	pollResult.Status = "pushing"
-	err = updatePollResult(*transferRequestId, *pollResult)
-	if err != nil {
-		return &Event{
-			Name: "push-initiator-cant-write-to-etcd",
-			Args: &EventArgs{"err": err},
-		}, backoffState
+
+	f.transferUpdates <- TransferUpdate{
+		Kind: TransferCalculatedSize,
+		Changes: TransferPollResult{
+			Status: "pushing",
+			Size:   size,
+		},
 	}
 
 	// proceed to do real send
@@ -238,11 +219,13 @@ func (f *fsMachine) push(
 		make(chan *Event),
 		func(e *Event, c chan *Event) {},
 		func(bytes int64, t int64) {
-			pollResult.Sent = bytes
-			pollResult.NanosecondsElapsed = t
-			err = updatePollResult(*transferRequestId, *pollResult)
-			if err != nil {
-				log.Printf("Error updating poll result: %s", err)
+			f.transferUpdates <- TransferUpdate{
+				Kind: TransferProgress,
+				Changes: TransferPollResult{
+					Status:             "pushing",
+					Sent:               bytes,
+					NanosecondsElapsed: t,
+				},
 			}
 			f.transitionedTo("pushInitiatorState",
 				fmt.Sprintf(
@@ -391,13 +374,12 @@ func (f *fsMachine) push(
 	pipeWriter.Close()
 	pipeReader.Close()
 
-	pollResult.Status = "finished"
-	err = updatePollResult(*transferRequestId, *pollResult)
-	if err != nil {
-		return &Event{
-			Name: "error-updating-poll-result",
-			Args: &EventArgs{"err": err},
-		}, backoffState
+	f.transferUpdates <- TransferUpdate{
+		Kind: TransferStatus,
+		Changes: TransferPollResult{
+			Status:  "finished",
+			Message: "",
+		},
 	}
 
 	// TODO update the transfer record, release the peer state machines
@@ -407,9 +389,28 @@ func (f *fsMachine) push(
 	}, discoveringState
 }
 
+func stash(filesystemId, snapId string, client *dmclient.JsonRpcClient, ctx context.Context) (*Event, stateFn) {
+	var newBranch string
+	e := client.CallRemote(
+		ctx,
+		"DotmeshRPC.StashAfter",
+		types.StashRequest{
+			FilesystemId: filesystemId,
+			SnapshotId:   snapId,
+		},
+		&newBranch,
+	)
+	if e != nil {
+		return &Event{
+			Name: "failed-stashing-remote-end", Args: &EventArgs{"err": e},
+		}, backoffState
+	}
+	return nil, discoveringState
+}
+
 func (f *fsMachine) retryPush(
 	fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
-	transferRequestId string, pollResult *TransferPollResult,
+	transferRequestId string,
 	client *dmclient.JsonRpcClient, transferRequest *types.TransferRequest, ctx context.Context,
 ) (*Event, stateFn) {
 	// Let's go!
@@ -442,8 +443,8 @@ func (f *fsMachine) retryPush(
 				toSnapshotId = snaps[len(snaps)-1].Id
 			}
 			log.Printf(
-				"[retryPush] from (%s, %s) to (%s, %s), pollResult: %+v",
-				fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId, pollResult,
+				"[retryPush] from (%s, %s) to (%s, %s)",
+				fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
 			)
 			var remoteSnaps []*snapshot
 			err := client.CallRemote(
@@ -481,25 +482,33 @@ func (f *fsMachine) retryPush(
 			}
 			snapRange, err := canApply(localSnaps, remoteSnaps)
 			if err != nil {
-				switch err.(type) {
+				switch err := err.(type) {
 				case *ToSnapsUpToDate:
 					// no action, we're up-to-date for this filesystem
-					pollResult.Status = "finished"
-					pollResult.Message = "remote already up-to-date, nothing to do"
-
-					e := updatePollResult(transferRequestId, *pollResult)
-					if e != nil {
-						return &Event{
-							Name: "push-initiator-cant-write-to-etcd", Args: &EventArgs{"err": e},
-						}, backoffState
-					}
+					f.updateTransfer("finished", "remote already up-to-date, nothing to do")
 					return &Event{
 						Name: "peer-up-to-date",
 					}, backoffState
+				// here we tell the other end to get it's house in order, then return an error so we go round the loop again to get the commit list etc.
+				case *ToSnapsDiverged:
+					if transferRequest.StashDivergence {
+						event, state := stash(toFilesystemId, err.latestCommonSnapshot.Id, client, ctx)
+						if event != nil {
+							return event, state
+						}
+					}
+				case *ToSnapsAhead:
+					if transferRequest.StashDivergence {
+						event, state := stash(toFilesystemId, err.latestCommonSnapshot.Id, client, ctx)
+						if event != nil {
+							return event, state
+						}
+					}
 				}
 				return &Event{
 					Name: "error-in-canapply-when-pushing", Args: &EventArgs{"err": err},
 				}, backoffState
+
 			}
 			// TODO peer may error out of pushPeerState, wouldn't we like to get them
 			// back into it somehow? we could attempt to do that with by sending a new
@@ -518,22 +527,20 @@ func (f *fsMachine) retryPush(
 				fromSnap = snapRange.fromSnap.Id
 			}
 
-			pollResult.FilesystemId = toFilesystemId
-			pollResult.StartingCommit = fromSnap
-			pollResult.TargetCommit = snapRange.toSnap.Id
-
-			err = updatePollResult(transferRequestId, *pollResult)
-			if err != nil {
-				return &Event{
-					Name: "push-initiator-cant-write-to-etcd", Args: &EventArgs{"err": err},
-				}, backoffState
+			f.transferUpdates <- TransferUpdate{
+				Kind: TransferGotIds,
+				Changes: TransferPollResult{
+					FilesystemId:   toFilesystemId,
+					StartingCommit: fromSnap,
+					TargetCommit:   snapRange.toSnap.Id,
+				},
 			}
 
 			// tell the remote what snapshot to expect
 			var result bool
-			log.Printf("[retryPush] calling RegisterTransfer with args: %+v", pollResult)
+			log.Printf("[retryPush] calling RegisterTransfer")
 			err = client.CallRemote(
-				ctx, "DotmeshRPC.RegisterTransfer", pollResult, &result,
+				ctx, "DotmeshRPC.RegisterTransfer", f.getCurrentPollResult(), &result,
 			)
 			if err != nil {
 				return &Event{
@@ -541,16 +548,9 @@ func (f *fsMachine) retryPush(
 				}, backoffState
 			}
 
-			err = updatePollResult(transferRequestId, *pollResult)
-			if err != nil {
-				return &Event{
-					Name: "push-initiator-cant-write-to-etcd", Args: &EventArgs{"err": err},
-				}, backoffState
-			}
-
 			return f.push(
 				fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
-				snapRange, transferRequest, &transferRequestId, pollResult, client,
+				snapRange, transferRequest, &transferRequestId, client,
 				ctx,
 			)
 		}()

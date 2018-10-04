@@ -776,6 +776,33 @@ func (d *DotmeshRPC) CommitsById(
 	return nil
 }
 
+func (d *DotmeshRPC) StashAfter(
+	r *http.Request,
+	args *types.StashRequest,
+	newBranch *string,
+) error {
+	responseChan, err := d.state.globalFsRequest(
+		args.FilesystemId,
+		&Event{Name: "stash",
+			Args: &EventArgs{"snapshotId": args.SnapshotId}},
+	)
+	if err != nil {
+		// meh, maybe REST *would* be nicer
+		return err
+	}
+
+	// TODO this may never succeed, if the master for it never shows up. maybe
+	// this response should have a timeout associated with it.
+	e := <-responseChan
+	if e.Name == "stashed" {
+		log.Printf("Stashed %s", args.FilesystemId)
+	} else {
+		return maybeError(e)
+	}
+	*newBranch = (*e.Args)["NewBranchName"].(string)
+	return nil
+}
+
 // Acknowledge that an authenticated connection had been successfully established.
 func (d *DotmeshRPC) Ping(r *http.Request, args *struct{}, result *bool) error {
 	*result = true
@@ -2361,9 +2388,6 @@ func (d *DotmeshRPC) DumpInternalState(
 			resultChan <- []string{fmt.Sprintf("filesystems.%s.lastTransferRequestId", id), fs.lastTransferRequestId}
 			resultChan <- []string{fmt.Sprintf("filesystems.%s.dirtyDelta", id), fmt.Sprintf("%d", fs.dirtyDelta)}
 			resultChan <- []string{fmt.Sprintf("filesystems.%s.sizeBytes", id), fmt.Sprintf("%d", fs.sizeBytes)}
-			if fs.lastPollResult != nil {
-				resultChan <- []string{fmt.Sprintf("filesystems.%s.lastPollResult", id), toJsonString(*fs.lastPollResult)}
-			}
 			if fs.handoffRequest != nil {
 				resultChan <- []string{fmt.Sprintf("filesystems.%s.handoffRequest", id), toJsonString(*fs.handoffRequest)}
 			}

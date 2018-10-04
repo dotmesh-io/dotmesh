@@ -49,9 +49,10 @@ func newFilesystemMachine(filesystemId string, s *InMemoryState) *fsMachine {
 		// reload the list of snapshots, update etcd and coordinate our own
 		// state changes, which we do via the POST handler sending on this
 		// channel.
-		pushCompleted: make(chan bool),
-		dirtyDelta:    0,
-		sizeBytes:     0,
+		pushCompleted:   make(chan bool),
+		dirtyDelta:      0,
+		sizeBytes:       0,
+		transferUpdates: make(chan TransferUpdate),
 	}
 }
 
@@ -110,6 +111,13 @@ func (f *fsMachine) run() {
 	go runWhileFilesystemLives(
 		f.updateEtcdAboutSnapshots,
 		"updateEtcdAboutSnapshots",
+		f.filesystemId,
+		1*time.Second,
+		0*time.Second,
+	)
+	go runWhileFilesystemLives(
+		f.updateEtcdAboutTransfers,
+		"updateEtcdAboutTransfers",
 		f.filesystemId,
 		1*time.Second,
 		0*time.Second,
@@ -241,6 +249,110 @@ func (f *fsMachine) getResponseChan(reqId string, e *Event) (chan *Event, error)
 
 func (f *fsMachine) markFilesystemAsLive() error {
 	return f.state.markFilesystemAsLiveInEtcd(f.filesystemId)
+}
+
+func (f *fsMachine) getCurrentPollResult() TransferPollResult {
+	gr := make(chan TransferPollResult)
+	f.transferUpdates <- TransferUpdate{
+		Kind:      TransferGetCurrentPollResult,
+		GetResult: gr,
+	}
+	return <-gr
+}
+
+func (f *fsMachine) updateEtcdAboutTransfers() error {
+	// attempt to connect to etcd
+	kapi, err := getEtcdKeysApi()
+	if err != nil {
+		return err
+	}
+
+	pollResult := &(f.currentPollResult)
+
+	// wait until the state machine notifies us that it's changed the
+	// transfer state, but have an escape clause in case this filesystem
+	// is deleted so we don't block forever
+	deathChan := make(chan interface{})
+	deathObserver.Subscribe(f.filesystemId, deathChan)
+	defer deathObserver.Unsubscribe(f.filesystemId, deathChan)
+
+	for {
+		var update TransferUpdate
+		select {
+		case update = <-(f.transferUpdates):
+			log.Printf("[updateEtcdAboutTransfers] Received command %#v", update)
+		case _ = <-deathChan:
+			log.Printf("[updateEtcdAboutTransfers] Terminating due to filesystem death")
+			return nil
+		}
+
+		switch update.Kind {
+		case TransferStart:
+			(*pollResult) = update.Changes
+		case TransferGotIds:
+			pollResult.FilesystemId = update.Changes.FilesystemId
+			pollResult.StartingCommit = update.Changes.StartingCommit
+			pollResult.TargetCommit = update.Changes.TargetCommit
+		case TransferCalculatedSize:
+			pollResult.Status = update.Changes.Status
+			pollResult.Size = update.Changes.Size
+		case TransferTotalAndSize:
+			pollResult.Status = update.Changes.Status
+			pollResult.Total = update.Changes.Total
+			pollResult.Size = update.Changes.Size
+		case TransferProgress:
+			pollResult.Sent = update.Changes.Sent
+			pollResult.NanosecondsElapsed = update.Changes.NanosecondsElapsed
+			pollResult.Status = update.Changes.Status
+		case TransferIncrementIndex:
+			if pollResult.Index < pollResult.Total {
+				pollResult.Index++
+			}
+			pollResult.Sent += update.Changes.Size
+		case TransferNextS3File:
+			pollResult.Index += 1
+			pollResult.Total += 1
+			pollResult.Size = update.Changes.Size
+			pollResult.Status = update.Changes.Status
+		case TransferSent:
+			pollResult.Sent = update.Changes.Sent
+			pollResult.Status = update.Changes.Status
+		case TransferFinished:
+			pollResult.Status = "finished"
+			pollResult.Index = pollResult.Total
+		case TransferStatus:
+			pollResult.Status = update.Changes.Status
+		case TransferGetCurrentPollResult:
+			update.GetResult <- *pollResult
+			continue
+		default:
+			return fmt.Errorf("Unknown transfer update kind in %#v", update)
+		}
+
+		// In all cases
+		if update.Changes.Message != "" {
+			pollResult.Message = update.Changes.Message
+		}
+
+		// Send the update
+		log.Printf("[updateEtcdAboutTransfers] pollResult = %#v", *pollResult)
+
+		serialized, err := json.Marshal(*pollResult)
+		if err != nil {
+			return err
+		}
+		_, err = kapi.Set(
+			context.Background(),
+			fmt.Sprintf("%s/filesystems/transfers/%s", ETCD_PREFIX, pollResult.TransferRequestId),
+			string(serialized),
+			nil,
+		)
+		if err != nil {
+			return err
+		}
+
+		// Go around the loop for the next command
+	}
 }
 
 func (f *fsMachine) updateEtcdAboutSnapshots() error {
@@ -582,7 +694,7 @@ func (f *fsMachine) snapshotsChanged() error {
 // step 4: Make dotmesh aware of the new branch
 // ...something something fsmachine something etcd...
 
-func (f *fsMachine) recoverFromDivergence(rollbackTo snapshot) error {
+func (f *fsMachine) recoverFromDivergence(rollbackToId string) error {
 	// Mint an ID for the new branch
 	id, err := uuid.NewV4()
 	if err != nil {
@@ -591,7 +703,7 @@ func (f *fsMachine) recoverFromDivergence(rollbackTo snapshot) error {
 	newFilesystemId := id.String()
 
 	// Roll back the filesystem to rollbackTo, but leaving the new filesystem pointing to its original state
-	err = stashBranch(f.filesystemId, newFilesystemId, rollbackTo.Id)
+	err = stashBranch(f.filesystemId, newFilesystemId, rollbackToId)
 	if err != nil {
 		return err
 	}
@@ -610,7 +722,7 @@ func (f *fsMachine) recoverFromDivergence(rollbackTo snapshot) error {
 		newBranchName = fmt.Sprintf("%s-DIVERGED-%s", parentBranchName, strings.Replace(t.Format(time.RFC3339), ":", "-", -1))
 	}
 
-	errorName, err := activateClone(f.state, topLevelFilesystemId, f.filesystemId, rollbackTo.Id, newFilesystemId, newBranchName)
+	errorName, err := activateClone(f.state, topLevelFilesystemId, f.filesystemId, rollbackToId, newFilesystemId, newBranchName)
 
 	if err != nil {
 		return fmt.Errorf("Error recovering from divergence: %+v in %s", err, errorName)

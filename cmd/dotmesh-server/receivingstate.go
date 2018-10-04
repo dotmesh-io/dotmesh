@@ -36,7 +36,7 @@ func receivingState(f *fsMachine) stateFn {
 		case *ToSnapsAhead:
 			log.Printf("receivingState: ToSnapsAhead %s got %s", f.filesystemId, err)
 			// erk, slave is ahead of master
-			errx := f.recoverFromDivergence(err.latestCommonSnapshot)
+			errx := f.recoverFromDivergence(err.latestCommonSnapshot.Id)
 			if errx != nil {
 				return backoffStateWithReason(fmt.Sprintf("receivingState(%s): Unable to recover from divergence: %+v", f.filesystemId, errx))
 			}
@@ -44,7 +44,7 @@ func receivingState(f *fsMachine) stateFn {
 			return discoveringState
 		case *ToSnapsDiverged:
 			log.Printf("receivingState: ToSnapsDiverged %s got %s", f.filesystemId, err)
-			errx := f.recoverFromDivergence(err.latestCommonSnapshot)
+			errx := f.recoverFromDivergence(err.latestCommonSnapshot.Id)
 			if errx != nil {
 				return backoffStateWithReason(fmt.Sprintf("receivingState(%s): Unable to recover from divergence: %+v", f.filesystemId, errx))
 			}
