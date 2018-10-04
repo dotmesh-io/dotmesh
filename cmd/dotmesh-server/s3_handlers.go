@@ -158,6 +158,11 @@ func (s *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, files
 	user := auth.GetUserFromCtx(req.Context())
 	fsm := s.state.initFilesystemMachine(filesystemId)
 
+	if fsm.currentState != "active" {
+		http.Error(resp, "please try again later", http.StatusServiceUnavailable)
+		return
+	}
+
 	defer req.Body.Close()
 	respCh := make(chan *Event)
 	fsm.fileIO <- &File{
