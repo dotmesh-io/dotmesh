@@ -1,89 +1,68 @@
 package main
 
 import (
-	"encoding/base64"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
 )
 
-// functions to make dotmesh server act like an S3 server
+const eventNameSaveFailed = "save-failed"
+const eventNameSaveSuccess = "save-success"
 
-type S3ApiRequest struct {
-	Filename    string
-	Data        []byte
-	RequestType string
-	User        string
-}
-
-func s3ApiRequestify(in interface{}) (S3ApiRequest, error) {
-	typed, ok := in.(map[string]interface{})
-	if !ok {
-		log.Printf("[s3ApiRequestify] Unable to cast %s to map[string]interface{}", in)
-		return S3ApiRequest{}, fmt.Errorf(
-			"Unable to cast %s to map[string]interface{}", in,
-		)
-	}
-	data, ok := typed["Data"].(string)
-	if !ok {
-		return S3ApiRequest{}, fmt.Errorf("Could not cast %#v to string", typed["Data"])
-	}
-	bytes, err := base64.StdEncoding.DecodeString(data)
-	if err != nil {
-		return S3ApiRequest{}, fmt.Errorf("Unable to decode data %s to bytes", data)
-	}
-	return S3ApiRequest{
-		Filename:    typed["Filename"].(string),
-		Data:        bytes,
-		RequestType: typed["RequestType"].(string),
-		User:        typed["User"].(string),
-	}, nil
-}
-
-func (f *fsMachine) saveFile(request S3ApiRequest) stateFn {
-	log.Printf("Saving file %s", request.Filename)
+func (f *fsMachine) saveFile(file *File) stateFn {
 	// create the default paths
-	destPath := fmt.Sprintf("%s/%s/%s", mnt(f.filesystemId), "__default__", request.Filename)
+	destPath := fmt.Sprintf("%s/%s/%s", mnt(f.filesystemId), "__default__", file.Filename)
+	log.Printf("Saving file to %s", destPath)
 	directoryPath := destPath[:strings.LastIndex(destPath, "/")]
 	err := os.MkdirAll(directoryPath, 0775)
 	if err != nil {
-		f.innerResponses <- &Event{
-			Name: "cannot-create-dir",
-			Args: &EventArgs{"err": err},
+		file.Response <- &Event{
+			Name: eventNameSaveFailed,
+			Args: &EventArgs{"err": fmt.Errorf("failed to create directory, error: %s", err)},
 		}
 		return backoffState
 	}
-	file, err := os.Create(destPath)
+	out, err := os.Create(destPath)
 	if err != nil {
-		f.innerResponses <- &Event{
-			Name: "cannot-create-file",
-			Args: &EventArgs{"err": err},
+		file.Response <- &Event{
+			Name: eventNameSaveFailed,
+			Args: &EventArgs{"err": fmt.Errorf("failed to create file, error: %s", err)},
 		}
 		return backoffState
 	}
-	_, err = file.Write(request.Data)
+
+	_, err = io.Copy(out, file.Contents)
 	if err != nil {
-		f.innerResponses <- &Event{
-			Name: "cannot-write-file",
-			Args: &EventArgs{"err": err},
+		file.Response <- &Event{
+			Name: eventNameSaveFailed,
+			Args: &EventArgs{"err": fmt.Errorf("cannot to create a file, error: %s", err)},
 		}
 		return backoffState
 	}
-	err = file.Close()
+	err = out.Close()
 	if err != nil {
-		f.innerResponses <- &Event{
-			Name: "cannot-close-file",
-			Args: &EventArgs{"err": err},
+		file.Response <- &Event{
+			Name: eventNameSaveFailed,
+			Args: &EventArgs{"err": fmt.Errorf("cannot close the file, error: %s", err)},
 		}
 		return backoffState
 	}
 	response, _ := f.snapshot(&Event{Name: "snapshot",
-		Args: &EventArgs{"metadata": metadata{"message": "saving file put by s3 api " + request.Filename, "author": request.User}}})
+		Args: &EventArgs{"metadata": metadata{"message": "saving file put by s3 api " + file.Filename, "author": file.User}}})
 	if response.Name != "snapshotted" {
-		f.innerResponses <- response
+		file.Response <- &Event{
+			Name: eventNameSaveFailed,
+			Args: &EventArgs{"err": "file snapshot failed"},
+		}
 		return backoffState
 	}
-	f.innerResponses <- &Event{Name: "saved", Args: &EventArgs{"filename": request.Filename}}
+
+	file.Response <- &Event{
+		Name: eventNameSaveSuccess,
+		Args: &EventArgs{},
+	}
+
 	return activeState
 }

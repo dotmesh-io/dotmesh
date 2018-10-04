@@ -505,7 +505,8 @@ func (s *InMemoryState) handleOneFilesystemMaster(node *client.Node) error {
 			}
 		}
 		go func() {
-			<-responseChan
+			e := <-responseChan
+			log.Printf("[handleOneFilesystemMaster] filesystem %s response %#v", fs, e)
 		}()
 	}
 	return nil

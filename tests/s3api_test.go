@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/dotmesh-io/citools"
 	"strings"
 	"testing"
+
+	"github.com/dotmesh-io/citools"
 )
 
 func TestS3Api(t *testing.T) {
@@ -36,6 +37,22 @@ func TestS3Api(t *testing.T) {
 		resp = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(dotName)+" cat /foo/newfile")
 		if !strings.Contains(resp, "helloworld") {
 			t.Error("failed to upload file")
+		}
+		resp = citools.OutputFromRunOnNode(t, node1, "dm log")
+		if !strings.Contains(resp, "author: admin") {
+			t.Error("Did not set author correctly")
+		}
+	})
+
+	t.Run("Put 10MB", func(t *testing.T) {
+		dotName := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm init "+dotName)
+		cmd := fmt.Sprintf("curl -T newfile.txt -u admin:%s 127.0.0.1:32607/s3/admin:%s/largefile", host.Password, dotName)
+		citools.RunOnNode(t, node1, `yes "Some text" | head -n 1000000 > largefile.txt`)
+		citools.RunOnNode(t, node1, cmd)
+		resp := citools.OutputFromRunOnNode(t, node1, citools.DockerRun(dotName)+" ls /foo/")
+		if !strings.Contains(resp, "largefile") {
+			t.Error("failed to create large file")
 		}
 		resp = citools.OutputFromRunOnNode(t, node1, "dm log")
 		if !strings.Contains(resp, "author: admin") {

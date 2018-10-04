@@ -2,15 +2,19 @@ package main
 
 import (
 	"fmt"
-	"github.com/nu7hatch/gouuid"
-	"log"
 	"os/exec"
+
+	"github.com/nu7hatch/gouuid"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func activeState(f *fsMachine) stateFn {
 	f.transitionedTo("active", "waiting")
 	log.Printf("entering active state for %s", f.filesystemId)
 	select {
+	case file := <-f.fileIO:
+		return f.saveFile(file)
 	case e := <-f.innerRequests:
 		if e.Name == "delete" {
 			err := f.state.deleteFilesystem(f.filesystemId)
@@ -48,19 +52,6 @@ func activeState(f *fsMachine) stateFn {
 				}
 			}
 			return activeState
-		} else if e.Name == "put-file" {
-			//filename := (*e.Args)["key"].(string)
-			log.Println(e.Args)
-			s3ApiRequest, err := s3ApiRequestify((*e.Args)["S3Request"])
-			if err != nil {
-				log.Printf("%v while trying to cast to s3request", err)
-				f.innerResponses <- &Event{
-					Name: "failed-s3apirequest-cast",
-					Args: &EventArgs{"err": err},
-				}
-				return backoffState
-			}
-			return f.saveFile(s3ApiRequest)
 		} else if e.Name == "transfer" {
 
 			// TODO dedupe

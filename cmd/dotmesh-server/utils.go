@@ -158,16 +158,11 @@ func unmnt(p string) (string, error) {
 }
 
 func isFilesystemMounted(fs string) (bool, error) {
-	out, err := exec.Command("mount").CombinedOutput()
+	code, err := returnCode("mountpoint", mnt(fs))
 	if err != nil {
 		return false, err
 	}
-	for _, line := range strings.Split(string(out), "\n") {
-		if strings.Contains(line, fs) && strings.Contains(line, "zfs") {
-			return true, nil
-		}
-	}
-	return false, nil
+	return code == 0, nil
 }
 
 func containerMntParent(id VolumeName) string {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 
@@ -77,7 +78,7 @@ type VersionInfo struct {
 type transferFn func(
 	f *fsMachine,
 	fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
-	transferRequestId string, pollResult *TransferPollResult,
+	transferRequestId string,
 	client *dmclient.JsonRpcClient, transferRequest *types.TransferRequest,
 ) (*Event, stateFn)
 
@@ -110,11 +111,39 @@ type filesystem struct {
 	origin Origin
 }
 
+type TransferUpdateKind int
+
+const (
+	TransferStart TransferUpdateKind = iota
+	TransferGotIds
+	TransferCalculatedSize
+	TransferTotalAndSize
+	TransferProgress
+	TransferIncrementIndex
+	TransferNextS3File
+	TransferSent
+	TransferFinished
+	TransferStatus
+
+	TransferGetCurrentPollResult
+)
+
+type TransferUpdate struct {
+	Kind TransferUpdateKind
+
+	Changes TransferPollResult
+
+	GetResult chan TransferPollResult
+}
+
 // a "filesystem machine" or "filesystem state machine"
 type fsMachine struct {
 	// which ZFS filesystem this statemachine is operating on
 	filesystemId string
 	filesystem   *filesystem
+
+	fileIO chan *File
+
 	// channel of requests going in to the state machine
 	requests chan *Event
 	// inner versions of the above
@@ -150,13 +179,23 @@ type fsMachine struct {
 	pushCompleted           chan bool
 	dirtyDelta              int64
 	sizeBytes               int64
-	lastPollResult          *TransferPollResult
+	transferUpdates         chan TransferUpdate
+	// only to be accessed via the updateEtcdAboutTransfers goroutine!
+	currentPollResult TransferPollResult
 }
 
 type EventArgs map[string]interface{}
 type Event struct {
 	Name string
 	Args *EventArgs
+}
+
+// File is used to write files to the disk on the local node.
+type File struct {
+	Filename string
+	Contents io.Reader
+	User     string
+	Response chan *Event
 }
 
 func (ea EventArgs) String() string {
