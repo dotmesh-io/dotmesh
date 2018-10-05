@@ -4,11 +4,10 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
-	"strings"
-	// "log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/dotmesh-io/dotmesh/pkg/auth"
@@ -96,10 +95,12 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 
 	isAdmin, err := AuthenticatedUserIsNamespaceAdministrator(req.Context(), volName.Namespace)
 	if err != nil {
+		log.Warn("[S3Handler.ServeHTTP] authentication failed")
 		http.Error(resp, err.Error(), 401)
 		return
 	}
 	if !isAdmin {
+		log.Warn("[S3Handler.ServeHTTP]  user is not an admin of the namespace")
 		http.Error(resp, "User is not the administrator of namespace "+volName.Namespace, 401)
 		return
 	}
@@ -114,7 +115,13 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		volName, branch,
 	)
 
-	log.Infof("[S3Handler.ServeHTTP] request got for filesystem %s", localFilesystemId)
+	if localFilesystemId == "" {
+		log.WithFields(log.Fields{
+			"error": err,
+		}).Error("[S3Handler.ServeHTTP] filesystem not found")
+		http.Error(resp, "filesystem '%s' not found", 404)
+		return
+	}
 
 	if localFilesystemId != "" {
 		key, ok := vars["key"]
@@ -129,7 +136,6 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 						log.Errorf("can't get API key to proxy s3: %+v.", err)
 						return
 					}
-
 					addresses := s.state.addressesFor(master)
 					target, err := dmclient.DeduceUrl(context.Background(), addresses, "internal", "admin", admin.ApiKey) // FIXME, need master->name mapping, see how handover works normally
 					if err != nil {
@@ -138,11 +144,9 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 						return
 					}
 					log.Infof("[S3Handler.ServeHTTP] proxying PUT request to node: %s", target)
-					s.ServeHTTP(resp, req.WithContext(ctxSetAddress(req.Context(), target)))
+					s.ReverseProxy.ServeHTTP(resp, req.WithContext(ctxSetAddress(req.Context(), target)))
 					return
 				}
-
-				log.Infof("[S3Handler.ServeHTTP] node is a master node for fs %s, handling", localFilesystemId)
 
 				s.putObject(resp, req, localFilesystemId, key)
 			}

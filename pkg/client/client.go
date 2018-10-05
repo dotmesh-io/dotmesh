@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -73,6 +74,7 @@ func (j *JsonRpcClient) reallyCallRemote(
 	if err != nil {
 		return err
 	}
+
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(message))
 	if err != nil {
 		return err
@@ -81,6 +83,10 @@ func (j *JsonRpcClient) reallyCallRemote(
 	tracer := opentracing.GlobalTracer()
 	// use our middleware to propagate our trace
 	req = middleware.ToHTTPRequest(tracer)(req.WithContext(ctx))
+
+	newCtx, cancel := context.WithTimeout(req.Context(), 5*time.Second)
+	defer cancel()
+	req = req.WithContext(newCtx)
 
 	req.Header.Set("Content-Type", "application/json")
 	req.SetBasicAuth(j.User, j.ApiKey)
@@ -134,10 +140,13 @@ func DeduceUrl(ctx context.Context, hostnames []string, mode, user, apiKey strin
 			// reallyCallRemote which doesn't use it.
 			j := NewJsonRpcClient(user, "", apiKey, 0)
 			var result bool
+			fmt.Println("[DEDUCE URL] calling: ", urlToTry)
 			err := j.reallyCallRemote(ctx, "DotmeshRPC.Ping", nil, &result, urlToTry+"/rpc")
 			if err == nil {
+				fmt.Println("[DEDUCE URL] success: ", urlToTry)
 				return urlToTry, nil
 			} else {
+				fmt.Printf("[DEDUCE URL] failure: %s, error: %s \n", urlToTry, err)
 				errs = append(errs, err)
 			}
 		}

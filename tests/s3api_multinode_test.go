@@ -60,7 +60,7 @@ func TestS3ApiMultiNode(t *testing.T) {
 	t.Run("Put 10MB", func(t *testing.T) {
 		dotName := citools.UniqName()
 		citools.RunOnNode(t, node1, "dm init "+dotName)
-		cmd := fmt.Sprintf("curl -T newfile.txt -u admin:%s 127.0.0.1:32607/s3/admin:%s/largefile", host1.Password, dotName)
+		cmd := fmt.Sprintf("curl -T largefile.txt -u admin:%s 127.0.0.1:32607/s3/admin:%s/largefile", host1.Password, dotName)
 		citools.RunOnNode(t, node1, `yes "Some text" | head -n 1000000 > largefile.txt`)
 		citools.RunOnNode(t, node1, cmd)
 		resp := citools.OutputFromRunOnNode(t, node1, citools.DockerRun(dotName)+" ls /foo/")
