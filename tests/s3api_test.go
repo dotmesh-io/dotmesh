@@ -50,7 +50,7 @@ func TestS3Api(t *testing.T) {
 		citools.RunOnNode(t, node1, "echo helloworld > newfile.txt")
 		resp := citools.OutputFromRunOnNode(t, node1, cmd)
 		if !strings.Contains(resp, fmt.Sprintf("Bucket admin-%s does not exist", dotName)) {
-			t.Error("Did not respond with error msg")
+			t.Errorf("Expected '%s', got '%s'", fmt.Sprintf("Bucket admin-%s does not exist", dotName), resp)
 		}
 	})
 
@@ -61,7 +61,7 @@ func TestS3Api(t *testing.T) {
 		citools.RunOnNode(t, node1, "echo helloworld > newfile.txt")
 		resp := citools.OutputFromRunOnNode(t, node1, cmd)
 		if !strings.Contains(resp, "User is not the administrator of namespace admin") {
-			t.Error("Did not respond with error msg")
+			t.Errorf("Expected 'User is not the administrator of namespace admin', got: '%s'", resp)
 		}
 	})
 	t.Run("List", func(t *testing.T) {
