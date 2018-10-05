@@ -111,15 +111,13 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	} else {
 		bucketName += "-" + branch
 	}
-	localFilesystemId := s.state.registry.Exists(
-		volName, branch,
-	)
+	localFilesystemId := s.state.registry.Exists(volName, branch)
 
 	if localFilesystemId == "" {
 		log.WithFields(log.Fields{
 			"error": err,
 		}).Error("[S3Handler.ServeHTTP] filesystem not found")
-		http.Error(resp, "filesystem '%s' not found", 404)
+		http.Error(resp, fmt.Sprintf("Bucket %s does not exist", bucketName), 404)
 		return
 	}
 
