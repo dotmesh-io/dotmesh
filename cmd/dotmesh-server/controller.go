@@ -659,6 +659,7 @@ func (state *InMemoryState) reallyProcureFilesystem(ctx context.Context, name Vo
 		} else if master == "" {
 			return "", fmt.Errorf("Internal error: The volume name exists, but the volume does not (have a master). Name:%s Clone:%s ID:%s", name, cloneName, filesystemId)
 		} else {
+			log.Printf("Triggering move request for filesystem: %s from master: %s to me: %s", filesystemId, master, state.myNodeId)
 			// put in a request for the current master of the filesystem to
 			// move it to me
 			responseChan, err := state.globalFsRequest(

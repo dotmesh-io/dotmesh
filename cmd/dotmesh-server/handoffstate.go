@@ -28,6 +28,16 @@ func handoffState(f *fsMachine) stateFn {
 	f.newSnapsOnServers.Subscribe(target, newSnapsChan)
 	defer f.newSnapsOnServers.Unsubscribe(target, newSnapsChan)
 
+	if target == f.state.myNodeId {
+		errString := fmt.Sprintf("Error trying to handoff because myNodeId: %s and target: %s are the same", f.state.myNodeId, target)
+		log.Println(errString)
+		f.innerResponses <- &Event{
+			Name: "error-handoff-source-target-are-equal",
+			Args: &EventArgs{"err": errString},
+		}
+		return backoffState
+	}
+
 	// unmount the filesystem immediately, so that the filesystem doesn't get
 	// dirtied by being unmounted
 	event, _ := f.unmount()
