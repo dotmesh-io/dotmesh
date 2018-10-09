@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os/exec"
+	"strings"
 
 	"golang.org/x/net/context"
 
@@ -134,9 +136,12 @@ func receivingState(f *fsMachine) stateFn {
 	defer pipeReader.Close()
 	defer pipeWriter.Close()
 
+	stdErrBuffer := &bytes.Buffer{}
+
 	cmd.Stdin = pipeReader
 	cmd.Stdout = getLogfile("zfs-recv-stdout")
-	cmd.Stderr = getLogfile("zfs-recv-stderr")
+	cmd.Stderr = stdErrBuffer
+	//getLogfile("zfs-recv-stderr")
 
 	finished := make(chan bool)
 
@@ -177,8 +182,37 @@ func receivingState(f *fsMachine) stateFn {
 	f.transitionedTo("receiving", "finished pipe")
 
 	if err != nil {
-		return backoffStateWithReason(fmt.Sprintf("receivingState: Got error %+v when running zfs recv for %s, check the logs for output that looks like it's from zfs",
-			err, f.filesystemId,
+		// TODO: handle a dirty data type situation
+		stdErrString := stdErrBuffer.String()
+
+		// in this case ZFS has detected a dirty filesystem
+		// let's do a snapshot and then we can let the divergence code handle it
+		if strings.Contains(stdErrString, "has been modified") {
+			response, _ := f.snapshot(&Event{
+				Name: "snapshot",
+				Args: &EventArgs{"metadata": metadata{
+					"type":   "stashing",
+					"author": "system",
+					"message": fmt.Sprintf(
+						"We detected dirty data upon a receive on %s.",
+						f.state.myNodeId,
+					)},
+				},
+			})
+			if response.Name != "snapshotted" {
+				// error - bail
+				return backoffStateWithReason(fmt.Sprintf("receivingState: Got error %+v when trying to snapshot because of running zfs recv for %s.  Stderr from the receive was: %s",
+					response, f.filesystemId, stdErrString,
+				))
+			} else {
+				return backoffStateWithReason(fmt.Sprintf("receivingState: Snapshotted after detecting dirty data upon receive - triggering backoff state such that divergence handling kicks in - filesystem id: %s.  Stderr of the zfs command was: %s",
+					f.filesystemId, stdErrString,
+				))
+			}
+		}
+
+		return backoffStateWithReason(fmt.Sprintf("receivingState: Got error %+v when running zfs recv for %s.  Stderr was: %s",
+			err, f.filesystemId, stdErrString,
 		))
 	} else {
 		log.Printf("Successfully received %s => %s for %s", fromSnap, snapRange.toSnap.Id, f.filesystemId)
