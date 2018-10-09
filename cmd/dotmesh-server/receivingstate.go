@@ -177,7 +177,7 @@ func receivingState(f *fsMachine) stateFn {
 	f.transitionedTo("receiving", "finished pipe")
 
 	if err != nil {
-		return backoffStateWithReason(fmt.Sprintf("receivingState: Got error %+v when running zfs recv for %s, check zfs-recv-stderr.log",
+		return backoffStateWithReason(fmt.Sprintf("receivingState: Got error %+v when running zfs recv for %s, check the logs for output that looks like it's from zfs",
 			err, f.filesystemId,
 		))
 	} else {

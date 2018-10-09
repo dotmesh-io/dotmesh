@@ -361,7 +361,7 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	err = cmd.Run()
 	if err != nil {
 		log.Printf(
-			"[ZFSReceiver:%s] Got error %s when running zfs recv, check zfs-recv-stderr.log",
+			"[ZFSReceiver:%s] Got error %s when running zfs recv, check the logs for output that looks like it's from zfs",
 			z.filesystem, err,
 		)
 		pipeReader.Close()

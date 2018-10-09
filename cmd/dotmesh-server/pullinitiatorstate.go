@@ -278,7 +278,7 @@ func (f *fsMachine) pull(
 
 	if err != nil {
 		log.Printf(
-			"Got error %s when running zfs recv for %s, check zfs-recv-stderr.log",
+			"Got error %s when running zfs recv for %s, check the logs for output that looks like it's from zfs",
 			err, toFilesystemId,
 		)
 		return &Event{
