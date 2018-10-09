@@ -817,13 +817,19 @@ func (s *InMemoryState) updateSnapshotsFromKnownState(
 				name := tlf.MasterBranch.Name.Name
 				go func() {
 					for _, ss := range (*snapshots)[len(oldSnapshots):] {
+						collaborators := make([]string, len(tlf.Collaborators))
+						for idx, u := range tlf.Collaborators {
+							collaborators[idx] = u.Id
+						}
 						err := s.publisher.PublishCommit(&types.CommitNotification{
-							FilesystemId: filesystem,
-							Namespace:    namespace,
-							Name:         name,
-							Branch:       branch,
-							CommitId:     ss.Id,
-							Metadata:     *ss.Metadata,
+							FilesystemId:    filesystem,
+							Namespace:       namespace,
+							Name:            name,
+							Branch:          branch,
+							CommitId:        ss.Id,
+							Metadata:        *ss.Metadata,
+							OwnerID:         tlf.Owner.Id,
+							CollaboratorIDs: collaborators,
 						})
 						if err != nil {
 							log.WithFields(log.Fields{

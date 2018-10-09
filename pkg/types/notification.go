@@ -9,6 +9,9 @@ type CommitNotification struct {
 	Branch       string
 	CommitId     string
 	Metadata     map[string]string
+
+	OwnerID         string
+	CollaboratorIDs []string
 }
 
 // NATSPublishCommitsSubject - default NATS subject when sending commit

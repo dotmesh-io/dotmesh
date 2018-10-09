@@ -76,7 +76,7 @@ func (p *publisher) Configure(c *notification.Config) (bool, error) {
 
 	p.client = client
 
-	encodedClient, err := nats.NewEncodedConn(client, nats.JSON_ENCODER)
+	encodedClient, err := nats.NewEncodedConn(client, nats.GOB_ENCODER)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error": err,
