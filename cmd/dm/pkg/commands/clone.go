@@ -3,7 +3,7 @@ package commands
 import (
 	"io"
 
-	"github.com/dotmesh-io/dotmesh/cmd/dm/pkg/remotes"
+	"github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/spf13/cobra"
 )
 
@@ -29,7 +29,7 @@ Online help: https://docs.dotmesh.com/references/cli/#clone-dm-clone-local-name-
 `,
 		Run: func(cmd *cobra.Command, args []string) {
 			runHandlingError(func() error {
-				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
+				dm, err := client.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
 				}

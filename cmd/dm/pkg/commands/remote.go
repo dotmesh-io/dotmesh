@@ -2,7 +2,7 @@ package commands
 
 import (
 	"fmt"
-	"github.com/dotmesh-io/dotmesh/cmd/dm/pkg/remotes"
+	"github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/howeyc/gopass"
 	"github.com/spf13/cobra"
 	"io"
@@ -24,7 +24,7 @@ func NewCmdRemote(out io.Writer) *cobra.Command {
 					return fmt.Errorf("Too many arguments specified.")
 				}
 
-				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
+				dm, err := client.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
 				}
@@ -108,7 +108,7 @@ func NewCmdRemote(out io.Writer) *cobra.Command {
 						)
 					}
 				}
-				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
+				dm, err := client.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
 				}
@@ -123,13 +123,13 @@ func NewCmdRemote(out io.Writer) *cobra.Command {
 					}
 					apiKey = string(enteredApiKey)
 				}
-				client := &remotes.JsonRpcClient{
+				client := &client.JsonRpcClient{
 					User:     user,
 					Hostname: hostname,
 					Port:     port,
 					ApiKey:   apiKey,
 				}
-				_, err = remotes.Ping(client)
+				_, err = client.Ping()
 
 				if err != nil {
 					return err
@@ -159,7 +159,7 @@ func NewCmdRemote(out io.Writer) *cobra.Command {
 
 		Run: func(cmd *cobra.Command, args []string) {
 			runHandlingError(func() error {
-				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
+				dm, err := client.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
 				}
@@ -178,7 +178,7 @@ func NewCmdRemote(out io.Writer) *cobra.Command {
 		Long:  "Online help: https://docs.dotmesh.com/references/cli/#select-the-current-remote-dm-remote-switch-name",
 		Run: func(cmd *cobra.Command, args []string) {
 			runHandlingError(func() error {
-				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
+				dm, err := client.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
 				}

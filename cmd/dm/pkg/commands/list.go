@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/dotmesh-io/dotmesh/cmd/dm/pkg/remotes"
+	"github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/spf13/cobra"
 	"text/tabwriter"
 )
@@ -19,7 +19,7 @@ func NewCmdList(out io.Writer) *cobra.Command {
 		Long:    "Online help: https://docs.dotmesh.com/references/cli/#list-the-available-dots-dm-list-h-scripting",
 		Run: func(cmd *cobra.Command, args []string) {
 			err := func() error {
-				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
+				dm, err := client.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
 				}
@@ -60,11 +60,11 @@ func NewCmdList(out io.Writer) *cobra.Command {
 					if err != nil {
 						return err
 					}
-					activeNamespace, activeVolume, err := remotes.ParseNamespacedVolume(activeQualified)
+					activeNamespace, activeVolume, err := client.ParseNamespacedVolume(activeQualified)
 					if err != nil {
 						return err
 					}
-					active := remotes.VolumeName{activeNamespace, activeVolume}
+					active := client.VolumeName{activeNamespace, activeVolume}
 
 					start := "  "
 					if active == v.Name {

@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/dotmesh-io/dotmesh/cmd/dm/pkg/remotes"
+	"github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/spf13/cobra"
 )
 
@@ -113,7 +113,7 @@ is used.`,
 }
 
 func dotSetUpstream(cmd *cobra.Command, args []string, out io.Writer) error {
-	dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
+	dm, err := client.NewDotmeshAPI(configPath, verboseOutput)
 	if err != nil {
 		return err
 	}
@@ -142,11 +142,11 @@ func dotSetUpstream(cmd *cobra.Command, args []string, out io.Writer) error {
 		return err
 	}
 
-	localNamespace, localDot, err := remotes.ParseNamespacedVolume(localDot)
+	localNamespace, localDot, err := client.ParseNamespacedVolume(localDot)
 	if err != nil {
 		return err
 	}
-	remoteNamespace, remoteDot, err := remotes.ParseNamespacedVolumeWithDefault(remoteDot, remote.DefaultNamespace())
+	remoteNamespace, remoteDot, err := client.ParseNamespacedVolumeWithDefault(remoteDot, remote.DefaultNamespace())
 	if err != nil {
 		return err
 	}
@@ -156,7 +156,7 @@ func dotSetUpstream(cmd *cobra.Command, args []string, out io.Writer) error {
 }
 
 func branchSetMaster(cmd *cobra.Command, args []string, out io.Writer) error {
-	dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
+	dm, err := client.NewDotmeshAPI(configPath, verboseOutput)
 	if err != nil {
 		return err
 	}
@@ -189,7 +189,7 @@ func branchSetMaster(cmd *cobra.Command, args []string, out io.Writer) error {
 		branch = ""
 	}
 
-	namespace, name, err := remotes.ParseNamespacedVolume(dot)
+	namespace, name, err := client.ParseNamespacedVolume(dot)
 	if err != nil {
 		return err
 	}
@@ -200,7 +200,7 @@ func branchSetMaster(cmd *cobra.Command, args []string, out io.Writer) error {
 }
 
 func dotDelete(cmd *cobra.Command, args []string, out io.Writer) error {
-	dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
+	dm, err := client.NewDotmeshAPI(configPath, verboseOutput)
 	if err != nil {
 		return err
 	}
@@ -232,7 +232,7 @@ func dotDelete(cmd *cobra.Command, args []string, out io.Writer) error {
 }
 
 func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
-	dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
+	dm, err := client.NewDotmeshAPI(configPath, verboseOutput)
 	if err != nil {
 		return err
 	}
@@ -247,7 +247,7 @@ func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
 		}
 	}
 
-	namespace, dot, err := remotes.ParseNamespacedVolume(qualifiedDotName)
+	namespace, dot, err := client.ParseNamespacedVolume(qualifiedDotName)
 	if err != nil {
 		return err
 	}
@@ -273,7 +273,7 @@ func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	activeNamespace, activeDot, err := remotes.ParseNamespacedVolume(activeQualified)
+	activeNamespace, activeDot, err := client.ParseNamespacedVolume(activeQualified)
 	if err != nil {
 		return err
 	}
@@ -324,7 +324,7 @@ func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
 
 	for _, branch := range bs {
 		containerNames := []string{}
-		var branchDot remotes.DotmeshVolume
+		var branchDot client.DotmeshVolume
 		if branch == "master" {
 			branchDot = masterDot
 		} else {

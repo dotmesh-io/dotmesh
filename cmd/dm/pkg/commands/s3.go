@@ -8,7 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/dotmesh-io/dotmesh/cmd/dm/pkg/remotes"
+	"github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/spf13/cobra"
 )
 
@@ -59,7 +59,7 @@ func NewCmdS3(out io.Writer) *cobra.Command {
 				if err != nil {
 					return fmt.Errorf("Could not establish connection with AWS using supplied credentials")
 				}
-				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
+				dm, err := client.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
 				}
@@ -80,7 +80,7 @@ func NewCmdS3(out io.Writer) *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			runHandlingError(func() error {
 				prefixes := strings.Split(args[2], ",")
-				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
+				dm, err := client.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
 				}

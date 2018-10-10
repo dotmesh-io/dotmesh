@@ -1,12 +1,12 @@
 package test
 
 import (
-	"github.com/dotmesh-io/dotmesh/cmd/dm/pkg/remotes"
+	"github.com/dotmesh-io/dotmesh/pkg/client"
 	"testing"
 )
 
 func TestUserPriviledged(t *testing.T) {
-	dm, err := remotes.NewDotmeshAPI("./fixtures/admin.config", true)
+	dm, err := client.NewDotmeshAPI("./fixtures/admin.config", true)
 	if err != nil {
 		t.Errorf("Unable to get an instance of API: %s", err)
 	}
@@ -18,7 +18,7 @@ func TestUserPriviledged(t *testing.T) {
 }
 
 func TestUserNotPriviledged(t *testing.T) {
-	dm, err := remotes.NewDotmeshAPI("./fixtures/non-admin.config", true)
+	dm, err := client.NewDotmeshAPI("./fixtures/non-admin.config", true)
 	if err != nil {
 		t.Errorf("Unable to get an instance of API: %s", err)
 	}

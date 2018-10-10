@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/dotmesh-io/dotmesh/cmd/dm/pkg/remotes"
+	"github.com/dotmesh-io/dotmesh/pkg/client"
 )
 
 // pretty-print MiB or KiB or GiB
@@ -35,7 +35,7 @@ func resolveTransferArgs(args []string) (returnPeer string, returnFilesystemName
 		  of a "remote tracking branch"?)
 
 	*/
-	dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
+	dm, err := client.NewDotmeshAPI(configPath, verboseOutput)
 	if err != nil {
 		return "", "", "", err
 	}
@@ -63,7 +63,7 @@ func resolveTransferArgs(args []string) (returnPeer string, returnFilesystemName
 	} else if len(args) == 2 {
 		// dm clone foo
 		filesystemName = args[1]
-		branchName = remotes.DEFAULT_BRANCH
+		branchName = client.DEFAULT_BRANCH
 	} else if len(args) == 3 {
 		// dm pull foo branch
 		filesystemName = args[1]

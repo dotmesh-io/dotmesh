@@ -22,9 +22,9 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/blang/semver"
-	"github.com/coreos/etcd/client"
+	etcd "github.com/coreos/etcd/client"
 	"github.com/dotmesh-io/dotmesh/cmd/dm/pkg/pki"
-	"github.com/dotmesh-io/dotmesh/cmd/dm/pkg/remotes"
+	"github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/scrypt"
 )
@@ -189,7 +189,7 @@ func NewCmdClusterBackupEtcd(out io.Writer) *cobra.Command {
 		Long:  "Online help: FIXME",
 		Run: func(cmd *cobra.Command, args []string) {
 
-			dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
+			dm, err := client.NewDotmeshAPI(configPath, verboseOutput)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err.Error())
 				os.Exit(1)
@@ -219,7 +219,7 @@ func NewCmdClusterRestoreEtcd(out io.Writer, in io.Reader) *cobra.Command {
 				os.Exit(1)
 			}
 
-			dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
+			dm, err := client.NewDotmeshAPI(configPath, verboseOutput)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err.Error())
 				os.Exit(1)
@@ -527,7 +527,7 @@ func transportFromTLS(certFile, keyFile, caFile string) (*http.Transport, error)
 	return transport, nil
 }
 
-func getEtcd() (client.KeysAPI, error) {
+func getEtcd() (etcd.KeysAPI, error) {
 	// attempt to connect to etcd and set the admin password for the first time
 	transport, err := transportFromTLS(
 		getPkiPath()+"/apiserver.pem",
@@ -537,18 +537,18 @@ func getEtcd() (client.KeysAPI, error) {
 	if err != nil {
 		return nil, err
 	}
-	cfg := client.Config{
+	cfg := etcd.Config{
 		Endpoints: []string{fmt.Sprintf("https://%s:42379", getHostFromEnv())},
 		Transport: transport,
 		// set timeout per request to fail fast when the target endpoint is
 		// unavailable
 		HeaderTimeoutPerRequest: time.Second * 30,
 	}
-	c, err := client.New(cfg)
+	c, err := etcd.New(cfg)
 	if err != nil {
 		return nil, err
 	}
-	return client.NewKeysAPI(c), nil
+	return etcd.NewKeysAPI(c), nil
 }
 
 func getToken() (string, error) {
@@ -603,7 +603,7 @@ func setAuthTokens(adminPassword, adminKey string) error {
 		context.Background(),
 		fmt.Sprintf("/dotmesh.io/users/%s", ADMIN_USER_UUID),
 		string(encoded),
-		&client.SetOptions{},
+		&etcd.SetOptions{},
 	)
 	return err
 }
@@ -901,7 +901,7 @@ func clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath string) err
 	}
 	// set the admin password in our Configuration
 	fmt.Printf("Configuring dm CLI to authenticate to dotmesh server %s... ", configPath)
-	config, err := remotes.NewConfiguration(configPath)
+	config, err := client.NewConfiguration(configPath)
 	if err != nil {
 		return err
 	}
@@ -935,7 +935,7 @@ func clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath string) err
 	for !connected {
 		try++
 		connected = func() bool {
-			dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
+			dm, err := client.NewDotmeshAPI(configPath, verboseOutput)
 			e := func() {
 				if try == 4*120 { // 120 seconds (250ms per try)
 					fmt.Printf(
@@ -1013,7 +1013,7 @@ func clusterReset(cmd *cobra.Command, args []string, out io.Writer) error {
 	fmt.Printf("done.\n")
 
 	fmt.Printf("Deleting 'local' remote... ")
-	config, err := remotes.NewConfiguration(configPath)
+	config, err := client.NewConfiguration(configPath)
 	if err != nil {
 		fmt.Printf("response: %s\n", resp)
 		bailErr = err

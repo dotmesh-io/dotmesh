@@ -1,4 +1,4 @@
-package remotes
+package client
 
 import (
 	"fmt"
@@ -73,21 +73,6 @@ func (dm *DotmeshAPI) CallRemote(
 	ctx context.Context, method string, args interface{}, response interface{},
 ) error {
 	return dm.client.CallRemote(ctx, method, args, response)
-}
-
-func Ping(client *JsonRpcClient) (bool, error) {
-	var response bool
-	ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
-	defer cancel()
-	err := client.CallRemote(ctx, "DotmeshRPC.Ping", struct{}{}, &response)
-	if err != nil {
-		return false, err
-	}
-	return response, nil
-}
-
-func (dm *DotmeshAPI) PingLocal() (bool, error) {
-	return Ping(dm.client)
 }
 
 func (dm *DotmeshAPI) BackupEtcd() (string, error) {

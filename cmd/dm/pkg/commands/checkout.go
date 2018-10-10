@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/dotmesh-io/dotmesh/cmd/dm/pkg/remotes"
+	"github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/spf13/cobra"
 )
 
@@ -20,7 +20,7 @@ func NewCmdCheckout(out io.Writer) *cobra.Command {
 					return fmt.Errorf("Please give me a branch name.")
 				}
 				branch := args[0]
-				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
+				dm, err := client.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
 				}

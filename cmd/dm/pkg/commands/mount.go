@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/dotmesh-io/dotmesh/cmd/dm/pkg/remotes"
+	"github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/spf13/cobra"
 )
 
@@ -37,7 +37,7 @@ NOTE: this currently only works for Linux.`,
 }
 
 func mountDot(cmd *cobra.Command, args []string, out io.Writer) error {
-	dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
+	dm, err := client.NewDotmeshAPI(configPath, verboseOutput)
 	if err != nil {
 		return err
 	}
@@ -50,7 +50,7 @@ func mountDot(cmd *cobra.Command, args []string, out io.Writer) error {
 		return fmt.Errorf("Please specify <dot> <mountpoint> as arguments.")
 	}
 
-	namespace, dot, err := remotes.ParseNamespacedVolume(localDot)
+	namespace, dot, err := client.ParseNamespacedVolume(localDot)
 	if err != nil {
 		return err
 	}

@@ -1,4 +1,4 @@
-package remotes
+package client
 
 /*
 A local configuration system for storing "clusters" (remote API targets for the
@@ -23,21 +23,12 @@ matter?
 */
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"reflect"
 	"sync"
-
-	"golang.org/x/net/context"
-
-	"github.com/gorilla/rpc/v2/json2"
-	"github.com/opentracing/opentracing-go"
-	opentracinglog "github.com/opentracing/opentracing-go/log"
-	"github.com/openzipkin/zipkin-go-opentracing/examples/middleware"
 )
 
 type Remote interface {
@@ -486,154 +477,4 @@ func (c *Configuration) ClusterFromRemote(remote string, verbose bool) (*JsonRpc
 
 func (c *Configuration) ClusterFromCurrentRemote(verbose bool) (*JsonRpcClient, error) {
 	return c.ClusterFromRemote(c.CurrentRemote, verbose)
-}
-
-type JsonRpcClient struct {
-	User     string
-	Hostname string
-	Port     int
-	ApiKey   string
-	Verbose  bool
-}
-
-func (jsonRpcClient JsonRpcClient) String() string {
-	v := reflect.ValueOf(jsonRpcClient)
-	toString := ""
-	for i := 0; i < v.NumField(); i++ {
-		fieldName := v.Type().Field(i).Name
-		if fieldName == "ApiKey" {
-			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, "****")
-		} else {
-			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, v.Field(i).Interface())
-		}
-	}
-	return toString
-}
-
-type Address struct {
-	Scheme   string
-	Hostname string
-	Port     int
-}
-
-func (j *JsonRpcClient) tryAddresses(ctx context.Context, as []Address) (Address, error) {
-	var errs []error
-	for _, a := range as {
-		var result bool
-		err := j.reallyCallRemote(ctx, "DotmeshRPC.Ping", nil, &result, a)
-		if err == nil {
-			return a, nil
-		} else {
-			errs = append(errs, err)
-		}
-	}
-	// TODO distinguish between network errors and API errors here: #356
-	return Address{}, fmt.Errorf("Unable to connect to any of the addresses attempted: %+v, errs: %s", as, errs)
-}
-
-// call a method with string args, and attempt to decode it into result
-func (j *JsonRpcClient) CallRemote(
-	ctx context.Context, method string, args interface{}, result interface{},
-) error {
-	if j == nil {
-		return fmt.Errorf(
-			"No remote cluster specified. List remotes with 'dm remote -v'. " +
-				"Choose one with 'dm remote switch' or create one with 'dm remote " +
-				"add'. Try 'dm cluster init' if you don't have a cluster yet.",
-		)
-	}
-	addressToUse := Address{}
-	addressesToTry := []Address{}
-	var err error
-	if j.Port == 0 {
-		if j.Hostname == "dothub.com" || j.Hostname == "cloud.dotscience.com" || j.Hostname == "cloud.dotscience.net" {
-			scheme := "https"
-			port := 443
-			addressesToTry = append(addressesToTry, Address{scheme, j.Hostname, port})
-		} else {
-			scheme := "http"
-			addressesToTry = append(addressesToTry, Address{scheme, j.Hostname, 32607})
-			addressesToTry = append(addressesToTry, Address{scheme, j.Hostname, 6969})
-		}
-		addressToUse, err = j.tryAddresses(ctx, addressesToTry)
-		if err != nil {
-			return err
-		}
-	} else {
-		addressToUse = Address{"http", j.Hostname, j.Port}
-	}
-
-	return j.reallyCallRemote(ctx, method, args, result, addressToUse)
-}
-
-func (j *JsonRpcClient) reallyCallRemote(
-	ctx context.Context, method string, args interface{}, result interface{},
-	addressToUse Address,
-) error {
-	// create new span using span found in context as parent (if none is found,
-	// our span becomes the trace root).
-	span, ctx := opentracing.StartSpanFromContext(ctx, method)
-	span.LogFields(
-		opentracinglog.String("type", "cli-rpc"),
-		opentracinglog.String("method", method),
-		opentracinglog.String("args", fmt.Sprintf("%v", args)),
-	)
-	defer span.Finish()
-
-	scheme := addressToUse.Scheme
-	hostname := addressToUse.Hostname
-	port := addressToUse.Port
-
-	url := fmt.Sprintf("%s://%s:%d/rpc", scheme, hostname, port)
-	message, err := json2.EncodeClientRequest(method, args)
-	if err != nil {
-		return err
-	}
-
-	if j.Verbose {
-		fmt.Fprintln(os.Stdout, "send rpc request")
-		fmt.Fprintln(os.Stdout, string(message))
-	}
-
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(message))
-	if err != nil {
-		return err
-	}
-
-	tracer := opentracing.GlobalTracer()
-	// use our middleware to propagate our trace
-	req = middleware.ToHTTPRequest(tracer)(req.WithContext(ctx))
-
-	req.Header.Set("Content-Type", "application/json")
-	req.SetBasicAuth(j.User, j.ApiKey)
-	client := new(http.Client)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 401 {
-		// TODO add user mgmt subcommands, then reference them in this error message
-		// annotate our span with the error condition
-		span.SetTag("error", "Permission denied")
-		return fmt.Errorf("Permission denied. Please check that your API key is still valid.")
-	}
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		span.SetTag("error", err.Error())
-		return fmt.Errorf("Error reading body: %s", err)
-	}
-
-	if j.Verbose {
-		fmt.Fprintln(os.Stdout, "got rpc response")
-		fmt.Fprintln(os.Stdout, string(b))
-	}
-	err = json2.DecodeClientResponse(bytes.NewBuffer(b), &result)
-	if err != nil {
-		span.SetTag("error", fmt.Sprintf("Response '%s' yields error %s", string(b), err))
-		return fmt.Errorf("Response '%s' yields error %s", string(b), err)
-	}
-	return nil
 }

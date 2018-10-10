@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/dotmesh-io/dotmesh/cmd/dm/pkg/remotes"
+	"github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/spf13/cobra"
 )
 
@@ -16,7 +16,7 @@ func NewCmdInit(out io.Writer) *cobra.Command {
 		Long:  "Online help: https://docs.dotmesh.com/references/cli/#create-an-empty-dot-dm-init-dot",
 		Run: func(cmd *cobra.Command, args []string) {
 			err := func() error {
-				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
+				dm, err := client.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
 				}
@@ -27,7 +27,7 @@ func NewCmdInit(out io.Writer) *cobra.Command {
 					return fmt.Errorf("No dot name specified.")
 				}
 				v := args[0]
-				if !remotes.CheckName(v) {
+				if !client.CheckName(v) {
 					return fmt.Errorf("Error: %v is an invalid name", v)
 				}
 				exists, err := dm.VolumeExists(v)

@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/dotmesh-io/dotmesh/cmd/dm/pkg/remotes"
+	"github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/spf13/cobra"
 )
 
@@ -16,7 +16,7 @@ func NewCmdSwitch(out io.Writer) *cobra.Command {
 		Long:  "Online help: https://docs.dotmesh.com/references/cli/#select-a-different-current-dot-dm-switch-dot",
 		Run: func(cmd *cobra.Command, args []string) {
 			err := func() error {
-				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
+				dm, err := client.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
 				}
@@ -27,7 +27,7 @@ func NewCmdSwitch(out io.Writer) *cobra.Command {
 					return fmt.Errorf("No dot name specified.")
 				}
 				volumeName := args[0]
-				if !remotes.CheckName(volumeName) {
+				if !client.CheckName(volumeName) {
 					return fmt.Errorf("Error: %v is an invalid name", volumeName)
 				}
 				exists, err := dm.VolumeExists(volumeName)

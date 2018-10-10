@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/dotmesh-io/dotmesh/cmd/dm/pkg/remotes"
+	"github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/spf13/cobra"
 )
 
@@ -32,7 +32,7 @@ func NewCmdCommit(out io.Writer) *cobra.Command {
 					metadataPairs[metadataStringParts[0]] = metadataStringParts[1]
 				}
 
-				dm, err := remotes.NewDotmeshAPI(configPath, verboseOutput)
+				dm, err := client.NewDotmeshAPI(configPath, verboseOutput)
 				if err != nil {
 					return err
 				}
