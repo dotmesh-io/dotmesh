@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"reflect"
-	"time"
 
 	"golang.org/x/net/context"
 
@@ -106,10 +105,6 @@ func (j *JsonRpcClient) reallyCallRemote(
 	tracer := opentracing.GlobalTracer()
 	// use our middleware to propagate our trace
 	req = middleware.ToHTTPRequest(tracer)(req.WithContext(ctx))
-
-	newCtx, cancel := context.WithTimeout(req.Context(), 5*time.Second)
-	defer cancel()
-	req = req.WithContext(newCtx)
 
 	req.Header.Set("Content-Type", "application/json")
 	req.SetBasicAuth(j.User, j.ApiKey)
