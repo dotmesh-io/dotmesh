@@ -38,7 +38,23 @@ function delete_lingering_dots() {
 # Set traps before we go into the subshells, otherwise they'll never be
 # triggered!
 function finish {
-	EXIT=$?
+    EXIT=$?
+    set +x
+    if [ $EXIT == 0 ]
+    then
+        echo " _____ ___ _   _ ___ ____  _   _ _____ ____  "
+        echo "|  ___|_ _| \ | |_ _/ ___|| | | | ____|  _ \ "
+        echo "| |_   | ||  \| || |\___ \| |_| |  _| | | | |"
+        echo "|  _|  | || |\  || | ___) |  _  | |___| |_| |"
+        echo "|_|   |___|_| \_|___|____/|_| |_|_____|____/ "
+    else
+        echo " _____ _    ___ _     _____ ____  "
+        echo "|  ___/ \  |_ _| |   | ____|  _ \ "
+        echo "| |_ / _ \  | || |   |  _| | | | |"
+        echo "|  _/ ___ \ | || |___| |___| |_| |"
+        echo "|_|/_/   \_\___|_____|_____|____/ "
+    fi
+    set -x
     echo "INTERNAL STATE"
     "$DM" -c "$CONFIG" remote switch local
     "$DM" -c "$CONFIG" debug DotmeshRPC.DumpInternalState
@@ -66,10 +82,15 @@ echo "### Fetching client"
 
 mkdir -p $SMOKE_TEST_DIR
 
-if [[ $CI_COMMIT_REF_NAME = *"release"* ]]; then
-    curl -sSL -o $SMOKE_TEST_DIR/dm https://get.dotmesh.io/$VERSION/$(uname -s)/dm
+if [[ x$LOCAL_TEST = xYES ]];
+then
+    cp ./binaries/$(uname -s)/dm $SMOKE_TEST_DIR/dm
 else
-    curl -sSL -o $SMOKE_TEST_DIR/dm https://get.dotmesh.io/unstable/$CI_COMMIT_REF_NAME/$(uname -s)/dm
+    if [[ $CI_COMMIT_REF_NAME = *"release"* ]]; then
+        curl -sSL -o $SMOKE_TEST_DIR/dm https://get.dotmesh.io/$VERSION/$(uname -s)/dm
+    else
+        curl -sSL -o $SMOKE_TEST_DIR/dm https://get.dotmesh.io/unstable/$CI_COMMIT_REF_NAME/$(uname -s)/dm
+    fi
 fi
 
 chmod +x $SMOKE_TEST_DIR/dm
