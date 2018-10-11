@@ -28,7 +28,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//cmd/dm/pkg/pki:go_default_library",
-        "//pkg/client:go_default_library",
         "//cmd/dm/vendor/github.com/blang/semver:go_default_library",
         "//cmd/dm/vendor/github.com/coreos/etcd/client:go_default_library",
         "//cmd/dm/vendor/github.com/howeyc/gopass:go_default_library",
@@ -37,6 +36,7 @@ go_library(
         "//cmd/dm/vendor/golang.org/x/crypto/scrypt:go_default_library",
         "//cmd/dm/vendor/golang.org/x/net/context:go_default_library",
         "//cmd/dm/vendor/golang.org/x/sys/unix:go_default_library",
+        "//pkg/client:go_default_library",
         "//vendor/github.com/aws/aws-sdk-go/aws:go_default_library",
         "//vendor/github.com/aws/aws-sdk-go/aws/credentials:go_default_library",
         "//vendor/github.com/aws/aws-sdk-go/aws/session:go_default_library",

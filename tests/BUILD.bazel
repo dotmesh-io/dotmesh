@@ -4,6 +4,7 @@ go_test(
     name = "go_default_test",
     srcs = [
         "acceptance_test.go",
+        "s3api_multinode_test.go",
         "s3api_test.go",
         "s3remote_test.go",
     ],
