@@ -338,10 +338,16 @@ func (dm *DotmeshAPI) DeleteVolume(volumeName string) error {
 		return err
 	}
 
-	var result bool
-	err = dm.client.CallRemote(
-		context.Background(), "DotmeshRPC.Delete", VolumeName{namespace, name}, &result,
-	)
+	err = retryUntilSucceeds(func() error {
+		var result bool
+		err = dm.client.CallRemote(
+			context.Background(), "DotmeshRPC.Delete", VolumeName{namespace, name}, &result,
+		)
+		if err != nil {
+			return err
+		}
+		return nil
+	}, 5, 1*time.Second)
 	if err != nil {
 		return err
 	}
@@ -351,6 +357,19 @@ func (dm *DotmeshAPI) DeleteVolume(volumeName string) error {
 		return err
 	}
 	return nil
+}
+
+func retryUntilSucceeds(f func() error, retries int, delay time.Duration) error {
+	var err error
+	for try := 0; try < retries; try++ {
+		err = f()
+		if err != nil {
+			time.Sleep(time.Duration(try) * delay)
+		} else {
+			return nil
+		}
+	}
+	return err
 }
 
 func (dm *DotmeshAPI) GetReplicationLatencyForBranch(volumeName string, branch string) (map[string][]string, error) {
