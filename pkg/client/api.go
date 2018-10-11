@@ -348,6 +348,9 @@ func (dm *DotmeshAPI) DeleteVolume(volumeName string) error {
 		}
 		return nil
 	}, 5, 1*time.Second)
+	if err != nil {
+		return err
+	}
 
 	err = dm.Configuration.DeleteStateForVolume(volumeName)
 	if err != nil {
