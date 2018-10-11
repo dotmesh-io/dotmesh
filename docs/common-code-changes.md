@@ -2,6 +2,22 @@
 
 A list of things you might need to do to the codebase and how to do it.
 
+## Fiddline with dependencies
+
+If you change dependencies, update the vendored copies:
+
+```bash
+(cd `realpath .`; dep ensure)
+```
+
+And tell Bazel about it (not sure why):
+
+```bash
+bazel run //:gazelle
+```
+
+Don't `git add` any change Bazel makes that involves opentracing - revert those and commit the rest!
+
 ## adding env variables to dotmesh-server
 
 There are CLI options passed to `dm cluster init` - for example:
