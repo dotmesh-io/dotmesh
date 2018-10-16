@@ -13,8 +13,10 @@ func activeState(f *fsMachine) stateFn {
 	f.transitionedTo("active", "waiting")
 	log.Printf("entering active state for %s", f.filesystemId)
 	select {
-	case file := <-f.fileIO:
+	case file := <-f.fileInputIO:
 		return f.saveFile(file)
+	case file := <-f.fileOutputIO:
+		return f.readFile(file)
 	case e := <-f.innerRequests:
 		if e.Name == "delete" {
 			err := f.state.deleteFilesystem(f.filesystemId)

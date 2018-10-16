@@ -113,6 +113,11 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	}
 	localFilesystemId := s.state.registry.Exists(volName, branch)
 
+	snapshotId, ok := vars["snapshotId"]
+	if !ok {
+		snapshotId = ""
+	}
+
 	if localFilesystemId == "" {
 		log.WithFields(log.Fields{
 			"error": err,
@@ -121,43 +126,83 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// ensure any of these requests end up on the current master node for
+	// this filesystem
+	master := s.state.masterFor(localFilesystemId)
+	if master != s.state.myNodeId {
+		admin, err := s.state.userManager.Get(&user.Query{Ref: "admin"})
+		if err != nil {
+			http.Error(resp, fmt.Sprintf("Can't get API key to proxy s3 request: %+v.\n", err), 500)
+			log.Errorf("can't get API key to proxy s3: %+v.", err)
+			return
+		}
+		addresses := s.state.addressesFor(master)
+		target, err := dmclient.DeduceUrl(context.Background(), addresses, "internal", "admin", admin.ApiKey) // FIXME, need master->name mapping, see how handover works normally
+		if err != nil {
+			http.Error(resp, err.Error(), 500)
+			log.Errorf("can't establish URL to proxy s3: %+v.", err)
+			return
+		}
+		log.Infof("[S3Handler.ServeHTTP] proxying PUT request to node: %s", target)
+		s.ReverseProxy.ServeHTTP(resp, req.WithContext(ctxSetAddress(req.Context(), target)))
+		return
+	}
+
+	// from this point on we assume we are on the node that is the current master
+	// for the filesystem
 	if localFilesystemId != "" {
 		key, ok := vars["key"]
 		if ok {
 			switch req.Method {
+			case "GET":
+				s.readFile(resp, req, localFilesystemId, snapshotId, key)
 			case "PUT":
-				master := s.state.masterFor(localFilesystemId)
-				if master != s.state.myNodeId {
-					admin, err := s.state.userManager.Get(&user.Query{Ref: "admin"})
-					if err != nil {
-						http.Error(resp, fmt.Sprintf("Can't get API key to proxy s3 request: %+v.\n", err), 500)
-						log.Errorf("can't get API key to proxy s3: %+v.", err)
-						return
-					}
-					addresses := s.state.addressesFor(master)
-					target, err := dmclient.DeduceUrl(context.Background(), addresses, "internal", "admin", admin.ApiKey) // FIXME, need master->name mapping, see how handover works normally
-					if err != nil {
-						http.Error(resp, err.Error(), 500)
-						log.Errorf("can't establish URL to proxy s3: %+v.", err)
-						return
-					}
-					log.Infof("[S3Handler.ServeHTTP] proxying PUT request to node: %s", target)
-					s.ReverseProxy.ServeHTTP(resp, req.WithContext(ctxSetAddress(req.Context(), target)))
-					return
-				}
-
 				s.putObject(resp, req, localFilesystemId, key)
 			}
 
 		} else {
 			switch req.Method {
 			case "GET":
-				s.listBucket(resp, req, bucketName, localFilesystemId)
+				s.listBucket(resp, req, bucketName, localFilesystemId, snapshotId)
 			}
 		}
 
 	} else {
 		http.Error(resp, fmt.Sprintf("Bucket %s does not exist", bucketName), 404)
+	}
+}
+
+func (s *S3Handler) readFile(resp http.ResponseWriter, req *http.Request, filesystemId, snapshotId, filename string) {
+	user := auth.GetUserFromCtx(req.Context())
+	fsm := s.state.initFilesystemMachine(filesystemId)
+
+	if fsm.currentState != "active" {
+		http.Error(resp, "please try again later", http.StatusServiceUnavailable)
+		return
+	}
+
+	defer req.Body.Close()
+	respCh := make(chan *Event)
+	fsm.fileOutputIO <- &OutputFile{
+		Filename: filename,
+		Contents: resp,
+		User:     user.Name,
+		Response: respCh,
+	}
+
+	result := <-respCh
+
+	switch result.Name {
+	case eventNameReadFailed:
+		e, ok := (*result.Args)["err"].(string)
+		if ok {
+
+			http.Error(resp, e, 500)
+		}
+		http.Error(resp, "read failed", 500)
+	default:
+		resp.WriteHeader(200)
+		resp.Header().Set("Access-Control-Allow-Origin", "*")
 	}
 }
 
@@ -172,7 +217,7 @@ func (s *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, files
 
 	defer req.Body.Close()
 	respCh := make(chan *Event)
-	fsm.fileIO <- &File{
+	fsm.fileInputIO <- &InputFile{
 		Filename: filename,
 		Contents: req.Body,
 		User:     user.Name,
@@ -207,7 +252,7 @@ type BucketObject struct {
 	Size         int64
 }
 
-func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name string, filesystemId string) {
+func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name string, filesystemId string, snapshotId string) {
 	snapshots, err := s.state.snapshotsForCurrentMaster(filesystemId)
 	if len(snapshots) == 0 {
 		// throw up an error?
@@ -215,10 +260,14 @@ func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name
 		return
 	}
 	lastSnapshot := snapshots[len(snapshots)-1]
+	mountSnapshotId := lastSnapshot.Id
+	if snapshotId != "" {
+		mountSnapshotId = snapshotId
+	}
 	responseChan, err := s.state.globalFsRequest(
 		filesystemId,
 		&Event{Name: "mount-snapshot",
-			Args: &EventArgs{"snapId": lastSnapshot.Id}},
+			Args: &EventArgs{"snapId": mountSnapshotId}},
 	)
 	if err != nil {
 		// error here

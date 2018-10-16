@@ -11,7 +11,10 @@ import (
 const eventNameSaveFailed = "save-failed"
 const eventNameSaveSuccess = "save-success"
 
-func (f *fsMachine) saveFile(file *File) stateFn {
+const eventNameReadFailed = "read-failed"
+const eventNameReadSuccess = "read-success"
+
+func (f *fsMachine) saveFile(file *InputFile) stateFn {
 	// create the default paths
 	destPath := fmt.Sprintf("%s/%s/%s", mnt(f.filesystemId), "__default__", file.Filename)
 	log.Printf("Saving file to %s", destPath)
@@ -61,6 +64,44 @@ func (f *fsMachine) saveFile(file *File) stateFn {
 
 	file.Response <- &Event{
 		Name: eventNameSaveSuccess,
+		Args: &EventArgs{},
+	}
+
+	return activeState
+}
+
+func (f *fsMachine) readFile(file *OutputFile) stateFn {
+	// create the default paths
+	sourcePath := fmt.Sprintf("%s/%s/%s", mnt(f.filesystemId), "__default__", file.Filename)
+	log.Printf("Reading file from %s", sourcePath)
+
+	fileOnDisk, err := os.Open(sourcePath)
+	if err != nil {
+		file.Response <- &Event{
+			Name: eventNameReadFailed,
+			Args: &EventArgs{"err": fmt.Errorf("failed to read file, error: %s", err)},
+		}
+		return backoffState
+	}
+	_, err = io.Copy(file.Contents, fileOnDisk)
+	if err != nil {
+		file.Response <- &Event{
+			Name: eventNameReadFailed,
+			Args: &EventArgs{"err": fmt.Errorf("cannot stream file, error: %s", err)},
+		}
+		return backoffState
+	}
+	err = fileOnDisk.Close()
+	if err != nil {
+		file.Response <- &Event{
+			Name: eventNameReadFailed,
+			Args: &EventArgs{"err": fmt.Errorf("cannot close the file, error: %s", err)},
+		}
+		return backoffState
+	}
+
+	file.Response <- &Event{
+		Name: eventNameReadSuccess,
 		Args: &EventArgs{},
 	}
 

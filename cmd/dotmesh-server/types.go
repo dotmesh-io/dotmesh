@@ -142,7 +142,9 @@ type fsMachine struct {
 	filesystemId string
 	filesystem   *filesystem
 
-	fileIO chan *File
+	// channels for uploading and downloading file data
+	fileInputIO  chan *InputFile
+	fileOutputIO chan *OutputFile
 
 	// channel of requests going in to the state machine
 	requests chan *Event
@@ -190,10 +192,18 @@ type Event struct {
 	Args *EventArgs
 }
 
-// File is used to write files to the disk on the local node.
-type File struct {
+// InputFile is used to write files to the disk on the local node.
+type InputFile struct {
 	Filename string
 	Contents io.Reader
+	User     string
+	Response chan *Event
+}
+
+// OutputFile is used to read files from the disk on the local node
+type OutputFile struct {
+	Filename string
+	Contents io.Writer
 	User     string
 	Response chan *Event
 }

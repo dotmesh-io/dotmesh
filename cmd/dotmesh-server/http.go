@@ -111,7 +111,13 @@ func (state *InMemoryState) runServer() {
 			),
 		).Methods("POST")
 
+		// list files in the latest snapshot
 		router.Handle("/s3/{namespace}:{name}", middleware.FromHTTPRequest(tracer, "s3")(Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager)))).Methods("GET")
+		// list files in a specific snapshot
+		router.Handle("/s3/{namespace}:{name}/snapshot/{snapshotId}", middleware.FromHTTPRequest(tracer, "s3")(Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager)))).Methods("GET")
+		// download a file from a specific snapshot
+		router.Handle("/s3/{namespace}:{name}/snapshot/{snapshotId}/{key}", middleware.FromHTTPRequest(tracer, "s3")(Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager)))).Methods("GET")
+
 		// put file into master
 		router.Handle("/s3/{namespace}:{name}/{key}", middleware.FromHTTPRequest(tracer, "s3")(Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager)))).Methods("PUT")
 
@@ -130,7 +136,12 @@ func (state *InMemoryState) runServer() {
 			Instrument(state)(NewAuthHandler(state.NewZFSReceivingServer(), state.userManager)),
 		).Methods("POST")
 
+		// list files in the latest snapshot
 		router.Handle("/s3/{namespace}:{name}", Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager))).Methods("GET")
+		// list files in a specific snapshot
+		router.Handle("/s3/{namespace}:{name}/snapshot/{snapshotId}", Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager))).Methods("GET")
+		// download a file from a specific snapshot
+		router.Handle("/s3/{namespace}:{name}/snapshot/{snapshotId}/{key}", Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager))).Methods("GET")
 		// put file into master
 		router.Handle("/s3/{namespace}:{name}/{key}", Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager))).Methods("PUT")
 		// put file into other branch
