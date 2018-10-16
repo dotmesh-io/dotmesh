@@ -187,7 +187,3 @@ func (client *JsonRpcClient) Ping() (bool, error) {
 	}
 	return response, nil
 }
-
-func (dm *DotmeshAPI) PingLocal() (bool, error) {
-	return dm.client.Ping()
-}

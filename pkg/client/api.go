@@ -56,28 +56,53 @@ func NewDotmeshAPI(configPath string, verbose bool) (*DotmeshAPI, error) {
 	if err != nil {
 		return nil, err
 	}
-	client, err := c.ClusterFromCurrentRemote(verbose)
-	// intentionally disregard err, since not being able to get a client is
-	// non-fatal for some operations (like creating a remote). instead, push
-	// the error checking into CallRemote.
+
 	d := &DotmeshAPI{
 		Configuration: c,
-		client:        client,
+		client:        nil,
 		verbose:       verbose,
 	}
 	return d, nil
+}
+
+func (dm *DotmeshAPI) openClient() error {
+	if dm.client == nil {
+		client, err := dm.Configuration.ClusterFromCurrentRemote(dm.verbose)
+		if err == nil {
+			dm.client = client
+			return nil
+		} else {
+			return err
+		}
+	} else {
+		return nil
+	}
 }
 
 // proxy thru
 func (dm *DotmeshAPI) CallRemote(
 	ctx context.Context, method string, args interface{}, response interface{},
 ) error {
-	return dm.client.CallRemote(ctx, method, args, response)
+	err := dm.openClient()
+	if err == nil {
+		return dm.client.CallRemote(ctx, method, args, response)
+	} else {
+		return err
+	}
+}
+
+func (dm *DotmeshAPI) PingLocal() (bool, error) {
+	err := dm.openClient()
+	if err == nil {
+		return dm.client.Ping()
+	} else {
+		return false, err
+	}
 }
 
 func (dm *DotmeshAPI) BackupEtcd() (string, error) {
 	var response string
-	err := dm.client.CallRemote(context.Background(), "DotmeshRPC.DumpEtcd",
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.DumpEtcd",
 		struct{ Prefix string }{Prefix: ""},
 		&response,
 	)
@@ -89,7 +114,7 @@ func (dm *DotmeshAPI) BackupEtcd() (string, error) {
 
 func (dm *DotmeshAPI) RestoreEtcd(dump string) error {
 	var response bool
-	err := dm.client.CallRemote(context.Background(), "DotmeshRPC.RestoreEtcd",
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.RestoreEtcd",
 		struct {
 			Prefix string
 			Dump   string
@@ -107,7 +132,7 @@ func (dm *DotmeshAPI) RestoreEtcd(dump string) error {
 
 func (dm *DotmeshAPI) GetVersion() (VersionInfo, error) {
 	var response VersionInfo
-	err := dm.client.CallRemote(context.Background(), "DotmeshRPC.Version", struct{}{}, &response)
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.Version", struct{}{}, &response)
 	if err != nil {
 		return VersionInfo{}, err
 	}
@@ -124,7 +149,7 @@ func (dm *DotmeshAPI) NewVolume(volumeName string) error {
 		Namespace: namespace,
 		Name:      name,
 	}
-	err = dm.client.CallRemote(context.Background(), "DotmeshRPC.Create", sendVolumeName, &response)
+	err = dm.CallRemote(context.Background(), "DotmeshRPC.Create", sendVolumeName, &response)
 	if err != nil {
 		return err
 	}
@@ -148,7 +173,7 @@ func (dm *DotmeshAPI) ProcureVolume(volumeName string) (string, error) {
 		Name:      name,
 		Subdot:    "__default__",
 	}
-	err = dm.client.CallRemote(context.Background(), "DotmeshRPC.Procure", sendVolumeName, &response)
+	err = dm.CallRemote(context.Background(), "DotmeshRPC.Procure", sendVolumeName, &response)
 	if err != nil {
 		return "", err
 	}
@@ -177,7 +202,7 @@ func (dm *DotmeshAPI) CreateBranch(volumeName, sourceBranch, newBranch string) e
 		return err
 	}
 
-	return dm.client.CallRemote(
+	return dm.CallRemote(
 		context.Background(),
 		"DotmeshRPC.Branch",
 		struct {
@@ -229,7 +254,7 @@ func (dm *DotmeshAPI) CheckoutBranch(volumeName, from, to string, create bool) e
 		return err
 	}
 	var result bool
-	err = dm.client.CallRemote(context.Background(),
+	err = dm.CallRemote(context.Background(),
 		"DotmeshRPC.SwitchContainers", map[string]string{
 			"Namespace":     namespace,
 			"Name":          name,
@@ -301,7 +326,7 @@ func (dm *DotmeshAPI) Branches(volumeName string) ([]string, error) {
 	}
 
 	branches := []string{}
-	err = dm.client.CallRemote(
+	err = dm.CallRemote(
 		context.Background(), "DotmeshRPC.Branches", VolumeName{namespace, name}, &branches,
 	)
 	if err != nil {
@@ -317,7 +342,7 @@ func (dm *DotmeshAPI) VolumeExists(volumeName string) (bool, error) {
 	}
 
 	volumes := map[string]map[string]DotmeshVolume{}
-	err = dm.client.CallRemote(
+	err = dm.CallRemote(
 		context.Background(), "DotmeshRPC.List", nil, &volumes,
 	)
 	if err != nil {
@@ -340,7 +365,7 @@ func (dm *DotmeshAPI) DeleteVolume(volumeName string) error {
 
 	err = retryUntilSucceeds(func() error {
 		var result bool
-		err = dm.client.CallRemote(
+		err = dm.CallRemote(
 			context.Background(), "DotmeshRPC.Delete", VolumeName{namespace, name}, &result,
 		)
 		if err != nil {
@@ -379,7 +404,7 @@ func (dm *DotmeshAPI) GetReplicationLatencyForBranch(volumeName string, branch s
 	}
 
 	var result map[string][]string
-	err = dm.client.CallRemote(
+	err = dm.CallRemote(
 		context.Background(), "DotmeshRPC.GetReplicationLatencyForBranch",
 		struct {
 			Namespace, Name, Branch string
@@ -409,7 +434,7 @@ func (dm *DotmeshAPI) AllBranches(volumeName string) ([]string, error) {
 	}
 
 	var branches []string
-	err = dm.client.CallRemote(
+	err = dm.CallRemote(
 		context.Background(), "DotmeshRPC.Branches", VolumeName{namespace, name}, &branches,
 	)
 	// the "main" filesystem (topLevelFilesystemId) is the master branch
@@ -421,7 +446,7 @@ func (dm *DotmeshAPI) AllBranches(volumeName string) ([]string, error) {
 
 func (dm *DotmeshAPI) BranchInfo(namespace, name, branch string) (DotmeshVolume, error) {
 	var fsId string
-	err := dm.client.CallRemote(
+	err := dm.CallRemote(
 		context.Background(), "DotmeshRPC.Lookup", struct{ Namespace, Name, Branch string }{
 			Namespace: namespace,
 			Name:      name,
@@ -433,7 +458,7 @@ func (dm *DotmeshAPI) BranchInfo(namespace, name, branch string) (DotmeshVolume,
 	}
 
 	var result DotmeshVolume
-	err = dm.client.CallRemote(
+	err = dm.CallRemote(
 		context.Background(), "DotmeshRPC.Get", fsId, &result,
 	)
 	return result, err
@@ -441,7 +466,7 @@ func (dm *DotmeshAPI) BranchInfo(namespace, name, branch string) (DotmeshVolume,
 
 func (dm *DotmeshAPI) ForceBranchMaster(namespace, name, branch, newMaster string) error {
 	var fsId string
-	err := dm.client.CallRemote(
+	err := dm.CallRemote(
 		context.Background(), "DotmeshRPC.Lookup", struct{ Namespace, Name, Branch string }{
 			Namespace: namespace,
 			Name:      name,
@@ -453,7 +478,7 @@ func (dm *DotmeshAPI) ForceBranchMaster(namespace, name, branch, newMaster strin
 	}
 
 	var result bool
-	err = dm.client.CallRemote(
+	err = dm.CallRemote(
 		context.Background(), "DotmeshRPC.ForceBranchMasterById", struct{ FilesystemId, Master string }{
 			FilesystemId: fsId,
 			Master:       newMaster,
@@ -466,7 +491,7 @@ func (dm *DotmeshAPI) AllVolumes() ([]DotmeshVolume, error) {
 	filesystems := map[string]map[string]DotmeshVolume{}
 	result := []DotmeshVolume{}
 	interim := map[string]DotmeshVolume{}
-	err := dm.client.CallRemote(
+	err := dm.CallRemote(
 		context.Background(), "DotmeshRPC.List", nil, &filesystems,
 	)
 	if err != nil {
@@ -518,7 +543,7 @@ func (dm *DotmeshAPI) Commit(activeVolumeName, activeBranch, commitMessage strin
 		return "", err
 	}
 
-	err = dm.client.CallRemote(
+	err = dm.CallRemote(
 		context.Background(),
 		"DotmeshRPC.Commit",
 		// TODO replace these map[string]string's with typed structs that are
@@ -553,7 +578,7 @@ func (dm *DotmeshAPI) ListCommits(activeVolumeName, activeBranch string) ([]snap
 		return []snapshot{}, err
 	}
 
-	err = dm.client.CallRemote(
+	err = dm.CallRemote(
 		context.Background(),
 		"DotmeshRPC.Commits",
 		map[string]string{
@@ -617,7 +642,7 @@ func (dm *DotmeshAPI) ResetCurrentVolume(commit string) error {
 	if err != nil {
 		return err
 	}
-	err = dm.client.CallRemote(
+	err = dm.CallRemote(
 		context.Background(),
 		"DotmeshRPC.Rollback",
 		map[string]string{
@@ -648,7 +673,7 @@ func (dm *DotmeshAPI) AllVolumesWithContainers() ([]DotmeshVolumeAndContainers, 
 	filesystems := map[string]map[string]DotmeshVolumeAndContainers{}
 	result := []DotmeshVolumeAndContainers{}
 	interim := map[string]DotmeshVolumeAndContainers{}
-	err := dm.client.CallRemote(
+	err := dm.CallRemote(
 		context.Background(), "DotmeshRPC.ListWithContainers", nil, &filesystems,
 	)
 	if err != nil {
@@ -678,7 +703,7 @@ func (dm *DotmeshAPI) AllVolumesWithContainers() ([]DotmeshVolumeAndContainers, 
 
 func (dm *DotmeshAPI) RelatedContainers(volumeName VolumeName, branch string) ([]Container, error) {
 	result := []Container{}
-	err := dm.client.CallRemote(
+	err := dm.CallRemote(
 		context.Background(),
 		"DotmeshRPC.Containers",
 		map[string]string{
@@ -768,7 +793,7 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 			}
 
 			var result pollTransferInternalResult
-			result.err = dm.client.CallRemote(
+			result.err = dm.CallRemote(
 				ctx, "DotmeshRPC.GetTransfer", transferId, &(result.result),
 			)
 			if debugMode {
@@ -1093,6 +1118,13 @@ func (dm *DotmeshAPI) RequestTransfer(
 }
 
 func (dm *DotmeshAPI) IsUserPriveledged() bool {
+	err := dm.openClient()
+
+	if err != nil {
+		// No way to return errors from here...
+		return false
+	}
+
 	if dm.client.User == "admin" {
 		return true
 	}
