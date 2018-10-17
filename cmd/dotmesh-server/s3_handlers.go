@@ -172,6 +172,35 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	}
 }
 
+func (s *S3Handler) mountFilesystemSnapshot(filesystemId string, snapshotId string) *Event {
+	snapshots, err := s.state.snapshotsForCurrentMaster(filesystemId)
+	if len(snapshots) == 0 {
+		return &Event{
+			Name: "no-snapshots-found",
+		}
+	}
+	lastSnapshot := snapshots[len(snapshots)-1]
+	mountSnapshotId := lastSnapshot.Id
+	if snapshotId != "" {
+		mountSnapshotId = snapshotId
+	}
+	responseChan, err := s.state.globalFsRequest(
+		filesystemId,
+		&Event{Name: "mount-snapshot",
+			Args: &EventArgs{"snapId": mountSnapshotId}},
+	)
+	if err != nil {
+		// error here
+		log.Println(err)
+		return &Event{
+			Name: "mount-snapshot-error",
+		}
+	}
+
+	e := <-responseChan
+	return e
+}
+
 func (s *S3Handler) readFile(resp http.ResponseWriter, req *http.Request, filesystemId, snapshotId, filename string) {
 	user := auth.GetUserFromCtx(req.Context())
 	fsm := s.state.initFilesystemMachine(filesystemId)
@@ -181,29 +210,45 @@ func (s *S3Handler) readFile(resp http.ResponseWriter, req *http.Request, filesy
 		return
 	}
 
-	resp.Header().Set("Access-Control-Allow-Origin", "*")
-	resp.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+	// we must first mount the given snapshot before we try to read a file within it
+	// if snapshotId is not given then the latest snapshot id will be used
+	e := s.mountFilesystemSnapshot(filesystemId, snapshotId)
 
-	defer req.Body.Close()
-	respCh := make(chan *Event)
-	fsm.fileOutputIO <- &OutputFile{
-		Filename: filename,
-		Contents: resp,
-		User:     user.Name,
-		Response: respCh,
-	}
+	// the snapshot has been mounted - pass the SnapshotMountPath via the
+	// OutputFile to the fileOutputIO channel to get handled
+	if e.Name == "mounted" {
+		resp.Header().Set("Access-Control-Allow-Origin", "*")
+		resp.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
 
-	result := <-respCh
-
-	switch result.Name {
-	case eventNameReadFailed:
-		e, ok := (*result.Args)["err"].(string)
-		if ok {
-			http.Error(resp, e, 500)
+		defer req.Body.Close()
+		respCh := make(chan *Event)
+		fsm.fileOutputIO <- &OutputFile{
+			Filename:          filename,
+			Contents:          resp,
+			User:              user.Name,
+			Response:          respCh,
+			SnapshotMountPath: (*e.Args)["mount-path"].(string),
 		}
-		http.Error(resp, "read failed", 500)
-	default:
-		resp.WriteHeader(200)
+
+		result := <-respCh
+
+		switch result.Name {
+		case eventNameReadFailed:
+			e, ok := (*result.Args)["err"].(string)
+			if ok {
+				http.Error(resp, e, 500)
+			}
+			http.Error(resp, "read failed", 500)
+		default:
+			resp.WriteHeader(200)
+		}
+	} else {
+		log.Println(e)
+		log.WithFields(log.Fields{
+			"event":      e,
+			"filesystem": filesystemId,
+		}).Error("mount failed, returned event is not 'mounted'")
+		http.Error(resp, fmt.Sprintf("failed to mount filesystem (%s), check logs", e.Name), 500)
 	}
 }
 
@@ -254,29 +299,7 @@ type BucketObject struct {
 }
 
 func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name string, filesystemId string, snapshotId string) {
-	snapshots, err := s.state.snapshotsForCurrentMaster(filesystemId)
-	if len(snapshots) == 0 {
-		// throw up an error?
-		http.Error(resp, "No snaps to mount - commit before listing.", 400)
-		return
-	}
-	lastSnapshot := snapshots[len(snapshots)-1]
-	mountSnapshotId := lastSnapshot.Id
-	if snapshotId != "" {
-		mountSnapshotId = snapshotId
-	}
-	responseChan, err := s.state.globalFsRequest(
-		filesystemId,
-		&Event{Name: "mount-snapshot",
-			Args: &EventArgs{"snapId": mountSnapshotId}},
-	)
-	if err != nil {
-		// error here
-		log.Println(err)
-		return
-	}
-
-	e := <-responseChan
+	e := s.mountFilesystemSnapshot(filesystemId, snapshotId)
 	if e.Name == "mounted" {
 		result := (*e.Args)["mount-path"].(string)
 		keys, _, err := getKeysForDir(result+"/__default__", "")
@@ -304,8 +327,10 @@ func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name
 		}
 		resp.WriteHeader(200)
 		resp.Write(response)
+	} else if e.Name == "no-snapshots-found" {
+		// throw up an error?
+		http.Error(resp, "No snaps to mount - commit before listing.", 400)
 	} else {
-
 		log.Println(e)
 		log.WithFields(log.Fields{
 			"event":      e,

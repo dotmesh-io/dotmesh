@@ -201,11 +201,14 @@ type InputFile struct {
 }
 
 // OutputFile is used to read files from the disk on the local node
+// this is always done against a specific, already mounted snapshotId
+// the mount path of the snapshot is passed through via SnapshotMountPath
 type OutputFile struct {
-	Filename string
-	Contents io.Writer
-	User     string
-	Response chan *Event
+	Filename          string
+	SnapshotMountPath string
+	Contents          io.Writer
+	User              string
+	Response          chan *Event
 }
 
 func (ea EventArgs) String() string {

@@ -72,7 +72,7 @@ func (f *fsMachine) saveFile(file *InputFile) stateFn {
 
 func (f *fsMachine) readFile(file *OutputFile) stateFn {
 	// create the default paths
-	sourcePath := fmt.Sprintf("%s/%s/%s", mnt(f.filesystemId), "__default__", file.Filename)
+	sourcePath := fmt.Sprintf("%s/%s/%s", file.SnapshotMountPath, "__default__", file.Filename)
 	log.Printf("Reading file from %s", sourcePath)
 
 	fileOnDisk, err := os.Open(sourcePath)
