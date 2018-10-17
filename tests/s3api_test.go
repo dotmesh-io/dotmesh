@@ -76,4 +76,65 @@ func TestS3Api(t *testing.T) {
 			t.Error("failed to include file")
 		}
 	})
+
+	t.Run("ListSnapshot", func(t *testing.T) {
+		dotName := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm init "+dotName)
+		cmdFile1 := fmt.Sprintf("curl -T file1.txt -u admin:%s 127.0.0.1:32607/s3/admin:%s/file1.txt", host.Password, dotName)
+		citools.RunOnNode(t, node1, "echo helloworld1 > file1.txt")
+		citools.RunOnNode(t, node1, cmdFile1)
+		cmdFile2 := fmt.Sprintf("curl -T file2.txt -u admin:%s 127.0.0.1:32607/s3/admin:%s/file2.txt", host.Password, dotName)
+		citools.RunOnNode(t, node1, "echo helloworld2 > file2.txt")
+		citools.RunOnNode(t, node1, cmdFile2)
+
+		commitIdsString := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("dm log | grep commit | awk '{print $2}'"))
+		commitIdsList := strings.Split(commitIdsString, "\n")
+
+		firstCommitId := commitIdsList[0]
+		secondCommitId := commitIdsList[1]
+
+		respFirstCommit := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s", host.Password, dotName, firstCommitId))
+		if !strings.Contains(respFirstCommit, "file1.txt") {
+			fmt.Printf(respFirstCommit)
+			t.Error("The first commit did not contain the first file")
+		}
+		if strings.Contains(respFirstCommit, "file2.txt") {
+			fmt.Printf(respFirstCommit)
+			t.Error("The first commit contained the second file")
+		}
+
+		respSecondCommit := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s", host.Password, dotName, secondCommitId))
+		if !strings.Contains(respSecondCommit, "file2.txt") {
+			fmt.Printf(respSecondCommit)
+			t.Error("The second commit did not contain the second file")
+		}
+	})
+
+	t.Run("ReadFileAtSnapshot", func(t *testing.T) {
+		dotName := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm init "+dotName)
+		cmdFile1 := fmt.Sprintf("curl -T file.txt -u admin:%s 127.0.0.1:32607/s3/admin:%s/file.txt", host.Password, dotName)
+		citools.RunOnNode(t, node1, "echo helloworld1 > file.txt")
+		citools.RunOnNode(t, node1, cmdFile1)
+		cmdFile2 := fmt.Sprintf("curl -T file.txt -u admin:%s 127.0.0.1:32607/s3/admin:%s/file.txt", host.Password, dotName)
+		citools.RunOnNode(t, node1, "echo helloworld2 > file.txt")
+		citools.RunOnNode(t, node1, cmdFile2)
+
+		commitIdsString := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("dm log | grep commit | awk '{print $2}'"))
+		commitIdsList := strings.Split(commitIdsString, "\n")
+
+		firstCommitId := commitIdsList[0]
+		secondCommitId := commitIdsList[1]
+
+		respFirstCommit := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", host.Password, dotName, firstCommitId))
+		if !strings.Contains(respFirstCommit, "helloworld1") {
+			fmt.Printf(respFirstCommit)
+			t.Error("The first commit did not contain the correct file data")
+		}
+		respSecondCommit := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", host.Password, dotName, secondCommitId))
+		if !strings.Contains(respSecondCommit, "helloworld2") {
+			fmt.Printf(respSecondCommit)
+			t.Error("The second commit did not contain the correct file data")
+		}
+	})
 }
