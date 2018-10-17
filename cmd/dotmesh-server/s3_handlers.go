@@ -181,6 +181,9 @@ func (s *S3Handler) readFile(resp http.ResponseWriter, req *http.Request, filesy
 		return
 	}
 
+	resp.Header().Set("Access-Control-Allow-Origin", "*")
+	resp.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+
 	defer req.Body.Close()
 	respCh := make(chan *Event)
 	fsm.fileOutputIO <- &OutputFile{
@@ -196,13 +199,11 @@ func (s *S3Handler) readFile(resp http.ResponseWriter, req *http.Request, filesy
 	case eventNameReadFailed:
 		e, ok := (*result.Args)["err"].(string)
 		if ok {
-
 			http.Error(resp, e, 500)
 		}
 		http.Error(resp, "read failed", 500)
 	default:
 		resp.WriteHeader(200)
-		resp.Header().Set("Access-Control-Allow-Origin", "*")
 	}
 }
 
