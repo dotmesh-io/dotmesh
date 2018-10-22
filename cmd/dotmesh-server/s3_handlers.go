@@ -150,25 +150,19 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 
 	// from this point on we assume we are on the node that is the current master
 	// for the filesystem
-	if localFilesystemId != "" {
-		key, ok := vars["key"]
-		if ok {
-			switch req.Method {
-			case "GET":
-				s.readFile(resp, req, localFilesystemId, snapshotId, key)
-			case "PUT":
-				s.putObject(resp, req, localFilesystemId, key)
-			}
-
-		} else {
-			switch req.Method {
-			case "GET":
-				s.listBucket(resp, req, bucketName, localFilesystemId, snapshotId)
-			}
+	key, ok := vars["key"]
+	if ok {
+		switch req.Method {
+		case "GET":
+			s.readFile(resp, req, localFilesystemId, snapshotId, key)
+		case "PUT":
+			s.putObject(resp, req, localFilesystemId, key)
 		}
-
 	} else {
-		http.Error(resp, fmt.Sprintf("Bucket %s does not exist", bucketName), 404)
+		switch req.Method {
+		case "GET":
+			s.listBucket(resp, req, bucketName, localFilesystemId, snapshotId)
+		}
 	}
 }
 
