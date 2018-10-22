@@ -36,7 +36,7 @@ func (f *fsMachine) saveFile(file *InputFile) stateFn {
 		return backoffState
 	}
 
-	_, err = io.Copy(out, file.Contents)
+	bytes, err := io.Copy(out, file.Contents)
 	if err != nil {
 		file.Response <- &Event{
 			Name: eventNameSaveFailed,
@@ -53,7 +53,14 @@ func (f *fsMachine) saveFile(file *InputFile) stateFn {
 		return backoffState
 	}
 	response, _ := f.snapshot(&Event{Name: "snapshot",
-		Args: &EventArgs{"metadata": metadata{"message": "saving file put by s3 api " + file.Filename, "author": file.User}}})
+		Args: &EventArgs{"metadata": metadata{
+			"message":      "Uploaded " + file.Filename + " (" + formatBytes(bytes) + ")",
+			"author":       file.User,
+			"type":         "upload",
+			"upload.type":  "S3",
+			"upload.file":  file.Filename,
+			"upload.bytes": fmt.Sprintf("%d", bytes),
+		}}})
 	if response.Name != "snapshotted" {
 		file.Response <- &Event{
 			Name: eventNameSaveFailed,
