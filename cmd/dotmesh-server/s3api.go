@@ -3,9 +3,10 @@ package main
 import (
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 )
 
 const eventNameSaveFailed = "save-failed"
@@ -36,19 +37,21 @@ func (f *fsMachine) saveFile(file *InputFile) stateFn {
 		return backoffState
 	}
 
+	defer func() {
+		err := out.Close()
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error": err,
+				"file":  destPath,
+			}).Error("s3 saveFile: got error while closing output file")
+		}
+	}()
+
 	bytes, err := io.Copy(out, file.Contents)
 	if err != nil {
 		file.Response <- &Event{
 			Name: eventNameSaveFailed,
 			Args: &EventArgs{"err": fmt.Errorf("cannot to create a file, error: %s", err)},
-		}
-		return backoffState
-	}
-	err = out.Close()
-	if err != nil {
-		file.Response <- &Event{
-			Name: eventNameSaveFailed,
-			Args: &EventArgs{"err": fmt.Errorf("cannot close the file, error: %s", err)},
 		}
 		return backoffState
 	}
@@ -80,7 +83,6 @@ func (f *fsMachine) saveFile(file *InputFile) stateFn {
 func (f *fsMachine) readFile(file *OutputFile) stateFn {
 	// create the default paths
 	sourcePath := fmt.Sprintf("%s/%s/%s", file.SnapshotMountPath, "__default__", file.Filename)
-	log.Printf("Reading file from %s", sourcePath)
 
 	fileOnDisk, err := os.Open(sourcePath)
 	if err != nil {
@@ -90,19 +92,20 @@ func (f *fsMachine) readFile(file *OutputFile) stateFn {
 		}
 		return backoffState
 	}
+	defer func() {
+		err := fileOnDisk.Close()
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error": err,
+				"file":  sourcePath,
+			}).Error("s3 readFile: got error while closing file")
+		}
+	}()
 	_, err = io.Copy(file.Contents, fileOnDisk)
 	if err != nil {
 		file.Response <- &Event{
 			Name: eventNameReadFailed,
 			Args: &EventArgs{"err": fmt.Errorf("cannot stream file, error: %s", err)},
-		}
-		return backoffState
-	}
-	err = fileOnDisk.Close()
-	if err != nil {
-		file.Response <- &Event{
-			Name: eventNameReadFailed,
-			Args: &EventArgs{"err": fmt.Errorf("cannot close the file, error: %s", err)},
 		}
 		return backoffState
 	}
