@@ -3,6 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"log"
+	"os"
+	"strings"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -10,10 +15,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"golang.org/x/net/context"
-	"io/ioutil"
-	"log"
-	"os"
-	"strings"
 )
 
 // stuff we use for s3 management which likely isn't needed in other situations
@@ -156,7 +157,7 @@ func downloadPartialS3Bucket(f *fsMachine, svc *s3.S3, bucketName, destPath, tra
 	err := svc.ListObjectVersionsPages(params,
 		func(page *s3.ListObjectVersionsOutput, lastPage bool) bool {
 			for _, item := range page.DeleteMarkers {
-				latestMeta, _ := currentKeyVersions[*item.Key]
+				latestMeta := currentKeyVersions[*item.Key]
 				if *item.IsLatest && latestMeta != *item.VersionId {
 					deletePath := fmt.Sprintf("%s/%s", destPath, *item.Key)
 					log.Printf("Got object for deletion: %#v, key: %s", item, *item.Key)
@@ -171,7 +172,7 @@ func downloadPartialS3Bucket(f *fsMachine, svc *s3.S3, bucketName, destPath, tra
 				}
 			}
 			for _, item := range page.Versions {
-				latestMeta, _ := currentKeyVersions[*item.Key]
+				latestMeta := currentKeyVersions[*item.Key]
 				if *item.IsLatest && latestMeta != *item.VersionId {
 					log.Printf("Got object: %#v, key: %s", item, *item.Key)
 
