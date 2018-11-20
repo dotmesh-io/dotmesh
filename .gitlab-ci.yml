@@ -555,8 +555,8 @@ trigger_e2e_test:
         - ubuntu-bionic
         - fast
     script:
-        - echo - curl -X POST -F "token=$CI_JOB_TOKEN" -F "ref=master" -F "variables[CI_SERVICE_BEING_TESTED]=$CI_SERVICE_BEING_TESTED" -F "variables[CI_DOCKER_TAG]=$CI_DOCKER_TAG" -F "variables[DOTMESH_CI_BUILD_REF_NAME]=$CI_BUILD_REF_NAME" https://gitlab.dotmesh.com/api/v4/projects/e2e-sync/trigger/pipeline
-        - curl -X POST -F "token=$CI_JOB_TOKEN" -F "ref=master" -F "variables[CI_SERVICE_BEING_TESTED]=$CI_SERVICE_BEING_TESTED" -F "variables[CI_DOCKER_TAG]=$CI_DOCKER_TAG" -F "variables[DOTMESH_CI_BUILD_REF_NAME]=$CI_BUILD_REF_NAME" https://gitlab.dotmesh.com/api/v4/projects/e2e-sync/trigger/pipeline
+        - echo - curl -X POST -F "token=$CI_JOB_TOKEN" -F "ref=master" -F "variables[CI_SERVICE_BEING_TESTED]=$CI_SERVICE_BEING_TESTED" -F "variables[CI_DOCKER_TAG]=$CI_DOCKER_TAG" -F "variables[DOTMESH_CI_BUILD_REF_NAME]=$CI_BUILD_REF_NAME" https://gitlab.dotmesh.com/api/v4/projects/dotmesh%2Fe2e-sync/trigger/pipeline
+        - curl -X POST -F "token=$CI_JOB_TOKEN" -F "ref=master" -F "variables[CI_SERVICE_BEING_TESTED]=$CI_SERVICE_BEING_TESTED" -F "variables[CI_DOCKER_TAG]=$CI_DOCKER_TAG" -F "variables[DOTMESH_CI_BUILD_REF_NAME]=$CI_BUILD_REF_NAME" https://gitlab.dotmesh.com/api/v4/projects/dotmesh%2Fe2e-sync/trigger/pipeline
     only:
         - master
     except:
