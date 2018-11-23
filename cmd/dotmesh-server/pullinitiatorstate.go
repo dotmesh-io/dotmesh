@@ -385,6 +385,20 @@ func (f *fsMachine) retryPull(
 						Args: &EventArgs{"err": e},
 					}, backoffState
 				}
+				localSnaps, e = restrictSnapshots(localSnaps, err.latestCommonSnapshot.Id)
+				if e != nil {
+					return &Event{
+						Name: "failed-restricting-after-stash",
+						Args: &EventArgs{"err": e},
+					}, backoffState
+				}
+				snapRange, e = canApply(remoteSnaps, localSnaps)
+				if e != nil {
+					return &Event{
+						Name: "failed-canApply-after-stash",
+						Args: &EventArgs{"err": e},
+					}, backoffState
+				}
 			} else {
 				return &Event{
 					Name: "error-in-canapply-when-pulling", Args: &EventArgs{"err": err},
@@ -396,6 +410,20 @@ func (f *fsMachine) retryPull(
 				if e != nil {
 					return &Event{
 						Name: "failed-stashing",
+						Args: &EventArgs{"err": e},
+					}, backoffState
+				}
+				localSnaps, e = restrictSnapshots(localSnaps, err.latestCommonSnapshot.Id)
+				if e != nil {
+					return &Event{
+						Name: "failed-restricting-after-stash",
+						Args: &EventArgs{"err": e},
+					}, backoffState
+				}
+				snapRange, e = canApply(remoteSnaps, localSnaps)
+				if e != nil {
+					return &Event{
+						Name: "failed-canApply-after-stash",
 						Args: &EventArgs{"err": e},
 					}, backoffState
 				}
