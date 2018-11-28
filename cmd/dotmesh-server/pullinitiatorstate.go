@@ -376,14 +376,7 @@ func (f *fsMachine) retryPull(
 			}, backoffState
 		case *ToSnapsAhead:
 			if transferRequest.StashDivergence {
-				e := f.recoverFromDivergence(typedErr.latestCommonSnapshot.Id)
-				if e != nil {
-					return &Event{
-						Name: "failed-stashing",
-						Args: &EventArgs{"err": e},
-					}, backoffState
-				}
-				f.updateTransfer("finished", "remote already up-to-date, nothing to do")
+				f.updateTransfer("finished", "This remote is ahead of the cluster you are pulling from - did you mean 'dm push'?")
 				// in this case, there are no further snaps to pull from the other side as our local version was ahead
 				return &Event{
 					Name: "peer-up-to-date",
