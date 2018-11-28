@@ -1709,7 +1709,7 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 	citools.StartTiming()
 	err := f.Start(t)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Failed setup, err - %s", err.Error())
 	}
 	node1 := f[0].GetNode(0).Container
 	node2 := f[1].GetNode(0).Container
@@ -2017,10 +2017,6 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		citools.RunOnNode(t, node2, "dm switch "+fsname)
 		citools.RunOnNode(t, node2, "dm commit -m 'hello'")
 		citools.RunOnNode(t, node2, "dm clone --stash-on-divergence cluster_0 "+fsname)
-		output := citools.OutputFromRunOnNode(t, node2, "dm branch")
-		if !strings.Contains(output, "master-DIVERGED-") {
-			t.Error("Stashed clone did not create divergent branch")
-		}
 	})
 	t.Run("CloneStashDirty", func(t *testing.T) {
 		fsname := citools.UniqName()
