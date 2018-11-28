@@ -84,10 +84,8 @@ func pullInitiatorState(f *fsMachine) stateFn {
 		transferRequestId string,
 		client *dmclient.JsonRpcClient, transferRequest *types.TransferRequest,
 	) (*Event, stateFn) {
-		return f.retryPull(
-			fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
-			transferRequestId, client, transferRequest,
-		)
+		return f.retryPull(fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
+			transferRequestId, client, transferRequest)
 	}, transferRequestId, client, &transferRequest)
 
 	f.innerResponses <- responseEvent
@@ -369,7 +367,7 @@ func (f *fsMachine) retryPull(
 	}
 	snapRange, err := canApply(remoteSnaps, localSnaps)
 	if err != nil {
-		switch err := err.(type) {
+		switch typedErr := err.(type) {
 		case *ToSnapsUpToDate:
 			// no action, we're up-to-date for this filesystem
 			f.updateTransfer("finished", "remote already up-to-date, nothing to do")
@@ -378,27 +376,18 @@ func (f *fsMachine) retryPull(
 			}, backoffState
 		case *ToSnapsAhead:
 			if transferRequest.StashDivergence {
-				e := f.recoverFromDivergence(err.latestCommonSnapshot.Id)
+				e := f.recoverFromDivergence(typedErr.latestCommonSnapshot.Id)
 				if e != nil {
 					return &Event{
 						Name: "failed-stashing",
 						Args: &EventArgs{"err": e},
 					}, backoffState
 				}
-				localSnaps, e = restrictSnapshots(localSnaps, err.latestCommonSnapshot.Id)
-				if e != nil {
-					return &Event{
-						Name: "failed-restricting-after-stash",
-						Args: &EventArgs{"err": e},
-					}, backoffState
-				}
-				snapRange, e = canApply(remoteSnaps, localSnaps)
-				if e != nil {
-					return &Event{
-						Name: "failed-canApply-after-stash",
-						Args: &EventArgs{"err": e},
-					}, backoffState
-				}
+				f.updateTransfer("finished", "remote already up-to-date, nothing to do")
+				// in this case, there are no further snaps to pull from the other side as our local version was ahead
+				return &Event{
+					Name: "peer-up-to-date",
+				}, backoffState
 			} else {
 				return &Event{
 					Name: "error-in-canapply-when-pulling", Args: &EventArgs{"err": err},
@@ -406,25 +395,23 @@ func (f *fsMachine) retryPull(
 			}
 		case *ToSnapsDiverged:
 			if transferRequest.StashDivergence {
-				e := f.recoverFromDivergence(err.latestCommonSnapshot.Id)
+				e := f.recoverFromDivergence(typedErr.latestCommonSnapshot.Id)
 				if e != nil {
 					return &Event{
 						Name: "failed-stashing",
 						Args: &EventArgs{"err": e},
 					}, backoffState
 				}
-				localSnaps, e = restrictSnapshots(localSnaps, err.latestCommonSnapshot.Id)
-				if e != nil {
+				localSnaps := func() []*snapshot {
+					fsMachine.snapshotsLock.Lock()
+					defer fsMachine.snapshotsLock.Unlock()
+					return fsMachine.filesystem.snapshots
+				}()
+				snapRange, err = canApply(remoteSnaps, localSnaps)
+				if err != nil {
 					return &Event{
-						Name: "failed-restricting-after-stash",
-						Args: &EventArgs{"err": e},
-					}, backoffState
-				}
-				snapRange, e = canApply(remoteSnaps, localSnaps)
-				if e != nil {
-					return &Event{
-						Name: "failed-canApply-after-stash",
-						Args: &EventArgs{"err": e},
+						Name: "snapshot-canapply-error-after-diverge",
+						Args: &EventArgs{"err": err},
 					}, backoffState
 				}
 			} else {
