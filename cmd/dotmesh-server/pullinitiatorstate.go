@@ -388,6 +388,7 @@ func (f *fsMachine) retryPull(
 			}
 		case *ToSnapsDiverged:
 			if transferRequest.StashDivergence {
+				fmt.Printf("[retryPull] hit divergence case, have permission to stash - will stash local changes")
 				e := f.recoverFromDivergence(typedErr.latestCommonSnapshot.Id)
 				if e != nil {
 					return &Event{
@@ -395,11 +396,7 @@ func (f *fsMachine) retryPull(
 						Args: &EventArgs{"err": e},
 					}, backoffState
 				}
-				localSnaps := func() []*snapshot {
-					fsMachine.snapshotsLock.Lock()
-					defer fsMachine.snapshotsLock.Unlock()
-					return fsMachine.filesystem.snapshots
-				}()
+				localSnaps, err = restrictSnapshots(remoteSnaps, typedErr.latestCommonSnapshot.Id)
 				snapRange, err = canApply(remoteSnaps, localSnaps)
 				if err != nil {
 					return &Event{
