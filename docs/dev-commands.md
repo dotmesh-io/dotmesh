@@ -193,6 +193,7 @@ On first run `vagrant up` will probably take 5-10 minutes, `prepare_vagrant.sh` 
 
 NOTE: you must exit and re-ssh to get the GOPATH to work
 
+You may need to update your docker version - see `scripts/update-docker.sh` 
 Now you can skip directly to ["running tests"](#running-tests).
 
 #### reset vagrant
