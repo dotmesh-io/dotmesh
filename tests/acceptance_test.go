@@ -1995,7 +1995,7 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		citools.RunOnNode(t, node2, "dm clone cluster_0 "+fsname)
 		citools.RunOnNode(t, node2, "dm switch "+fsname)
 		citools.RunOnNode(t, node2, "dm commit -m 'hello'")
-		citools.RunOnNode(t, node2, "dm commit -m 'hello2'")
+		citools.RunOnNode(t, node1, "dm commit -m 'hello2'")
 		citools.RunOnNode(t, node2, "dm clone --stash-on-divergence cluster_0 "+fsname)
 		output := citools.OutputFromRunOnNode(t, node2, "dm branch")
 		if !strings.Contains(output, "master-DIVERGED-") {
