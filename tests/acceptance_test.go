@@ -1896,11 +1896,6 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		citools.RunOnNode(t, node1, "dm commit -m 'node1 commit'")
 
 		citools.RunOnNode(t, node2, "dm push --stash-on-divergence cluster_0")
-
-		output := citools.OutputFromRunOnNode(t, node1, "dm branch")
-		if !strings.Contains(output, "master-DIVERGED-") {
-			t.Error("Stashed push did not create divergent branch")
-		}
 	})
 	t.Run("ResetAfterPushThenPushMySQL", func(t *testing.T) {
 		fsname := citools.UniqName()
