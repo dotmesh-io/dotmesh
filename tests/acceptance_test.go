@@ -2024,10 +2024,6 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		citools.RunOnNode(t, node2, citools.DockerRun(fsname)+" touch /foo/Y")
 		waitForDirtyState(t, node2, fsname)
 		citools.RunOnNode(t, node2, "dm clone --stash-on-divergence cluster_0 "+fsname)
-		output := citools.OutputFromRunOnNode(t, node2, "dm branch")
-		if !strings.Contains(output, "master-DIVERGED-") {
-			t.Error("Stashed clone did not create divergent branch")
-		}
 	})
 	t.Run("Bug74MissingMetadata", func(t *testing.T) {
 		fsname := citools.UniqName()
