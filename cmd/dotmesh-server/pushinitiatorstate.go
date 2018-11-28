@@ -495,14 +495,18 @@ func (f *fsMachine) retryPush(
 						event, state := stash(toFilesystemId, err.latestCommonSnapshot.Id, client, ctx)
 						if event != nil {
 							return event, state
+						} else {
+							return &Event{
+								Name: "stashed-remote-cluster",
+							}, backoffState
 						}
 					}
 				case *ToSnapsAhead:
 					if transferRequest.StashDivergence {
-						event, state := stash(toFilesystemId, err.latestCommonSnapshot.Id, client, ctx)
-						if event != nil {
-							return event, state
-						}
+						f.updateTransfer("finished", "The remote is ahead of the cluster you are pushing from - did you mean 'dm pull'?")
+						return &Event{
+							Name: "peer-up-to-date",
+						}, backoffState
 					}
 				}
 				return &Event{
