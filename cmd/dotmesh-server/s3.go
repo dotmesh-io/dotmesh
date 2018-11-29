@@ -22,7 +22,7 @@ import (
 func (f *fsMachine) getLastNonMetadataSnapshot() (*snapshot, error) {
 	// for all the snapshots we have, start from the latest, work backwards until we find a snapshot which isn't just a metadata change (i.e a write of a json file about s3 versions)
 	// in theory, we should only ever go back to latest-1, but could potentially go back further if we've had multiple commits slip in there.
-	snaps, err := f.state.snapshotsForCurrentMaster(f.filesystemId)
+	snaps, err := f.state.SnapshotsForCurrentMaster(f.filesystemId)
 	if err != nil {
 		return nil, err
 	}
