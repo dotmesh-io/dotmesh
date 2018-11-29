@@ -17,6 +17,8 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/dotmesh-io/dotmesh/pkg/observer"
 	//niobuffer "github.com/djherbis/buffer"
 	//"github.com/djherbis/nio"
 )
@@ -256,7 +258,7 @@ func runForever(f func() error, label string, errorBackoff, successBackoff time.
 	}
 }
 
-var deathObserver *Observer = NewObserver("deathObserver")
+var deathObserver = observer.NewObserver("deathObserver")
 
 // run while filesystem lives
 func runWhileFilesystemLives(f func() error, label string, filesystemId string, errorBackoff, successBackoff time.Duration) {
