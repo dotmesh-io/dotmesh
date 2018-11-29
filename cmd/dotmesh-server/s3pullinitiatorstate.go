@@ -2,8 +2,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/nu7hatch/gouuid"
 	"os"
+
+	"github.com/nu7hatch/gouuid"
 )
 
 func s3PullInitiatorState(f *fsMachine) stateFn {
@@ -44,7 +45,7 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 		Changes: TransferPollResult{
 			TransferRequestId: transferRequestId,
 			Direction:         transferRequest.Direction,
-			InitiatorNodeId:   f.state.myNodeId,
+			InitiatorNodeId:   f.state.NodeID(),
 			Index:             1,
 			Status:            "starting",
 		},
