@@ -14,11 +14,11 @@ func pushPeerState(f *fsMachine) stateFn {
 	receiveProgress := make(chan interface{})
 	log.Printf("[pushPeerState] subscribing to newSnapsOnMaster for %s", f.filesystemId)
 
-	f.state.localReceiveProgress.Subscribe(f.filesystemId, receiveProgress)
-	defer f.state.localReceiveProgress.Unsubscribe(f.filesystemId, receiveProgress)
+	f.localReceiveProgress.Subscribe(f.filesystemId, receiveProgress)
+	defer f.localReceiveProgress.Unsubscribe(f.filesystemId, receiveProgress)
 
-	f.state.newSnapsOnMaster.Subscribe(f.filesystemId, newSnapsOnMaster)
-	defer f.state.newSnapsOnMaster.Unsubscribe(f.filesystemId, newSnapsOnMaster)
+	f.newSnapsOnMaster.Subscribe(f.filesystemId, newSnapsOnMaster)
+	defer f.newSnapsOnMaster.Unsubscribe(f.filesystemId, newSnapsOnMaster)
 
 	// this is a write state. refuse to act if containers are running
 
@@ -56,7 +56,7 @@ func pushPeerState(f *fsMachine) stateFn {
 
 	// first check whether we already have the snapshot. if so, early
 	// exit?
-	ss, err := f.state.snapshotsFor(f.state.myNodeId, f.filesystemId)
+	ss, err := f.state.SnapshotsFor(f.state.NodeID(), f.filesystemId)
 	for _, s := range ss {
 		if s.Id == targetSnapshot {
 			f.innerResponses <- &Event{
