@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/dotmesh-io/citools"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/dotmesh-io/citools"
 )
 
 func s3cmd(params string) string {
@@ -40,7 +41,7 @@ func TestS3Remote(t *testing.T) {
 	citools.StartTiming()
 	err := f.Start(t)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("failed to start cluster, error: %s", err)
 	}
 	node1 := f[0].GetNode(0).Container
 
