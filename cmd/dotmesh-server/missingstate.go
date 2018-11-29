@@ -18,7 +18,7 @@ func missingState(f *fsMachine) stateFn {
 		return backoffState
 	}
 	if deleted {
-		err := f.state.deleteFilesystem(f.filesystemId)
+		err := f.state.DeleteFilesystem(f.filesystemId)
 		if err != nil {
 			log.Printf("Error deleting filesystem while in missingState: %s", err)
 			return backoffState
@@ -32,8 +32,8 @@ func missingState(f *fsMachine) stateFn {
 	}
 
 	newSnapsOnMaster := make(chan interface{})
-	f.state.newSnapsOnMaster.Subscribe(f.filesystemId, newSnapsOnMaster)
-	defer f.state.newSnapsOnMaster.Unsubscribe(f.filesystemId, newSnapsOnMaster)
+	f.newSnapsOnMaster.Subscribe(f.filesystemId, newSnapsOnMaster)
+	defer f.newSnapsOnMaster.Unsubscribe(f.filesystemId, newSnapsOnMaster)
 
 	f.transitionedTo("missing", "waiting for snapshots or requests")
 	select {
@@ -47,7 +47,7 @@ func missingState(f *fsMachine) stateFn {
 			// theoretically isn't here anyway. But it may be present in
 			// some internal caches, so we call deleteFilesystem for
 			// thoroughness.
-			err := f.state.deleteFilesystem(f.filesystemId)
+			err := f.state.DeleteFilesystem(f.filesystemId)
 			if err != nil {
 				f.innerResponses <- &Event{
 					Name: "cant-delete",
@@ -86,7 +86,7 @@ func missingState(f *fsMachine) stateFn {
 				// Can't push when we're missing.
 				f.innerResponses <- &Event{
 					Name: "cant-push-while-missing",
-					Args: &EventArgs{"request": e, "node": f.state.myNodeId},
+					Args: &EventArgs{"request": e, "node": f.state.NodeID()},
 				}
 				return backoffState
 			} else if f.lastTransferRequest.Direction == "pull" {
@@ -119,7 +119,7 @@ func missingState(f *fsMachine) stateFn {
 				// Can't push when we're missing.
 				f.innerResponses <- &Event{
 					Name: "cant-push-while-missing",
-					Args: &EventArgs{"request": e, "node": f.state.myNodeId},
+					Args: &EventArgs{"request": e, "node": f.state.NodeID()},
 				}
 				return backoffState
 			} else if f.lastS3TransferRequest.Direction == "pull" {
@@ -177,7 +177,7 @@ func missingState(f *fsMachine) stateFn {
 				// Can't provide for an initiator trying to pull when we're missing.
 				f.innerResponses <- &Event{
 					Name: "cant-provide-pull-while-missing",
-					Args: &EventArgs{"request": e, "node": f.state.myNodeId},
+					Args: &EventArgs{"request": e, "node": f.state.NodeID()},
 				}
 				return backoffState
 			} else if f.lastTransferRequest.Direction == "push" {
