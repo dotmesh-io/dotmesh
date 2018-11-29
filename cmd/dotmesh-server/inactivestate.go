@@ -12,7 +12,7 @@ func inactiveState(f *fsMachine) stateFn {
 	handleEvent := func(e *Event) (bool, stateFn) {
 		f.transitionedTo("inactive", fmt.Sprintf("handling %s", e.Name))
 		if e.Name == "delete" {
-			err := f.state.deleteFilesystem(f.filesystemId)
+			err := f.state.DeleteFilesystem(f.filesystemId)
 			if err != nil {
 				f.innerResponses <- &Event{
 					Name: "cant-delete",
@@ -70,8 +70,8 @@ func inactiveState(f *fsMachine) stateFn {
 	}
 
 	newSnapsOnMaster := make(chan interface{})
-	f.state.newSnapsOnMaster.Subscribe(f.filesystemId, newSnapsOnMaster)
-	defer f.state.newSnapsOnMaster.Unsubscribe(f.filesystemId, newSnapsOnMaster)
+	f.newSnapsOnMaster.Subscribe(f.filesystemId, newSnapsOnMaster)
+	defer f.newSnapsOnMaster.Unsubscribe(f.filesystemId, newSnapsOnMaster)
 
 	f.transitionedTo("inactive", "waiting for requests or snapshots")
 	select {
