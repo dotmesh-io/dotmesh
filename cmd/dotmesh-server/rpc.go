@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dotmesh-io/dotmesh/pkg/container"
+	"github.com/dotmesh-io/dotmesh/pkg/registry"
 	"github.com/dotmesh-io/dotmesh/pkg/validator"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -500,12 +502,12 @@ func (d *DotmeshRPC) ListWithContainers(
 	for _, v := range volumes {
 		// Just get top-level filesystems
 		if v.Branch == "" {
-			var containers []DockerContainer
+			var containers []container.DockerContainer
 			containerInfo, ok := d.state.globalContainerCache[v.Id]
 			if ok {
 				containers = containerInfo.Containers
 			} else {
-				containers = []DockerContainer{}
+				containers = []container.DockerContainer{}
 			}
 
 			submap, ok := gather[v.Name.Namespace]
@@ -612,11 +614,7 @@ func (d *DotmeshRPC) SwitchContainers(
 }
 
 // Containers that were recently known to be running on a given filesystem.
-func (d *DotmeshRPC) Containers(
-	r *http.Request,
-	args *struct{ Namespace, Name, Branch string },
-	result *[]DockerContainer,
-) error {
+func (d *DotmeshRPC) Containers(r *http.Request, args *struct{ Namespace, Name, Branch string }, result *[]container.DockerContainer) error {
 	log.Printf("[Containers] called with %+v", *args)
 
 	err := validator.IsValidVolume(args.Namespace, args.Name)
@@ -641,7 +639,7 @@ func (d *DotmeshRPC) Containers(
 	defer d.state.globalContainerCacheLock.Unlock()
 	containerInfo, ok := d.state.globalContainerCache[filesystemId]
 	if !ok {
-		*result = []DockerContainer{}
+		*result = []container.DockerContainer{}
 		return nil
 	}
 	// TODO maybe check that the server this containerInfo pertains to matches
@@ -655,13 +653,13 @@ func (d *DotmeshRPC) Containers(
 func (d *DotmeshRPC) ContainersById(
 	r *http.Request,
 	filesystemId *string,
-	result *[]DockerContainer,
+	result *[]container.DockerContainer,
 ) error {
 	d.state.globalContainerCacheLock.Lock()
 	defer d.state.globalContainerCacheLock.Unlock()
 	containerInfo, ok := d.state.globalContainerCache[*filesystemId]
 	if !ok {
-		*result = []DockerContainer{}
+		*result = []container.DockerContainer{}
 		return nil
 	}
 	*result = containerInfo.Containers
@@ -755,7 +753,7 @@ func (d *DotmeshRPC) Commits(
 	if err != nil {
 		return err
 	}
-	snapshots, err := d.state.snapshotsForCurrentMaster(filesystemId)
+	snapshots, err := d.state.SnapshotsForCurrentMaster(filesystemId)
 	if err != nil {
 		return err
 	}
@@ -768,7 +766,7 @@ func (d *DotmeshRPC) CommitsById(
 	filesystemId *string,
 	result *[]snapshot,
 ) error {
-	snapshots, err := d.state.snapshotsForCurrentMaster(*filesystemId)
+	snapshots, err := d.state.SnapshotsForCurrentMaster(*filesystemId)
 	if err != nil {
 		return err
 	}
@@ -903,7 +901,7 @@ func (d *DotmeshRPC) MountCommit(
 		return err
 	}
 
-	snapshots, err := d.state.snapshotsForCurrentMaster(args.FilesystemId)
+	snapshots, err := d.state.SnapshotsForCurrentMaster(args.FilesystemId)
 	if err != nil {
 		return err
 	}
@@ -1185,7 +1183,7 @@ func (d *DotmeshRPC) registerFilesystemBecomeMaster(
 		// process any events. in the case where it already exists, this is a
 		// noop.
 		log.Printf("[registerFilesystemBecomeMaster] calling initFilesystemMachine for %s", f)
-		d.state.initFilesystemMachine(f)
+		d.state.InitFilesystemMachine(f)
 		log.Printf("[registerFilesystemBecomeMaster] done initFilesystemMachine for %s", f)
 
 		_, err = kapi.Get(
@@ -1220,11 +1218,7 @@ func (d *DotmeshRPC) registerFilesystemBecomeMaster(
 			// Immediately update the masters cache because we just wrote
 			// to etcd meaning we don't have to wait for a watch
 			// this is cconsistent with the code in createFilesystem
-			func() {
-				d.state.mastersCacheLock.Lock()
-				defer d.state.mastersCacheLock.Unlock()
-				d.state.mastersCache[filesystemId] = d.state.myNodeId
-			}()
+			d.state.registry.SetMasterNode(filesystemId, d.state.myNodeId)
 
 		}
 	}
@@ -1666,7 +1660,7 @@ func (d *DotmeshRPC) Transfer(
 		// Check whether there are uncommitted changes or containers running
 		// where the writes are going to happen.
 
-		var cs []DockerContainer
+		var cs []container.DockerContainer
 		var containersRunning []string
 		var dirtyBytes int64
 
@@ -2429,9 +2423,8 @@ func (d *DotmeshRPC) DumpInternalState(
 	go func() {
 		defer recoverFromPanic() // Don't kill the entire server if resultChan is closed because we took too long
 		resultChan <- []string{"mastersCache.STARTED", "yes"}
-		s.mastersCacheLock.Lock()
-		defer s.mastersCacheLock.Unlock()
-		for fsId, server := range s.mastersCache {
+		masterNodes := s.registry.ListMasterNodes(&registry.ListMasterNodesQuery{})
+		for fsId, server := range masterNodes {
 			resultChan <- []string{fmt.Sprintf("mastersCache.%s", fsId), server}
 		}
 		resultChan <- []string{"mastersCache.DONE", "yes"}
@@ -2451,10 +2444,13 @@ func (d *DotmeshRPC) DumpInternalState(
 	go func() {
 		defer recoverFromPanic() // Don't kill the entire server if resultChan is closed because we took too long
 		resultChan <- []string{"globalSnapshotCache.STARTED", "yes"}
-		s.globalSnapshotCacheLock.Lock()
-		defer s.globalSnapshotCacheLock.Unlock()
-		for serverId, d := range s.globalSnapshotCache {
-			for fsId, snapshots := range d {
+
+		s.filesystemsLock.RLock()
+		defer s.filesystemsLock.RUnlock()
+		for fsId, fsm := range s.filesystems {
+			serversAndSnapshots := fsm.ListSnapshots()
+			for serverId, snapshots := range serversAndSnapshots {
+
 				for idx, snapshot := range snapshots {
 					resultChan <- []string{fmt.Sprintf("globalSnapshotCache.%s.%s.snapshots[%d].id", serverId, fsId, idx), snapshot.Id}
 					for key, val := range *(snapshot.Metadata) {
@@ -2463,21 +2459,45 @@ func (d *DotmeshRPC) DumpInternalState(
 				}
 			}
 		}
+
+		// s.globalSnapshotCacheLock.Lock()
+		// defer s.globalSnapshotCacheLock.Unlock()
+		// for serverId, d := range s.globalSnapshotCache {
+		// 	for fsId, snapshots := range d {
+		// 		for idx, snapshot := range snapshots {
+		// 			resultChan <- []string{fmt.Sprintf("globalSnapshotCache.%s.%s.snapshots[%d].id", serverId, fsId, idx), snapshot.Id}
+		// 			for key, val := range *(snapshot.Metadata) {
+		// 				resultChan <- []string{fmt.Sprintf("globalSnapshotCache.%s.%s.snapshots[%d].metadata.%s", serverId, fsId, idx, key), val}
+		// 			}
+		// 		}
+		// 	}
+		// }
 		resultChan <- []string{"globalSnapshotCache.DONE", "yes"}
 	}()
 
 	go func() {
 		defer recoverFromPanic() // Don't kill the entire server if resultChan is closed because we took too long
 		resultChan <- []string{"globalStateCache.STARTED", "yes"}
-		s.globalStateCacheLock.Lock()
-		defer s.globalStateCacheLock.Unlock()
-		for serverId, d := range s.globalStateCache {
-			for fsId, states := range d {
-				for key, val := range states {
-					resultChan <- []string{fmt.Sprintf("globalStateCache.%s.%s.%s", serverId, fsId, key), val}
+
+		s.filesystemsLock.RLock()
+		defer s.filesystemsLock.RUnlock()
+		for fsID, fsm := range s.filesystems {
+			serversState := fsm.ListMetadata()
+			for serverID, state := range serversState {
+				for key, val := range state {
+					resultChan <- []string{fmt.Sprintf("globalStateCache.%s.%s.%s", serverID, fsID, key), val}
 				}
 			}
 		}
+		// s.globalStateCacheLock.Lock()
+		// defer s.globalStateCacheLock.Unlock()
+		// for serverId, d := range s.globalStateCache {
+		// 	for fsId, states := range d {
+		// 		for key, val := range states {
+		// 			resultChan <- []string{fmt.Sprintf("globalStateCache.%s.%s.%s", serverId, fsId, key), val}
+		// 		}
+		// 	}
+		// }
 		resultChan <- []string{"globalStateCache.DONE", "yes"}
 	}()
 
