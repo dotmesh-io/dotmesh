@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
+	"log"
+
 	"github.com/coreos/etcd/client"
 	"golang.org/x/net/context"
-	"log"
 )
 
 // state functions
@@ -28,8 +29,8 @@ func handoffState(f *fsMachine) stateFn {
 	f.newSnapsOnServers.Subscribe(target, newSnapsChan)
 	defer f.newSnapsOnServers.Unsubscribe(target, newSnapsChan)
 
-	if target == f.state.myNodeId {
-		errString := fmt.Sprintf("Error trying to handoff because myNodeId: %s and target: %s are the same", f.state.myNodeId, target)
+	if target == f.state.NodeID() {
+		errString := fmt.Sprintf("Error trying to handoff because myNodeId: %s and target: %s are the same", f.state.NodeID(), target)
 		log.Println(errString)
 		f.innerResponses <- &Event{
 			Name: "error-handoff-source-target-are-equal",
@@ -59,7 +60,7 @@ func handoffState(f *fsMachine) stateFn {
 			"author": "system",
 			"message": fmt.Sprintf(
 				"Automatic snapshot during migration from %s to %s.",
-				f.state.myNodeId, target,
+				f.state.NodeID(), target,
 			)},
 		},
 	})
@@ -77,7 +78,7 @@ waitingForSlaveSnapshot:
 		// target node (it should be, naturally because currently we replicate
 		// everything everywhere)
 		f.transitionedTo("handoff", fmt.Sprintf("calling snapshotsFor %s", target))
-		slaveSnapshots, err := f.state.snapshotsFor(target, f.filesystemId)
+		slaveSnapshots, err := f.state.SnapshotsFor(target, f.filesystemId)
 		f.transitionedTo(
 			"handoff",
 			fmt.Sprintf("done calling snapshotsFor %s: %s", target, err),
@@ -129,13 +130,13 @@ waitingForSlaveSnapshot:
 		} else {
 			err = fmt.Errorf(
 				"ff update of %s for %s to %s was possible, can't move yet, retrying...",
-				f.filesystemId, f.state.myNodeId, target,
+				f.filesystemId, f.state.NodeID(), target,
 			)
 		}
 		if !slaveUpToDate {
 			log.Printf(
 				"Not proceeding with migration yet for %s from %s to %s because %s, waiting for new snaps...",
-				f.filesystemId, f.state.myNodeId, target, err,
+				f.filesystemId, f.state.NodeID(), target, err,
 			)
 		}
 
@@ -175,7 +176,7 @@ waitingForSlaveSnapshot:
 		),
 		target,
 		// only modify current master if I am indeed still the master
-		&client.SetOptions{PrevValue: f.state.myNodeId},
+		&client.SetOptions{PrevValue: f.state.NodeID()},
 	)
 	if err != nil {
 		f.innerResponses <- &Event{
@@ -183,7 +184,7 @@ waitingForSlaveSnapshot:
 			Args: &EventArgs{
 				"err":    err,
 				"target": f.filesystemId,
-				"node":   f.state.myNodeId,
+				"node":   f.state.NodeID(),
 			},
 		}
 		return backoffState
