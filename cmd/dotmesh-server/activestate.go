@@ -19,7 +19,7 @@ func activeState(f *fsMachine) stateFn {
 		return f.readFile(file)
 	case e := <-f.innerRequests:
 		if e.Name == "delete" {
-			err := f.state.deleteFilesystem(f.filesystemId)
+			err := f.state.DeleteFilesystem(f.filesystemId)
 			if err != nil {
 				f.innerResponses <- &Event{
 					Name: "cant-delete",
@@ -309,9 +309,7 @@ func activeState(f *fsMachine) stateFn {
 				return backoffState
 			}
 
-			errorName, err := activateClone(f.state,
-				topLevelFilesystemId, originFilesystemId, originSnapshotId,
-				newCloneFilesystemId, newBranchName)
+			errorName, err := f.state.ActivateClone(topLevelFilesystemId, originFilesystemId, originSnapshotId, newCloneFilesystemId, newBranchName)
 			if err != nil {
 				f.innerResponses <- &Event{
 					Name: errorName, Args: &EventArgs{"err": err},
