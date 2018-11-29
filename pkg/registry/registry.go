@@ -57,6 +57,13 @@ type Registry interface {
 
 	MaybeCloneFilesystemId(name types.VolumeName, cloneName string) (string, error)
 
+	CurrentMasterNode(filesystemID string) (string, error)
+
+	GetMasterNode(filesystemID string) (nodeID string, exists bool)
+	SetMasterNode(filesystemID, nodeID string)
+	DeleteMasterNode(filesystemID string)
+	ListMasterNodes(query *ListMasterNodesQuery) map[string]string
+
 	DumpTopLevelFilesystems() []*types.TopLevelFilesystem
 	DumpClones() map[string]map[string]types.Clone
 }
@@ -75,6 +82,13 @@ type DefaultRegistry struct {
 
 	userManager user.UserManager
 
+	// a cache of filesystem ID -> node ID map
+	mastersCache     map[string]string
+	mastersCacheLock *sync.RWMutex
+
+	serverAddressesCache     map[string]string
+	serverAddressesCacheLock *sync.RWMutex
+
 	etcdClient client.KeysAPI
 	prefix     string
 }
@@ -86,8 +100,15 @@ func NewRegistry(um user.UserManager, etcdClient client.KeysAPI, prefix string) 
 		topLevelFilesystemsLock: &sync.RWMutex{},
 		clonesLock:              &sync.RWMutex{},
 		userManager:             um,
-		etcdClient:              etcdClient,
-		prefix:                  prefix,
+		// filesystem => node id
+		mastersCache:     make(map[string]string),
+		mastersCacheLock: &sync.RWMutex{},
+		// server id => comma-separated IPv[46] addresses
+		serverAddressesCache:     make(map[string]string),
+		serverAddressesCacheLock: &sync.RWMutex{},
+
+		etcdClient: etcdClient,
+		prefix:     prefix,
 	}
 }
 
