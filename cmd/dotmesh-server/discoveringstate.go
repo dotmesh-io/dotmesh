@@ -17,7 +17,7 @@ func discoveringState(f *fsMachine) stateFn {
 	if !f.filesystem.exists {
 		return missingState
 	} else {
-		err := f.state.alignMountStateWithMasters(f.filesystemId)
+		err := f.state.AlignMountStateWithMasters(f.filesystemId)
 		if err != nil {
 			log.Printf(
 				"[discoveringState:%s] error trying to align mount state with masters: %v, "+
