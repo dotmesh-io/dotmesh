@@ -403,7 +403,7 @@ func listFilesystemsPendingCleanup(kapi client.KeysAPI) (map[string]NameOrClone,
 	return result, nil
 }
 
-func (state *InMemoryState) markFilesystemAsLiveInEtcd(topLevelFilesystemId string) error {
+func (state *InMemoryState) MarkFilesystemAsLiveInEtcd(topLevelFilesystemId string) error {
 	kapi, err := getEtcdKeysApi()
 	if err != nil {
 		return err
@@ -437,7 +437,7 @@ func (s *InMemoryState) dispatchEvent(
 		}
 		requestId = id.String()
 	}
-	fs, err := s.maybeFilesystem(filesystem)
+	fs, err := s.InitFilesystemMachine(filesystem)
 	if err != nil {
 		return nil, err
 	}
@@ -488,7 +488,7 @@ func (s *InMemoryState) handleOneFilesystemMaster(node *client.Node) error {
 			return nil
 		}
 
-		s.initFilesystemMachine(fs)
+		s.InitFilesystemMachine(fs)
 		var responseChan chan *Event
 		requestId := pieces[len(pieces)-1]
 		if node.Value == s.myNodeId {
@@ -531,21 +531,26 @@ func (s *InMemoryState) handleOneFilesystemDeletion(node *client.Node) error {
 		}
 	}()
 
-	s.initFilesystemMachine(fs)
+	f, err := s.InitFilesystemMachine(fs)
+	if err != nil {
+		log.Infof("[handleOneFilesystemDeletion:%s] after initFs.. no fsMachine", fs)
+	} else {
+		log.Infof("[handleOneFilesystemDeletion:%s] after initFs.. state: %s, status: %s", fs, f.currentState, f.status)
+	}
 
-	func() {
-		s.filesystemsLock.Lock()
-		defer s.filesystemsLock.Unlock()
-		f, ok := s.filesystems[fs]
-		if ok {
-			log.Infof("[handleOneFilesystemDeletion:%s] after initFs.. state: %s, status: %s", fs, f.currentState, f.status)
-		} else {
-			log.Infof("[handleOneFilesystemDeletion:%s] after initFs.. no fsMachine", fs)
-		}
-	}()
+	// func() {
+	// 	s.filesystemsLock.Lock()
+	// 	defer s.filesystemsLock.Unlock()
+	// 	f, ok := s.filesystems[fs]
+	// 	if ok {
+	// 		log.Infof("[handleOneFilesystemDeletion:%s] after initFs.. state: %s, status: %s", fs, f.currentState, f.status)
+	// 	} else {
+	// 		log.Infof("[handleOneFilesystemDeletion:%s] after initFs.. no fsMachine", fs)
+	// 	}
+	// }()
 
 	var responseChan chan *Event
-	var err error
+	// var err error
 	id, err := uuid.NewV4()
 	if err != nil {
 		return err
@@ -771,43 +776,59 @@ func (s *InMemoryState) deserializeDispatchAndRespond(fs string, node *client.No
 //
 // Possible alternative: use different etcd clients for the Watch versus the
 // Set.
-func (s *InMemoryState) updateSnapshotsFromKnownState(
-	server, filesystem string, snapshots *[]snapshot,
-) error {
-	deleted, err := isFilesystemDeletedInEtcd(filesystem)
+func (s *InMemoryState) UpdateSnapshotsFromKnownState(server, filesystem string, snapshots []*snapshot) error {
+	// deleted, err := isFilesystemDeletedInEtcd(filesystem)
+	// if err != nil {
+	// 	return err
+	// }
+	// if deleted {
+	// 	// Filesystem is being deleted, so ignore it.
+	// 	return nil
+	// }
+
+	fsm, err := s.InitFilesystemMachine(filesystem)
+	if err != nil {
+		if err == ErrFilesystemDeleted {
+			// Filesystem is being deleted, ignoring it
+			return nil
+		}
+
+		return err
+	}
+
+	oldSnapshots := fsm.GetSnapshots(server)
+
+	fsm.SetSnapshots(server, snapshots)
+
+	// s.globalSnapshotCacheLock.Lock()
+	// if _, ok := s.globalSnapshotCache[server]; !ok {
+	// 	s.globalSnapshotCache[server] = map[string][]snapshot{}
+	// }
+	// oldSnapshots := s.globalSnapshotCache[server][filesystem]
+	// s.globalSnapshotCache[server][filesystem] = *snapshots
+	// s.globalSnapshotCacheLock.Unlock()
+
+	masterNode, err := s.registry.CurrentMasterNode(filesystem)
 	if err != nil {
 		return err
 	}
-	if deleted {
-		// Filesystem is being deleted, so ignore it.
-		return nil
-	}
-
-	s.globalSnapshotCacheLock.Lock()
-	if _, ok := s.globalSnapshotCache[server]; !ok {
-		s.globalSnapshotCache[server] = map[string][]snapshot{}
-	}
-	oldSnapshots := s.globalSnapshotCache[server][filesystem]
-	s.globalSnapshotCache[server][filesystem] = *snapshots
-	s.globalSnapshotCacheLock.Unlock()
-
 	log.Printf(
 		"[updateSnapshots] checking %s master: %s == %s?",
-		filesystem, s.masterFor(filesystem), server,
+		filesystem, masterNode, server,
 	)
-	if s.masterFor(filesystem) == server {
-		if len(*snapshots) > 0 {
+	if masterNode == server {
+		if len(snapshots) > 0 {
 			// notify any interested parties that there are some new snapshots on
 			// the master
 
-			latest := (*snapshots)[len(*snapshots)-1]
+			latest := (snapshots)[len(snapshots)-1]
 			log.Printf(
 				"[updateSnapshots] publishing latest snapshot %v on %s",
 				latest, filesystem,
 			)
 
 			// External pubsub
-			if len(*snapshots) > len(oldSnapshots) {
+			if len(snapshots) > len(oldSnapshots) {
 				tlf, branch, err := s.registry.LookupFilesystemById(filesystem)
 				if err != nil {
 					return err
@@ -816,7 +837,7 @@ func (s *InMemoryState) updateSnapshotsFromKnownState(
 				namespace := tlf.MasterBranch.Name.Namespace
 				name := tlf.MasterBranch.Name.Name
 				go func() {
-					for _, ss := range (*snapshots)[len(oldSnapshots):] {
+					for _, ss := range snapshots[len(oldSnapshots):] {
 						collaborators := make([]string, len(tlf.Collaborators))
 						for idx, u := range tlf.Collaborators {
 							collaborators[idx] = u.Id
@@ -902,29 +923,35 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 	updateMine := func(node *client.Node) bool {
 		// (0)/(1)dotmesh.io/(2)servers/(3)masters/(4):filesystem = master
 		pieces := strings.Split(node.Key, "/")
-		fs := pieces[4]
+		filesystemID := pieces[4]
 
-		s.mastersCacheLock.Lock()
-		defer s.mastersCacheLock.Unlock()
+		// s.mastersCacheLock.Lock()
+		// defer s.mastersCacheLock.Unlock()
 
 		var modified bool
 		if node.Value == "" {
-			delete(s.mastersCache, fs)
-			delete(filesystemBelongsToMe, fs)
+			// delete(s.mastersCache, fs)
+			s.registry.DeleteMasterNode(filesystemID)
+			delete(filesystemBelongsToMe, filesystemID)
 		} else {
-			old, ok := s.mastersCache[fs]
-			if ok && old != node.Value {
+			masterNode, ok := s.registry.GetMasterNode(filesystemID)
+			if !ok || masterNode != node.Value {
 				modified = true
+				s.registry.SetMasterNode(filesystemID, node.Value)
 			}
-			if !ok {
-				// new value
-				modified = true
-			}
-			s.mastersCache[fs] = node.Value
+			// if ok && masterNode != node.Value {
+			// 	modified = true
+			// }
+			// if !ok {
+			// 	// new value
+			// 	modified = true
+			// }
+			// s.mastersCache[fs] = node.Value
+
 			if node.Value == s.myNodeId {
-				filesystemBelongsToMe[fs] = true
+				filesystemBelongsToMe[filesystemID] = true
 			} else {
-				filesystemBelongsToMe[fs] = false
+				filesystemBelongsToMe[filesystemID] = false
 			}
 		}
 		return modified
@@ -945,49 +972,70 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		pieces := strings.Split(node.Key, "/")
 		server := pieces[4]
 		filesystem := pieces[5]
-		s.globalStateCacheLock.Lock()
-		defer s.globalStateCacheLock.Unlock()
+		// s.globalStateCacheLock.Lock()
+		// defer s.globalStateCacheLock.Unlock()
+
+		fsm, err := s.InitFilesystemMachine(filesystem)
+		if err != nil {
+			// failed to initialize, nothing to do
+			return nil
+		}
 
 		stateMetadata := &map[string]string{}
 		if node.Value == "" {
-			if _, ok := s.globalStateCache[server]; !ok {
-				delete(s.globalStateCache[server], filesystem)
-			} else {
-				// We don't know about the server anyway, so there's nothing to do
-			}
+			// TODO(karolis): not sure what happened here, it tries to delete if it already
+			// couldn't find it?
+			// if _, ok := s.globalStateCache[server]; !ok {
+			// delete(s.globalStateCache[server], filesystem)
+			// } else {
+			// We don't know about the server anyway, so there's nothing to do
+			// }
 		} else {
 			err := json.Unmarshal([]byte(node.Value), stateMetadata)
 			if err != nil {
 				log.Printf("Unable to marshal for updateStates - %s: %s", node.Value, err)
 				return err
 			}
-			if _, ok := s.globalStateCache[server]; !ok {
-				s.globalStateCache[server] = map[string]map[string]string{}
-			} else {
-				if _, ok := s.globalStateCache[server][filesystem]; !ok {
-					// ok, we'll be setting it below...
+			// if _, ok := s.globalStateCache[server]; !ok {
+			// s.globalStateCache[server] = map[string]map[string]string{}
+			// } else {
+
+			// if _, ok := s.globalStateCache[server][filesystem]; !ok {
+			// ok, we'll be setting it below...
+			// } else {
+			// state already exists. check that we're updating with a
+			// revision that is the same or newer...
+			// currentVersion := s.globalStateCache[server][filesystem]["version"]
+			// currentVersion := fsm.GetMetadata(server)["version"]
+			currentMeta := fsm.GetMetadata(server)
+			currentVersion, ok := currentMeta["version"]
+			if ok {
+				i, err := strconv.ParseUint(currentVersion, 10, 64)
+				if err != nil {
+					// return err
+					// unparsable version?
 				} else {
-					// state already exists. check that we're updating with a
-					// revision that is the same or newer...
-					currentVersion := s.globalStateCache[server][filesystem]["version"]
-					i, err := strconv.ParseUint(currentVersion, 10, 64)
-					if err != nil {
-						return err
-					}
 					if i > node.ModifiedIndex {
 						log.Printf(
 							"Out of order updates! %s is older than %s",
-							s.globalStateCache[server][filesystem],
+							currentMeta,
 							node,
 						)
 						return nil
 					}
 				}
+
 			}
-			s.globalStateCache[server][filesystem] = *stateMetadata
-			s.globalStateCache[server][filesystem]["version"] = fmt.Sprintf(
-				"%d", node.ModifiedIndex,
-			)
+
+			// }
+			// }
+			newMeta := *stateMetadata
+			newMeta["version"] = fmt.Sprintf("%d", node.ModifiedIndex)
+			fsm.SetMetadata(server, newMeta)
+			// s.globalStateCache[server][filesystem] = *stateMetadata
+			// s.globalStateCache[server][filesystem]["version"] = fmt.Sprintf(
+			// "%d", node.ModifiedIndex,
+			// )
 		}
 		return nil
 	}
@@ -1007,12 +1055,12 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 			return nil
 		}
 
-		snapshots := &[]snapshot{}
+		snapshots := []*snapshot{}
 		if node.Value == "" {
 			// Key was deleted, so there's no snapshots
-			return s.updateSnapshotsFromKnownState(server, filesystem, snapshots)
+			return s.UpdateSnapshotsFromKnownState(server, filesystem, snapshots)
 		} else {
-			err := json.Unmarshal([]byte(node.Value), snapshots)
+			err := json.Unmarshal([]byte(node.Value), &snapshots)
 			if err != nil {
 				log.Printf(
 					"updateSnapshots: error trying to unmarshal '%s' for %s on %s, %s",
@@ -1020,7 +1068,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 				)
 				return err
 			}
-			return s.updateSnapshotsFromKnownState(server, filesystem, snapshots)
+			return s.UpdateSnapshotsFromKnownState(server, filesystem, snapshots)
 		}
 	}
 	/*
