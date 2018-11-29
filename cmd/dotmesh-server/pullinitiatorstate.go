@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
-	"golang.org/x/net/context"
 	"io"
 	"log"
 	"net/http"
 	"os/exec"
 	"time"
+
+	"golang.org/x/net/context"
 
 	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
@@ -73,7 +74,7 @@ func pullInitiatorState(f *fsMachine) stateFn {
 	f.transferUpdates <- TransferUpdate{
 		Kind: TransferStart,
 		Changes: TransferPollResultFromTransferRequest(
-			transferRequestId, transferRequest, f.state.myNodeId,
+			transferRequestId, transferRequest, f.state.NodeID(),
 			1, 1+len(path.Clones), "syncing metadata",
 		),
 	}
@@ -346,7 +347,7 @@ func (f *fsMachine) retryPull(
 		fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
 	)
 
-	fsMachine, err := f.state.maybeFilesystem(toFilesystemId)
+	fsMachine, err := f.state.InitFilesystemMachine(toFilesystemId)
 	if err != nil {
 		return &Event{
 			Name: "retry-pull-cant-find-filesystem-id",
