@@ -6,6 +6,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/dotmesh-io/dotmesh/pkg/container"
+	"github.com/dotmesh-io/dotmesh/pkg/observer"
+	"github.com/dotmesh-io/dotmesh/pkg/registry"
+
 	"github.com/coreos/etcd/client"
 
 	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
@@ -60,7 +64,7 @@ func (v dotmeshVolumeByName) Less(i, j int) bool {
 
 type DotmeshVolumeAndContainers struct {
 	Volume     DotmeshVolume
-	Containers []DockerContainer
+	Containers []container.DockerContainer
 }
 
 type VersionInfo struct {
@@ -136,6 +140,28 @@ type TransferUpdate struct {
 	GetResult chan TransferPollResult
 }
 
+type StateManager interface {
+	InitFilesystemMachine(filesystemId string) (*fsMachine, error)
+	GetFilesystemMachine(filesystemId string) (*fsMachine, error)
+
+	// ActivateFilesystem(filesystemId string) error
+	AlignMountStateWithMasters(filesystemId string) error
+	ActivateClone(topLevelFilesystemId, originFilesystemId, originSnapshotId, newCloneFilesystemId, newBranchName string) (string, error)
+	DeleteFilesystem(filesystemId string) error
+	DeleteFilesystemFromMap(filesystemId string)
+	// current node ID
+	NodeID() string
+
+	UpdateSnapshotsFromKnownState(server, filesystem string, snapshots []*snapshot) error
+	SnapshotsFor(server string, filesystemId string) ([]snapshot, error)
+	SnapshotsForCurrentMaster(filesystemId string) ([]snapshot, error)
+
+	AddressesForServer(server string) []string
+
+	// TODO: move under a separate interface for Etcd related things
+	MarkFilesystemAsLiveInEtcd(topLevelFilesystemId string) error
+}
+
 // a "filesystem machine" or "filesystem state machine"
 type fsMachine struct {
 	// which ZFS filesystem this statemachine is operating on
@@ -161,7 +187,17 @@ type fsMachine struct {
 	// channel notifying etcd-updater whenever snapshot state changes
 	snapshotsModified chan bool
 	// pointer to global state, because it's convenient to have access to it
-	state *InMemoryState
+	// state *InMemoryState
+
+	containerClient container.Client
+	etcdClient      client.KeysAPI
+	state           StateManager
+	userManager     user.UserManager
+	registry        registry.Registry
+
+	localReceiveProgress observer.Observer
+	newSnapsOnMaster     observer.Observer
+
 	// fsMachines live forever, whereas filesystem structs do not. so
 	// filesystem struct's snapshotLock can live here so that it doesn't get
 	// clobbered
@@ -169,12 +205,12 @@ type fsMachine struct {
 	// a place to store arguments to pass to the next state
 	handoffRequest *Event
 	// filesystem-sliced view of new snapshot events
-	newSnapsOnServers *Observer
+	newSnapsOnServers observer.Observer
 	// current state, status field for reporting/debugging and transition observer
 	currentState            string
 	status                  string
 	lastTransitionTimestamp int64
-	transitionObserver      *Observer
+	transitionObserver      observer.Observer
 	lastS3TransferRequest   types.S3TransferRequest
 	lastTransferRequest     types.TransferRequest
 	lastTransferRequestId   string
@@ -184,6 +220,25 @@ type fsMachine struct {
 	transferUpdates         chan TransferUpdate
 	// only to be accessed via the updateEtcdAboutTransfers goroutine!
 	currentPollResult TransferPollResult
+
+	// state machine metadata
+	// Moved from InMemoryState:
+	// server id => filesystem id => state machine metadata
+	//globalStateCache:     make(map[string]map[string]map[string]string),
+
+	// new structure: NodeID => State machine metadata
+	stateMachineMetadata   map[string]map[string]string
+	stateMachineMetadataMu *sync.RWMutex
+
+	// Moved from
+	// server id => filesystem id => snapshot metadata
+	// globalSnapshotCache:     make(map[string]map[string][]snapshot),
+
+	// NodeID => snapshot metadata
+	snapshotCache   map[string][]*snapshot
+	snapshotCacheMu *sync.RWMutex
+
+	filesystemMetadataTimeout int64
 }
 
 type EventArgs map[string]interface{}
@@ -296,5 +351,5 @@ type Prelude struct {
 
 type containerInfo struct {
 	Server     string
-	Containers []DockerContainer
+	Containers []container.DockerContainer
 }
