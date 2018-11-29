@@ -16,7 +16,7 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 		Changes: TransferPollResult{
 			TransferRequestId: transferRequestId,
 			Direction:         transferRequest.Direction,
-			InitiatorNodeId:   f.state.myNodeId,
+			InitiatorNodeId:   f.state.NodeID(),
 			Index:             0,
 			Status:            "starting",
 		},
@@ -35,7 +35,7 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 	}
 	mountPoint := mnt(fmt.Sprintf("%s@%s", f.filesystemId, latestSnap.Id))
 
-	snaps, err := f.state.snapshotsForCurrentMaster(f.filesystemId)
+	snaps, err := f.state.SnapshotsForCurrentMaster(f.filesystemId)
 	if len(snaps) == 0 {
 		f.innerResponses <- event
 		f.updateUser("No commits to push!")

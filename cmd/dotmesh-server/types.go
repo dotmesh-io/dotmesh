@@ -230,10 +230,6 @@ type fsMachine struct {
 	stateMachineMetadata   map[string]map[string]string
 	stateMachineMetadataMu *sync.RWMutex
 
-	// Moved from
-	// server id => filesystem id => snapshot metadata
-	// globalSnapshotCache:     make(map[string]map[string][]snapshot),
-
 	// NodeID => snapshot metadata
 	snapshotCache   map[string][]*snapshot
 	snapshotCacheMu *sync.RWMutex
