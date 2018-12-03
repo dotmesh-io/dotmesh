@@ -163,7 +163,7 @@ func pushPeerState(f *fsMachine) stateFn {
 			return backoffState
 		// check that the snapshot is the one we're expecting
 		case s := <-newSnapsOnMaster:
-			sn := s.(snapshot)
+			sn := s.(*snapshot)
 			log.Printf(
 				"[pushPeerState] got snapshot %+v while waiting for one to arrive", sn,
 			)
