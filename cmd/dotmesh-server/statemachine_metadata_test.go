@@ -22,6 +22,10 @@ func TestListMetadata(t *testing.T) {
 
 	ls := fsm.ListSnapshots()
 
+	if len(ls["123"]) != 1 {
+		t.Fatalf("expected to get 1 snapshot, got: %d", len(ls["123"]))
+	}
+
 	if ls["123"][0].Id != "1" {
 		t.Errorf("failed to set/list metadata")
 	}

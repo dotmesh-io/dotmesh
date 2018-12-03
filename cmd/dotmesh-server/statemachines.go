@@ -24,8 +24,8 @@ func newFilesystemMachine(filesystemId string, s *InMemoryState) *fsMachine {
 	// initialize the fsMachine with a filesystem struct that has bare minimum
 	// information (just the filesystem id) required to get started
 	return &fsMachine{
-		filesystem: &filesystem{
-			id: filesystemId,
+		filesystem: &Filesystem{
+			Id: filesystemId,
 		},
 		// stored here as well to avoid excessive locking on filesystem struct,
 		// which gets clobbered, just to read its id
@@ -56,7 +56,7 @@ func newFilesystemMachine(filesystemId string, s *InMemoryState) *fsMachine {
 		stateMachineMetadata:   make(map[string]map[string]string),
 		stateMachineMetadataMu: &sync.RWMutex{},
 
-		snapshotCache:   make(map[string][]*snapshot),
+		snapshotCache:   make(map[string][]*Snapshot),
 		snapshotCacheMu: &sync.RWMutex{},
 		// In the case where we're receiving a push (pushPeerState), it's the
 		// POST handler on our http server which handles the receiving of the
@@ -176,7 +176,7 @@ func (f *fsMachine) pollDirty() error {
 	if err != nil {
 		return err
 	}
-	if f.filesystem.mounted {
+	if f.filesystem.Mounted {
 		dirtyDelta, sizeBytes, err := getDirtyDelta(
 			f.filesystemId, f.latestSnapshot(),
 		)
@@ -215,8 +215,8 @@ func (f *fsMachine) pollDirty() error {
 func (f *fsMachine) latestSnapshot() string {
 	f.snapshotsLock.Lock()
 	defer f.snapshotsLock.Unlock()
-	if len(f.filesystem.snapshots) > 0 {
-		return f.filesystem.snapshots[len(f.filesystem.snapshots)-1].Id
+	if len(f.filesystem.Snapshots) > 0 {
+		return f.filesystem.Snapshots[len(f.filesystem.Snapshots)-1].Id
 	}
 	return ""
 }
@@ -340,25 +340,19 @@ func (f *fsMachine) updateEtcdAboutTransfers() error {
 }
 
 func (f *fsMachine) updateEtcdAboutSnapshots() error {
-	// attempt to connect to etcd
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		return err
-	}
-
 	// as soon as we're connected, eagerly: if we know about some
 	// snapshots, **or the absence of them**, set this in etcd.
 	serialized, err := func() ([]byte, error) {
 		f.snapshotsLock.Lock()
 		defer f.snapshotsLock.Unlock()
-		return json.Marshal(f.filesystem.snapshots)
+		return json.Marshal(f.filesystem.Snapshots)
 	}()
 
 	// since we want atomic rewrites, we can just save the entire
 	// snapshot data in a single key, as a json list. this is easier to
 	// begin with! although we'll bump into the 1MB request limit in
 	// etcd eventually.
-	_, err = kapi.Set(
+	_, err = f.etcdClient.Set(
 		context.Background(),
 		fmt.Sprintf(
 			"%s/servers/snapshots/%s/%s", ETCD_PREFIX,
@@ -461,11 +455,11 @@ func (f *fsMachine) transitionedTo(state string, status string) {
 }
 
 func (f *fsMachine) snapshot(e *Event) (responseEvent *Event, nextState stateFn) {
-	var meta metadata
+	var meta Metadata
 	if val, ok := (*e.Args)["metadata"]; ok {
 		meta = castToMetadata(val)
 	} else {
-		meta = metadata{}
+		meta = Metadata{}
 	}
 	meta["timestamp"] = fmt.Sprintf("%d", time.Now().UnixNano())
 	metadataEncoded, err := encodeMetadata(meta)
@@ -512,11 +506,11 @@ func (f *fsMachine) snapshot(e *Event) (responseEvent *Event, nextState stateFn)
 	func() {
 		f.snapshotsLock.Lock()
 		defer f.snapshotsLock.Unlock()
-		log.Printf("[snapshot] Succeeded snapshotting (out: '%s'), saving: %+v", out, &snapshot{
-			Id: snapshotId, Metadata: &meta,
+		log.Printf("[snapshot] Succeeded snapshotting (out: '%s'), saving: %+v", out, &Snapshot{
+			Id: snapshotId, Metadata: meta,
 		})
-		f.filesystem.snapshots = append(f.filesystem.snapshots,
-			&snapshot{Id: snapshotId, Metadata: &meta})
+		f.filesystem.Snapshots = append(f.filesystem.Snapshots,
+			&Snapshot{Id: snapshotId, Metadata: meta})
 	}()
 	err = f.snapshotsChanged()
 	if err != nil {
@@ -561,10 +555,10 @@ func (f *fsMachine) startContainers() error {
 }
 
 // probably the wrong way to do it
-func pointers(snapshots []snapshot) []*snapshot {
-	newList := []*snapshot{}
+func pointers(snapshots []Snapshot) []*Snapshot {
+	newList := []*Snapshot{}
 	for _, snap := range snapshots {
-		s := &snapshot{}
+		s := &Snapshot{}
 		*s = snap
 		newList = append(newList, s)
 	}
@@ -581,7 +575,7 @@ func (f *fsMachine) plausibleSnapRange() (*snapshotRange, error) {
 
 	f.snapshotsLock.Lock()
 	defer f.snapshotsLock.Unlock()
-	snapRange, err := canApply(pointers(snapshots), f.filesystem.snapshots)
+	snapRange, err := canApply(pointers(snapshots), f.filesystem.Snapshots)
 
 	return snapRange, err
 }
@@ -648,20 +642,14 @@ func (f *fsMachine) snapshotsChanged() error {
 	// any observers in the process.
 	// XXX this _might_ break the fact that handoff doesn't check what snapshot
 	// it's notified about.
-	var snaps []*snapshot
-	func() {
-		f.snapshotsLock.Lock()
-		defer f.snapshotsLock.Unlock()
-		snaps = f.filesystem.snapshots
-	}()
-
-	// []*snapshot => []snapshot, gah
-	snapsAlternate := []*snapshot{}
-	for _, snap := range snaps {
-		snapsAlternate = append(snapsAlternate, snap)
+	var snaps []*Snapshot
+	f.snapshotsLock.Lock()
+	for _, s := range f.filesystem.Snapshots {
+		snaps = append(snaps, s.DeepCopy())
 	}
+	f.snapshotsLock.Unlock()
 	return f.state.UpdateSnapshotsFromKnownState(
-		f.state.NodeID(), f.filesystemId, snapsAlternate,
+		f.state.NodeID(), f.filesystemId, snaps,
 	)
 }
 

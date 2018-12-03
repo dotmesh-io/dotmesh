@@ -67,7 +67,7 @@ func applyPrelude(prelude Prelude, fqfs string) error {
 	// iterate over it setting zfs user properties accordingly.
 	log.Printf("[applyPrelude] Got prelude: %+v", prelude)
 	for _, j := range prelude.SnapshotProperties {
-		metadataEncoded, err := encodeMetadata(*j.Metadata)
+		metadataEncoded, err := encodeMetadata(j.Metadata)
 		if err != nil {
 			return err
 		}
@@ -521,9 +521,9 @@ func (o *Once) Do(f func()) {
 	}
 }
 
-func restrictSnapshots(localSnaps []*snapshot, toSnapshotId string) ([]*snapshot, error) {
+func restrictSnapshots(localSnaps []*Snapshot, toSnapshotId string) ([]*Snapshot, error) {
 	if toSnapshotId != "" {
-		newLocalSnaps := []*snapshot{}
+		newLocalSnaps := []*Snapshot{}
 		for _, s := range localSnaps {
 			newLocalSnaps = append(newLocalSnaps, s)
 			if s.Id == toSnapshotId {
