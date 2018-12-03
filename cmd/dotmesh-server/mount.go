@@ -146,8 +146,8 @@ func (f *fsMachine) mountSnap(snapId string, readonly bool) (responseEvent *Even
 func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
 	response, nextState := f.mountSnap("", false)
 	if response.Name == "mounted" {
-		f.filesystem.exists = true // needed in create case
-		f.filesystem.mounted = true
+		f.filesystem.Exists = true // needed in create case
+		f.filesystem.Mounted = true
 	}
 	return response, nextState
 }
@@ -155,7 +155,7 @@ func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
 func (f *fsMachine) unmount() (responseEvent *Event, nextState stateFn) {
 	event, nextState := f.unmountSnap("")
 	if event.Name == "unmounted" {
-		f.filesystem.mounted = false
+		f.filesystem.Mounted = false
 	}
 	return event, nextState
 }

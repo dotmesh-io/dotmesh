@@ -55,7 +55,7 @@ func handoffState(f *fsMachine) stateFn {
 	// take a snapshot and wait for it to arrive on the target
 	response, _ := f.snapshot(&Event{
 		Name: "snapshot",
-		Args: &EventArgs{"metadata": metadata{
+		Args: &EventArgs{"metadata": Metadata{
 			"type":   "migration",
 			"author": "system",
 			"message": fmt.Sprintf(
@@ -104,10 +104,10 @@ waitingForSlaveSnapshot:
 		// through etcd yet, so use our definitive knowledge about our local
 		// state...
 
-		snaps := func() []*snapshot {
+		snaps := func() []*Snapshot {
 			f.snapshotsLock.Lock()
 			defer f.snapshotsLock.Unlock()
-			return f.filesystem.snapshots
+			return f.filesystem.Snapshots
 		}()
 
 		f.transitionedTo(

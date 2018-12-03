@@ -163,9 +163,9 @@ func (s *InMemoryState) AlignMountStateWithMasters(filesystemId string) error {
 				filesystemId,
 				masterNode,
 				s.myNodeId,
-				fs.filesystem.mounted,
+				fs.filesystem.Mounted,
 			)
-			return fs, fs.filesystem.mounted, nil
+			return fs, fs.filesystem.Mounted, nil
 		}()
 		if err != nil {
 			return err
@@ -232,16 +232,16 @@ func (s *InMemoryState) ActivateClone(topLevelFilesystemId, originFilesystemId, 
 	return "", nil
 }
 
-func (s *InMemoryState) SnapshotsForCurrentMaster(filesystemId string) ([]snapshot, error) {
+func (s *InMemoryState) SnapshotsForCurrentMaster(filesystemId string) ([]Snapshot, error) {
 	master, err := s.registry.CurrentMasterNode(filesystemId)
 	if err != nil {
-		return []snapshot{}, err
+		return []Snapshot{}, err
 	}
 	return s.SnapshotsFor(master, filesystemId)
 }
 
-func (s *InMemoryState) SnapshotsFor(server string, filesystemId string) ([]snapshot, error) {
-	snaps := []snapshot{}
+func (s *InMemoryState) SnapshotsFor(server string, filesystemId string) ([]Snapshot, error) {
+	snaps := []Snapshot{}
 	fsm, err := s.GetFilesystemMachine(filesystemId)
 	if err != nil {
 		return nil, err

@@ -732,7 +732,7 @@ func (d *DotmeshRPC) Lookup(
 func (d *DotmeshRPC) Commits(
 	r *http.Request,
 	args *struct{ Namespace, Name, Branch string },
-	result *[]snapshot,
+	result *[]Snapshot,
 ) error {
 	err := validator.IsValidVolume(args.Namespace, args.Name)
 	if err != nil {
@@ -762,7 +762,7 @@ func (d *DotmeshRPC) Commits(
 func (d *DotmeshRPC) CommitsById(
 	r *http.Request,
 	filesystemId *string,
-	result *[]snapshot,
+	result *[]Snapshot,
 ) error {
 	snapshots, err := d.state.SnapshotsForCurrentMaster(*filesystemId)
 	if err != nil {
@@ -810,7 +810,7 @@ type CommitArgs struct {
 	Name      string
 	Branch    string
 	Message   string
-	Metadata  metadata
+	Metadata  Metadata
 }
 
 // Take a snapshot of a specific filesystem on the master.
@@ -853,7 +853,7 @@ func (d *DotmeshRPC) Commit(
 	}
 	// NB: metadata keys must always start lowercase, because zfs
 	user, _, _ := r.BasicAuth()
-	meta := metadata{"message": args.Message, "author": user}
+	meta := Metadata{"message": args.Message, "author": user}
 
 	// check that user submitted metadata field names all start with lowercase
 	for name, value := range args.Metadata {
@@ -1693,7 +1693,7 @@ func (d *DotmeshRPC) Transfer(
 			if dirtyBytes > 0 {
 				if args.StashDivergence {
 					user, _, _ := r.BasicAuth()
-					meta := metadata{"message": "committing dirty data ready for stashing", "author": user}
+					meta := Metadata{"message": "committing dirty data ready for stashing", "author": user}
 					responseChan, err := d.state.globalFsRequest(
 						filesystemId,
 						&Event{Name: "snapshot",
@@ -2392,13 +2392,13 @@ func (d *DotmeshRPC) DumpInternalState(
 
 			resultChan <- []string{fmt.Sprintf("filesystems.%s.id", id), fs.filesystemId}
 			if fs.filesystem != nil {
-				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.id", id), fs.filesystem.id}
-				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.exists", id), fmt.Sprintf("%t", fs.filesystem.exists)}
-				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.mounted", id), fmt.Sprintf("%t", fs.filesystem.mounted)}
-				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.origin", id), fmt.Sprintf("%s@%s", fs.filesystem.origin.FilesystemId, fs.filesystem.origin.SnapshotId)}
-				for idx, snapshot := range fs.filesystem.snapshots {
+				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.id", id), fs.filesystem.Id}
+				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.exists", id), fmt.Sprintf("%t", fs.filesystem.Exists)}
+				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.mounted", id), fmt.Sprintf("%t", fs.filesystem.Mounted)}
+				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.origin", id), fmt.Sprintf("%s@%s", fs.filesystem.Origin.FilesystemId, fs.filesystem.Origin.SnapshotId)}
+				for idx, snapshot := range fs.filesystem.Snapshots {
 					resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.snapshots[%d].id", id, idx), snapshot.Id}
-					for key, val := range *(snapshot.Metadata) {
+					for key, val := range snapshot.Metadata {
 						resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.snapshots[%d].metadata.%s", id, idx, key), val}
 					}
 				}
@@ -2451,25 +2451,13 @@ func (d *DotmeshRPC) DumpInternalState(
 
 				for idx, snapshot := range snapshots {
 					resultChan <- []string{fmt.Sprintf("globalSnapshotCache.%s.%s.snapshots[%d].id", serverId, fsId, idx), snapshot.Id}
-					for key, val := range *(snapshot.Metadata) {
+					for key, val := range snapshot.Metadata {
 						resultChan <- []string{fmt.Sprintf("globalSnapshotCache.%s.%s.snapshots[%d].metadata.%s", serverId, fsId, idx, key), val}
 					}
 				}
 			}
 		}
 
-		// s.globalSnapshotCacheLock.Lock()
-		// defer s.globalSnapshotCacheLock.Unlock()
-		// for serverId, d := range s.globalSnapshotCache {
-		// 	for fsId, snapshots := range d {
-		// 		for idx, snapshot := range snapshots {
-		// 			resultChan <- []string{fmt.Sprintf("globalSnapshotCache.%s.%s.snapshots[%d].id", serverId, fsId, idx), snapshot.Id}
-		// 			for key, val := range *(snapshot.Metadata) {
-		// 				resultChan <- []string{fmt.Sprintf("globalSnapshotCache.%s.%s.snapshots[%d].metadata.%s", serverId, fsId, idx, key), val}
-		// 			}
-		// 		}
-		// 	}
-		// }
 		resultChan <- []string{"globalSnapshotCache.DONE", "yes"}
 	}()
 
@@ -2487,15 +2475,7 @@ func (d *DotmeshRPC) DumpInternalState(
 				}
 			}
 		}
-		// s.globalStateCacheLock.Lock()
-		// defer s.globalStateCacheLock.Unlock()
-		// for serverId, d := range s.globalStateCache {
-		// 	for fsId, states := range d {
-		// 		for key, val := range states {
-		// 			resultChan <- []string{fmt.Sprintf("globalStateCache.%s.%s.%s", serverId, fsId, key), val}
-		// 		}
-		// 	}
-		// }
+
 		resultChan <- []string{"globalStateCache.DONE", "yes"}
 	}()
 

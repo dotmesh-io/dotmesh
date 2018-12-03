@@ -45,7 +45,7 @@ import "fmt"
 // ToSnapsUpToDate: there are no new snapshots in fromSnaps to apply to
 //     toSnaps: toSnaps is already up-to-date.
 
-func canApply(fromSnaps []*snapshot, toSnaps []*snapshot) (*snapshotRange, error) {
+func canApply(fromSnaps []*Snapshot, toSnaps []*Snapshot) (*snapshotRange, error) {
 	// fromSnaps and toSnaps are in-order.
 	//
 	// case: fromSnaps empty
@@ -76,7 +76,7 @@ func canApply(fromSnaps []*snapshot, toSnaps []*snapshot) (*snapshotRange, error
 		toSnapKeys[snap.Id] = true
 	}
 
-	var latestCommon *snapshot
+	var latestCommon *Snapshot
 	// find latest common snapshot
 	for i := len(fromSnaps) - 1; i >= 0; i-- {
 		maybeCommon := fromSnaps[i].Id
@@ -144,8 +144,8 @@ func canApply(fromSnaps []*snapshot, toSnaps []*snapshot) (*snapshotRange, error
 }
 
 type snapshotRange struct {
-	fromSnap *snapshot
-	toSnap   *snapshot
+	fromSnap *Snapshot
+	toSnap   *Snapshot
 }
 
 type NoFromSnaps struct{}
@@ -155,8 +155,8 @@ func (e *NoFromSnaps) Error() string {
 }
 
 type NoCommonSnapshots struct {
-	fromSnaps []*snapshot
-	toSnaps   []*snapshot
+	fromSnaps []*Snapshot
+	toSnaps   []*Snapshot
 }
 
 func (e *NoCommonSnapshots) Error() string {
@@ -164,7 +164,7 @@ func (e *NoCommonSnapshots) Error() string {
 }
 
 type ToSnapsDiverged struct {
-	latestCommonSnapshot snapshot
+	latestCommonSnapshot Snapshot
 }
 
 func (e *ToSnapsDiverged) Error() string {
@@ -175,7 +175,7 @@ func (e *ToSnapsDiverged) Error() string {
 }
 
 type ToSnapsAhead struct {
-	latestCommonSnapshot snapshot
+	latestCommonSnapshot Snapshot
 }
 
 func (e *ToSnapsAhead) Error() string {

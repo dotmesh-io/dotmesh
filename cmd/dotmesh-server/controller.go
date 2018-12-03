@@ -151,13 +151,13 @@ func (s *InMemoryState) resetRegistry() {
 	s.registry = registry.NewRegistry(s.userManager, s.config.EtcdClient, ETCD_PREFIX)
 }
 
-func calculatePrelude(snaps []snapshot, toSnapshotId string) (Prelude, error) {
+func calculatePrelude(snaps []Snapshot, toSnapshotId string) (Prelude, error) {
 	var prelude Prelude
 	// snaps, err := s.SnapshotsFor(s.myNodeId, toFilesystemId)
 	// if err != nil {
 	// 	return prelude, err
 	// }
-	pointerSnaps := []*snapshot{}
+	pointerSnaps := []*Snapshot{}
 	for _, s := range snaps {
 		// Take a copy of s to take a pointer of, rather than getting
 		// lots of pointers to so in the pointerSnaps slice...

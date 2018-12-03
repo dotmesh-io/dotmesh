@@ -453,7 +453,7 @@ func (f *fsMachine) retryPush(
 				"[retryPush] from (%s, %s) to (%s, %s)",
 				fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
 			)
-			var remoteSnaps []*snapshot
+			var remoteSnaps []*Snapshot
 			err := client.CallRemote(
 				ctx,
 				"DotmeshRPC.CommitsById",
@@ -472,12 +472,14 @@ func (f *fsMachine) retryPush(
 					Args: &EventArgs{"err": err, "filesystemId": toFilesystemId},
 				}, backoffState
 			}
-			var snaps []*snapshot
-			func() {
-				fsMachine.snapshotsLock.Lock()
-				defer fsMachine.snapshotsLock.Unlock()
-				snaps = fsMachine.filesystem.snapshots
-			}()
+			var snaps []*Snapshot
+
+			fsMachine.snapshotsLock.Lock()
+			for _, snapshot := range fsMachine.filesystem.Snapshots {
+				snaps = append(snaps, snapshot.DeepCopy())
+			}
+			fsMachine.snapshotsLock.Unlock()
+
 			// if we're given a target snapshot, restrict f.filesystem.snapshots to
 			// that snapshot
 			localSnaps, err := restrictSnapshots(snaps, toSnapshotId)

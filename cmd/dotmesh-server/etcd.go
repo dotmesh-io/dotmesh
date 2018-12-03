@@ -782,7 +782,7 @@ func (s *InMemoryState) deserializeDispatchAndRespond(fs string, node *client.No
 //
 // Possible alternative: use different etcd clients for the Watch versus the
 // Set.
-func (s *InMemoryState) UpdateSnapshotsFromKnownState(server, filesystem string, snapshots []*snapshot) error {
+func (s *InMemoryState) UpdateSnapshotsFromKnownState(server, filesystem string, snapshots []*Snapshot) error {
 	// deleted, err := isFilesystemDeletedInEtcd(filesystem)
 	// if err != nil {
 	// 	return err
@@ -854,7 +854,7 @@ func (s *InMemoryState) UpdateSnapshotsFromKnownState(server, filesystem string,
 							Name:            name,
 							Branch:          branch,
 							CommitId:        ss.Id,
-							Metadata:        *ss.Metadata,
+							Metadata:        ss.Metadata,
 							OwnerID:         tlf.Owner.Id,
 							CollaboratorIDs: collaborators,
 						})
@@ -1061,7 +1061,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 			return nil
 		}
 
-		snapshots := []*snapshot{}
+		snapshots := []*Snapshot{}
 		if node.Value == "" {
 			// Key was deleted, so there's no snapshots
 			return s.UpdateSnapshotsFromKnownState(server, filesystem, snapshots)

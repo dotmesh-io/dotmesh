@@ -19,16 +19,16 @@ import (
 
 // stuff we use for s3 management which likely isn't needed in other situations
 
-func (f *fsMachine) getLastNonMetadataSnapshot() (*snapshot, error) {
+func (f *fsMachine) getLastNonMetadataSnapshot() (*Snapshot, error) {
 	// for all the snapshots we have, start from the latest, work backwards until we find a snapshot which isn't just a metadata change (i.e a write of a json file about s3 versions)
 	// in theory, we should only ever go back to latest-1, but could potentially go back further if we've had multiple commits slip in there.
 	snaps, err := f.state.SnapshotsForCurrentMaster(f.filesystemId)
 	if err != nil {
 		return nil, err
 	}
-	var latestSnap *snapshot
+	var latestSnap *Snapshot
 	for idx := len(snaps) - 1; idx > -1; idx-- {
-		commitType, ok := (*snaps[idx].Metadata)["type"]
+		commitType, ok := snaps[idx].Metadata["type"]
 		if !ok || commitType != "dotmesh.metadata_only" {
 			latestSnap = &snaps[idx]
 			break
