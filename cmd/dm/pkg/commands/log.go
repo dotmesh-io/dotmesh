@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 
 	"github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/spf13/cobra"
@@ -45,7 +46,14 @@ func NewCmdLog(out io.Writer) *cobra.Command {
 					fmt.Fprintf(out, "author: %s\n", (*commit.Metadata)["author"])
 					fmt.Fprintf(out, "date: %s\n", (*commit.Metadata)["timestamp"])
 
-					for name, value := range *commit.Metadata {
+					sortedNames := []string{}
+					for name, _ := range *commit.Metadata {
+						sortedNames = append(sortedNames, name)
+					}
+					sort.Strings(sortedNames)
+
+					for _, name := range sortedNames {
+						value := (*commit.Metadata)[name]
 						if name != "author" && name != "message" && name != "timestamp" {
 							fmt.Fprintf(out, "%s: %s\n", name, value)
 						}
