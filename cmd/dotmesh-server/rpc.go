@@ -462,7 +462,6 @@ func (d *DotmeshRPC) Get(
 // List all filesystems in the cluster.
 func (d *DotmeshRPC) List(
 	r *http.Request, args *struct{}, result *map[string]map[string]DotmeshVolume) error {
-	log.Printf("[List] starting!")
 
 	volumes, err := d.state.GetListOfVolumes(r.Context())
 
@@ -491,7 +490,6 @@ func (d *DotmeshRPC) List(
 // List all filesystems in the cluster.
 func (d *DotmeshRPC) ListWithContainers(
 	r *http.Request, args *struct{}, result *map[string]map[string]DotmeshVolumeAndContainers) error {
-	log.Printf("[List] starting!")
 
 	volumes, err := d.state.GetListOfVolumes(r.Context())
 	if err != nil {
@@ -522,7 +520,7 @@ func (d *DotmeshRPC) ListWithContainers(
 			}
 		}
 	}
-	log.Printf("[List] gather got %d elements", len(gather))
+
 	*result = gather
 	return nil
 }

@@ -264,9 +264,9 @@ func (f *fsMachine) updateEtcdAboutTransfers() error {
 		var update TransferUpdate
 		select {
 		case update = <-(f.transferUpdates):
-			log.Printf("[updateEtcdAboutTransfers] Received command %#v", update)
+			log.Debugf("[updateEtcdAboutTransfers] Received command %#v", update)
 		case _ = <-deathChan:
-			log.Printf("[updateEtcdAboutTransfers] Terminating due to filesystem death")
+			log.Infof("[updateEtcdAboutTransfers] Terminating due to filesystem death")
 			return nil
 		}
 
@@ -319,7 +319,7 @@ func (f *fsMachine) updateEtcdAboutTransfers() error {
 		}
 
 		// Send the update
-		log.Printf("[updateEtcdAboutTransfers] pollResult = %#v", *pollResult)
+		log.Debugf("[updateEtcdAboutTransfers] pollResult = %#v", *pollResult)
 
 		serialized, err := json.Marshal(*pollResult)
 		if err != nil {
