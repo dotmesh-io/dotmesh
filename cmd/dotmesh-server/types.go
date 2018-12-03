@@ -94,26 +94,10 @@ type SafeConfig struct {
 // state machinery
 type stateFn func(*fsMachine) stateFn
 
-type metadata map[string]string
-type snapshot struct {
-	// exported for json serialization
-	Id       string
-	Metadata *metadata
-	// private (do not serialize)
-	filesystem *filesystem
-}
-
+type Snapshot = types.Snapshot
 type Clone = types.Clone
-
-type filesystem struct {
-	id        string
-	exists    bool
-	mounted   bool
-	snapshots []*snapshot
-	// support filesystem which is clone of another filesystem, for branching
-	// purposes, with origin e.g. "<fs-uuid-of-actual-origin-snapshot>@<snap-id>"
-	origin Origin
-}
+type Filesystem = types.Filesystem
+type Metadata = types.Metadata
 
 type TransferUpdateKind int
 
@@ -152,9 +136,9 @@ type StateManager interface {
 	// current node ID
 	NodeID() string
 
-	UpdateSnapshotsFromKnownState(server, filesystem string, snapshots []*snapshot) error
-	SnapshotsFor(server string, filesystemId string) ([]snapshot, error)
-	SnapshotsForCurrentMaster(filesystemId string) ([]snapshot, error)
+	UpdateSnapshotsFromKnownState(server, filesystem string, snapshots []*Snapshot) error
+	SnapshotsFor(server string, filesystemId string) ([]Snapshot, error)
+	SnapshotsForCurrentMaster(filesystemId string) ([]Snapshot, error)
 
 	AddressesForServer(server string) []string
 
@@ -166,7 +150,7 @@ type StateManager interface {
 type fsMachine struct {
 	// which ZFS filesystem this statemachine is operating on
 	filesystemId string
-	filesystem   *filesystem
+	filesystem   *Filesystem
 
 	// channels for uploading and downloading file data
 	fileInputIO  chan *InputFile
@@ -231,7 +215,7 @@ type fsMachine struct {
 	stateMachineMetadataMu *sync.RWMutex
 
 	// NodeID => snapshot metadata
-	snapshotCache   map[string][]*snapshot
+	snapshotCache   map[string][]*Snapshot
 	snapshotCacheMu *sync.RWMutex
 
 	filesystemMetadataTimeout int64
@@ -328,10 +312,10 @@ type Config struct {
 // parent. In this case the Origin FilesystemId will always point to its direct
 // parent.
 
-func castToMetadata(val interface{}) metadata {
-	meta, ok := val.(metadata)
+func castToMetadata(val interface{}) Metadata {
+	meta, ok := val.(Metadata)
 	if !ok {
-		meta = metadata{}
+		meta = Metadata{}
 		// massage the data into the right type
 		cast := val.(map[string]interface{})
 		for k, v := range cast {
@@ -342,7 +326,7 @@ func castToMetadata(val interface{}) metadata {
 }
 
 type Prelude struct {
-	SnapshotProperties []*snapshot
+	SnapshotProperties []*Snapshot
 }
 
 type containerInfo struct {

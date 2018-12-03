@@ -190,7 +190,7 @@ func activeState(f *fsMachine) stateFn {
 			rollbackTo := (*e.Args)["rollbackTo"].(string)
 			// TODO also roll back slaves (i.e., support doing this in unmounted state)
 			sliceIndex := -1
-			for i, snapshot := range f.filesystem.snapshots {
+			for i, snapshot := range f.filesystem.Snapshots {
 				if snapshot.Id == rollbackTo {
 					// the first *deleted* snapshot will be the one *after*
 					// rollbackTo
@@ -232,11 +232,11 @@ func activeState(f *fsMachine) stateFn {
 			}
 			if sliceIndex > 0 {
 				log.Printf("found index %d", sliceIndex)
-				log.Printf("snapshots before %+v", f.filesystem.snapshots)
+				log.Printf("snapshots before %+v", f.filesystem.Snapshots)
 				func() {
 					f.snapshotsLock.Lock()
 					defer f.snapshotsLock.Unlock()
-					f.filesystem.snapshots = f.filesystem.snapshots[:sliceIndex]
+					f.filesystem.Snapshots = f.filesystem.Snapshots[:sliceIndex]
 				}()
 				err = f.snapshotsChanged()
 				if err != nil {
@@ -247,7 +247,7 @@ func activeState(f *fsMachine) stateFn {
 					}
 					return backoffState
 				}
-				log.Printf("snapshots after %+v", f.filesystem.snapshots)
+				log.Printf("snapshots after %+v", f.filesystem.Snapshots)
 			} else {
 				f.innerResponses <- &Event{
 					Name: "no-such-snapshot",
