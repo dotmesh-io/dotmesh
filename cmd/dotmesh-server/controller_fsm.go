@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
+	"strings"
+
+	"github.com/coreos/etcd/client"
 )
 
 var (
@@ -187,4 +191,77 @@ func (s *InMemoryState) AlignMountStateWithMasters(filesystemId string) error {
 		}
 		return nil
 	}, fmt.Sprintf("aligning mount state of %s with masters", filesystemId))
+}
+
+func (s *InMemoryState) ActivateClone(topLevelFilesystemId, originFilesystemId, originSnapshotId, newCloneFilesystemId, newBranchName string) (string, error) {
+	// RegisterClone(name string, topLevelFilesystemId string, clone Clone)
+	err := s.registry.RegisterClone(
+		newBranchName, topLevelFilesystemId,
+		Clone{
+			newCloneFilesystemId,
+			Origin{
+				originFilesystemId, originSnapshotId,
+			},
+		},
+	)
+	if err != nil {
+		return "failed-clone-registration", err
+	}
+
+	// spin off a state machine
+	_, err = s.InitFilesystemMachine(newCloneFilesystemId)
+	if err != nil {
+		return "failed-to-initialize-state-machine", err
+	}
+
+	// claim the clone as mine, so that it can be mounted here
+	_, err = s.etcdClient.Set(
+		context.Background(),
+		fmt.Sprintf(
+			"%s/filesystems/masters/%s", ETCD_PREFIX, newCloneFilesystemId,
+		),
+		s.myNodeId,
+		// only modify current master if this is a new filesystem id
+		&client.SetOptions{PrevExist: client.PrevNoExist},
+	)
+	if err != nil {
+		return "failed-make-cloner-master", err
+	}
+
+	return "", nil
+}
+
+func (s *InMemoryState) SnapshotsForCurrentMaster(filesystemId string) ([]snapshot, error) {
+	master, err := s.registry.CurrentMasterNode(filesystemId)
+	if err != nil {
+		return []snapshot{}, err
+	}
+	return s.SnapshotsFor(master, filesystemId)
+}
+
+func (s *InMemoryState) SnapshotsFor(server string, filesystemId string) ([]snapshot, error) {
+	snaps := []snapshot{}
+	fsm, err := s.GetFilesystemMachine(filesystemId)
+	if err != nil {
+		return nil, err
+	}
+
+	snapshots := fsm.GetSnapshots(server)
+	for _, sn := range snapshots {
+		snaps = append(snaps, *sn)
+	}
+	return snaps, nil
+}
+
+// the addresses of a named server id
+func (s *InMemoryState) AddressesForServer(server string) []string {
+	s.serverAddressesCacheLock.RLock()
+	defer s.serverAddressesCacheLock.RUnlock()
+	addresses, ok := s.serverAddressesCache[server]
+	if !ok {
+		// don't know about this server
+		// TODO maybe this should be an error
+		return []string{}
+	}
+	return strings.Split(addresses, ",")
 }

@@ -151,47 +151,6 @@ func (s *InMemoryState) resetRegistry() {
 	s.registry = registry.NewRegistry(s.userManager, s.config.EtcdClient, ETCD_PREFIX)
 }
 
-func (s *InMemoryState) ActivateClone(topLevelFilesystemId, originFilesystemId, originSnapshotId, newCloneFilesystemId, newBranchName string) (string, error) {
-	// RegisterClone(name string, topLevelFilesystemId string, clone Clone)
-	err := s.registry.RegisterClone(
-		newBranchName, topLevelFilesystemId,
-		Clone{
-			newCloneFilesystemId,
-			Origin{
-				originFilesystemId, originSnapshotId,
-			},
-		},
-	)
-	if err != nil {
-		return "failed-clone-registration", err
-	}
-
-	// spin off a state machine
-	_, err = s.InitFilesystemMachine(newCloneFilesystemId)
-	if err != nil {
-		return "failed-to-initialize-state-machine", err
-	}
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		return "failed-get-etcd", err
-	}
-	// claim the clone as mine, so that it can be mounted here
-	_, err = kapi.Set(
-		context.Background(),
-		fmt.Sprintf(
-			"%s/filesystems/masters/%s", ETCD_PREFIX, newCloneFilesystemId,
-		),
-		s.myNodeId,
-		// only modify current master if this is a new filesystem id
-		&client.SetOptions{PrevExist: client.PrevNoExist},
-	)
-	if err != nil {
-		return "failed-make-cloner-master", err
-	}
-
-	return "", nil
-}
-
 func calculatePrelude(snaps []snapshot, toSnapshotId string) (Prelude, error) {
 	var prelude Prelude
 	// snaps, err := s.SnapshotsFor(s.myNodeId, toFilesystemId)
@@ -523,93 +482,12 @@ func (s *InMemoryState) findRelatedContainers() error {
 	return nil
 }
 
-// func (s *InMemoryState) currentMaster(filesystemId string) (string, error) {
-// 	s.mastersCacheLock.RLock()
-// 	defer s.mastersCacheLock.RUnlock()
-
-// 	master, ok := s.mastersCache[filesystemId]
-// 	if !ok {
-// 		return "", fmt.Errorf("No known filesystem with id %s", filesystemId)
-// 	}
-// 	return master, nil
-// }
-
-func (s *InMemoryState) SnapshotsForCurrentMaster(filesystemId string) ([]snapshot, error) {
-	master, err := s.registry.CurrentMasterNode(filesystemId)
-	if err != nil {
-		return []snapshot{}, err
-	}
-	return s.SnapshotsFor(master, filesystemId)
-}
-
-func (s *InMemoryState) SnapshotsFor(server string, filesystemId string) ([]snapshot, error) {
-	// s.globalSnapshotCacheLock.RLock()
-	// defer s.globalSnapshotCacheLock.RUnlock()
-	// filesystems, ok := s.globalSnapshotCache[server]
-	// if !ok {
-	// 	return []snapshot{}, nil
-	// }
-	// snapshots, ok := filesystems[filesystemId]
-	// if !ok {
-	// 	return []snapshot{}, nil
-	// }
-	// return snapshots, nil
-
-	snaps := []snapshot{}
-
-	fsm, err := s.GetFilesystemMachine(filesystemId)
-	if err != nil {
-		return nil, err
-	}
-
-	snapshots := fsm.GetSnapshots(server)
-	for _, sn := range snapshots {
-		snaps = append(snaps, *sn)
-	}
-	return snaps, nil
-}
-
-// the addresses of a named server id
-func (s *InMemoryState) AddressesForServer(server string) []string {
-	s.serverAddressesCacheLock.RLock()
-	defer s.serverAddressesCacheLock.RUnlock()
-	addresses, ok := s.serverAddressesCache[server]
-	if !ok {
-		// don't know about this server
-		// TODO maybe this should be an error
-		return []string{}
-	}
-	return strings.Split(addresses, ",")
-}
-
-// func (s *InMemoryState) masterFor(filesystem string) string {
-// 	s.mastersCacheLock.RLock()
-// 	defer s.mastersCacheLock.RUnlock()
-// 	currentMaster, ok := s.mastersCache[filesystem]
-// 	if !ok {
-// 		// don't know about this filesystem
-// 		// TODO maybe this should be an error
-// 		return ""
-// 	}
-// 	return currentMaster
-// }
-
 func (s *InMemoryState) exists(filesystem string) bool {
 	s.filesystemsLock.RLock()
 	_, ok := s.filesystems[filesystem]
 	s.filesystemsLock.RUnlock()
 	return ok
 }
-
-// return a filesystem or error
-// func (s *InMemoryState) maybeFilesystem(filesystemId string) (*fsMachine, error) {
-// 	fs := s.initFilesystemMachine(filesystemId)
-// 	if fs == nil {
-// 		// It was deleted.
-// 		return nil, fmt.Errorf("No such filesystemId %s (it was deleted)", filesystemId)
-// 	}
-// 	return fs, nil
-// }
 
 func (state *InMemoryState) reallyProcureFilesystem(ctx context.Context, name VolumeName) (string, error) {
 	// move filesystem here if it's not here already (coordinate the move
