@@ -38,26 +38,42 @@ func (f *fsMachine) SetMetadata(nodeID string, meta map[string]string) {
 	f.stateMachineMetadataMu.Unlock()
 }
 
-func (f *fsMachine) GetSnapshots(nodeID string) []*snapshot {
-	res := []*snapshot{}
+func (f *fsMachine) GetSnapshots(nodeID string) []*Snapshot {
+	res := []*Snapshot{}
 	f.snapshotCacheMu.RLock()
 	defer f.snapshotCacheMu.RUnlock()
-	// TODO: need to create deep copy of this slice
-	// as it contains pointers inside
+
 	snaps, ok := f.snapshotCache[nodeID]
 	if !ok {
 		return res
 	}
-	return snaps
+
+	for _, s := range snaps {
+		res = append(res, s.DeepCopy())
+	}
+
+	return res
 }
 
-func (f *fsMachine) ListSnapshots() map[string][]*snapshot {
+func (f *fsMachine) ListSnapshots() map[string][]*Snapshot {
 	f.snapshotCacheMu.RLock()
 	defer f.snapshotCacheMu.RUnlock()
-	return f.snapshotCache
+
+	r := make(map[string][]*Snapshot)
+
+	for key, snapshots := range f.snapshotCache {
+
+		snaps := make([]*Snapshot, len(snapshots))
+		for idx, s := range snapshots {
+			snaps[idx] = s.DeepCopy()
+		}
+		r[key] = snaps
+	}
+
+	return r
 }
 
-func (f *fsMachine) SetSnapshots(nodeID string, snapshots []*snapshot) {
+func (f *fsMachine) SetSnapshots(nodeID string, snapshots []*Snapshot) {
 	f.snapshotCacheMu.Lock()
 	f.snapshotCache[nodeID] = snapshots
 	f.snapshotCacheMu.Unlock()
