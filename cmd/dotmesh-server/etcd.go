@@ -479,7 +479,7 @@ func (s *InMemoryState) handleOneFilesystemMaster(node *client.Node) error {
 
 		deleted, err = isFilesystemDeletedInEtcd(fs)
 		if err != nil {
-			log.Printf("[handleOneFilesystemMaster] error determining if file system is deleted: fs: %s, etcd nodeValue: %s, error: %+v", fs, node.Value, err)
+			log.Errorf("[handleOneFilesystemMaster] error determining if file system is deleted: fs: %s, etcd nodeValue: %s, error: %+v", fs, node.Value, err)
 			return err
 		}
 		if deleted {
@@ -488,17 +488,23 @@ func (s *InMemoryState) handleOneFilesystemMaster(node *client.Node) error {
 			return nil
 		}
 
-		s.InitFilesystemMachine(fs)
+		_, err = s.InitFilesystemMachine(fs)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":         err,
+				"filesystem_id": fs,
+			}).Error("[handleOneFilesystemMaster] failed to initialize filesystem")
+		}
 		var responseChan chan *Event
 		requestId := pieces[len(pieces)-1]
 		if node.Value == s.myNodeId {
-			log.Printf("MOUNTING: %s=%s", fs, node.Value)
+			log.Debugf("MOUNTING: %s=%s", fs, node.Value)
 			responseChan, err = s.dispatchEvent(fs, &Event{Name: "mount"}, requestId)
 			if err != nil {
 				return err
 			}
 		} else {
-			log.Printf("UNMOUNTING: %s=%s", fs, node.Value)
+			log.Debugf("UNMOUNTING: %s=%s", fs, node.Value)
 			responseChan, err = s.dispatchEvent(fs, &Event{Name: "unmount"}, requestId)
 			if err != nil {
 				return err
@@ -506,7 +512,7 @@ func (s *InMemoryState) handleOneFilesystemMaster(node *client.Node) error {
 		}
 		go func() {
 			e := <-responseChan
-			log.Printf("[handleOneFilesystemMaster] filesystem %s response %#v", fs, e)
+			log.Debugf("[handleOneFilesystemMaster] filesystem %s response %#v", fs, e)
 		}()
 	}
 	return nil

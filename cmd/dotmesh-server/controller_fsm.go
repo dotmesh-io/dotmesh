@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/coreos/etcd/client"
+
+	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -25,29 +26,29 @@ func (s *InMemoryState) GetFilesystemMachine(filesystemId string) (*fsMachine, e
 }
 
 func (s *InMemoryState) InitFilesystemMachine(filesystemId string) (*fsMachine, error) {
-	log.Printf("[initFilesystemMachine] starting: %s", filesystemId)
+	log.Debugf("[initFilesystemMachine] starting: %s", filesystemId)
 
 	fs, deleted := func() (*fsMachine, bool) {
-		s.filesystemsLock.Lock()
-		defer s.filesystemsLock.Unlock()
-		// s.filesystemsLock.RLock()
+		// s.filesystemsLock.Lock()
+		// defer s.filesystemsLock.Unlock()
+		s.filesystemsLock.RLock()
 		fs, ok := s.filesystems[filesystemId]
-		// s.filesystemsLock.RUnlock()
+		s.filesystemsLock.RUnlock()
 		// do nothing if the fsMachine is already running
 		// deleted := false
 		// var err error
 		if ok {
-			log.Printf("[initFilesystemMachine] reusing fsMachine for %s", filesystemId)
+			log.Debugf("[initFilesystemMachine] reusing fsMachine for %s", filesystemId)
 			return fs, false
 		}
-		// s.filesystemsLock.Lock()
-		// defer s.filesystemsLock.Unlock()
+		s.filesystemsLock.Lock()
+		defer s.filesystemsLock.Unlock()
 
-		log.Printf("[initFilesystemMachine] acquired lock: %s", filesystemId)
+		log.Debugf("[initFilesystemMachine] acquired lock: %s", filesystemId)
 
 		fs, ok = s.filesystems[filesystemId]
 		if ok {
-			log.Printf("[initFilesystemMachine] reusing fsMachine for %s", filesystemId)
+			log.Debugf("[initFilesystemMachine] reusing fsMachine for %s", filesystemId)
 			return fs, false
 		}
 
@@ -62,7 +63,7 @@ func (s *InMemoryState) InitFilesystemMachine(filesystemId string) (*fsMachine, 
 			return nil, deleted
 		}
 
-		log.Printf("[initFilesystemMachine] initializing new fsMachine for %s", filesystemId)
+		log.Debugf("[initFilesystemMachine] initializing new fsMachine for %s", filesystemId)
 
 		s.filesystems[filesystemId] = newFilesystemMachine(filesystemId, s)
 
@@ -72,10 +73,10 @@ func (s *InMemoryState) InitFilesystemMachine(filesystemId string) (*fsMachine, 
 	}()
 	// NB: deleteFilesystem takes filesystemsLock
 	if deleted {
-		log.Printf("[initFilesystemMachine] deleted fsMachine found, deleting locally")
+		log.Debugf("[initFilesystemMachine] deleted fsMachine found, deleting locally")
 		err := s.DeleteFilesystem(filesystemId)
 		if err != nil {
-			log.Printf("Error deleting filesystem: %v", err)
+			log.Errorf("Error deleting filesystem: %v", err)
 		}
 		// return nil, fmt.Errorf("No such filesystemId %s (it was deleted)", filesystemId)
 		return nil, ErrFilesystemDeleted
@@ -96,7 +97,7 @@ func (s *InMemoryState) DeleteFilesystemFromMap(filesystemId string) {
 func (s *InMemoryState) DeleteFilesystem(filesystemId string) error {
 	var errors []error
 
-	log.Printf("[deleteFilesystem] Attempting to delete filesystem %s", filesystemId)
+	log.Debugf("[deleteFilesystem] Attempting to delete filesystem %s", filesystemId)
 
 	// Remove the FS from all our myriad caches
 	s.DeleteFilesystemFromMap(filesystemId)
@@ -132,7 +133,7 @@ func (s *InMemoryState) DeleteFilesystem(filesystemId string) error {
 		// failed, we'll try and clean it up again later.  Therefore,
 		// when we try again, various bits might already be deleted, so
 		// trying to delete them fails.  It's all good.
-		log.Printf("[deleteFilesystem] Errors deleting filesystem %s, possibly because some operations were previously completed: %+v", filesystemId, errors)
+		log.Errorf("[deleteFilesystem] Errors deleting filesystem %s, possibly because some operations were previously completed: %+v", filesystemId, errors)
 	}
 
 	// However, we reserve the right to return an error if we decide to in future.
@@ -150,7 +151,7 @@ func (s *InMemoryState) AlignMountStateWithMasters(filesystemId string) error {
 
 			fs, ok := s.filesystems[filesystemId]
 			if !ok {
-				log.Printf(
+				log.Errorf(
 					"[AlignMountStateWithMasters] not doing anything - cannot find %v in fsMachines",
 					filesystemId,
 				)

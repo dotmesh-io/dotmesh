@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -19,8 +18,8 @@ import (
 	"time"
 
 	"github.com/dotmesh-io/dotmesh/pkg/observer"
-	//niobuffer "github.com/djherbis/buffer"
-	//"github.com/djherbis/nio"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // NB: It's important that the following includes characters _not_ included in
@@ -80,12 +79,12 @@ func applyPrelude(prelude Prelude, fqfs string) error {
 				args = append(args, fqfs+"@"+j.Id)
 				out, err := exec.Command(ZFS, args...).CombinedOutput()
 				if err != nil {
-					log.Printf(
+					log.Errorf(
 						"[applyPrelude] Error applying prelude: %s, %s, %s", args, err, out,
 					)
 					return fmt.Errorf("Error applying prelude: %s -> %v: %s", args, err, out)
 				}
-				log.Printf("[applyPrelude] Applied snapshot props for: %s", j.Id)
+				log.Debugf("[applyPrelude] Applied snapshot props for: %s", j.Id)
 			}
 		}
 	}

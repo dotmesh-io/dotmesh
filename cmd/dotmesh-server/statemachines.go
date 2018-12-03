@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -15,6 +14,8 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/nu7hatch/gouuid"
 	"golang.org/x/net/context"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // core functions used by files ending `state` which I couldn't think of a good place for.
@@ -369,7 +370,7 @@ func (f *fsMachine) updateEtcdAboutSnapshots() error {
 	if err != nil {
 		return err
 	}
-	log.Printf(
+	log.Debugf(
 		"[updateEtcdAboutSnapshots] successfully set new snaps for %s on %s",
 		f.filesystemId, f.state.NodeID(),
 	)
@@ -383,9 +384,9 @@ func (f *fsMachine) updateEtcdAboutSnapshots() error {
 
 	select {
 	case _ = <-f.snapshotsModified:
-		log.Printf("[updateEtcdAboutSnapshots] going 'round the loop")
+		log.Debugf("[updateEtcdAboutSnapshots] going 'round the loop")
 	case _ = <-deathChan:
-		log.Printf("[updateEtcdAboutSnapshots] terminating due to filesystem death")
+		log.Infof("[updateEtcdAboutSnapshots] terminating due to filesystem death")
 	}
 
 	return nil
