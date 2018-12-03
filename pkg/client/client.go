@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"strings"
 
 	"golang.org/x/net/context"
 
@@ -148,7 +149,7 @@ func DeduceUrl(ctx context.Context, hostnames []string, mode, user, apiKey strin
 	var errs []error
 	for _, hostname := range hostnames {
 		var urlsToTry []string
-		if mode == "external" && (hostname == "dothub.com" || hostname == "cloud.dotscience.net" || hostname == "cloud.dotscience.com") {
+		if mode == "external" && (strings.HasSuffix(hostname, "dothub.com") || strings.HasSuffix(hostname, "dotscience.net") || strings.HasSuffix(hostname, "dotscience.com")) {
 			urlsToTry = []string{
 				fmt.Sprintf("https://%s:443", hostname),
 			}
