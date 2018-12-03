@@ -416,11 +416,11 @@ func (s *InMemoryState) findRelatedContainers() error {
 	if err != nil {
 		return err
 	}
-	log.Printf("findRelatedContainers got containerMap %s", containerMap)
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		return err
-	}
+	// log.Printf("findRelatedContainers got containerMap %s", containerMap)
+	// kapi, err := getEtcdKeysApi()
+	// if err != nil {
+	// 	return err
+	// }
 
 	// Iterate over _every_ filesystem id we know we are masters for on this
 	// system, zeroing out the etcd record of containers running on that
@@ -461,32 +461,29 @@ func (s *InMemoryState) findRelatedContainers() error {
 
 		// update our local globalContainerCache immediately, so that we reduce
 		// the window for races against setting this cache value.
-		func() {
-			s.globalContainerCacheLock.Lock()
-			s.globalContainerCache[filesystemId] = value
-			s.globalContainerCacheLock.Unlock()
-		}()
+		s.globalContainerCacheLock.Lock()
+		s.globalContainerCache[filesystemId] = value
+		s.globalContainerCacheLock.Unlock()
 
-		log.Printf(
+		log.Debugf(
 			"findRelatedContainers setting %s to %s",
 			fmt.Sprintf("%s/filesystems/containers/%s", ETCD_PREFIX, filesystemId),
 			string(result),
 		)
-		_, err = kapi.Set(
+		_, err = s.etcdClient.Set(
 			context.Background(),
 			fmt.Sprintf("%s/filesystems/containers/%s", ETCD_PREFIX, filesystemId),
 			string(result),
 			nil,
 		)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"filesystem": filesystemId,
+				"error":      err,
+			}).Error("findRelatedContainers: failed to set related containers")
+		}
 	}
 	return nil
-}
-
-func (s *InMemoryState) exists(filesystem string) bool {
-	s.filesystemsLock.RLock()
-	_, ok := s.filesystems[filesystem]
-	s.filesystemsLock.RUnlock()
-	return ok
 }
 
 func (state *InMemoryState) reallyProcureFilesystem(ctx context.Context, name VolumeName) (string, error) {
