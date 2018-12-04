@@ -44,7 +44,7 @@ func TestDefaultDot(t *testing.T) {
 	citools.StartTiming()
 	err := f.Start(t)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("failed to start cluster, error: %s", err)
 	}
 	node1 := f[0].GetNode(0).Container
 
@@ -108,7 +108,7 @@ func TestRecoverFromUnmountedDotOnMaster(t *testing.T) {
 	citools.StartTiming()
 	err := f.Start(t)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("failed to start cluster, error: %s", err)
 	}
 	node1 := f[0].GetNode(0).Container
 
@@ -234,13 +234,13 @@ func TestPubSub(t *testing.T) {
 	citools.StartTiming()
 	err := f.Start(t)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("failed to start cluster, error: %s", err)
 	}
 	node1 := f[0].GetNode(0).Container
 
 	natsIP, err := citools.FindAHostIP()
 	if err != nil {
-		t.Fatal(err)
+		t.Errorf("failed to find host ip")
 	}
 
 	// Random port, to try and avoid clashing with concurrent test runs
@@ -385,7 +385,7 @@ func TestSingleNode(t *testing.T) {
 	citools.StartTiming()
 	err := f.Start(t)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("failed to start cluster, error: %s", err)
 	}
 	node1 := f[0].GetNode(0).Container
 
@@ -1187,7 +1187,7 @@ func TestDeletionSimple(t *testing.T) {
 	citools.StartTiming()
 	err := f.Start(t)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("failed to start cluster, error: %s", err)
 	}
 	citools.LogTiming("setup")
 
@@ -1381,7 +1381,7 @@ func TestDeletionComplex(t *testing.T) {
 	citools.StartTiming()
 	err := f.Start(t)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("failed to start cluster, error: %s", err)
 	}
 	citools.LogTiming("setup")
 
@@ -1427,7 +1427,7 @@ func TestTwoNodesSameCluster(t *testing.T) {
 	citools.StartTiming()
 	err := f.Start(t)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("failed to start cluster, error: %s", err)
 	}
 	citools.LogTiming("setup")
 
@@ -1615,7 +1615,7 @@ func TestTwoDoubleNodeClusters(t *testing.T) {
 	citools.StartTiming()
 	err := f.Start(t)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("failed to start cluster, error: %s", err)
 	}
 	// c = cluster; n = node
 	c0n0 := f[0].GetNode(0).Container
@@ -1709,7 +1709,7 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 	citools.StartTiming()
 	err := f.Start(t)
 	if err != nil {
-		t.Fatalf("Failed setup, err - %s", err.Error())
+		t.Fatalf("failed to start cluster, error: %s", err)
 	}
 	node1 := f[0].GetNode(0).Container
 	node2 := f[1].GetNode(0).Container
@@ -2096,7 +2096,7 @@ func TestBackupAndRestoreTwoSingleNodeClusters(t *testing.T) {
 	citools.StartTiming()
 	err := f.Start(t)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("failed to start cluster, error: %s", err)
 	}
 	cluster_0 := f[0].GetNode(0).Container
 
@@ -2177,7 +2177,7 @@ func TestThreeSingleNodeClusters(t *testing.T) {
 	citools.StartTiming()
 	err := f.Start(t)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("failed to start cluster, error: %s", err)
 	}
 	commonNode := f[0].GetNode(0)
 	aliceNode := f[1].GetNode(0)
@@ -2541,7 +2541,7 @@ func TestKubernetesOperator(t *testing.T) {
 	citools.StartTiming()
 	err := f.Start(t)
 	if err != nil {
-		t.Fatal(err) // there's no point carrying on
+		t.Fatalf("failed to start cluster, error: %s", err)
 	}
 	node1 := f[0].GetNode(0)
 
@@ -2800,7 +2800,7 @@ func TestKubernetesVolumes(t *testing.T) {
 	citools.StartTiming()
 	err := f.Start(t)
 	if err != nil {
-		t.Fatal(err) // there's no point carrying on
+		t.Fatalf("failed to start cluster, error: %s", err) // there's no point carrying on
 	}
 	node1 := f[0].GetNode(0)
 
@@ -3054,7 +3054,7 @@ func TestKubernetesTestTooling(t *testing.T) {
 	citools.StartTiming()
 	err := f.Start(t)
 	if err != nil {
-		t.Fatal(err) // there's no point carrying on
+		t.Fatalf("failed to start cluster, error: %s", err) // there's no point carrying on
 	}
 	node1 := f[0].GetNode(0)
 
@@ -3277,7 +3277,7 @@ func TestStressLotsOfCommits(t *testing.T) {
 	citools.StartTiming()
 	err := f.Start(t)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("failed to start cluster, error: %s", err)
 	}
 	cluster0 := f[0].GetNode(0)
 	cluster1 := f[1].GetNode(0)
@@ -3334,7 +3334,7 @@ func TestStressHandover(t *testing.T) {
 	citools.StartTiming()
 	err := f.Start(t)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("failed to start cluster, error: %s", err)
 	}
 	commonNode := f[0].GetNode(0)
 

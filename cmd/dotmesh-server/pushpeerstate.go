@@ -14,11 +14,11 @@ func pushPeerState(f *fsMachine) stateFn {
 	receiveProgress := make(chan interface{})
 	log.Printf("[pushPeerState] subscribing to newSnapsOnMaster for %s", f.filesystemId)
 
-	f.state.localReceiveProgress.Subscribe(f.filesystemId, receiveProgress)
-	defer f.state.localReceiveProgress.Unsubscribe(f.filesystemId, receiveProgress)
+	f.localReceiveProgress.Subscribe(f.filesystemId, receiveProgress)
+	defer f.localReceiveProgress.Unsubscribe(f.filesystemId, receiveProgress)
 
-	f.state.newSnapsOnMaster.Subscribe(f.filesystemId, newSnapsOnMaster)
-	defer f.state.newSnapsOnMaster.Unsubscribe(f.filesystemId, newSnapsOnMaster)
+	f.newSnapsOnMaster.Subscribe(f.filesystemId, newSnapsOnMaster)
+	defer f.newSnapsOnMaster.Unsubscribe(f.filesystemId, newSnapsOnMaster)
 
 	// this is a write state. refuse to act if containers are running
 
@@ -56,7 +56,7 @@ func pushPeerState(f *fsMachine) stateFn {
 
 	// first check whether we already have the snapshot. if so, early
 	// exit?
-	ss, err := f.state.snapshotsFor(f.state.myNodeId, f.filesystemId)
+	ss, err := f.state.SnapshotsFor(f.state.NodeID(), f.filesystemId)
 	for _, s := range ss {
 		if s.Id == targetSnapshot {
 			f.innerResponses <- &Event{
@@ -163,7 +163,7 @@ func pushPeerState(f *fsMachine) stateFn {
 			return backoffState
 		// check that the snapshot is the one we're expecting
 		case s := <-newSnapsOnMaster:
-			sn := s.(snapshot)
+			sn := s.(*Snapshot)
 			log.Printf(
 				"[pushPeerState] got snapshot %+v while waiting for one to arrive", sn,
 			)
@@ -172,12 +172,11 @@ func pushPeerState(f *fsMachine) stateFn {
 					"[pushPeerState] %s matches target snapshot %s!",
 					sn.Id, targetSnapshot,
 				)
-				var mounted bool
-				func() {
-					f.snapshotsLock.Lock()
-					defer f.snapshotsLock.Unlock()
-					mounted = f.filesystem.mounted
-				}()
+
+				f.snapshotsLock.Lock()
+				mounted := f.filesystem.Mounted
+				f.snapshotsLock.Unlock()
+
 				if mounted {
 					log.Printf(
 						"[pushPeerState:%s] mounted case, returning activeState on snap %s",

@@ -16,7 +16,7 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 		Changes: TransferPollResult{
 			TransferRequestId: transferRequestId,
 			Direction:         transferRequest.Direction,
-			InitiatorNodeId:   f.state.myNodeId,
+			InitiatorNodeId:   f.state.NodeID(),
 			Index:             0,
 			Status:            "starting",
 		},
@@ -35,7 +35,7 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 	}
 	mountPoint := mnt(fmt.Sprintf("%s@%s", f.filesystemId, latestSnap.Id))
 
-	snaps, err := f.state.snapshotsForCurrentMaster(f.filesystemId)
+	snaps, err := f.state.SnapshotsForCurrentMaster(f.filesystemId)
 	if len(snaps) == 0 {
 		f.innerResponses <- event
 		f.updateUser("No commits to push!")
@@ -116,7 +116,7 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 		// create a new commit with the type "dotmesh.metadata_only" so that we can ignore it when detecting new commits
 		response, _ := f.snapshot(&Event{
 			Name: "snapshot",
-			Args: &EventArgs{"metadata": metadata{
+			Args: &EventArgs{"metadata": Metadata{
 				"message": "adding s3 metadata",
 				"type":    "dotmesh.metadata_only",
 			},

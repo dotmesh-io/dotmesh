@@ -188,7 +188,7 @@ func (f *fsMachine) applyPath(
 			},
 		}, backoffState
 	}
-	err := f.state.alignMountStateWithMasters(path.TopLevelFilesystemId)
+	err := f.state.AlignMountStateWithMasters(path.TopLevelFilesystemId)
 	if err != nil {
 		return &Event{
 			Name: "error-maybe-mounting-filesystem",
@@ -236,7 +236,7 @@ func (f *fsMachine) applyPath(
 				},
 				backoffState
 		}
-		err := f.state.alignMountStateWithMasters(clone.Clone.FilesystemId)
+		err := f.state.AlignMountStateWithMasters(clone.Clone.FilesystemId)
 		if err != nil {
 			return &Event{
 				Name: "error-maybe-mounting-filesystem",

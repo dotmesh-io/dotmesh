@@ -9,7 +9,6 @@ package main
 
 import (
 	"fmt"
-	"log" // TODO start using https://github.com/Sirupsen/logrus
 	"os"
 	"strconv"
 	"strings"
@@ -24,6 +23,8 @@ import (
 
 	"github.com/opentracing/opentracing-go"
 	zipkin "github.com/openzipkin/zipkin-go-opentracing"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // initial setup
@@ -162,7 +163,13 @@ func main() {
 	for _, filesystemId := range findFilesystemIdsOnSystem() {
 		log.Printf("Initializing fsMachine for %s", filesystemId)
 		go func(fsID string) {
-			s.initFilesystemMachine(fsID)
+			_, err := s.InitFilesystemMachine(fsID)
+			if err != nil {
+				log.WithFields(log.Fields{
+					"error":         err,
+					"filesystem_id": fsID,
+				}).Warn("[main] failed to initialize filesystem machine during boot")
+			}
 		}(filesystemId)
 	}
 
@@ -213,7 +220,7 @@ func main() {
 		go runForever(s.fetchAndWatchEtcd, "fetchAndWatchEtcd",
 			1*time.Second, 1*time.Second,
 		)
-		s.repl()
+		// s.repl()
 	} else {
 		runForever(s.fetchAndWatchEtcd, "fetchAndWatchEtcd",
 			1*time.Second, 1*time.Second,

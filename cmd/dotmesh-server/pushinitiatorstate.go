@@ -29,7 +29,7 @@ func pushInitiatorState(f *fsMachine) stateFn {
 		transferRequestId,
 		transferRequest,
 	)
-	path, err := f.state.registry.DeducePathToTopLevelFilesystem(
+	path, err := f.registry.DeducePathToTopLevelFilesystem(
 		VolumeName{transferRequest.LocalNamespace, transferRequest.LocalName},
 		transferRequest.LocalBranchName,
 	)
@@ -44,7 +44,7 @@ func pushInitiatorState(f *fsMachine) stateFn {
 	f.transferUpdates <- TransferUpdate{
 		Kind: TransferStart,
 		Changes: TransferPollResultFromTransferRequest(
-			transferRequestId, transferRequest, f.state.myNodeId,
+			transferRequestId, transferRequest, f.state.NodeID(),
 			1, 1+len(path.Clones), "syncing metadata",
 		),
 	}
@@ -154,7 +154,14 @@ func (f *fsMachine) push(
 	// Workaround this limitation by include the missing information in
 	// JSON format in a "prelude" section of the ZFS send stream.
 	//
-	prelude, err := f.state.calculatePrelude(toFilesystemId, toSnapshotId)
+	snaps, err := f.state.SnapshotsFor(f.state.NodeID(), toFilesystemId)
+	if err != nil {
+		return &Event{
+			Name: "error-calculating-prelude",
+			Args: &EventArgs{"err": err, "filesystemId": toFilesystemId},
+		}, backoffState
+	}
+	prelude, err := calculatePrelude(snaps, toSnapshotId)
 	if err != nil {
 		return &Event{
 			Name: "error-calculating-prelude",
@@ -428,7 +435,7 @@ func (f *fsMachine) retryPush(
 		responseEvent, nextState = func() (*Event, stateFn) {
 			// Interpret empty toSnapshotId as "push to the latest snapshot"
 			if toSnapshotId == "" {
-				snaps, err := f.state.snapshotsForCurrentMaster(toFilesystemId)
+				snaps, err := f.state.SnapshotsForCurrentMaster(toFilesystemId)
 				if err != nil {
 					return &Event{
 						Name: "failed-getting-local-snapshots", Args: &EventArgs{"err": err},
@@ -446,7 +453,7 @@ func (f *fsMachine) retryPush(
 				"[retryPush] from (%s, %s) to (%s, %s)",
 				fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
 			)
-			var remoteSnaps []*snapshot
+			var remoteSnaps []*Snapshot
 			err := client.CallRemote(
 				ctx,
 				"DotmeshRPC.CommitsById",
@@ -458,19 +465,21 @@ func (f *fsMachine) retryPush(
 					Name: "failed-getting-remote-snapshots", Args: &EventArgs{"err": err},
 				}, backoffState
 			}
-			fsMachine, err := f.state.maybeFilesystem(toFilesystemId)
+			fsMachine, err := f.state.InitFilesystemMachine(toFilesystemId)
 			if err != nil {
 				return &Event{
 					Name: "retry-push-cant-find-filesystem-id",
 					Args: &EventArgs{"err": err, "filesystemId": toFilesystemId},
 				}, backoffState
 			}
-			var snaps []*snapshot
-			func() {
-				fsMachine.snapshotsLock.Lock()
-				defer fsMachine.snapshotsLock.Unlock()
-				snaps = fsMachine.filesystem.snapshots
-			}()
+			var snaps []*Snapshot
+
+			fsMachine.snapshotsLock.Lock()
+			for _, snapshot := range fsMachine.filesystem.Snapshots {
+				snaps = append(snaps, snapshot.DeepCopy())
+			}
+			fsMachine.snapshotsLock.Unlock()
+
 			// if we're given a target snapshot, restrict f.filesystem.snapshots to
 			// that snapshot
 			localSnaps, err := restrictSnapshots(snaps, toSnapshotId)

@@ -1,7 +1,4 @@
-// Observer pattern in golang
-// from https://github.com/funkygao/golib/blob/master/observer/observer.go
-
-package main
+package observer
 
 import (
 	"fmt"
@@ -11,27 +8,33 @@ import (
 	"time"
 )
 
-type Observer struct {
+type Observer interface {
+	Subscribe(event string, outputChan chan interface{})
+	Unsubscribe(event string, outputChan chan interface{}) error
+	Publish(event string, data interface{}) error
+}
+
+type DefaultObserver struct {
 	name    string
 	events  map[string][]chan interface{}
 	rwMutex sync.RWMutex
 }
 
-func NewObserver(name string) *Observer {
-	return &Observer{
+func NewObserver(name string) *DefaultObserver {
+	return &DefaultObserver{
 		name:    name,
 		rwMutex: sync.RWMutex{},
 		events:  map[string][]chan interface{}{},
 	}
 }
 
-func (o *Observer) Subscribe(event string, outputChan chan interface{}) {
+func (o *DefaultObserver) Subscribe(event string, outputChan chan interface{}) {
 	o.rwMutex.Lock()
 	o.events[event] = append(o.events[event], outputChan)
 	o.rwMutex.Unlock()
 }
 
-func (o *Observer) String() string {
+func (o *DefaultObserver) String() string {
 	o.rwMutex.RLock()
 	defer o.rwMutex.RUnlock()
 	s := []string{}
@@ -42,7 +45,7 @@ func (o *Observer) String() string {
 }
 
 // Stop observing the specified event on the provided output channel
-func (o *Observer) Unsubscribe(event string, outputChan chan interface{}) error {
+func (o *DefaultObserver) Unsubscribe(event string, outputChan chan interface{}) error {
 	o.rwMutex.Lock()
 	defer o.rwMutex.Unlock()
 
@@ -66,7 +69,7 @@ func (o *Observer) Unsubscribe(event string, outputChan chan interface{}) error 
 }
 
 // Stop observing the specified event on all channels
-func (o *Observer) UnsubscribeAll(event string) error {
+func (o *DefaultObserver) UnsubscribeAll(event string) error {
 	o.rwMutex.Lock()
 	defer o.rwMutex.Unlock()
 
@@ -98,7 +101,7 @@ func (o *Observer) UnsubscribeAll(event string) error {
   So: Make no assumption about the order messages arrive in.
 */
 
-func (o *Observer) Publish(event string, data interface{}) error {
+func (o *DefaultObserver) Publish(event string, data interface{}) error {
 	o.rwMutex.Lock()
 	defer o.rwMutex.Unlock()
 
@@ -128,9 +131,9 @@ func (o *Observer) Publish(event string, data interface{}) error {
 				break
 			case <-time.After(600 * time.Second):
 				// Took more than 10 minutes
-				log.Printf("[Observer.Publish] LONG WAIT to send %#v on %s:%s", data, o.name, event)
+				log.Printf("[DefaultObserver.Publish] LONG WAIT to send %#v on %s:%s", data, o.name, event)
 				outputChan <- data
-				log.Printf("[Observer.Publish] Finally sent %#v on %s:%s after a long wait", data, o.name, event)
+				log.Printf("[DefaultObserver.Publish] Finally sent %#v on %s:%s after a long wait", data, o.name, event)
 			}
 		}(outputChan)
 	}
@@ -138,7 +141,7 @@ func (o *Observer) Publish(event string, data interface{}) error {
 	return nil
 }
 
-func (o *Observer) PublishTimeout(event string, data interface{}, timeout time.Duration) error {
+func (o *DefaultObserver) PublishTimeout(event string, data interface{}, timeout time.Duration) error {
 	o.rwMutex.Lock()
 	defer o.rwMutex.Unlock()
 

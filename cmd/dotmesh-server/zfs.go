@@ -278,7 +278,7 @@ func stashBranch(existingFs string, newFs string, rollbackTo string) error {
 	return nil
 }
 
-func discoverSystem(fs string) (*filesystem, error) {
+func discoverSystem(fs string) (*Filesystem, error) {
 	// TODO sanitize fs
 	// does filesystem exist? (early exit if not)
 	code, err := returnCode(ZFS, "list", fq(fs))
@@ -286,13 +286,13 @@ func discoverSystem(fs string) (*filesystem, error) {
 		return nil, err
 	}
 	if code != 0 {
-		return &filesystem{
-			id:     fs,
-			exists: false,
+		return &Filesystem{
+			Id:     fs,
+			Exists: false,
 			// Important not to leave snapshots nil in the default case, we
 			// need to inform other nodes that we have no snapshots of a
 			// filesystem if we don't have the filesystem.
-			snapshots: []*snapshot{},
+			Snapshots: []*Snapshot{},
 		}, nil
 	}
 	// is filesystem mounted?
@@ -305,7 +305,7 @@ func discoverSystem(fs string) (*filesystem, error) {
 	// what metadata is encoded in any snapshots' zfs properties?
 	// construct metadata where it exists
 	//filesystemMeta := metadata{} // TODO fs-specific metadata
-	snapshotMeta := map[string]metadata{}
+	snapshotMeta := map[string]Metadata{}
 	output, err := exec.Command(
 		ZFS, "get", "all", "-H", "-r", "-s", "local,received", fq(fs),
 	).Output()
@@ -338,7 +338,7 @@ func discoverSystem(fs string) (*filesystem, error) {
 						id := strings.Split(fsSnapshot, "@")[1]
 						_, ok := snapshotMeta[id]
 						if !ok {
-							snapshotMeta[id] = metadata{}
+							snapshotMeta[id] = Metadata{}
 						}
 						snapshotMeta[id][keyEncoded] = string(decoded)
 					} else {
@@ -359,22 +359,22 @@ func discoverSystem(fs string) (*filesystem, error) {
 
 	// strip off trailing newline and root pool
 	listLines = listLines[1 : len(listLines)-1]
-	snapshots := []*snapshot{}
+	snapshots := []*Snapshot{}
 	for _, values := range listLines {
 		fsSnapshot := strings.Split(values, "\t")[0]
 		id := strings.Split(fsSnapshot, "@")[1]
 		meta, ok := snapshotMeta[id]
 		if !ok {
-			meta = metadata{}
+			meta = make(Metadata)
 		}
-		snapshot := &snapshot{Id: id, Metadata: &meta}
+		snapshot := &Snapshot{Id: id, Metadata: meta}
 		snapshots = append(snapshots, snapshot)
 	}
-	filesystem := &filesystem{
-		id:        fs,
-		exists:    true,
-		mounted:   mounted,
-		snapshots: snapshots,
+	filesystem := &Filesystem{
+		Id:        fs,
+		Exists:    true,
+		Mounted:   mounted,
+		Snapshots: snapshots,
 	}
 
 	return filesystem, nil

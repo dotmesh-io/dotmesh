@@ -6,6 +6,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/dotmesh-io/dotmesh/pkg/container"
+	"github.com/dotmesh-io/dotmesh/pkg/observer"
+	"github.com/dotmesh-io/dotmesh/pkg/registry"
+
 	"github.com/coreos/etcd/client"
 
 	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
@@ -60,7 +64,7 @@ func (v dotmeshVolumeByName) Less(i, j int) bool {
 
 type DotmeshVolumeAndContainers struct {
 	Volume     DotmeshVolume
-	Containers []DockerContainer
+	Containers []container.DockerContainer
 }
 
 type VersionInfo struct {
@@ -90,26 +94,10 @@ type SafeConfig struct {
 // state machinery
 type stateFn func(*fsMachine) stateFn
 
-type metadata map[string]string
-type snapshot struct {
-	// exported for json serialization
-	Id       string
-	Metadata *metadata
-	// private (do not serialize)
-	filesystem *filesystem
-}
-
+type Snapshot = types.Snapshot
 type Clone = types.Clone
-
-type filesystem struct {
-	id        string
-	exists    bool
-	mounted   bool
-	snapshots []*snapshot
-	// support filesystem which is clone of another filesystem, for branching
-	// purposes, with origin e.g. "<fs-uuid-of-actual-origin-snapshot>@<snap-id>"
-	origin Origin
-}
+type Filesystem = types.Filesystem
+type Metadata = types.Metadata
 
 type TransferUpdateKind int
 
@@ -136,11 +124,33 @@ type TransferUpdate struct {
 	GetResult chan TransferPollResult
 }
 
+type StateManager interface {
+	InitFilesystemMachine(filesystemId string) (*fsMachine, error)
+	GetFilesystemMachine(filesystemId string) (*fsMachine, error)
+
+	// ActivateFilesystem(filesystemId string) error
+	AlignMountStateWithMasters(filesystemId string) error
+	ActivateClone(topLevelFilesystemId, originFilesystemId, originSnapshotId, newCloneFilesystemId, newBranchName string) (string, error)
+	DeleteFilesystem(filesystemId string) error
+	DeleteFilesystemFromMap(filesystemId string)
+	// current node ID
+	NodeID() string
+
+	UpdateSnapshotsFromKnownState(server, filesystem string, snapshots []*Snapshot) error
+	SnapshotsFor(server string, filesystemId string) ([]Snapshot, error)
+	SnapshotsForCurrentMaster(filesystemId string) ([]Snapshot, error)
+
+	AddressesForServer(server string) []string
+
+	// TODO: move under a separate interface for Etcd related things
+	MarkFilesystemAsLiveInEtcd(topLevelFilesystemId string) error
+}
+
 // a "filesystem machine" or "filesystem state machine"
 type fsMachine struct {
 	// which ZFS filesystem this statemachine is operating on
 	filesystemId string
-	filesystem   *filesystem
+	filesystem   *Filesystem
 
 	// channels for uploading and downloading file data
 	fileInputIO  chan *InputFile
@@ -161,7 +171,17 @@ type fsMachine struct {
 	// channel notifying etcd-updater whenever snapshot state changes
 	snapshotsModified chan bool
 	// pointer to global state, because it's convenient to have access to it
-	state *InMemoryState
+	// state *InMemoryState
+
+	containerClient container.Client
+	etcdClient      client.KeysAPI
+	state           StateManager
+	userManager     user.UserManager
+	registry        registry.Registry
+
+	localReceiveProgress observer.Observer
+	newSnapsOnMaster     observer.Observer
+
 	// fsMachines live forever, whereas filesystem structs do not. so
 	// filesystem struct's snapshotLock can live here so that it doesn't get
 	// clobbered
@@ -169,12 +189,12 @@ type fsMachine struct {
 	// a place to store arguments to pass to the next state
 	handoffRequest *Event
 	// filesystem-sliced view of new snapshot events
-	newSnapsOnServers *Observer
+	newSnapsOnServers observer.Observer
 	// current state, status field for reporting/debugging and transition observer
 	currentState            string
 	status                  string
 	lastTransitionTimestamp int64
-	transitionObserver      *Observer
+	transitionObserver      observer.Observer
 	lastS3TransferRequest   types.S3TransferRequest
 	lastTransferRequest     types.TransferRequest
 	lastTransferRequestId   string
@@ -184,6 +204,21 @@ type fsMachine struct {
 	transferUpdates         chan TransferUpdate
 	// only to be accessed via the updateEtcdAboutTransfers goroutine!
 	currentPollResult TransferPollResult
+
+	// state machine metadata
+	// Moved from InMemoryState:
+	// server id => filesystem id => state machine metadata
+	//globalStateCache:     make(map[string]map[string]map[string]string),
+
+	// new structure: NodeID => State machine metadata
+	stateMachineMetadata   map[string]map[string]string
+	stateMachineMetadataMu *sync.RWMutex
+
+	// NodeID => snapshot metadata
+	snapshotCache   map[string][]*Snapshot
+	snapshotCacheMu *sync.RWMutex
+
+	filesystemMetadataTimeout int64
 }
 
 type EventArgs map[string]interface{}
@@ -277,10 +312,10 @@ type Config struct {
 // parent. In this case the Origin FilesystemId will always point to its direct
 // parent.
 
-func castToMetadata(val interface{}) metadata {
-	meta, ok := val.(metadata)
+func castToMetadata(val interface{}) Metadata {
+	meta, ok := val.(Metadata)
 	if !ok {
-		meta = metadata{}
+		meta = Metadata{}
 		// massage the data into the right type
 		cast := val.(map[string]interface{})
 		for k, v := range cast {
@@ -291,10 +326,10 @@ func castToMetadata(val interface{}) metadata {
 }
 
 type Prelude struct {
-	SnapshotProperties []*snapshot
+	SnapshotProperties []*Snapshot
 }
 
 type containerInfo struct {
 	Server     string
-	Containers []DockerContainer
+	Containers []container.DockerContainer
 }

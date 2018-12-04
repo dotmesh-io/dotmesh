@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
+	// "log"
 	"net/http"
 	"os/exec"
 	"strings"
@@ -14,6 +14,8 @@ import (
 	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 	"github.com/gorilla/mux"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // machinery for remote zfs replication
@@ -21,7 +23,7 @@ import (
 const BUF_LEN = 131072         // 128kb of replication data sent per update (of etcd)
 const START_SNAPSHOT = "START" // meaning "the start of the filesystem"
 
-func (z ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (z *ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// respond to GET requests with a ZFS data stream
 	vars := mux.Vars(r)
 	z.fromSnap = vars["fromSnap"]
@@ -39,9 +41,16 @@ func (z ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// z.state.lockFilesystem(z.filesystem)
 	// defer z.state.unlockFilesystem(z.filesystem)
 
-	master := z.state.masterFor(z.filesystem)
+	masterNodeID, err := z.state.registry.CurrentMasterNode(z.filesystem)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"error": err,
+		}).Error("[ZFSSender.ServeHTTP] master node for filesystem not found")
+		http.Error(w, fmt.Sprintf("master node for filesystem %s not found", z.filesystem), 500)
+		return
+	}
 
-	if master != z.state.myNodeId {
+	if masterNodeID != z.state.myNodeId {
 		admin, err := z.state.userManager.Get(&user.Query{Ref: "admin"})
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -50,7 +59,7 @@ func (z ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		addresses := z.state.addressesFor(master)
+		addresses := z.state.AddressesForServer(masterNodeID)
 		url, err := dmclient.DeduceUrl(context.Background(), addresses, "internal", "admin", admin.ApiKey) // FIXME, need master->name mapping, see how handover works normally
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -77,7 +86,7 @@ func (z ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			admin.ApiKey,
 		)
 
-		log.Printf("[ZFSSender:%s] Proxying pull from %s: %s", z.filesystem, master, url)
+		log.Printf("[ZFSSender:%s] Proxying pull from %s: %s", z.filesystem, masterNodeID, url)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -111,7 +120,18 @@ func (z ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// command writes into pipe
 	var cmd *exec.Cmd
 
-	prelude, err := z.state.calculatePrelude(z.filesystem, z.toSnap)
+	snaps, err := z.state.SnapshotsFor(masterNodeID, z.filesystem)
+	if err != nil {
+		log.Printf(
+			"[ZFSSender:ServeHTTP] Error getting snaps for fs before calculating prelude in from zfs send of %s from %s => %s: %s",
+			z.filesystem, z.fromSnap, z.toSnap, err,
+		)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(fmt.Sprintf("Unable to get snaps for filesystem to calculate prelude: %s\n", err)))
+		return
+	}
+
+	prelude, err := calculatePrelude(snaps, z.toSnap)
 	if err != nil {
 		log.Printf(
 			"[ZFSSender:ServeHTTP] Error calculating prelude in from zfs send of %s from %s => %s: %s",
@@ -207,7 +227,7 @@ func (z ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // POST request => zfs recv command (only used by recipient of "dm push", ie pushPeerState)
-func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (z *ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	log.Printf("[ZFSReceiver:ServeHTTP] r: %v vars: %v", r, vars)
 	z.fromSnap = vars["fromSnap"]
@@ -229,8 +249,16 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(fmt.Sprintf("Can't find state of filesystem %s.\n", z.filesystem)))
 		return
 	}
-	master := z.state.masterFor(z.filesystem)
-	if master == z.state.myNodeId {
+	masterNodeID, err := z.state.registry.CurrentMasterNode(z.filesystem)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"error": err,
+		}).Error("[ZFSReceiver.ServeHTTP] master node for filesystem not found")
+		http.Error(w, fmt.Sprintf("master node for filesystem %s not found", z.filesystem), 500)
+		return
+	}
+
+	if masterNodeID == z.state.myNodeId {
 		if state != "pushPeerState" {
 			w.WriteHeader(http.StatusNotFound)
 			w.Write([]byte(fmt.Sprintf(
@@ -252,7 +280,7 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		addresses := z.state.addressesFor(master)
+		addresses := z.state.AddressesForServer(masterNodeID)
 
 		url, err := dmclient.DeduceUrl(context.Background(), addresses, "internal", "admin", admin.ApiKey)
 		if err != nil {
@@ -280,7 +308,7 @@ func (z ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			admin.ApiKey,
 		)
 		postClient := new(http.Client)
-		log.Printf("[ZFSReceiver:%s] Proxying push to %s: %s", z.filesystem, master, url)
+		log.Printf("[ZFSReceiver:%s] Proxying push to %s: %s", z.filesystem, masterNodeID, url)
 		resp, err := postClient.Do(req)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -431,13 +459,13 @@ type ZFSReceiver struct {
 }
 
 func (s *InMemoryState) NewZFSSendingServer() http.Handler {
-	return ZFSSender{
+	return &ZFSSender{
 		state: s,
 	}
 }
 
 func (s *InMemoryState) NewZFSReceivingServer() http.Handler {
-	return ZFSReceiver{
+	return &ZFSReceiver{
 		state: s,
 	}
 }

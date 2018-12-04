@@ -18,7 +18,7 @@ func TestS3Api(t *testing.T) {
 	citools.StartTiming()
 	err := f.Start(t)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("failed to start cluster, error: %s", err)
 	}
 	host := f[0].GetNode(0)
 	node1 := host.Container

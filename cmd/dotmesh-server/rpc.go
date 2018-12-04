@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dotmesh-io/dotmesh/pkg/container"
+	"github.com/dotmesh-io/dotmesh/pkg/registry"
 	"github.com/dotmesh-io/dotmesh/pkg/validator"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -460,7 +462,6 @@ func (d *DotmeshRPC) Get(
 // List all filesystems in the cluster.
 func (d *DotmeshRPC) List(
 	r *http.Request, args *struct{}, result *map[string]map[string]DotmeshVolume) error {
-	log.Printf("[List] starting!")
 
 	volumes, err := d.state.GetListOfVolumes(r.Context())
 
@@ -489,7 +490,6 @@ func (d *DotmeshRPC) List(
 // List all filesystems in the cluster.
 func (d *DotmeshRPC) ListWithContainers(
 	r *http.Request, args *struct{}, result *map[string]map[string]DotmeshVolumeAndContainers) error {
-	log.Printf("[List] starting!")
 
 	volumes, err := d.state.GetListOfVolumes(r.Context())
 	if err != nil {
@@ -500,12 +500,12 @@ func (d *DotmeshRPC) ListWithContainers(
 	for _, v := range volumes {
 		// Just get top-level filesystems
 		if v.Branch == "" {
-			var containers []DockerContainer
+			var containers []container.DockerContainer
 			containerInfo, ok := d.state.globalContainerCache[v.Id]
 			if ok {
 				containers = containerInfo.Containers
 			} else {
-				containers = []DockerContainer{}
+				containers = []container.DockerContainer{}
 			}
 
 			submap, ok := gather[v.Name.Namespace]
@@ -520,7 +520,7 @@ func (d *DotmeshRPC) ListWithContainers(
 			}
 		}
 	}
-	log.Printf("[List] gather got %d elements", len(gather))
+
 	*result = gather
 	return nil
 }
@@ -612,11 +612,7 @@ func (d *DotmeshRPC) SwitchContainers(
 }
 
 // Containers that were recently known to be running on a given filesystem.
-func (d *DotmeshRPC) Containers(
-	r *http.Request,
-	args *struct{ Namespace, Name, Branch string },
-	result *[]DockerContainer,
-) error {
+func (d *DotmeshRPC) Containers(r *http.Request, args *struct{ Namespace, Name, Branch string }, result *[]container.DockerContainer) error {
 	log.Printf("[Containers] called with %+v", *args)
 
 	err := validator.IsValidVolume(args.Namespace, args.Name)
@@ -641,7 +637,7 @@ func (d *DotmeshRPC) Containers(
 	defer d.state.globalContainerCacheLock.Unlock()
 	containerInfo, ok := d.state.globalContainerCache[filesystemId]
 	if !ok {
-		*result = []DockerContainer{}
+		*result = []container.DockerContainer{}
 		return nil
 	}
 	// TODO maybe check that the server this containerInfo pertains to matches
@@ -655,13 +651,13 @@ func (d *DotmeshRPC) Containers(
 func (d *DotmeshRPC) ContainersById(
 	r *http.Request,
 	filesystemId *string,
-	result *[]DockerContainer,
+	result *[]container.DockerContainer,
 ) error {
 	d.state.globalContainerCacheLock.Lock()
 	defer d.state.globalContainerCacheLock.Unlock()
 	containerInfo, ok := d.state.globalContainerCache[*filesystemId]
 	if !ok {
-		*result = []DockerContainer{}
+		*result = []container.DockerContainer{}
 		return nil
 	}
 	*result = containerInfo.Containers
@@ -736,7 +732,7 @@ func (d *DotmeshRPC) Lookup(
 func (d *DotmeshRPC) Commits(
 	r *http.Request,
 	args *struct{ Namespace, Name, Branch string },
-	result *[]snapshot,
+	result *[]Snapshot,
 ) error {
 	err := validator.IsValidVolume(args.Namespace, args.Name)
 	if err != nil {
@@ -755,7 +751,7 @@ func (d *DotmeshRPC) Commits(
 	if err != nil {
 		return err
 	}
-	snapshots, err := d.state.snapshotsForCurrentMaster(filesystemId)
+	snapshots, err := d.state.SnapshotsForCurrentMaster(filesystemId)
 	if err != nil {
 		return err
 	}
@@ -766,9 +762,9 @@ func (d *DotmeshRPC) Commits(
 func (d *DotmeshRPC) CommitsById(
 	r *http.Request,
 	filesystemId *string,
-	result *[]snapshot,
+	result *[]Snapshot,
 ) error {
-	snapshots, err := d.state.snapshotsForCurrentMaster(*filesystemId)
+	snapshots, err := d.state.SnapshotsForCurrentMaster(*filesystemId)
 	if err != nil {
 		return err
 	}
@@ -814,7 +810,7 @@ type CommitArgs struct {
 	Name      string
 	Branch    string
 	Message   string
-	Metadata  metadata
+	Metadata  Metadata
 }
 
 // Take a snapshot of a specific filesystem on the master.
@@ -857,7 +853,7 @@ func (d *DotmeshRPC) Commit(
 	}
 	// NB: metadata keys must always start lowercase, because zfs
 	user, _, _ := r.BasicAuth()
-	meta := metadata{"message": args.Message, "author": user}
+	meta := Metadata{"message": args.Message, "author": user}
 
 	// check that user submitted metadata field names all start with lowercase
 	for name, value := range args.Metadata {
@@ -903,7 +899,7 @@ func (d *DotmeshRPC) MountCommit(
 		return err
 	}
 
-	snapshots, err := d.state.snapshotsForCurrentMaster(args.FilesystemId)
+	snapshots, err := d.state.SnapshotsForCurrentMaster(args.FilesystemId)
 	if err != nil {
 		return err
 	}
@@ -1185,7 +1181,7 @@ func (d *DotmeshRPC) registerFilesystemBecomeMaster(
 		// process any events. in the case where it already exists, this is a
 		// noop.
 		log.Printf("[registerFilesystemBecomeMaster] calling initFilesystemMachine for %s", f)
-		d.state.initFilesystemMachine(f)
+		d.state.InitFilesystemMachine(f)
 		log.Printf("[registerFilesystemBecomeMaster] done initFilesystemMachine for %s", f)
 
 		_, err = kapi.Get(
@@ -1220,11 +1216,7 @@ func (d *DotmeshRPC) registerFilesystemBecomeMaster(
 			// Immediately update the masters cache because we just wrote
 			// to etcd meaning we don't have to wait for a watch
 			// this is cconsistent with the code in createFilesystem
-			func() {
-				d.state.mastersCacheLock.Lock()
-				defer d.state.mastersCacheLock.Unlock()
-				d.state.mastersCache[filesystemId] = d.state.myNodeId
-			}()
+			d.state.registry.SetMasterNode(filesystemId, d.state.myNodeId)
 
 		}
 	}
@@ -1666,7 +1658,7 @@ func (d *DotmeshRPC) Transfer(
 		// Check whether there are uncommitted changes or containers running
 		// where the writes are going to happen.
 
-		var cs []DockerContainer
+		var cs []container.DockerContainer
 		var containersRunning []string
 		var dirtyBytes int64
 
@@ -1701,7 +1693,7 @@ func (d *DotmeshRPC) Transfer(
 			if dirtyBytes > 0 {
 				if args.StashDivergence {
 					user, _, _ := r.BasicAuth()
-					meta := metadata{"message": "committing dirty data ready for stashing", "author": user}
+					meta := Metadata{"message": "committing dirty data ready for stashing", "author": user}
 					responseChan, err := d.state.globalFsRequest(
 						filesystemId,
 						&Event{Name: "snapshot",
@@ -2400,13 +2392,13 @@ func (d *DotmeshRPC) DumpInternalState(
 
 			resultChan <- []string{fmt.Sprintf("filesystems.%s.id", id), fs.filesystemId}
 			if fs.filesystem != nil {
-				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.id", id), fs.filesystem.id}
-				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.exists", id), fmt.Sprintf("%t", fs.filesystem.exists)}
-				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.mounted", id), fmt.Sprintf("%t", fs.filesystem.mounted)}
-				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.origin", id), fmt.Sprintf("%s@%s", fs.filesystem.origin.FilesystemId, fs.filesystem.origin.SnapshotId)}
-				for idx, snapshot := range fs.filesystem.snapshots {
+				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.id", id), fs.filesystem.Id}
+				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.exists", id), fmt.Sprintf("%t", fs.filesystem.Exists)}
+				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.mounted", id), fmt.Sprintf("%t", fs.filesystem.Mounted)}
+				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.origin", id), fmt.Sprintf("%s@%s", fs.filesystem.Origin.FilesystemId, fs.filesystem.Origin.SnapshotId)}
+				for idx, snapshot := range fs.filesystem.Snapshots {
 					resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.snapshots[%d].id", id, idx), snapshot.Id}
-					for key, val := range *(snapshot.Metadata) {
+					for key, val := range snapshot.Metadata {
 						resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.snapshots[%d].metadata.%s", id, idx, key), val}
 					}
 				}
@@ -2429,9 +2421,8 @@ func (d *DotmeshRPC) DumpInternalState(
 	go func() {
 		defer recoverFromPanic() // Don't kill the entire server if resultChan is closed because we took too long
 		resultChan <- []string{"mastersCache.STARTED", "yes"}
-		s.mastersCacheLock.Lock()
-		defer s.mastersCacheLock.Unlock()
-		for fsId, server := range s.mastersCache {
+		masterNodes := s.registry.ListMasterNodes(&registry.ListMasterNodesQuery{})
+		for fsId, server := range masterNodes {
 			resultChan <- []string{fmt.Sprintf("mastersCache.%s", fsId), server}
 		}
 		resultChan <- []string{"mastersCache.DONE", "yes"}
@@ -2451,33 +2442,40 @@ func (d *DotmeshRPC) DumpInternalState(
 	go func() {
 		defer recoverFromPanic() // Don't kill the entire server if resultChan is closed because we took too long
 		resultChan <- []string{"globalSnapshotCache.STARTED", "yes"}
-		s.globalSnapshotCacheLock.Lock()
-		defer s.globalSnapshotCacheLock.Unlock()
-		for serverId, d := range s.globalSnapshotCache {
-			for fsId, snapshots := range d {
+
+		s.filesystemsLock.RLock()
+		defer s.filesystemsLock.RUnlock()
+		for fsId, fsm := range s.filesystems {
+			serversAndSnapshots := fsm.ListSnapshots()
+			for serverId, snapshots := range serversAndSnapshots {
+
 				for idx, snapshot := range snapshots {
 					resultChan <- []string{fmt.Sprintf("globalSnapshotCache.%s.%s.snapshots[%d].id", serverId, fsId, idx), snapshot.Id}
-					for key, val := range *(snapshot.Metadata) {
+					for key, val := range snapshot.Metadata {
 						resultChan <- []string{fmt.Sprintf("globalSnapshotCache.%s.%s.snapshots[%d].metadata.%s", serverId, fsId, idx, key), val}
 					}
 				}
 			}
 		}
+
 		resultChan <- []string{"globalSnapshotCache.DONE", "yes"}
 	}()
 
 	go func() {
 		defer recoverFromPanic() // Don't kill the entire server if resultChan is closed because we took too long
 		resultChan <- []string{"globalStateCache.STARTED", "yes"}
-		s.globalStateCacheLock.Lock()
-		defer s.globalStateCacheLock.Unlock()
-		for serverId, d := range s.globalStateCache {
-			for fsId, states := range d {
-				for key, val := range states {
-					resultChan <- []string{fmt.Sprintf("globalStateCache.%s.%s.%s", serverId, fsId, key), val}
+
+		s.filesystemsLock.RLock()
+		defer s.filesystemsLock.RUnlock()
+		for fsID, fsm := range s.filesystems {
+			serversState := fsm.ListMetadata()
+			for serverID, state := range serversState {
+				for key, val := range state {
+					resultChan <- []string{fmt.Sprintf("globalStateCache.%s.%s.%s", serverID, fsID, key), val}
 				}
 			}
 		}
+
 		resultChan <- []string{"globalStateCache.DONE", "yes"}
 	}()
 

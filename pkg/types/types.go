@@ -61,6 +61,39 @@ type Origin struct {
 	SnapshotId   string
 }
 
+type Metadata map[string]string
+
+type Snapshot struct {
+	// exported for json serialization
+	Id       string
+	Metadata Metadata
+	// private (do not serialize)
+	// Filesystem *Filesystem
+}
+
+func (s *Snapshot) DeepCopy() *Snapshot {
+	c := new(Snapshot)
+	*c = *s
+
+	meta := make(Metadata)
+	for k, v := range s.Metadata {
+		meta[k] = v
+	}
+	c.Metadata = meta
+
+	return c
+}
+
+type Filesystem struct {
+	Id        string
+	Exists    bool
+	Mounted   bool
+	Snapshots []*Snapshot
+	// support filesystem which is clone of another filesystem, for branching
+	// purposes, with origin e.g. "<fs-uuid-of-actual-origin-snapshot>@<snap-id>"
+	Origin Origin
+}
+
 type Clone struct {
 	FilesystemId string
 	Origin       Origin

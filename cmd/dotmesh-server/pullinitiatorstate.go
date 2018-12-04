@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
-	"golang.org/x/net/context"
 	"io"
 	"log"
 	"net/http"
 	"os/exec"
 	"time"
+
+	"golang.org/x/net/context"
 
 	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
@@ -73,7 +74,7 @@ func pullInitiatorState(f *fsMachine) stateFn {
 	f.transferUpdates <- TransferUpdate{
 		Kind: TransferStart,
 		Changes: TransferPollResultFromTransferRequest(
-			transferRequestId, transferRequest, f.state.myNodeId,
+			transferRequestId, transferRequest, f.state.NodeID(),
 			1, 1+len(path.Clones), "syncing metadata",
 		),
 	}
@@ -315,7 +316,7 @@ func (f *fsMachine) retryPull(
 	// TODO refactor the following with respect to retryPush!
 
 	// Let's go!
-	var remoteSnaps []*snapshot
+	var remoteSnaps []*Snapshot
 	err := client.CallRemote(
 		context.Background(),
 		"DotmeshRPC.CommitsById",
@@ -344,17 +345,17 @@ func (f *fsMachine) retryPull(
 		fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
 	)
 
-	fsMachine, err := f.state.maybeFilesystem(toFilesystemId)
+	fsMachine, err := f.state.InitFilesystemMachine(toFilesystemId)
 	if err != nil {
 		return &Event{
 			Name: "retry-pull-cant-find-filesystem-id",
 			Args: &EventArgs{"err": err, "filesystemId": toFilesystemId},
 		}, backoffState
 	}
-	localSnaps := func() []*snapshot {
+	localSnaps := func() []*Snapshot {
 		fsMachine.snapshotsLock.Lock()
 		defer fsMachine.snapshotsLock.Unlock()
-		return fsMachine.filesystem.snapshots
+		return fsMachine.filesystem.Snapshots
 	}()
 	// if we're given a target snapshot, restrict f.filesystem.snapshots to
 	// that snapshot

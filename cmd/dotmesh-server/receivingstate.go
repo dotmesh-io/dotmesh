@@ -69,7 +69,7 @@ func receivingState(f *fsMachine) stateFn {
 		// it is, attempt to generate a replication stream from the clone's
 		// origin. it might be the case that the clone's origin doesn't exist
 		// here, in which case the apply will fail.
-		clone, err := f.state.registry.LookupCloneById(f.filesystemId)
+		clone, err := f.registry.LookupCloneById(f.filesystemId)
 		if err != nil {
 			switch err := err.(type) {
 			case registry.NoSuchClone:
@@ -87,14 +87,17 @@ func receivingState(f *fsMachine) stateFn {
 		fromSnap = snapRange.fromSnap.Id
 	}
 
-	addresses := f.state.addressesFor(
-		f.state.masterFor(f.filesystemId),
-	)
+	masterNode, err := f.registry.CurrentMasterNode(f.filesystemId)
+	if err != nil {
+		return backoffStateWithReason(fmt.Sprintf("receivingState: can't find current master of %s", f.filesystemId))
+	}
+
+	addresses := f.state.AddressesForServer(masterNode)
 	if len(addresses) == 0 {
 		return backoffStateWithReason(fmt.Sprintf("receivingState: No known address for current master of %s", f.filesystemId))
 	}
 
-	admin, err := f.state.userManager.Get(&user.Query{Ref: "admin"})
+	admin, err := f.userManager.Get(&user.Query{Ref: "admin"})
 	if err != nil {
 		return backoffStateWithReason(fmt.Sprintf("receivingState: Attempting to pull %s, failed to get admin user, error: %s", f.filesystemId, err))
 	}
@@ -190,12 +193,12 @@ func receivingState(f *fsMachine) stateFn {
 		if strings.Contains(stdErrString, "has been modified") {
 			response, _ := f.snapshot(&Event{
 				Name: "snapshot",
-				Args: &EventArgs{"metadata": metadata{
+				Args: &EventArgs{"metadata": Metadata{
 					"type":   "stashing",
 					"author": "system",
 					"message": fmt.Sprintf(
 						"We detected dirty data upon a receive on %s.",
-						f.state.myNodeId,
+						f.state.NodeID(),
 					)},
 				},
 			})

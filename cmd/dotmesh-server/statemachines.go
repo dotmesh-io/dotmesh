@@ -3,17 +3,19 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/coreos/etcd/client"
+	"github.com/dotmesh-io/dotmesh/pkg/container"
+	"github.com/dotmesh-io/dotmesh/pkg/observer"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/nu7hatch/gouuid"
 	"golang.org/x/net/context"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // core functions used by files ending `state` which I couldn't think of a good place for.
@@ -22,8 +24,8 @@ func newFilesystemMachine(filesystemId string, s *InMemoryState) *fsMachine {
 	// initialize the fsMachine with a filesystem struct that has bare minimum
 	// information (just the filesystem id) required to get started
 	return &fsMachine{
-		filesystem: &filesystem{
-			id: filesystemId,
+		filesystem: &Filesystem{
+			Id: filesystemId,
 		},
 		// stored here as well to avoid excessive locking on filesystem struct,
 		// which gets clobbered, just to read its id
@@ -36,14 +38,26 @@ func newFilesystemMachine(filesystemId string, s *InMemoryState) *fsMachine {
 		responses:               map[string]chan *Event{},
 		responsesLock:           &sync.Mutex{},
 		snapshotsModified:       make(chan bool),
+		containerClient:         s.containers,
+		etcdClient:              s.etcdClient,
 		state:                   s,
+		userManager:             s.userManager,
+		registry:                s.registry,
+		newSnapsOnMaster:        s.newSnapsOnMaster,
+		localReceiveProgress:    s.localReceiveProgress,
 		snapshotsLock:           &sync.Mutex{},
-		newSnapsOnServers:       NewObserver(fmt.Sprintf("newSnapsOnServers:%s", filesystemId)),
+		newSnapsOnServers:       observer.NewObserver(fmt.Sprintf("newSnapsOnServers:%s", filesystemId)),
 		currentState:            "discovering",
 		status:                  "",
 		lastTransitionTimestamp: time.Now().UnixNano(),
-		transitionObserver:      NewObserver(fmt.Sprintf("transitionObserver:%s", filesystemId)),
+		transitionObserver:      observer.NewObserver(fmt.Sprintf("transitionObserver:%s", filesystemId)),
 		lastTransferRequest:     types.TransferRequest{},
+
+		stateMachineMetadata:   make(map[string]map[string]string),
+		stateMachineMetadataMu: &sync.RWMutex{},
+
+		snapshotCache:   make(map[string][]*Snapshot),
+		snapshotCacheMu: &sync.RWMutex{},
 		// In the case where we're receiving a push (pushPeerState), it's the
 		// POST handler on our http server which handles the receiving of the
 		// snapshot. We need to coordinate with it so that we know when to
@@ -54,45 +68,9 @@ func newFilesystemMachine(filesystemId string, s *InMemoryState) *fsMachine {
 		dirtyDelta:      0,
 		sizeBytes:       0,
 		transferUpdates: make(chan TransferUpdate),
-	}
-}
 
-func activateClone(state *InMemoryState, topLevelFilesystemId, originFilesystemId, originSnapshotId, newCloneFilesystemId, newBranchName string) (string, error) {
-	// RegisterClone(name string, topLevelFilesystemId string, clone Clone)
-	err := state.registry.RegisterClone(
-		newBranchName, topLevelFilesystemId,
-		Clone{
-			newCloneFilesystemId,
-			Origin{
-				originFilesystemId, originSnapshotId,
-			},
-		},
-	)
-	if err != nil {
-		return "failed-clone-registration", err
+		filesystemMetadataTimeout: s.config.FilesystemMetadataTimeout,
 	}
-
-	// spin off a state machine
-	state.initFilesystemMachine(newCloneFilesystemId)
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		return "failed-get-etcd", err
-	}
-	// claim the clone as mine, so that it can be mounted here
-	_, err = kapi.Set(
-		context.Background(),
-		fmt.Sprintf(
-			"%s/filesystems/masters/%s", ETCD_PREFIX, newCloneFilesystemId,
-		),
-		state.myNodeId,
-		// only modify current master if this is a new filesystem id
-		&client.SetOptions{PrevExist: client.PrevNoExist},
-	)
-	if err != nil {
-		return "failed-make-cloner-master", err
-	}
-
-	return "", nil
 }
 
 func (f *fsMachine) run() {
@@ -102,8 +80,8 @@ func (f *fsMachine) run() {
 		f.markFilesystemAsLive,
 		"markFilesystemAsLive",
 		f.filesystemId,
-		time.Duration(f.state.config.FilesystemMetadataTimeout/2)*time.Second,
-		time.Duration(f.state.config.FilesystemMetadataTimeout/2)*time.Second,
+		time.Duration(f.filesystemMetadataTimeout/2)*time.Second,
+		time.Duration(f.filesystemMetadataTimeout/2)*time.Second,
 	)
 	// The success backoff time for updateEtcdAboutSnapshots is 0s
 	// because it blocks on a channel anyway; inserting a success
@@ -141,13 +119,18 @@ func (f *fsMachine) run() {
 
 		close(f.innerResponses)
 
+		// TODO(karolis): check whether we really need to do this
+		// as filesytem is deleted from the cache in state.DeleteFilesystem
+
 		// Remove ourself from the filesystems map
-		f.state.filesystemsLock.Lock()
-		defer f.state.filesystemsLock.Unlock()
+		// f.state.filesystemsLock.Lock()
+		// defer f.state.filesystemsLock.Unlock()
 		// We must hold the fslock while calling terminateRunners... to avoid a deadlock with
 		// waitForFilesystemDeath in utils.go
 		terminateRunnersWhileFilesystemLived(f.filesystemId)
-		delete(f.state.filesystems, f.filesystemId)
+		// delete(f.state.filesystems, f.filesystemId)
+
+		f.state.DeleteFilesystemFromMap(f.filesystemId)
 
 		log.Printf("[run:%s] terminated", f.filesystemId)
 	}()
@@ -193,7 +176,7 @@ func (f *fsMachine) pollDirty() error {
 	if err != nil {
 		return err
 	}
-	if f.filesystem.mounted {
+	if f.filesystem.Mounted {
 		dirtyDelta, sizeBytes, err := getDirtyDelta(
 			f.filesystemId, f.latestSnapshot(),
 		)
@@ -205,7 +188,7 @@ func (f *fsMachine) pollDirty() error {
 			f.sizeBytes = sizeBytes
 
 			serialized, err := json.Marshal(dirtyInfo{
-				Server:     f.state.myNodeId,
+				Server:     f.state.NodeID(),
 				DirtyBytes: dirtyDelta,
 				SizeBytes:  sizeBytes,
 			})
@@ -232,8 +215,8 @@ func (f *fsMachine) pollDirty() error {
 func (f *fsMachine) latestSnapshot() string {
 	f.snapshotsLock.Lock()
 	defer f.snapshotsLock.Unlock()
-	if len(f.filesystem.snapshots) > 0 {
-		return f.filesystem.snapshots[len(f.filesystem.snapshots)-1].Id
+	if len(f.filesystem.Snapshots) > 0 {
+		return f.filesystem.Snapshots[len(f.filesystem.Snapshots)-1].Id
 	}
 	return ""
 }
@@ -249,7 +232,7 @@ func (f *fsMachine) getResponseChan(reqId string, e *Event) (chan *Event, error)
 }
 
 func (f *fsMachine) markFilesystemAsLive() error {
-	return f.state.markFilesystemAsLiveInEtcd(f.filesystemId)
+	return f.state.MarkFilesystemAsLiveInEtcd(f.filesystemId)
 }
 
 func (f *fsMachine) getCurrentPollResult() TransferPollResult {
@@ -281,9 +264,9 @@ func (f *fsMachine) updateEtcdAboutTransfers() error {
 		var update TransferUpdate
 		select {
 		case update = <-(f.transferUpdates):
-			log.Printf("[updateEtcdAboutTransfers] Received command %#v", update)
+			log.Debugf("[updateEtcdAboutTransfers] Received command %#v", update)
 		case _ = <-deathChan:
-			log.Printf("[updateEtcdAboutTransfers] Terminating due to filesystem death")
+			log.Infof("[updateEtcdAboutTransfers] Terminating due to filesystem death")
 			return nil
 		}
 
@@ -336,7 +319,7 @@ func (f *fsMachine) updateEtcdAboutTransfers() error {
 		}
 
 		// Send the update
-		log.Printf("[updateEtcdAboutTransfers] pollResult = %#v", *pollResult)
+		log.Debugf("[updateEtcdAboutTransfers] pollResult = %#v", *pollResult)
 
 		serialized, err := json.Marshal(*pollResult)
 		if err != nil {
@@ -357,29 +340,23 @@ func (f *fsMachine) updateEtcdAboutTransfers() error {
 }
 
 func (f *fsMachine) updateEtcdAboutSnapshots() error {
-	// attempt to connect to etcd
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		return err
-	}
-
 	// as soon as we're connected, eagerly: if we know about some
 	// snapshots, **or the absence of them**, set this in etcd.
 	serialized, err := func() ([]byte, error) {
 		f.snapshotsLock.Lock()
 		defer f.snapshotsLock.Unlock()
-		return json.Marshal(f.filesystem.snapshots)
+		return json.Marshal(f.filesystem.Snapshots)
 	}()
 
 	// since we want atomic rewrites, we can just save the entire
 	// snapshot data in a single key, as a json list. this is easier to
 	// begin with! although we'll bump into the 1MB request limit in
 	// etcd eventually.
-	_, err = kapi.Set(
+	_, err = f.etcdClient.Set(
 		context.Background(),
 		fmt.Sprintf(
 			"%s/servers/snapshots/%s/%s", ETCD_PREFIX,
-			f.state.myNodeId, f.filesystemId,
+			f.state.NodeID(), f.filesystemId,
 		),
 		string(serialized),
 		nil,
@@ -387,9 +364,9 @@ func (f *fsMachine) updateEtcdAboutSnapshots() error {
 	if err != nil {
 		return err
 	}
-	log.Printf(
+	log.Debugf(
 		"[updateEtcdAboutSnapshots] successfully set new snaps for %s on %s",
-		f.filesystemId, f.state.myNodeId,
+		f.filesystemId, f.state.NodeID(),
 	)
 
 	// wait until the state machine notifies us that it's changed the
@@ -401,9 +378,9 @@ func (f *fsMachine) updateEtcdAboutSnapshots() error {
 
 	select {
 	case _ = <-f.snapshotsModified:
-		log.Printf("[updateEtcdAboutSnapshots] going 'round the loop")
+		log.Debugf("[updateEtcdAboutSnapshots] going 'round the loop")
 	case _ = <-deathChan:
-		log.Printf("[updateEtcdAboutSnapshots] terminating due to filesystem death")
+		log.Infof("[updateEtcdAboutSnapshots] terminating due to filesystem death")
 	}
 
 	return nil
@@ -455,7 +432,7 @@ func (f *fsMachine) transitionedTo(state string, status string) {
 		// .../:server/:filesystem = {"state": "inactive", "status": "pulling..."}
 		fmt.Sprintf(
 			"%s/servers/states/%s/%s",
-			ETCD_PREFIX, f.state.myNodeId, f.filesystemId,
+			ETCD_PREFIX, f.state.NodeID(), f.filesystemId,
 		),
 		string(serialized),
 		nil,
@@ -464,23 +441,25 @@ func (f *fsMachine) transitionedTo(state string, status string) {
 		log.Printf("error updating etcd %+v: %+v", update, err)
 		return
 	}
-	// we don't hear our own echo, so set it locally too.
-	f.state.globalStateCacheLock.Lock()
-	defer f.state.globalStateCacheLock.Unlock()
 	// fake an etcd version for anyone expecting a version field
 	update["version"] = "0"
-	if _, ok := f.state.globalStateCache[f.state.myNodeId]; !ok {
-		f.state.globalStateCache[f.state.myNodeId] = map[string]map[string]string{}
+
+	// we don't hear our own echo, so set it locally too.
+	f.stateMachineMetadataMu.Lock()
+	_, ok := f.stateMachineMetadata[f.state.NodeID()]
+	if !ok {
+		f.stateMachineMetadata[f.state.NodeID()] = make(map[string]string)
 	}
-	f.state.globalStateCache[f.state.myNodeId][f.filesystemId] = update
+	f.stateMachineMetadata[f.state.NodeID()] = update
+	f.stateMachineMetadataMu.Unlock()
 }
 
 func (f *fsMachine) snapshot(e *Event) (responseEvent *Event, nextState stateFn) {
-	var meta metadata
+	var meta Metadata
 	if val, ok := (*e.Args)["metadata"]; ok {
 		meta = castToMetadata(val)
 	} else {
-		meta = metadata{}
+		meta = Metadata{}
 	}
 	meta["timestamp"] = fmt.Sprintf("%d", time.Now().UnixNano())
 	metadataEncoded, err := encodeMetadata(meta)
@@ -527,11 +506,11 @@ func (f *fsMachine) snapshot(e *Event) (responseEvent *Event, nextState stateFn)
 	func() {
 		f.snapshotsLock.Lock()
 		defer f.snapshotsLock.Unlock()
-		log.Printf("[snapshot] Succeeded snapshotting (out: '%s'), saving: %+v", out, &snapshot{
-			Id: snapshotId, Metadata: &meta,
+		log.Printf("[snapshot] Succeeded snapshotting (out: '%s'), saving: %+v", out, &Snapshot{
+			Id: snapshotId, Metadata: meta,
 		})
-		f.filesystem.snapshots = append(f.filesystem.snapshots,
-			&snapshot{Id: snapshotId, Metadata: &meta})
+		f.filesystem.Snapshots = append(f.filesystem.Snapshots,
+			&Snapshot{Id: snapshotId, Metadata: meta})
 	}()
 	err = f.snapshotsChanged()
 	if err != nil {
@@ -547,45 +526,39 @@ func (f *fsMachine) snapshot(e *Event) (responseEvent *Event, nextState stateFn)
 // find the user-facing name of a given filesystem id. if we're a branch
 // (clone), return the name of our parent filesystem.
 func (f *fsMachine) name() (VolumeName, error) {
-	tlf, _, err := f.state.registry.LookupFilesystemById(f.filesystemId)
+	tlf, _, err := f.registry.LookupFilesystemById(f.filesystemId)
 	return tlf.MasterBranch.Name, err
 }
 
-func (f *fsMachine) containersRunning() ([]DockerContainer, error) {
-	f.state.containersLock.Lock()
-	defer f.state.containersLock.Unlock()
+func (f *fsMachine) containersRunning() ([]container.DockerContainer, error) {
 	name, err := f.name()
 	if err != nil {
-		return []DockerContainer{}, err
+		return []container.DockerContainer{}, err
 	}
-	return f.state.containers.Related(name.String())
+	return f.containerClient.Related(name.String())
 }
 
 func (f *fsMachine) stopContainers() error {
-	f.state.containersLock.Lock()
-	defer f.state.containersLock.Unlock()
 	name, err := f.name()
 	if err != nil {
 		return err
 	}
-	return f.state.containers.Stop(name.StringWithoutAdmin())
+	return f.containerClient.Stop(name.StringWithoutAdmin())
 }
 
 func (f *fsMachine) startContainers() error {
-	f.state.containersLock.Lock()
-	defer f.state.containersLock.Unlock()
 	name, err := f.name()
 	if err != nil {
 		return err
 	}
-	return f.state.containers.Start(name.StringWithoutAdmin())
+	return f.containerClient.Start(name.StringWithoutAdmin())
 }
 
 // probably the wrong way to do it
-func pointers(snapshots []snapshot) []*snapshot {
-	newList := []*snapshot{}
+func pointers(snapshots []Snapshot) []*Snapshot {
+	newList := []*Snapshot{}
 	for _, snap := range snapshots {
-		s := &snapshot{}
+		s := &Snapshot{}
 		*s = snap
 		newList = append(newList, s)
 	}
@@ -595,14 +568,14 @@ func pointers(snapshots []snapshot) []*snapshot {
 func (f *fsMachine) plausibleSnapRange() (*snapshotRange, error) {
 	// get all snapshots for the given filesystem on the current master, and
 	// then start a pull if we need to
-	snapshots, err := f.state.snapshotsForCurrentMaster(f.filesystemId)
+	snapshots, err := f.state.SnapshotsForCurrentMaster(f.filesystemId)
 	if err != nil {
 		return nil, err
 	}
 
 	f.snapshotsLock.Lock()
 	defer f.snapshotsLock.Unlock()
-	snapRange, err := canApply(pointers(snapshots), f.filesystem.snapshots)
+	snapRange, err := canApply(pointers(snapshots), f.filesystem.Snapshots)
 
 	return snapRange, err
 }
@@ -669,20 +642,14 @@ func (f *fsMachine) snapshotsChanged() error {
 	// any observers in the process.
 	// XXX this _might_ break the fact that handoff doesn't check what snapshot
 	// it's notified about.
-	var snaps []*snapshot
-	func() {
-		f.snapshotsLock.Lock()
-		defer f.snapshotsLock.Unlock()
-		snaps = f.filesystem.snapshots
-	}()
-
-	// []*snapshot => []snapshot, gah
-	snapsAlternate := []snapshot{}
-	for _, snap := range snaps {
-		snapsAlternate = append(snapsAlternate, *snap)
+	var snaps []*Snapshot
+	f.snapshotsLock.Lock()
+	for _, s := range f.filesystem.Snapshots {
+		snaps = append(snaps, s.DeepCopy())
 	}
-	return f.state.updateSnapshotsFromKnownState(
-		f.state.myNodeId, f.filesystemId, &snapsAlternate,
+	f.snapshotsLock.Unlock()
+	return f.state.UpdateSnapshotsFromKnownState(
+		f.state.NodeID(), f.filesystemId, snaps,
 	)
 }
 
@@ -709,7 +676,7 @@ func (f *fsMachine) recoverFromDivergence(rollbackToId string) error {
 		return err
 	}
 
-	tlf, parentBranchName, err := f.state.registry.LookupFilesystemById(f.filesystemId)
+	tlf, parentBranchName, err := f.registry.LookupFilesystemById(f.filesystemId)
 	if err != nil {
 		return err
 	}
@@ -723,7 +690,7 @@ func (f *fsMachine) recoverFromDivergence(rollbackToId string) error {
 		newBranchName = fmt.Sprintf("%s-DIVERGED-%s", parentBranchName, strings.Replace(t.Format(time.RFC3339), ":", "-", -1))
 	}
 
-	errorName, err := activateClone(f.state, topLevelFilesystemId, f.filesystemId, rollbackToId, newFilesystemId, newBranchName)
+	errorName, err := f.state.ActivateClone(topLevelFilesystemId, f.filesystemId, rollbackToId, newFilesystemId, newBranchName)
 
 	if err != nil {
 		return fmt.Errorf("Error recovering from divergence: %+v in %s", err, errorName)

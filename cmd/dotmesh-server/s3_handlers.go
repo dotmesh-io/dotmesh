@@ -128,7 +128,14 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 
 	// ensure any of these requests end up on the current master node for
 	// this filesystem
-	master := s.state.masterFor(localFilesystemId)
+	master, err := s.state.registry.CurrentMasterNode(localFilesystemId)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"error": err,
+		}).Error("[S3Handler.ServeHTTP] master node for filesystem not found")
+		http.Error(resp, fmt.Sprintf("master node for filesystem %s not found", localFilesystemId), 500)
+		return
+	}
 	if master != s.state.myNodeId {
 		admin, err := s.state.userManager.Get(&user.Query{Ref: "admin"})
 		if err != nil {
@@ -136,7 +143,7 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 			log.Errorf("can't get API key to proxy s3: %+v.", err)
 			return
 		}
-		addresses := s.state.addressesFor(master)
+		addresses := s.state.AddressesForServer(master)
 		target, err := dmclient.DeduceUrl(context.Background(), addresses, "internal", "admin", admin.ApiKey) // FIXME, need master->name mapping, see how handover works normally
 		if err != nil {
 			http.Error(resp, err.Error(), 500)
@@ -167,7 +174,7 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 }
 
 func (s *S3Handler) mountFilesystemSnapshot(filesystemId string, snapshotId string) *Event {
-	snapshots, err := s.state.snapshotsForCurrentMaster(filesystemId)
+	snapshots, err := s.state.SnapshotsForCurrentMaster(filesystemId)
 	if len(snapshots) == 0 {
 		return &Event{
 			Name: "no-snapshots-found",
@@ -197,7 +204,11 @@ func (s *S3Handler) mountFilesystemSnapshot(filesystemId string, snapshotId stri
 
 func (s *S3Handler) readFile(resp http.ResponseWriter, req *http.Request, filesystemId, snapshotId, filename string) {
 	user := auth.GetUserFromCtx(req.Context())
-	fsm := s.state.initFilesystemMachine(filesystemId)
+	fsm, err := s.state.InitFilesystemMachine(filesystemId)
+	if err != nil {
+		http.Error(resp, "failed to initialize filesystem", http.StatusInternalServerError)
+		return
+	}
 
 	if fsm.currentState != "active" {
 		http.Error(resp, "please try again later", http.StatusServiceUnavailable)
@@ -248,7 +259,11 @@ func (s *S3Handler) readFile(resp http.ResponseWriter, req *http.Request, filesy
 
 func (s *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, filesystemId, filename string) {
 	user := auth.GetUserFromCtx(req.Context())
-	fsm := s.state.initFilesystemMachine(filesystemId)
+	fsm, err := s.state.InitFilesystemMachine(filesystemId)
+	if err != nil {
+		http.Error(resp, "failed to initialize filesystem", http.StatusInternalServerError)
+		return
+	}
 
 	if fsm.currentState != "active" {
 		http.Error(resp, "please try again later", http.StatusServiceUnavailable)

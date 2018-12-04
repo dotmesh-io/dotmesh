@@ -2,8 +2,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/nu7hatch/gouuid"
 	"os"
+
+	"github.com/nu7hatch/gouuid"
 )
 
 func s3PullInitiatorState(f *fsMachine) stateFn {
@@ -44,7 +45,7 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 		Changes: TransferPollResult{
 			TransferRequestId: transferRequestId,
 			Direction:         transferRequest.Direction,
-			InitiatorNodeId:   f.state.myNodeId,
+			InitiatorNodeId:   f.state.NodeID(),
 			Index:             1,
 			Status:            "starting",
 		},
@@ -96,7 +97,7 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 			f.errorDuringTransfer("couldnt-write-s3-metadata-pull", err)
 		}
 		response, _ := f.snapshot(&Event{Name: "snapshot",
-			Args: &EventArgs{"metadata": metadata{"message": "s3 content"},
+			Args: &EventArgs{"metadata": Metadata{"message": "s3 content"},
 				"snapshotId": snapshotId}})
 		if response.Name != "snapshotted" {
 			f.innerResponses <- response

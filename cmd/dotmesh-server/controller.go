@@ -15,7 +15,9 @@ import (
 	"github.com/nu7hatch/gouuid"
 	"golang.org/x/net/context"
 
+	"github.com/dotmesh-io/dotmesh/pkg/container"
 	"github.com/dotmesh-io/dotmesh/pkg/notification"
+	"github.com/dotmesh-io/dotmesh/pkg/observer"
 	"github.com/dotmesh-io/dotmesh/pkg/registry"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 
@@ -23,27 +25,39 @@ import (
 )
 
 type InMemoryState struct {
-	config                     Config
-	filesystems                map[string]*fsMachine
-	filesystemsLock            *sync.RWMutex
-	myNodeId                   string
-	mastersCache               map[string]string
-	mastersCacheLock           *sync.RWMutex
-	serverAddressesCache       map[string]string
-	serverAddressesCacheLock   *sync.RWMutex
-	globalSnapshotCache        map[string]map[string][]snapshot
-	globalSnapshotCacheLock    *sync.RWMutex
-	globalStateCache           map[string]map[string]map[string]string
-	globalStateCacheLock       *sync.RWMutex
-	globalContainerCache       map[string]containerInfo
-	globalContainerCacheLock   *sync.RWMutex
-	etcdWaitTimestamp          int64
-	etcdWaitState              string
-	etcdWaitTimestampLock      *sync.Mutex
-	localReceiveProgress       *Observer
-	newSnapsOnMaster           *Observer
-	registry                   registry.Registry
-	containers                 *DockerClient
+	config          Config
+	filesystems     map[string]*fsMachine
+	filesystemsLock *sync.RWMutex
+
+	myNodeId string
+
+	// mastersCache     map[string]string
+	// mastersCacheLock *sync.RWMutex
+
+	serverAddressesCache     map[string]string
+	serverAddressesCacheLock *sync.RWMutex
+
+	// globalSnapshotCache     map[string]map[string][]snapshot
+	// globalSnapshotCacheLock *sync.RWMutex
+
+	// globalStateCache used for mostly metadata & debugging, can be moved into
+	// each fsMachine but we should only keep a map of server -> fsMachine then
+	// or just fsMachines since all know which server they are on
+	// globalStateCache         map[string]map[string]map[string]string
+	// globalStateCacheLock     *sync.RWMutex
+
+	globalContainerCache     map[string]containerInfo
+	globalContainerCacheLock *sync.RWMutex
+
+	etcdClient            client.KeysAPI
+	etcdWaitTimestamp     int64
+	etcdWaitState         string
+	etcdWaitTimestampLock *sync.Mutex
+	localReceiveProgress  observer.Observer
+	newSnapsOnMaster      observer.Observer
+	registry              registry.Registry
+	// containers                 *DockerClient
+	containers                 container.Client
 	containersLock             *sync.RWMutex
 	fetchRelatedContainersChan chan bool
 	interclusterTransfers      map[string]TransferPollResult
@@ -60,7 +74,15 @@ type InMemoryState struct {
 // typically methods on the InMemoryState "god object"
 
 func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
-	d, err := NewDockerClient()
+	dockerClient, err := container.New(&container.Options{
+		ContainerMountPrefix:  CONTAINER_MOUNT_PREFIX,
+		ContainerMountDirLock: &containerMountDirLock,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	kapi, err := getEtcdKeysApi()
 	if err != nil {
 		panic(err)
 	}
@@ -69,32 +91,34 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 		filesystems:     make(map[string]*fsMachine),
 		filesystemsLock: &sync.RWMutex{},
 		myNodeId:        localPoolId,
+		// karolis: MOVED TO REGISTRY
 		// filesystem => node id
-		mastersCache:     make(map[string]string),
-		mastersCacheLock: &sync.RWMutex{},
+		// mastersCache:     make(map[string]string),
+		// mastersCacheLock: &sync.RWMutex{},
 		// server id => comma-separated IPv[46] addresses
 		serverAddressesCache:     make(map[string]string),
 		serverAddressesCacheLock: &sync.RWMutex{},
 		// server id => filesystem id => snapshot metadata
-		globalSnapshotCache:     make(map[string]map[string][]snapshot),
-		globalSnapshotCacheLock: &sync.RWMutex{},
+		// globalSnapshotCache:     make(map[string]map[string][]snapshot),
+		// globalSnapshotCacheLock: &sync.RWMutex{},
 		// server id => filesystem id => state machine metadata
-		globalStateCache:     make(map[string]map[string]map[string]string),
-		globalStateCacheLock: &sync.RWMutex{},
+		// globalStateCache:     make(map[string]map[string]map[string]string),
+		// globalStateCacheLock: &sync.RWMutex{},
 		// global container state (what containers are running where), filesystemId -> containerInfo
 		globalContainerCache:     make(map[string]containerInfo),
 		globalContainerCacheLock: &sync.RWMutex{},
 		// When did we start waiting for etcd?
+		etcdClient:            kapi,
 		etcdWaitTimestamp:     0,
 		etcdWaitState:         "",
 		etcdWaitTimestampLock: &sync.Mutex{},
 		// a sort of global event bus for filesystems getting new snapshots on
 		// their masters, keyed on filesystem name, which interested parties
 		// such as slaves for that filesystem may subscribe to
-		newSnapsOnMaster:     NewObserver("newSnapsOnMaster"),
-		localReceiveProgress: NewObserver("localReceiveProgress"),
+		newSnapsOnMaster:     observer.NewObserver("newSnapsOnMaster"),
+		localReceiveProgress: observer.NewObserver("localReceiveProgress"),
 		// containers that are running with dotmesh volumes by filesystem id
-		containers:     d,
+		containers:     dockerClient,
 		containersLock: &sync.RWMutex{},
 		// channel to send on to hint that a new container is using a dotmesh
 		// volume
@@ -127,120 +151,20 @@ func (s *InMemoryState) resetRegistry() {
 	s.registry = registry.NewRegistry(s.userManager, s.config.EtcdClient, ETCD_PREFIX)
 }
 
-func (s *InMemoryState) deleteFilesystem(filesystemId string) error {
-	var errors []error
-
-	log.Printf("[deleteFilesystem] Attempting to delete filesystem %s", filesystemId)
-
-	// Remove the FS from all our myriad caches
-	func() {
-		s.filesystemsLock.Lock()
-		defer s.filesystemsLock.Unlock()
-		delete(s.filesystems, filesystemId)
-	}()
-
-	// Don't delete from mastersCache, because we want to be consistent wrt
-	// etcd. We can wait for etcd to tell us when filesystems/masters gets
-	// changed.
-
-	func() {
-		s.globalContainerCacheLock.Lock()
-		defer s.globalContainerCacheLock.Unlock()
-		delete(s.globalContainerCache, filesystemId)
-	}()
-
-	// No need to worry about globalStateCache, as the fsmachine's termination will gracefully handle that
-
-	// Ensure the toplevel filesystem's docker links are cleaned
-	// up. This has to happen on every node. It only really needs to
-	// happen once, when (if) we delete the "current" filesystem that
-	// was checked out, but it's hard to tell when that case is so we
-	// call it every time.
-	err := s.cleanupDockerFilesystemState()
-	if err != nil {
-		errors = append(errors, err)
-	}
-
-	// Actually remove from ZFS
-	err = deleteFilesystemInZFS(filesystemId)
-	if err != nil {
-		errors = append(errors, err)
-	}
-
-	if len(errors) != 0 {
-		// We just make our best attempt at deleting; if anything
-		// failed, we'll try and clean it up again later.  Therefore,
-		// when we try again, various bits might already be deleted, so
-		// trying to delete them fails.  It's all good.
-		log.Printf("[deleteFilesystem] Errors deleting filesystem %s, possibly because some operations were previously completed: %+v", filesystemId, errors)
-	}
-
-	// However, we reserve the right to return an error if we decide to in future.
-	return nil
-}
-
-func (s *InMemoryState) alignMountStateWithMasters(filesystemId string) error {
-	// We have been given a hint that a ZFS filesystem may now exist locally
-	// which may need to be mounted to match up with its desired mount state
-	// (as indicated by the "masters" state in etcd).
-	return tryUntilSucceeds(func() error {
-		fs, mounted, err := func() (*fsMachine, bool, error) {
-			s.filesystemsLock.Lock()
-			defer s.filesystemsLock.Unlock()
-
-			fs, ok := s.filesystems[filesystemId]
-			if !ok {
-				log.Printf(
-					"[alignMountStateWithMasters] not doing anything - cannot find %v in fsMachines",
-					filesystemId,
-				)
-				return nil, false, fmt.Errorf("cannot find %v in fsMachines", filesystemId)
-			}
-			log.Printf(
-				"[alignMountStateWithMasters] called for %v; masterFor=%v, myNodeId=%v; mounted=%t",
-				filesystemId,
-				s.masterFor(filesystemId),
-				s.myNodeId,
-				fs.filesystem.mounted,
-			)
-			return fs, fs.filesystem.mounted, nil
-		}()
-		if err != nil {
-			return err
-		}
-
-		// not mounted but should be (we are the master)
-		if s.masterFor(filesystemId) == s.myNodeId && !mounted {
-			responseEvent, _ := fs.mount()
-			if responseEvent.Name != "mounted" {
-				return fmt.Errorf("Couldn't mount filesystem: %v", responseEvent)
-			}
-		}
-		// mounted but shouldn't be (we are not the master)
-		if s.masterFor(filesystemId) != s.myNodeId && mounted {
-			responseEvent, _ := fs.unmount()
-			if responseEvent.Name != "unmounted" {
-				return fmt.Errorf("Couldn't unmount filesystem: %v", responseEvent)
-			}
-		}
-		return nil
-	}, fmt.Sprintf("aligning mount state of %s with masters", filesystemId))
-}
-
-func (s *InMemoryState) calculatePrelude(toFilesystemId, toSnapshotId string) (Prelude, error) {
+func calculatePrelude(snaps []Snapshot, toSnapshotId string) (Prelude, error) {
 	var prelude Prelude
-	snaps, err := s.snapshotsFor(s.myNodeId, toFilesystemId)
-	if err != nil {
-		return prelude, err
-	}
-	pointerSnaps := []*snapshot{}
+	// snaps, err := s.SnapshotsFor(s.myNodeId, toFilesystemId)
+	// if err != nil {
+	// 	return prelude, err
+	// }
+	pointerSnaps := []*Snapshot{}
 	for _, s := range snaps {
 		// Take a copy of s to take a pointer of, rather than getting
 		// lots of pointers to so in the pointerSnaps slice...
 		snapshots := s
 		pointerSnaps = append(pointerSnaps, &snapshots)
 	}
-
+	var err error
 	prelude.SnapshotProperties, err = restrictSnapshots(pointerSnaps, toSnapshotId)
 	if err != nil {
 		return prelude, err
@@ -248,10 +172,31 @@ func (s *InMemoryState) calculatePrelude(toFilesystemId, toSnapshotId string) (P
 	return prelude, nil
 }
 
+// func (s *InMemoryState) calculatePrelude(toFilesystemId, toSnapshotId string) (Prelude, error) {
+// 	var prelude Prelude
+// 	snaps, err := s.SnapshotsFor(s.myNodeId, toFilesystemId)
+// 	if err != nil {
+// 		return prelude, err
+// 	}
+// 	pointerSnaps := []*snapshot{}
+// 	for _, s := range snaps {
+// 		// Take a copy of s to take a pointer of, rather than getting
+// 		// lots of pointers to so in the pointerSnaps slice...
+// 		snapshots := s
+// 		pointerSnaps = append(pointerSnaps, &snapshots)
+// 	}
+
+// 	prelude.SnapshotProperties, err = restrictSnapshots(pointerSnaps, toSnapshotId)
+// 	if err != nil {
+// 		return prelude, err
+// 	}
+// 	return prelude, nil
+// }
+
 func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, error) {
 	// TODO simplify this by refactoring it into multiple functions,
 	// simplifying locking in the process.
-	master, err := s.currentMaster(fs)
+	master, err := s.registry.CurrentMasterNode(fs)
 	if err != nil {
 		return DotmeshVolume{}, err
 	}
@@ -292,13 +237,19 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 		}
 		s.globalDirtyCacheLock.RUnlock()
 		// if not exists, 0 is fine
-		s.globalSnapshotCacheLock.RLock()
-		snapshots, ok := s.globalSnapshotCache[master][fs]
-		var commitCount int64
-		if ok {
-			commitCount = int64(len(snapshots))
+
+		fsm, err := s.GetFilesystemMachine(fs)
+		if err != nil {
+			return DotmeshVolume{}, err
 		}
-		s.globalSnapshotCacheLock.RUnlock()
+
+		// s.globalSnapshotCacheLock.RLock()
+		// snapshots, ok := s.globalSnapshotCache[master][fs]
+		// var commitCount int64
+		// if ok {
+		commitCount := int64(len(fsm.GetSnapshots(master)))
+		// }
+		// s.globalSnapshotCacheLock.RUnlock()
 
 		d := DotmeshVolume{
 			Name:           tlf.MasterBranch.Name,
@@ -321,28 +272,54 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 		}
 		sort.Sort(ByAddress(servers))
 
-		s.globalStateCacheLock.RLock()
-		s.globalSnapshotCacheLock.RLock()
-		for _, server := range servers {
-			// get current state and status for filesystem on server from our
-			// cache
-			numSnapshots := len(s.globalSnapshotCache[server.Id][fs])
-			state, ok := s.globalStateCache[server.Id][fs]
-			status := ""
-			if !ok {
-				status = fmt.Sprintf("unknown, %d snaps", numSnapshots)
-			} else {
-				status = fmt.Sprintf(
-					"%s: %s, %d snaps (v%s)",
-					state["state"], state["status"],
-					numSnapshots, state["version"],
-				)
-			}
-			d.ServerStatuses[server.Id] = status
+		// s.globalStateCacheLock.RLock()
+		// s.globalSnapshotCacheLock.RLock()
 
+		// if ok {
+		// 	// for _, server := range servers {
+
+		// 	// }
+		// 	// meta := fsm.GetMetadata()
+		// 	serverStateMachineMetadata := fsm.ListMetadata()
+
+		// 	for _, server := range servers {
+
+		// 		status := ""
+
+		// 		if len(serverStateMachineMetadata) == 0 {
+
+		// 		} else {
+		// 			d.ServerStatuses[server.Id] = serverStateMachineMetadata[]
+		// 		}
+		// 	}
+		// }
+
+		if ok {
+
+			for _, server := range servers {
+				// get current state and status for filesystem on server from our
+				// cache
+				// numSnapshots := len(s.globalSnapshotCache[server.Id][fs])
+				numSnapshots := len(fsm.GetSnapshots(server.Id))
+				// state, ok := s.globalStateCache[server.Id][fs]
+				state := fsm.GetMetadata(server.Id)
+				status := ""
+				if len(state) == 0 {
+					status = fmt.Sprintf("unknown, %d snaps", numSnapshots)
+				} else {
+					status = fmt.Sprintf(
+						"%s: %s, %d snaps (v%s)",
+						state["state"], state["status"],
+						numSnapshots, state["version"],
+					)
+				}
+				d.ServerStatuses[server.Id] = status
+			}
 		}
-		s.globalSnapshotCacheLock.RUnlock()
-		s.globalStateCacheLock.RUnlock()
+
+		// }
+		// s.globalSnapshotCacheLock.RUnlock()
+		// s.globalStateCacheLock.RUnlock()
 
 		log.Debugf("[getOne] here is your volume: %v", d)
 		return d, nil
@@ -352,10 +329,11 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 }
 
 func (s *InMemoryState) notifyPushCompleted(filesystemId string, success bool) {
-	s.filesystemsLock.RLock()
-	f, ok := s.filesystems[filesystemId]
-	s.filesystemsLock.RUnlock()
-	if !ok {
+	// s.filesystemsLock.RLock()
+	// f, ok := s.filesystems[filesystemId]
+	// s.filesystemsLock.RUnlock()
+	f, err := s.GetFilesystemMachine(filesystemId)
+	if err != nil {
 		log.Printf("[notifyPushCompleted] No such filesystem id %s", filesystemId)
 		return
 	}
@@ -367,15 +345,18 @@ func (s *InMemoryState) notifyPushCompleted(filesystemId string, success bool) {
 func (s *InMemoryState) getCurrentState(filesystemId string) (string, error) {
 	// init fsMachine in case it isn't.
 	// XXX this trusts (authenticated) POST data :/
-	s.initFilesystemMachine(filesystemId)
-
-	s.filesystemsLock.RLock()
-	defer s.filesystemsLock.RUnlock()
-	f, ok := s.filesystems[filesystemId]
-	if !ok {
-		return "", fmt.Errorf("No such filesystem id %s", filesystemId)
+	fs, err := s.GetFilesystemMachine(filesystemId)
+	if err != nil {
+		return "", err
 	}
-	return f.getCurrentState(), nil
+	return fs.getCurrentState(), nil
+	// s.filesystemsLock.RLock()
+	// defer s.filesystemsLock.RUnlock()
+	// f, ok := s.filesystems[filesystemId]
+	// if !ok {
+	// 	return "", fmt.Errorf("No such filesystem id %s", filesystemId)
+	// }
+	// return f.getCurrentState(), nil
 }
 
 func (s *InMemoryState) insertInitialAdminPassword() error {
@@ -435,11 +416,11 @@ func (s *InMemoryState) findRelatedContainers() error {
 	if err != nil {
 		return err
 	}
-	log.Printf("findRelatedContainers got containerMap %s", containerMap)
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		return err
-	}
+	// log.Printf("findRelatedContainers got containerMap %s", containerMap)
+	// kapi, err := getEtcdKeysApi()
+	// if err != nil {
+	// 	return err
+	// }
 
 	// Iterate over _every_ filesystem id we know we are masters for on this
 	// system, zeroing out the etcd record of containers running on that
@@ -447,13 +428,11 @@ func (s *InMemoryState) findRelatedContainers() error {
 	// container stops, it no longer shows as running.)
 
 	myFilesystems := []string{}
-	s.mastersCacheLock.Lock()
-	for filesystemId, master := range s.mastersCache {
-		if s.myNodeId == master {
-			myFilesystems = append(myFilesystems, filesystemId)
-		}
+
+	filesystems := s.registry.ListMasterNodes(&registry.ListMasterNodesQuery{NodeID: s.myNodeId})
+	for fs := range filesystems {
+		myFilesystems = append(myFilesystems, fs)
 	}
-	s.mastersCacheLock.Unlock()
 
 	log.Printf("findRelatedContainers with containerMap %s, myFilesystems %s", containerMap, myFilesystems)
 
@@ -472,7 +451,7 @@ func (s *InMemoryState) findRelatedContainers() error {
 		} else {
 			value = containerInfo{
 				Server:     s.myNodeId,
-				Containers: []DockerContainer{},
+				Containers: []container.DockerContainer{},
 			}
 		}
 		result, err := json.Marshal(value)
@@ -482,147 +461,32 @@ func (s *InMemoryState) findRelatedContainers() error {
 
 		// update our local globalContainerCache immediately, so that we reduce
 		// the window for races against setting this cache value.
-		func() {
-			s.globalContainerCacheLock.Lock()
-			s.globalContainerCache[filesystemId] = value
-			s.globalContainerCacheLock.Unlock()
-		}()
+		s.globalContainerCacheLock.Lock()
+		s.globalContainerCache[filesystemId] = value
+		s.globalContainerCacheLock.Unlock()
 
-		log.Printf(
+		log.Debugf(
 			"findRelatedContainers setting %s to %s",
 			fmt.Sprintf("%s/filesystems/containers/%s", ETCD_PREFIX, filesystemId),
 			string(result),
 		)
-		_, err = kapi.Set(
+		_, err = s.etcdClient.Set(
 			context.Background(),
 			fmt.Sprintf("%s/filesystems/containers/%s", ETCD_PREFIX, filesystemId),
 			string(result),
 			nil,
 		)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"filesystem": filesystemId,
+				"error":      err,
+			}).Error("findRelatedContainers: failed to set related containers")
+		}
 	}
 	return nil
 }
 
-func (s *InMemoryState) currentMaster(filesystemId string) (string, error) {
-	s.mastersCacheLock.RLock()
-	defer s.mastersCacheLock.RUnlock()
-
-	master, ok := s.mastersCache[filesystemId]
-	if !ok {
-		return "", fmt.Errorf("No known filesystem with id %s", filesystemId)
-	}
-	return master, nil
-}
-
-func (s *InMemoryState) snapshotsForCurrentMaster(filesystemId string) ([]snapshot, error) {
-	master, err := s.currentMaster(filesystemId)
-	if err != nil {
-		return []snapshot{}, err
-	}
-	return s.snapshotsFor(master, filesystemId)
-}
-
-func (s *InMemoryState) snapshotsFor(server string, filesystemId string) ([]snapshot, error) {
-	s.globalSnapshotCacheLock.RLock()
-	defer s.globalSnapshotCacheLock.RUnlock()
-	filesystems, ok := s.globalSnapshotCache[server]
-	if !ok {
-		return []snapshot{}, nil
-	}
-	snapshots, ok := filesystems[filesystemId]
-	if !ok {
-		return []snapshot{}, nil
-	}
-	return snapshots, nil
-}
-
-// the addresses of a named server id
-func (s *InMemoryState) addressesFor(server string) []string {
-	s.serverAddressesCacheLock.RLock()
-	defer s.serverAddressesCacheLock.RUnlock()
-	addresses, ok := s.serverAddressesCache[server]
-	if !ok {
-		// don't know about this server
-		// TODO maybe this should be an error
-		return []string{}
-	}
-	return strings.Split(addresses, ",")
-}
-
-func (s *InMemoryState) masterFor(filesystem string) string {
-	s.mastersCacheLock.RLock()
-	defer s.mastersCacheLock.RUnlock()
-	currentMaster, ok := s.mastersCache[filesystem]
-	if !ok {
-		// don't know about this filesystem
-		// TODO maybe this should be an error
-		return ""
-	}
-	return currentMaster
-}
-
-func (s *InMemoryState) initFilesystemMachine(filesystemId string) *fsMachine {
-	log.Printf("[initFilesystemMachine] starting: %s", filesystemId)
-
-	fs, deleted := func() (*fsMachine, bool) {
-		s.filesystemsLock.Lock()
-		defer s.filesystemsLock.Unlock()
-		fs, ok := s.filesystems[filesystemId]
-		log.Printf("[initFilesystemMachine] acquired lock: %s", filesystemId)
-		// do nothing if the fsMachine is already running
-		deleted := false
-		var err error
-		if ok {
-			log.Printf("[initFilesystemMachine] reusing fsMachine for %s", filesystemId)
-			return fs, false
-		} else {
-			// Don't create a new fsMachine if we've been deleted
-			deleted, err = isFilesystemDeletedInEtcd(filesystemId)
-			if err != nil {
-				log.Printf("%v while requesting deletion state from etcd", err)
-				return nil, false
-			}
-		}
-		if !deleted {
-			log.Printf("[initFilesystemMachine] initializing new fsMachine for %s", filesystemId)
-			s.filesystems[filesystemId] = newFilesystemMachine(filesystemId, s)
-			go s.filesystems[filesystemId].run() // concurrently run state machine
-			return s.filesystems[filesystemId], deleted
-		} else {
-			return fs, deleted
-		}
-	}()
-	// NB: deleteFilesystem takes filesystemsLock
-	if deleted {
-		err := s.deleteFilesystem(filesystemId)
-		if err != nil {
-			log.Printf("Error deleting filesystem: %v", err)
-		}
-		return nil
-	}
-	return fs
-}
-
-func (s *InMemoryState) exists(filesystem string) bool {
-	s.filesystemsLock.RLock()
-	_, ok := s.filesystems[filesystem]
-	s.filesystemsLock.RUnlock()
-	return ok
-}
-
-// return a filesystem or error
-func (s *InMemoryState) maybeFilesystem(filesystemId string) (*fsMachine, error) {
-	fs := s.initFilesystemMachine(filesystemId)
-	if fs == nil {
-		// It was deleted.
-		return nil, fmt.Errorf("No such filesystemId %s (it was deleted)", filesystemId)
-	}
-	return fs, nil
-}
-
-func (state *InMemoryState) reallyProcureFilesystem(ctx context.Context, name VolumeName) (
-	string, error,
-) {
+func (state *InMemoryState) reallyProcureFilesystem(ctx context.Context, name VolumeName) (string, error) {
 	// move filesystem here if it's not here already (coordinate the move
 	// with the current master via etcd), also (TODO check this) DON'T
 	// ALLOW PATH TO BE PASSED TO DOCKER IF IT IS NOT ACTUALLY MOUNTED
@@ -652,7 +516,10 @@ func (state *InMemoryState) reallyProcureFilesystem(ctx context.Context, name Vo
 		// TODO can we synchronize with the state machine somehow, to
 		// ensure that we're not currently on a master in the process of
 		// doing a handoff?
-		master := state.masterFor(filesystemId)
+		master, err := state.registry.CurrentMasterNode(filesystemId)
+		if err != nil {
+			return "", err
+		}
 		if master == state.myNodeId {
 			log.Printf("Volume already here, we are done %s", filesystemId)
 			return filesystemId, nil
@@ -675,7 +542,7 @@ func (state *InMemoryState) reallyProcureFilesystem(ctx context.Context, name Vo
 			log.Printf(
 				"Attempting to move %s from %s to me (%s)",
 				filesystemId,
-				state.masterFor(filesystemId),
+				master,
 				state.myNodeId,
 			)
 			var e *Event
@@ -694,12 +561,12 @@ func (state *InMemoryState) reallyProcureFilesystem(ctx context.Context, name Vo
 			}
 			log.Printf(
 				"Attempting to move %s from %s to me (%s)",
-				filesystemId, state.masterFor(filesystemId), state.myNodeId,
+				filesystemId, master, state.myNodeId,
 			)
 			if e.Name != "moved" {
 				return "", fmt.Errorf(
 					"failed to move %s from %s to %s: %s",
-					filesystemId, state.masterFor(filesystemId), state.myNodeId, e,
+					filesystemId, master, state.myNodeId, e,
 				)
 			}
 			// great - the current master thinks it's handed off to us.
@@ -848,16 +715,14 @@ func (s *InMemoryState) CreateFilesystem(
 		return nil, nil, err
 	}
 
-	// update mastersCache with what we know. Do it in a func so that we
-	// don't hold the mutex for longer than we need to.
-	func() {
-		s.mastersCacheLock.Lock()
-		defer s.mastersCacheLock.Unlock()
-		s.mastersCache[filesystemId] = s.myNodeId
-	}()
+	// update mastersCache with what we know
+	s.registry.SetMasterNode(filesystemId, s.myNodeId)
 
 	// go ahead and create the filesystem
-	fs := s.initFilesystemMachine(filesystemId)
+	fs, err := s.InitFilesystemMachine(filesystemId)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	ch, err := s.dispatchEvent(filesystemId, &Event{Name: "create"}, "")
 	if err != nil {
@@ -875,25 +740,50 @@ func (s *InMemoryState) CreateFilesystem(
 func (s *InMemoryState) GetReplicationLatency(fs string) map[string][]string {
 	commitsOnServer := map[string]map[string]struct{}{}
 	allCommits := map[string]struct{}{}
+	result := map[string][]string{}
 
-	s.globalSnapshotCacheLock.RLock()
-	for server, filesystems := range s.globalSnapshotCache {
-		snapshots, ok := filesystems[fs]
+	// s.filesystemsLock.RLock()
+	// defer s.filesystemsLock.RUnlock()
+
+	// for fsID, fsm := range s.filesystems {
+	// snaps := fsm.GetSnapshots()
+	// }
+
+	fsm, err := s.GetFilesystemMachine(fs)
+	if err != nil {
+		log.Printf("[GetReplicationLatency] failed to get filesystem: %s", err)
+		return result
+	}
+
+	serversAndSnapshots := fsm.ListSnapshots()
+
+	for server, snapshots := range serversAndSnapshots {
 		commitsOnServer[server] = map[string]struct{}{}
-		if ok {
-			commitsOnServer[server] = map[string]struct{}{}
-			for _, snapshot := range snapshots {
-				commitsOnServer[server][snapshot.Id] = struct{}{}
-				allCommits[snapshot.Id] = struct{}{}
-			}
+
+		for _, snapshot := range snapshots {
+			commitsOnServer[server][snapshot.Id] = struct{}{}
+			allCommits[snapshot.Id] = struct{}{}
 		}
 	}
-	s.globalSnapshotCacheLock.RUnlock()
+
+	// s.globalSnapshotCacheLock.RLock()
+	// for server, filesystems := range s.globalSnapshotCache {
+	// 	commitsOnServer[server] = map[string]struct{}{}
+
+	// 	snapshots, ok := filesystems[fs]
+	// 	if ok {
+	// 		commitsOnServer[server] = map[string]struct{}{}
+	// 		for _, snapshot := range snapshots {
+	// 			commitsOnServer[server][snapshot.Id] = struct{}{}
+	// 			allCommits[snapshot.Id] = struct{}{}
+	// 		}
+	// 	}
+	// }
+	// s.globalSnapshotCacheLock.RUnlock()
 
 	log.Printf("[GetReplicationLatency] got initial data: %+v", commitsOnServer)
 	log.Printf("[GetReplicationLatency] all commits: %+v", allCommits)
 
-	result := map[string][]string{}
 	// Compute which elements are missing for each server
 	for server, commits := range commitsOnServer {
 		missingForServer := []string{}

@@ -14,10 +14,10 @@ func discoveringState(f *fsMachine) stateFn {
 		return backoffState
 	}
 
-	if !f.filesystem.exists {
+	if !f.filesystem.Exists {
 		return missingState
 	} else {
-		err := f.state.alignMountStateWithMasters(f.filesystemId)
+		err := f.state.AlignMountStateWithMasters(f.filesystemId)
 		if err != nil {
 			log.Printf(
 				"[discoveringState:%s] error trying to align mount state with masters: %v, "+
@@ -27,8 +27,7 @@ func discoveringState(f *fsMachine) stateFn {
 			)
 			return failedState
 		}
-		// TODO do we need to acquire some locks here?
-		if f.filesystem.mounted {
+		if f.filesystem.Mounted {
 			return activeState
 		} else {
 			return inactiveState

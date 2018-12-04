@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -17,8 +16,10 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
-	//niobuffer "github.com/djherbis/buffer"
-	//"github.com/djherbis/nio"
+
+	"github.com/dotmesh-io/dotmesh/pkg/observer"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // NB: It's important that the following includes characters _not_ included in
@@ -66,7 +67,7 @@ func applyPrelude(prelude Prelude, fqfs string) error {
 	// iterate over it setting zfs user properties accordingly.
 	log.Printf("[applyPrelude] Got prelude: %+v", prelude)
 	for _, j := range prelude.SnapshotProperties {
-		metadataEncoded, err := encodeMetadata(*j.Metadata)
+		metadataEncoded, err := encodeMetadata(j.Metadata)
 		if err != nil {
 			return err
 		}
@@ -78,12 +79,12 @@ func applyPrelude(prelude Prelude, fqfs string) error {
 				args = append(args, fqfs+"@"+j.Id)
 				out, err := exec.Command(ZFS, args...).CombinedOutput()
 				if err != nil {
-					log.Printf(
+					log.Errorf(
 						"[applyPrelude] Error applying prelude: %s, %s, %s", args, err, out,
 					)
 					return fmt.Errorf("Error applying prelude: %s -> %v: %s", args, err, out)
 				}
-				log.Printf("[applyPrelude] Applied snapshot props for: %s", j.Id)
+				log.Debugf("[applyPrelude] Applied snapshot props for: %s", j.Id)
 			}
 		}
 	}
@@ -256,7 +257,7 @@ func runForever(f func() error, label string, errorBackoff, successBackoff time.
 	}
 }
 
-var deathObserver *Observer = NewObserver("deathObserver")
+var deathObserver = observer.NewObserver("deathObserver")
 
 // run while filesystem lives
 func runWhileFilesystemLives(f func() error, label string, filesystemId string, errorBackoff, successBackoff time.Duration) {
@@ -520,9 +521,9 @@ func (o *Once) Do(f func()) {
 	}
 }
 
-func restrictSnapshots(localSnaps []*snapshot, toSnapshotId string) ([]*snapshot, error) {
+func restrictSnapshots(localSnaps []*Snapshot, toSnapshotId string) ([]*Snapshot, error) {
 	if toSnapshotId != "" {
-		newLocalSnaps := []*snapshot{}
+		newLocalSnaps := []*Snapshot{}
 		for _, s := range localSnaps {
 			newLocalSnaps = append(newLocalSnaps, s)
 			if s.Id == toSnapshotId {

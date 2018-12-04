@@ -5,14 +5,15 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/dotmesh-io/dotmesh/pkg/registry"
 	cp "github.com/dotmesh-io/go-checkpoint"
 )
 
 func (state *InMemoryState) checkForUpdates() error {
 	numberOfDots := func() string {
-		state.mastersCacheLock.Lock()
-		defer state.mastersCacheLock.Unlock()
-		return fmt.Sprintf("%d", len(state.mastersCache))
+		// state.mastersCacheLock.Lock()
+		// defer state.mastersCacheLock.Unlock()
+		return fmt.Sprintf("%d", len(state.registry.ListMasterNodes(&registry.ListMasterNodesQuery{})))
 	}()
 
 	totalBytes := func() string {
