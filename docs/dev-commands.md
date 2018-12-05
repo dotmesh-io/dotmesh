@@ -442,3 +442,11 @@ Put the following (sorry) in root's crontab (by e.g. running sudo crontab -e):
 @reboot rm /dotmesh-test-cleanup.lock
 @daily bash -c 'echo y | docker system prune -a --volumes; find /dotmesh-test-pools -ctime +1 -delete'
 ```
+
+## Checking out etcd contents in smoke runners
+
+
+
+```bash
+docker exec -it [container ID] etcdctl --cert-file=/pki/apiserver.pem --key-file=/pki/apiserver-key.pem --ca-file=/pki/ca.pem --endpoint "https://127.0.0.1:42379" ls /dotmesh.io/filesystems
+```
