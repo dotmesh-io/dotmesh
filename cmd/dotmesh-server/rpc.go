@@ -830,12 +830,10 @@ func (d *DotmeshRPC) Commit(
 				return err
 			}
 	*/
-    log.WithFields(
+	log.WithFields(
 		log.Fields{
-			"message": args.Message,
-			"metadata": args.Metadata,
-		}
-	).Infoln("In commit rpc")
+			"message":  args.Message,
+			"metadata": args.Metadata}).Infoln("In commit rpc")
 	err := validator.IsValidVolume(args.Namespace, args.Name)
 	if err != nil {
 		return err
@@ -859,7 +857,7 @@ func (d *DotmeshRPC) Commit(
 	// NB: metadata keys must always start lowercase, because zfs
 	user, _, _ := r.BasicAuth()
 	meta := Metadata{"message": args.Message, "author": user}
-	
+
 	// check that user submitted metadata field names all start with lowercase
 	for name, value := range args.Metadata {
 		firstCharacter := string(name[0])
