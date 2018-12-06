@@ -830,7 +830,10 @@ func (d *DotmeshRPC) Commit(
 				return err
 			}
 	*/
-
+	log.WithFields(
+		log.Fields{
+			"message":  args.Message,
+			"metadata": args.Metadata}).Infoln("In commit rpc")
 	err := validator.IsValidVolume(args.Namespace, args.Name)
 	if err != nil {
 		return err
@@ -863,7 +866,7 @@ func (d *DotmeshRPC) Commit(
 		}
 		meta[name] = value
 	}
-
+	log.WithField("meta", meta).Infoln("Finished collating metadata with msg and author")
 	responseChan, err := d.state.globalFsRequest(
 		filesystemId,
 		&Event{Name: "snapshot",
