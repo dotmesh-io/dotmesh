@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/dotmesh-io/dotmesh/pkg/kv"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 
 	// notification provider
@@ -30,7 +31,7 @@ import (
 // initial setup
 const ROOT_FS = "dmfs"
 const META_KEY_PREFIX = "io.dotmesh:meta-"
-const ETCD_PREFIX = "/dotmesh.io"
+const ETCD_PREFIX = types.EtcdPrefix
 
 var ZFS string
 var MOUNT_ZFS string
