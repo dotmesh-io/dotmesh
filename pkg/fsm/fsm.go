@@ -33,6 +33,8 @@ type FsConfig struct {
 	NewSnapsOnMaster     observer.Observer
 
 	FilesystemMetadataTimeout int64
+
+	ZFSPath string
 }
 
 // core functions used by files ending `state` which I couldn't think of a good place for.
@@ -86,6 +88,7 @@ func NewFilesystemMachine(cfg *FsConfig) *FsMachine {
 		transferUpdates: make(chan types.TransferUpdate),
 
 		filesystemMetadataTimeout: cfg.FilesystemMetadataTimeout,
+		zfsPath:                   cfg.ZFSPath,
 	}
 }
 
@@ -486,43 +489,43 @@ func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextSt
 	args := []string{"snapshot"}
 	args = append(args, metadataEncoded...)
 	args = append(args, fq(f.filesystemId)+"@"+snapshotId)
-	logZFSCommand(f.filesystemId, fmt.Sprintf("%s %s", ZFS, strings.Join(args, " ")))
-	out, err := exec.Command(ZFS, args...).CombinedOutput()
+	logZFSCommand(f.filesystemId, fmt.Sprintf("%s %s", f.zfsPath, strings.Join(args, " ")))
+	out, err := exec.Command(f.zfsPath, args...).CombinedOutput()
 	log.Printf("[snapshot] Attempting: zfs %s", args)
 	if err != nil {
 		log.Printf("[snapshot] %v while trying to snapshot %s (%s)", err, fq(f.filesystemId), args)
-		return &Event{
+		return &types.Event{
 			Name: "failed-snapshot",
-			Args: &EventArgs{"err": err, "combined-output": string(out)},
+			Args: &types.EventArgs{"err": err, "combined-output": string(out)},
 		}, backoffState
 	}
-	list, err := exec.Command(ZFS, "list", fq(f.filesystemId)+"@"+snapshotId).CombinedOutput()
+	list, err := exec.Command(f.zfsPath, "list", fq(f.filesystemId)+"@"+snapshotId).CombinedOutput()
 	if err != nil {
 		log.Printf("[snapshot] %v while trying to list snapshot %s (%s)", err, fq(f.filesystemId), args)
-		return &Event{
+		return &types.Event{
 			Name: "failed-snapshot",
-			Args: &EventArgs{"err": err, "combined-output": string(out)},
+			Args: &types.EventArgs{"err": err, "combined-output": string(out)},
 		}, backoffState
 	}
 	log.Printf("[snapshot] listed snapshot: '%q'", strconv.Quote(string(list)))
 	func() {
 		f.snapshotsLock.Lock()
 		defer f.snapshotsLock.Unlock()
-		log.Printf("[snapshot] Succeeded snapshotting (out: '%s'), saving: %+v", out, &Snapshot{
+		log.Printf("[snapshot] Succeeded snapshotting (out: '%s'), saving: %+v", out, &types.Snapshot{
 			Id: snapshotId, Metadata: meta,
 		})
 		f.filesystem.Snapshots = append(f.filesystem.Snapshots,
-			&Snapshot{Id: snapshotId, Metadata: meta})
+			&types.Snapshot{Id: snapshotId, Metadata: meta})
 	}()
 	err = f.snapshotsChanged()
 	if err != nil {
 		log.Printf("[snapshot] %v while trying to inform that snapshots changed %s (%s)", err, fq(f.filesystemId), args)
-		return &Event{
+		return &types.Event{
 			Name: "failed-snapshot-changed",
-			Args: &EventArgs{"err": err},
+			Args: &types.EventArgs{"err": err},
 		}, backoffState
 	}
-	return &Event{Name: "snapshotted", Args: &EventArgs{"SnapshotId": snapshotId}}, activeState
+	return &types.Event{Name: "snapshotted", Args: &types.EventArgs{"SnapshotId": snapshotId}}, activeState
 }
 
 // find the user-facing name of a given filesystem id. if we're a branch
@@ -558,9 +561,9 @@ func (f *FsMachine) startContainers() error {
 
 // probably the wrong way to do it
 func pointers(snapshots []types.Snapshot) []*types.Snapshot {
-	newList := []*Snapshot{}
+	newList := []*types.Snapshot{}
 	for _, snap := range snapshots {
-		s := &Snapshot{}
+		s := &types.Snapshot{}
 		*s = snap
 		newList = append(newList, s)
 	}
@@ -644,7 +647,7 @@ func (f *FsMachine) snapshotsChanged() error {
 	// any observers in the process.
 	// XXX this _might_ break the fact that handoff doesn't check what snapshot
 	// it's notified about.
-	var snaps []*Snapshot
+	var snaps []*types.Snapshot
 	f.snapshotsLock.Lock()
 	for _, s := range f.filesystem.Snapshots {
 		snaps = append(snaps, s.DeepCopy())
@@ -762,14 +765,12 @@ func calculateSendArgs(
 		   Print machine-parsable verbose information about the stream
 		   package generated.
 */
-func predictSize(
-	fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
-) (int64, error) {
+func predictSize(zfsPath, fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string) (int64, error) {
 	sendArgs := calculateSendArgs(fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId)
 	predictArgs := []string{"send", "-nP"}
 	predictArgs = append(predictArgs, sendArgs...)
 
-	sizeCmd := exec.Command(ZFS, predictArgs...)
+	sizeCmd := exec.Command(zfsPath, predictArgs...)
 
 	log.Printf("[predictSize] predict command: %#v", sizeCmd)
 

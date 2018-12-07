@@ -110,6 +110,9 @@ type FsMachine struct {
 	snapshotCacheMu *sync.RWMutex
 
 	filesystemMetadataTimeout int64
+
+	// path to zfs executable (ZFS_USERLAND_ROOT + /sbin/zfs)
+	zfsPath string
 }
 
 type dirtyInfo struct {
