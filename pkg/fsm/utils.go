@@ -1,6 +1,7 @@
 package fsm
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/dotmesh-io/dotmesh/pkg/observer"
@@ -8,6 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// TODO: remove global variable
 var deathObserver = observer.NewObserver("deathObserver")
 
 func runWhileFilesystemLives(f func() error, label string, filesystemId string, errorBackoff, successBackoff time.Duration) {
@@ -36,7 +38,6 @@ func runWhileFilesystemLives(f func() error, label string, filesystemId string, 
 func terminateRunnersWhileFilesystemLived(filesystemId string) {
 	deathObserver.Publish(filesystemId, struct{ reason string }{"runWhileFilesystemLives"})
 }
-
 
 func fq(fs string) string {
 	// from filesystem id to a fully qualified ZFS filesystem
