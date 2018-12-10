@@ -5,6 +5,7 @@ import (
 
 	"github.com/coreos/etcd/client"
 
+	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/dotmesh-io/dotmesh/pkg/container"
 	"github.com/dotmesh-io/dotmesh/pkg/observer"
 	"github.com/dotmesh-io/dotmesh/pkg/registry"
@@ -113,6 +114,13 @@ type FsMachine struct {
 
 	// path to zfs executable (ZFS_USERLAND_ROOT + /sbin/zfs)
 	zfsPath string
+	// path to zpool exec
+	zpoolPath string
+
+	// poolName must be set through POOL environment variable
+	poolName string
+
+	mountZFS string
 }
 
 type dirtyInfo struct {
@@ -124,7 +132,7 @@ type dirtyInfo struct {
 func castToMetadata(val interface{}) types.Metadata {
 	meta, ok := val.(types.Metadata)
 	if !ok {
-		meta = Metadata{}
+		meta = types.Metadata{}
 		// massage the data into the right type
 		cast := val.(map[string]interface{})
 		for k, v := range cast {
@@ -133,3 +141,10 @@ func castToMetadata(val interface{}) types.Metadata {
 	}
 	return meta
 }
+
+type transferFn func(
+	f *FsMachine,
+	fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
+	transferRequestId string,
+	client *dmclient.JsonRpcClient, transferRequest *types.TransferRequest,
+) (*types.Event, StateFn)
