@@ -199,3 +199,19 @@ type RegistryFilesystem struct {
 }
 
 const EtcdPrefix = "/dotmesh.io"
+
+const RootFS = "dmfs"
+
+const MetaKeyPrefix = "io.dotmesh:meta-"
+
+// BufLength - every 128kb of data transferred through a replication, etcd is updated with the
+// amount of data and ETA and suchlike, this is used in status reporting in `dm` for example
+const BufLength = 131072
+
+// NB: It's important that the following includes characters _not_ included in
+// the base64 alphabet. https://en.wikipedia.org/wiki/Base64
+var EndDotmeshPrelude []byte = []byte("!!END_PRELUDE!!")
+
+type Prelude struct {
+	SnapshotProperties []*Snapshot
+}
