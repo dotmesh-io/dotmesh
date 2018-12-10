@@ -35,7 +35,7 @@ func encodeMetadata(meta types.Metadata) ([]string, error) {
 		}
 		metadataEncoded = append(
 			metadataEncoded, "-o",
-			fmt.Sprintf("%s%s=%s", META_KEY_PREFIX, k, encoded),
+			fmt.Sprintf("%s%s=%s", types.MetaKeyPrefix, k, encoded),
 		)
 	}
 	return metadataEncoded, nil
