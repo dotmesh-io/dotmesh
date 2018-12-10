@@ -36,14 +36,14 @@ func logZFSCommand(filesystemId, command string) {
 // how many bytes has a filesystem diverged from its latest snapshot?
 // also how many bytes does the filesystem take up on disk in total?
 // TODO rename getDirtyDelta and dirtyInfo etc to sizeInfo
-func getDirtyDelta(filesystemId, latestSnap string) (int64, int64, error) {
+func getDirtyDelta(zfsExec, poolName, filesystemId, latestSnap string) (int64, int64, error) {
 	o, err := exec.Command(
-		ZFS, "get", "-pHr", "referenced,used", fq(filesystemId),
+		zfsExec, "get", "-pHr", "referenced,used", fq(poolName, filesystemId),
 	).CombinedOutput()
 	if err != nil {
 		return 0, 0, fmt.Errorf(
 			"[pollDirty] 'zfs get -pHr referenced,used %s' errored with: %s %s",
-			fq(filesystemId), err, o,
+			fq(poolName, filesystemId), err, o,
 		)
 	}
 	/*
@@ -57,7 +57,7 @@ func getDirtyDelta(filesystemId, latestSnap string) (int64, int64, error) {
 	for _, line := range lines {
 		shrap := strings.Fields(line)
 		if len(shrap) >= 3 {
-			if shrap[0] == fq(filesystemId) {
+			if shrap[0] == fq(poolName, filesystemId) {
 				if shrap[1] == "referenced" {
 					referDataset, err = strconv.ParseInt(shrap[2], 10, 64)
 					if err != nil {
@@ -69,7 +69,7 @@ func getDirtyDelta(filesystemId, latestSnap string) (int64, int64, error) {
 						return 0, 0, err
 					}
 				}
-			} else if shrap[0] == fq(filesystemId)+"@"+latestSnap {
+			} else if shrap[0] == fq(poolName, filesystemId)+"@"+latestSnap {
 				if shrap[1] == "referenced" {
 					referLatestSnap, err = strconv.ParseInt(shrap[2], 10, 64)
 					if err != nil {
@@ -100,8 +100,8 @@ func intDiff(a, b int64) int64 {
 	}
 }
 
-func findLocalPoolId() (string, error) {
-	output, err := exec.Command(ZPOOL, "get", "-H", "guid", POOL).CombinedOutput()
+func findLocalPoolId(zpoolExec, pool string) (string, error) {
+	output, err := exec.Command(zpoolExec, "get", "-H", "guid", pool).CombinedOutput()
 	if err != nil {
 		return string(output), err
 	}
@@ -112,9 +112,9 @@ func findLocalPoolId() (string, error) {
 	return fmt.Sprintf("%x", i), nil
 }
 
-func getZpoolCapacity() (float64, error) {
-	output, err := exec.Command(ZPOOL,
-		"list", "-H", "-o", "capacity", POOL).Output()
+func getZpoolCapacity(zpoolExec, pool string) (float64, error) {
+	output, err := exec.Command(zpoolExec,
+		"list", "-H", "-o", "capacity", pool).Output()
 	if err != nil {
 		log.Fatalf("%s, when running zpool list", err)
 		return 0, err
@@ -129,27 +129,27 @@ func getZpoolCapacity() (float64, error) {
 	return capacityF, err
 }
 
-func findFilesystemIdsOnSystem() []string {
+func findFilesystemIdsOnSystem(zfsExec, pool string) []string {
 	// synchronously, return slice of filesystem ids that exist.
 	log.Print("Finding filesystem ids...")
-	listArgs := []string{"list", "-H", "-r", "-o", "name", POOL + "/" + ROOT_FS}
+	listArgs := []string{"list", "-H", "-r", "-o", "name", pool + "/" + types.RootFS}
 	// look before you leap (check error code of zfs list)
-	code, err := returnCode(ZFS, listArgs...)
+	code, err := returnCode(zfsExec, listArgs...)
 	if err != nil {
 		log.Fatalf("%s, when running zfs list", err)
 	}
 	// creates pool/dmfs on demand if it doesn't exist.
 	if code != 0 {
 		output, err := exec.Command(
-			ZFS, "create", "-o", "mountpoint=legacy", POOL+"/"+ROOT_FS).CombinedOutput()
+			zfsExec, "create", "-o", "mountpoint=legacy", pool+"/"+types.RootFS).CombinedOutput()
 		if err != nil {
-			out("Unable to create", POOL+"/"+ROOT_FS, "- does ZFS pool '"+POOL+"' exist?\n")
+			out("Unable to create", pool+"/"+types.RootFS, "- does ZFS pool '"+pool+"' exist?\n")
 			log.Printf(string(output))
 			log.Fatal(err)
 		}
 	}
 	// get output
-	output, err := exec.Command(ZFS, listArgs...).Output()
+	output, err := exec.Command(zfsExec, listArgs...).Output()
 	if err != nil {
 		log.Fatalf("%s, while getting output from zfs list", err)
 	}
@@ -160,7 +160,7 @@ func findFilesystemIdsOnSystem() []string {
 	// one which is empty newline
 	lines = lines[1 : len(lines)-1]
 	for _, line := range lines {
-		newLines = append(newLines, unfq(line))
+		newLines = append(newLines, unfq(pool, line))
 	}
 	return newLines
 }
@@ -180,10 +180,10 @@ func doSimpleZFSCommand(cmd *exec.Cmd, description string) error {
 	return nil
 }
 
-func deleteFilesystemInZFS(fs string) error {
-	logZFSCommand(fs, fmt.Sprintf("%s destroy -r %s", ZFS, fq(fs)))
-	cmd := exec.Command(ZFS, "destroy", "-r", fq(fs))
-	err := doSimpleZFSCommand(cmd, fmt.Sprintf("delete filesystem %s (full name: %s)", fs, fq(fs)))
+func deleteFilesystemInZFS(zfsExec, poolName, fs string) error {
+	logZFSCommand(fs, fmt.Sprintf("%s destroy -r %s", zfsExec, fq(poolName, fs)))
+	cmd := exec.Command(zfsExec, "destroy", "-r", fq(poolName, fs))
+	err := doSimpleZFSCommand(cmd, fmt.Sprintf("delete filesystem %s (full name: %s)", fs, fq(poolName, fs)))
 	return err
 }
 
@@ -235,33 +235,33 @@ func deleteFilesystemInZFS(fs string) error {
 //                   \ -> D(foo-oops)
 // # zfs promote foo
 
-func stashBranch(existingFs string, newFs string, rollbackTo string) error {
-	logZFSCommand(existingFs, fmt.Sprintf("%s rename %s %s", ZFS, fq(existingFs), fq(newFs)))
-	err := doSimpleZFSCommand(exec.Command(ZFS, "rename", fq(existingFs), fq(newFs)),
+func stashBranch(zfsExec, poolName string, existingFs string, newFs string, rollbackTo string) error {
+	logZFSCommand(existingFs, fmt.Sprintf("%s rename %s %s", zfsExec, fq(poolName, existingFs), fq(poolName, newFs)))
+	err := doSimpleZFSCommand(exec.Command(zfsExec, "rename", fq(poolName, existingFs), fq(poolName, newFs)),
 		fmt.Sprintf("rename filesystem %s (%s) to %s (%s) for retroBranch",
-			existingFs, fq(existingFs),
-			newFs, fq(newFs),
+			existingFs, fq(poolName, existingFs),
+			newFs, fq(poolName, newFs),
 		),
 	)
 	if err != nil {
 		return err
 	}
 
-	logZFSCommand(existingFs, fmt.Sprintf("%s clone %s@%s %s", ZFS, fq(newFs), rollbackTo, fq(existingFs)))
-	err = doSimpleZFSCommand(exec.Command(ZFS, "clone", fq(newFs)+"@"+rollbackTo, fq(existingFs)),
+	logZFSCommand(existingFs, fmt.Sprintf("%s clone %s@%s %s", zfsExec, fq(poolName, newFs), rollbackTo, fq(poolName, existingFs)))
+	err = doSimpleZFSCommand(exec.Command(zfsExec, "clone", fq(poolName, newFs)+"@"+rollbackTo, fq(poolName, existingFs)),
 		fmt.Sprintf("clone snapshot %s of filesystem %s (%s) to %s (%s) for retroBranch",
-			rollbackTo, newFs, fq(newFs)+"@"+rollbackTo,
-			existingFs, fq(existingFs),
+			rollbackTo, newFs, fq(poolName, newFs)+"@"+rollbackTo,
+			existingFs, fq(poolName, existingFs),
 		),
 	)
 	if err != nil {
 		return err
 	}
 
-	logZFSCommand(existingFs, fmt.Sprintf("%s promote %s", ZFS, fq(existingFs)))
-	err = doSimpleZFSCommand(exec.Command(ZFS, "promote", fq(existingFs)),
+	logZFSCommand(existingFs, fmt.Sprintf("%s promote %s", zfsExec, fq(poolName, existingFs)))
+	err = doSimpleZFSCommand(exec.Command(zfsExec, "promote", fq(poolName, existingFs)),
 		fmt.Sprintf("promote filesystem %s (%s) for retroBranch",
-			existingFs, fq(existingFs),
+			existingFs, fq(poolName, existingFs),
 		),
 	)
 	if err != nil {
@@ -271,21 +271,21 @@ func stashBranch(existingFs string, newFs string, rollbackTo string) error {
 	return nil
 }
 
-func discoverSystem(fs string) (*types.Filesystem, error) {
+func discoverSystem(zfsExec, poolName, fs string) (*types.Filesystem, error) {
 	// TODO sanitize fs
 	// does filesystem exist? (early exit if not)
-	code, err := returnCode(ZFS, "list", fq(fs))
+	code, err := returnCode(zfsExec, "list", fq(poolName, fs))
 	if err != nil {
 		return nil, err
 	}
 	if code != 0 {
-		return &Filesystem{
+		return &types.Filesystem{
 			Id:     fs,
 			Exists: false,
 			// Important not to leave snapshots nil in the default case, we
 			// need to inform other nodes that we have no snapshots of a
 			// filesystem if we don't have the filesystem.
-			Snapshots: []*Snapshot{},
+			Snapshots: []*types.Snapshot{},
 		}, nil
 	}
 	// is filesystem mounted?
@@ -298,9 +298,9 @@ func discoverSystem(fs string) (*types.Filesystem, error) {
 	// what metadata is encoded in any snapshots' zfs properties?
 	// construct metadata where it exists
 	//filesystemMeta := metadata{} // TODO fs-specific metadata
-	snapshotMeta := map[string]Metadata{}
+	snapshotMeta := map[string]types.Metadata{}
 	output, err := exec.Command(
-		ZFS, "get", "all", "-H", "-r", "-s", "local,received", fq(fs),
+		zfsExec, "get", "all", "-H", "-r", "-s", "local,received", fq(poolName, fs),
 	).Output()
 	if err != nil {
 		return nil, err
@@ -314,8 +314,8 @@ func discoverSystem(fs string) (*types.Filesystem, error) {
 			fsSnapshot := shrapnel[0]
 			// strip off meta prefix
 			keyEncoded := shrapnel[1]
-			if strings.HasPrefix(keyEncoded, META_KEY_PREFIX) {
-				keyEncoded = keyEncoded[len(META_KEY_PREFIX):]
+			if strings.HasPrefix(keyEncoded, types.MetaKeyPrefix) {
+				keyEncoded = keyEncoded[len(types.MetaKeyPrefix):]
 				// base64 decode or die
 				valueEncoded := shrapnel[2]
 
@@ -331,7 +331,7 @@ func discoverSystem(fs string) (*types.Filesystem, error) {
 						id := strings.Split(fsSnapshot, "@")[1]
 						_, ok := snapshotMeta[id]
 						if !ok {
-							snapshotMeta[id] = Metadata{}
+							snapshotMeta[id] = types.Metadata{}
 						}
 						snapshotMeta[id][keyEncoded] = string(decoded)
 					} else {
@@ -343,8 +343,8 @@ func discoverSystem(fs string) (*types.Filesystem, error) {
 	}
 
 	// what snapshots exist of the filesystem?
-	output, err = exec.Command(ZFS,
-		"list", "-H", "-t", "filesystem,snapshot", "-r", fq(fs)).Output()
+	output, err = exec.Command(zfsExec,
+		"list", "-H", "-t", "filesystem,snapshot", "-r", fq(poolName, fs)).Output()
 	if err != nil {
 		return nil, err
 	}
@@ -352,23 +352,22 @@ func discoverSystem(fs string) (*types.Filesystem, error) {
 
 	// strip off trailing newline and root pool
 	listLines = listLines[1 : len(listLines)-1]
-	snapshots := []*Snapshot{}
+	snapshots := []*types.Snapshot{}
 	for _, values := range listLines {
 		fsSnapshot := strings.Split(values, "\t")[0]
 		id := strings.Split(fsSnapshot, "@")[1]
 		meta, ok := snapshotMeta[id]
 		if !ok {
-			meta = make(Metadata)
+			meta = make(types.Metadata)
 		}
-		snapshot := &Snapshot{Id: id, Metadata: meta}
+		snapshot := &types.Snapshot{Id: id, Metadata: meta}
 		snapshots = append(snapshots, snapshot)
 	}
-	filesystem := &Filesystem{
+
+	return &types.Filesystem{
 		Id:        fs,
 		Exists:    true,
 		Mounted:   mounted,
 		Snapshots: snapshots,
-	}
-
-	return filesystem, nil
+	}, nil
 }
