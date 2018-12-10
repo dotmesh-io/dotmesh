@@ -34,7 +34,34 @@ type FsConfig struct {
 
 	FilesystemMetadataTimeout int64
 
+	// zfs executable path
 	ZFSPath string
+	// zpool executable path
+	ZPoolPath string
+	// Previously known as main.MOUNT_ZFS
+	MountZFS string
+
+	// PoolName is a required
+	PoolName string
+}
+
+type FSM interface {
+	Run()
+	GetStatus() string
+	GetCurrentState() string
+	Mounted() bool
+	TransitionSubscribe(channel string, ch chan interface{})
+	TransitionUnsubscribe(channel string, ch chan interface{})
+
+	// metadata API
+	GetMetadata(nodeID string) map[string]string
+	ListMetadata() map[string]map[string]string
+	SetMetadata(nodeID string, meta map[string]string)
+	GetSnapshots(nodeID string) []*types.Snapshot
+	ListSnapshots() map[string][]*types.Snapshot
+	SetSnapshots(nodeID string, snapshots []*types.Snapshot)
+
+	Submit(event *types.Event, requestID string) (reply chan *types.Event, err error)
 }
 
 // core functions used by files ending `state` which I couldn't think of a good place for.
@@ -89,10 +116,74 @@ func NewFilesystemMachine(cfg *FsConfig) *FsMachine {
 
 		filesystemMetadataTimeout: cfg.FilesystemMetadataTimeout,
 		zfsPath:                   cfg.ZFSPath,
+		mountZFS:                  cfg.MountZFS,
+		zpoolPath:                 cfg.ZPoolPath,
+		poolName:                  cfg.PoolName,
 	}
 }
 
-func (f *FsMachine) run() {
+func (f *FsMachine) GetCurrentState() string {
+	return f.currentState
+}
+
+func (f *FsMachine) GetStatus() string {
+	return f.status
+}
+
+func (f *FsMachine) TransitionSubscribe(channel string, ch chan interface{}) {
+	f.transitionObserver.Subscribe(channel, ch)
+}
+
+func (f *FsMachine) TransitionUnsubscribe(channel string, ch chan interface{}) {
+	f.transitionObserver.Unsubscribe(channel, ch)
+}
+
+func (f *FsMachine) Mounted() bool {
+	return f.filesystem.Mounted
+}
+
+// Submit - submits event to a filesystem, returning the event stream for convenience so the caller
+// can listen for a response
+func (f *FsMachine) Submit(event *types.Event, requestID string) (reply chan *types.Event, err error) {
+	// f.requests <- event
+	if requestID == "" {
+		id, err := uuid.NewV4()
+		if err != nil {
+			return nil, err
+		}
+		requestID = id.String()
+	}
+	// fs, err := s.InitFilesystemMachine(filesystem)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	if event.Args == nil {
+		event.Args = &types.EventArgs{}
+	}
+	(*event.Args)["RequestId"] = requestID
+	f.responsesLock.Lock()
+	defer f.responsesLock.Unlock()
+	rc, ok := f.responses[requestID]
+	if !ok {
+		responseChan := make(chan *types.Event)
+		f.responses[requestID] = responseChan
+		rc = responseChan
+	}
+
+	// Now we have a response channel set up, it's safe to send the request.
+
+	// Don't block the entire etcd event-loop just because one fsMachine isn't
+	// ready to receive an event. Our response is a chan anyway, so consumers
+	// can synchronize on reading from that as they wish (for example, in
+	// another goroutine).
+	go func() {
+		f.requests <- event
+	}()
+
+	return rc, nil
+}
+
+func (f *FsMachine) Run() {
 	// TODO cancel this when we eventually support deletion
 	log.Printf("[run:%s] INIT", f.filesystemId)
 	go runWhileFilesystemLives(
@@ -193,9 +284,7 @@ func (f *FsMachine) run() {
 func (f *FsMachine) pollDirty() error {
 
 	if f.filesystem.Mounted {
-		dirtyDelta, sizeBytes, err := getDirtyDelta(
-			f.filesystemId, f.latestSnapshot(),
-		)
+		dirtyDelta, sizeBytes, err := getDirtyDelta(f.zfsPath, f.poolName, f.filesystemId, f.latestSnapshot())
 		if err != nil {
 			return err
 		}
@@ -488,20 +577,20 @@ func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextSt
 	}
 	args := []string{"snapshot"}
 	args = append(args, metadataEncoded...)
-	args = append(args, fq(f.filesystemId)+"@"+snapshotId)
+	args = append(args, fq(f.poolName, f.filesystemId)+"@"+snapshotId)
 	logZFSCommand(f.filesystemId, fmt.Sprintf("%s %s", f.zfsPath, strings.Join(args, " ")))
 	out, err := exec.Command(f.zfsPath, args...).CombinedOutput()
 	log.Printf("[snapshot] Attempting: zfs %s", args)
 	if err != nil {
-		log.Printf("[snapshot] %v while trying to snapshot %s (%s)", err, fq(f.filesystemId), args)
+		log.Printf("[snapshot] %v while trying to snapshot %s (%s)", err, fq(f.poolName, f.filesystemId), args)
 		return &types.Event{
 			Name: "failed-snapshot",
 			Args: &types.EventArgs{"err": err, "combined-output": string(out)},
 		}, backoffState
 	}
-	list, err := exec.Command(f.zfsPath, "list", fq(f.filesystemId)+"@"+snapshotId).CombinedOutput()
+	list, err := exec.Command(f.zfsPath, "list", fq(f.poolName, f.filesystemId)+"@"+snapshotId).CombinedOutput()
 	if err != nil {
-		log.Printf("[snapshot] %v while trying to list snapshot %s (%s)", err, fq(f.filesystemId), args)
+		log.Printf("[snapshot] %v while trying to list snapshot %s (%s)", err, fq(f.poolName, f.filesystemId), args)
 		return &types.Event{
 			Name: "failed-snapshot",
 			Args: &types.EventArgs{"err": err, "combined-output": string(out)},
@@ -519,7 +608,7 @@ func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextSt
 	}()
 	err = f.snapshotsChanged()
 	if err != nil {
-		log.Printf("[snapshot] %v while trying to inform that snapshots changed %s (%s)", err, fq(f.filesystemId), args)
+		log.Printf("[snapshot] %v while trying to inform that snapshots changed %s (%s)", err, fq(f.poolName, f.filesystemId), args)
 		return &types.Event{
 			Name: "failed-snapshot-changed",
 			Args: &types.EventArgs{"err": err},
@@ -626,15 +715,15 @@ func (f *FsMachine) attemptReceive() bool {
 
 func (f *FsMachine) discover() error {
 	// discover system state synchronously
-	filesystem, err := discoverSystem(f.filesystemId)
+	filesystem, err := discoverSystem(f.zfsPath, f.poolName, f.filesystemId)
 	if err != nil {
 		return err
 	}
-	func() {
-		f.snapshotsLock.Lock()
-		defer f.snapshotsLock.Unlock()
-		f.filesystem = filesystem
-	}()
+
+	f.snapshotsLock.Lock()
+	f.filesystem = filesystem
+	f.snapshotsLock.Unlock()
+
 	return f.snapshotsChanged()
 }
 
@@ -676,7 +765,7 @@ func (f *FsMachine) recoverFromDivergence(rollbackToId string) error {
 	newFilesystemId := id.String()
 
 	// Roll back the filesystem to rollbackTo, but leaving the new filesystem pointing to its original state
-	err = stashBranch(f.filesystemId, newFilesystemId, rollbackToId)
+	err = stashBranch(f.zfsPath, f.poolName, f.filesystemId, newFilesystemId, rollbackToId)
 	if err != nil {
 		return err
 	}
@@ -704,9 +793,7 @@ func (f *FsMachine) recoverFromDivergence(rollbackToId string) error {
 	return nil
 }
 
-func calculateSendArgs(
-	fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
-) []string {
+func calculateSendArgs(poolName, fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string) []string {
 
 	// toFilesystemId
 	// snapRange.toSnap.Id
@@ -729,16 +816,16 @@ func calculateSendArgs(
 	if fromSnap == "START" {
 		// -R sends interim snapshots as well
 		sendArgs = []string{
-			"-p", "-R", fq(toFilesystemId) + "@" + toSnapshotId,
+			"-p", "-R", fq(poolName, toFilesystemId) + "@" + toSnapshotId,
 		}
 	} else {
 		// in clone case, fromSnap must be fully qualified
 		if strings.Contains(fromSnap, "@") {
 			// send a clone, so make it fully qualified
-			fromSnap = fq(fromSnap)
+			fromSnap = fq(poolName, fromSnap)
 		}
 		sendArgs = []string{
-			"-p", "-I", fromSnap, fq(toFilesystemId) + "@" + toSnapshotId,
+			"-p", "-I", fromSnap, fq(poolName, toFilesystemId) + "@" + toSnapshotId,
 		}
 	}
 	return sendArgs
@@ -765,8 +852,8 @@ func calculateSendArgs(
 		   Print machine-parsable verbose information about the stream
 		   package generated.
 */
-func predictSize(zfsPath, fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string) (int64, error) {
-	sendArgs := calculateSendArgs(fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId)
+func predictSize(zfsPath, poolName, fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string) (int64, error) {
+	sendArgs := calculateSendArgs(poolName, fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId)
 	predictArgs := []string{"send", "-nP"}
 	predictArgs = append(predictArgs, sendArgs...)
 
