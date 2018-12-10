@@ -80,7 +80,7 @@ func canApply(fromSnaps []*types.Snapshot, toSnaps []*types.Snapshot) (*snapshot
 		toSnapKeys[snap.Id] = true
 	}
 
-	var latestCommon *Snapshot
+	var latestCommon *types.Snapshot
 	// find latest common snapshot
 	for i := len(fromSnaps) - 1; i >= 0; i-- {
 		maybeCommon := fromSnaps[i].Id
@@ -190,4 +190,18 @@ type ToSnapsUpToDate struct{}
 
 func (e *ToSnapsUpToDate) Error() string {
 	return "toSnaps is up-to-date"
+}
+
+func restrictSnapshots(localSnaps []*types.Snapshot, toSnapshotId string) ([]*types.Snapshot, error) {
+	if toSnapshotId != "" {
+		newLocalSnaps := []*types.Snapshot{}
+		for _, s := range localSnaps {
+			newLocalSnaps = append(newLocalSnaps, s)
+			if s.Id == toSnapshotId {
+				return newLocalSnaps, nil
+			}
+		}
+		return newLocalSnaps, fmt.Errorf("Unable to find %s in %+v", toSnapshotId, localSnaps)
+	}
+	return localSnaps, nil
 }
