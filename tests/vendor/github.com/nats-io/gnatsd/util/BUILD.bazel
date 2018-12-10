@@ -1,0 +1,13 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "tls.go",
+        "tls_pre17.go",
+        "tls_pre18.go",
+    ],
+    importmap = "github.com/dotmesh-io/dotmesh/tests/vendor/github.com/nats-io/gnatsd/util",
+    importpath = "github.com/nats-io/gnatsd/util",
+    visibility = ["//visibility:public"],
+)

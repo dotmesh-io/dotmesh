@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "client.go",
+        "error.go",
+        "server.go",
+    ],
+    importmap = "github.com/dotmesh-io/dotmesh/tests/vendor/github.com/gorilla/rpc/v2/json2",
+    importpath = "github.com/gorilla/rpc/v2/json2",
+    visibility = ["//visibility:public"],
+    deps = ["//tests/vendor/github.com/gorilla/rpc/v2:go_default_library"],
+)

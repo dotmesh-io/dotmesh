@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["nuid.go"],
+    importmap = "github.com/dotmesh-io/dotmesh/tests/vendor/github.com/nats-io/nuid",
+    importpath = "github.com/nats-io/nuid",
+    visibility = ["//visibility:public"],
+)
