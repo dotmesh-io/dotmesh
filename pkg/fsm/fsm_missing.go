@@ -151,10 +151,10 @@ func missingState(f *FsMachine) StateFn {
 				}
 				return backoffState
 			} else if f.lastS3TransferRequest.Direction == "pull" {
-				logZFSCommand(f.filesystemId, fmt.Sprintf("%s %s %s", f.zfsPath, "create", fq(f.filesystemId)))
-				out, err := exec.Command(f.zfsPath, "create", fq(f.filesystemId)).CombinedOutput()
+				logZFSCommand(f.filesystemId, fmt.Sprintf("%s %s %s", f.zfsPath, "create", fq(f.poolName, f.filesystemId)))
+				out, err := exec.Command(f.zfsPath, "create", fq(f.poolName, f.filesystemId)).CombinedOutput()
 				if err != nil {
-					log.Printf("%v while trying to create %s", err, fq(f.filesystemId))
+					log.Printf("%v while trying to create %s", err, fq(f.poolName, f.filesystemId))
 					f.innerResponses <- &types.Event{
 						Name: "failed-create",
 						Args: &types.EventArgs{"err": err, "combined-output": string(out)},
@@ -216,10 +216,10 @@ func missingState(f *FsMachine) StateFn {
 			f.transitionedTo("missing", "creating")
 			// ah - we are going to be created on this node, rather than
 			// received into from a master...
-			logZFSCommand(f.filesystemId, fmt.Sprintf("%s %s %s", ZFS, "create", fq(f.filesystemId)))
-			out, err := exec.Command(ZFS, "create", fq(f.filesystemId)).CombinedOutput()
+			logZFSCommand(f.filesystemId, fmt.Sprintf("%s %s %s", f.zfsPath, "create", fq(f.poolName, f.filesystemId)))
+			out, err := exec.Command(f.zfsPath, "create", fq(f.poolName, f.filesystemId)).CombinedOutput()
 			if err != nil {
-				log.Printf("%v while trying to create %s", err, fq(f.filesystemId))
+				log.Printf("%v while trying to create %s", err, fq(f.poolName, f.filesystemId))
 				f.innerResponses <- &types.Event{
 					Name: "failed-create",
 					Args: &types.EventArgs{"err": err, "combined-output": string(out)},
