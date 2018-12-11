@@ -105,11 +105,7 @@ waitingForSlaveSnapshot:
 		// through etcd yet, so use our definitive knowledge about our local
 		// state...
 
-		snaps := func() []*types.Snapshot {
-			f.snapshotsLock.Lock()
-			defer f.snapshotsLock.Unlock()
-			return f.filesystem.Snapshots
-		}()
+		snaps := f.ListLocalSnapshots()
 
 		f.transitionedTo(
 			"handoff",
