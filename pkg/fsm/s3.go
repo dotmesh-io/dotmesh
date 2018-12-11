@@ -17,7 +17,17 @@ import (
 	"golang.org/x/net/context"
 )
 
-// stuff we use for s3 management which likely isn't needed in other situations
+// ReadFile - reads a file from the volume into the supplied Contents io.Writer,
+// response will be sent to a provided Response channel
+func (f *FsMachine) ReadFile(destination *types.OutputFile) {
+	f.fileOutputIO <- destination
+}
+
+// WriteFile - reads the supplied Contents io.Reader and writes into the volume,
+// response will be sent to a provided Response channel
+func (f *FsMachine) WriteFile(source *types.InputFile) {
+	f.fileInputIO <- source
+}
 
 func (f *FsMachine) getLastNonMetadataSnapshot() (*types.Snapshot, error) {
 	// for all the snapshots we have, start from the latest, work backwards until we find a snapshot which isn't just a metadata change (i.e a write of a json file about s3 versions)
