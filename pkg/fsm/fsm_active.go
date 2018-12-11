@@ -234,11 +234,11 @@ func activeState(f *FsMachine) StateFn {
 			if sliceIndex > 0 {
 				log.Printf("found index %d", sliceIndex)
 				log.Printf("snapshots before %+v", f.filesystem.Snapshots)
-				func() {
-					f.snapshotsLock.Lock()
-					defer f.snapshotsLock.Unlock()
-					f.filesystem.Snapshots = f.filesystem.Snapshots[:sliceIndex]
-				}()
+
+				f.snapshotsLock.Lock()
+				f.filesystem.Snapshots = f.filesystem.Snapshots[:sliceIndex]
+				f.snapshotsLock.Unlock()
+
 				err = f.snapshotsChanged()
 				if err != nil {
 					log.Printf("%v while trying to report that snapshots have changed %s", err, fq(f.poolName, f.filesystemId))
