@@ -475,13 +475,7 @@ func (f *FsMachine) retryPush(
 					Args: &types.EventArgs{"err": err, "filesystemId": toFilesystemId},
 				}, backoffState
 			}
-			var snaps []*types.Snapshot
-
-			fsMachine.snapshotsLock.Lock()
-			for _, snapshot := range fsMachine.filesystem.Snapshots {
-				snaps = append(snaps, snapshot.DeepCopy())
-			}
-			fsMachine.snapshotsLock.Unlock()
+			snaps := fsMachine.ListLocalSnapshots()
 
 			// if we're given a target snapshot, restrict f.filesystem.snapshots to
 			// that snapshot
