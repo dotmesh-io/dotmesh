@@ -1,17 +1,20 @@
 package fsm
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
 
 	"github.com/dotmesh-io/dotmesh/pkg/types"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // functions which relate to interacting directly with zfs
@@ -235,9 +238,89 @@ func deleteFilesystemInZFS(zfsExec, poolName, fs string) error {
 //                   \ -> D(foo-oops)
 // # zfs promote foo
 
+// func stashBranch(zfsExec, poolName string, existingFs string, newFs string, rollbackTo string) error {
+// logZFSCommand(existingFs, fmt.Sprintf("%s rename %s %s", zfsExec, fq(poolName, existingFs), fq(poolName, newFs)))
+// 	err := doSimpleZFSCommand(exec.Command(zfsExec, "rename", fq(poolName, existingFs), fq(poolName, newFs)),
+// 		fmt.Sprintf("rename filesystem %s (%s) to %s (%s) for retroBranch",
+// 			existingFs, fq(poolName, existingFs),
+// 			newFs, fq(poolName, newFs),
+// 		),
+// 	)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	logZFSCommand(existingFs, fmt.Sprintf("%s clone %s@%s %s", zfsExec, fq(poolName, newFs), rollbackTo, fq(poolName, existingFs)))
+// 	err = doSimpleZFSCommand(exec.Command(zfsExec, "clone", fq(poolName, newFs)+"@"+rollbackTo, fq(poolName, existingFs)),
+// 		fmt.Sprintf("clone snapshot %s of filesystem %s (%s) to %s (%s) for retroBranch",
+// 			rollbackTo, newFs, fq(poolName, newFs)+"@"+rollbackTo,
+// 			existingFs, fq(poolName, existingFs),
+// 		),
+// 	)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	logZFSCommand(existingFs, fmt.Sprintf("%s promote %s", zfsExec, fq(poolName, existingFs)))
+// 	err = doSimpleZFSCommand(exec.Command(zfsExec, "promote", fq(poolName, existingFs)),
+// 		fmt.Sprintf("promote filesystem %s (%s) for retroBranch",
+// 			existingFs, fq(poolName, existingFs),
+// 		),
+// 	)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	return nil
+// }
+
+type savedMount struct {
+	Mountpoint string // Actual filesystem mountpoint
+	MountedFS  string // ZFS pool location we mounted there
+}
+
 func stashBranch(zfsExec, poolName string, existingFs string, newFs string, rollbackTo string) error {
+	mounts := []savedMount{}
+
+	f, err := os.Open("/proc/self/mountinfo")
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	r := bufio.NewReader(f)
+	mountPrefix := os.Getenv("MOUNT_PREFIX")
+
+	for {
+		line, err := r.ReadString('\n')
+
+		if line != "" {
+			parts := strings.Split(line, " ")
+			if len(parts) >= 11 {
+				fsType := parts[8]
+				mountpoint := parts[4]
+				mountedFS := parts[9]
+				if fsType == "zfs" && strings.HasPrefix(mountpoint, mountPrefix) {
+					mounts = append(mounts, savedMount{
+						Mountpoint: mountpoint,
+						MountedFS:  mountedFS,
+					})
+				}
+			}
+		}
+
+		if err != nil {
+			if err == io.EOF {
+				break
+			} else {
+				return err
+			}
+		}
+	}
+
+	log.Debugf("ABS TEST: Got mountpoints: %#v\n", mounts)
+
 	logZFSCommand(existingFs, fmt.Sprintf("%s rename %s %s", zfsExec, fq(poolName, existingFs), fq(poolName, newFs)))
-	err := doSimpleZFSCommand(exec.Command(zfsExec, "rename", fq(poolName, existingFs), fq(poolName, newFs)),
+	err = doSimpleZFSCommand(exec.Command(zfsExec, "rename", fq(poolName, existingFs), fq(poolName, newFs)),
 		fmt.Sprintf("rename filesystem %s (%s) to %s (%s) for retroBranch",
 			existingFs, fq(poolName, existingFs),
 			newFs, fq(poolName, newFs),
