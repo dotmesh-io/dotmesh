@@ -12,6 +12,7 @@ import (
 
 	"github.com/dotmesh-io/dotmesh/pkg/auth"
 	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 	"github.com/gorilla/mux"
 
@@ -210,7 +211,7 @@ func (s *S3Handler) readFile(resp http.ResponseWriter, req *http.Request, filesy
 		return
 	}
 
-	if fsm.currentState != "active" {
+	if fsm.GetCurrentState() != "active" {
 		http.Error(resp, "please try again later", http.StatusServiceUnavailable)
 		return
 	}
@@ -227,13 +228,13 @@ func (s *S3Handler) readFile(resp http.ResponseWriter, req *http.Request, filesy
 
 		defer req.Body.Close()
 		respCh := make(chan *Event)
-		fsm.fileOutputIO <- &OutputFile{
+		fsm.ReadFile(&types.OutputFile{
 			Filename:          filename,
 			Contents:          resp,
 			User:              user.Name,
 			Response:          respCh,
 			SnapshotMountPath: (*e.Args)["mount-path"].(string),
-		}
+		})
 
 		result := <-respCh
 
@@ -265,19 +266,19 @@ func (s *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, files
 		return
 	}
 
-	if fsm.currentState != "active" {
+	if fsm.GetCurrentState() != "active" {
 		http.Error(resp, "please try again later", http.StatusServiceUnavailable)
 		return
 	}
 
 	defer req.Body.Close()
 	respCh := make(chan *Event)
-	fsm.fileInputIO <- &InputFile{
+	fsm.WriteFile(&types.InputFile{
 		Filename: filename,
 		Contents: req.Body,
 		User:     user.Name,
 		Response: respCh,
-	}
+	})
 
 	result := <-respCh
 
@@ -285,8 +286,8 @@ func (s *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, files
 	case eventNameSaveFailed:
 		e, ok := (*result.Args)["err"].(string)
 		if ok {
-
 			http.Error(resp, e, 500)
+			return
 		}
 		http.Error(resp, "upload failed", 500)
 	default:
