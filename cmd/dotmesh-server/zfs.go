@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -242,9 +244,53 @@ func deleteFilesystemInZFS(fs string) error {
 //                   \ -> D(foo-oops)
 // # zfs promote foo
 
+type savedMount struct {
+	Mountpoint string // Actual filesystem mountpoint
+	MountedFS  string // ZFS pool location we mounted there
+}
+
 func stashBranch(existingFs string, newFs string, rollbackTo string) error {
+	mounts := []savedMount{}
+
+	f, err := os.Open("/proc/self/mountinfo")
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	r := bufio.NewReader(f)
+	mountPrefix := os.Getenv("MOUNT_PREFIX")
+
+	for {
+		line, err := r.ReadString('\n')
+
+		if line != "" {
+			parts := strings.Split(line, " ")
+			if len(parts) >= 11 {
+				fsType := parts[8]
+				mountpoint := parts[4]
+				mountedFS := parts[9]
+				if fsType == "zfs" && strings.HasPrefix(mountpoint, mountPrefix) {
+					mounts = append(mounts, savedMount{
+						Mountpoint: mountpoint,
+						MountedFS:  mountedFS,
+					})
+				}
+			}
+		}
+
+		if err != nil {
+			if err == io.EOF {
+				break
+			} else {
+				return err
+			}
+		}
+	}
+
+	log.Printf("ABS TEST: Got mountpoints: %#v\n", mounts)
+
 	logZFSCommand(existingFs, fmt.Sprintf("%s rename %s %s", ZFS, fq(existingFs), fq(newFs)))
-	err := doSimpleZFSCommand(exec.Command(ZFS, "rename", fq(existingFs), fq(newFs)),
+	err = doSimpleZFSCommand(exec.Command(ZFS, "rename", fq(existingFs), fq(newFs)),
 		fmt.Sprintf("rename filesystem %s (%s) to %s (%s) for retroBranch",
 			existingFs, fq(existingFs),
 			newFs, fq(newFs),

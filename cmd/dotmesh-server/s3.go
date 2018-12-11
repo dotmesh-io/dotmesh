@@ -75,7 +75,6 @@ func getKeysForDir(parentPath string, subPath string) (map[string]os.FileInfo, i
 	if err != nil {
 		return nil, 0, err
 	}
-	log.Printf("[getKeysForDir] Files: %#v", files)
 	var dirSize int64
 	keys := make(map[string]os.FileInfo)
 	for _, fileInfo := range files {
