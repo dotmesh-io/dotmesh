@@ -2390,31 +2390,31 @@ func (d *DotmeshRPC) DumpInternalState(
 
 		for id, fs := range s.filesystems {
 			resultChan <- []string{fmt.Sprintf("filesystems.%s.STARTED", id), "yes"}
-			fs.snapshotsLock.Lock()
-			defer fs.snapshotsLock.Unlock()
 
-			resultChan <- []string{fmt.Sprintf("filesystems.%s.id", id), fs.filesystemId}
-			if fs.filesystem != nil {
-				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.id", id), fs.filesystem.Id}
-				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.exists", id), fmt.Sprintf("%t", fs.filesystem.Exists)}
-				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.mounted", id), fmt.Sprintf("%t", fs.filesystem.Mounted)}
-				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.origin", id), fmt.Sprintf("%s@%s", fs.filesystem.Origin.FilesystemId, fs.filesystem.Origin.SnapshotId)}
-				for idx, snapshot := range fs.filesystem.Snapshots {
+			fsState := fs.DumpState()
+
+			resultChan <- []string{fmt.Sprintf("filesystems.%s.id", id), fsState.Filesystem.Id}
+			if fsState.Filesystem != nil {
+				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.id", id), fsState.Filesystem.Id}
+				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.exists", id), fmt.Sprintf("%t", fsState.Filesystem.Exists)}
+				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.mounted", id), fmt.Sprintf("%t", fsState.Filesystem.Mounted)}
+				resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.origin", id), fmt.Sprintf("%s@%s", fsState.Filesystem.Origin.FilesystemId, fsState.Filesystem.Origin.SnapshotId)}
+				for idx, snapshot := range fsState.Filesystem.Snapshots {
 					resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.snapshots[%d].id", id, idx), snapshot.Id}
 					for key, val := range snapshot.Metadata {
 						resultChan <- []string{fmt.Sprintf("filesystems.%s.filesystem.snapshots[%d].metadata.%s", id, idx, key), val}
 					}
 				}
 			}
-			resultChan <- []string{fmt.Sprintf("filesystems.%s.currentState", id), fs.currentState}
-			resultChan <- []string{fmt.Sprintf("filesystems.%s.status", id), fs.status}
-			resultChan <- []string{fmt.Sprintf("filesystems.%s.lastTransitionTimestamp", id), fmt.Sprintf("%d", fs.lastTransitionTimestamp)}
-			resultChan <- []string{fmt.Sprintf("filesystems.%s.lastTransferRequest", id), toJsonString(fs.lastTransferRequest)}
-			resultChan <- []string{fmt.Sprintf("filesystems.%s.lastTransferRequestId", id), fs.lastTransferRequestId}
-			resultChan <- []string{fmt.Sprintf("filesystems.%s.dirtyDelta", id), fmt.Sprintf("%d", fs.dirtyDelta)}
-			resultChan <- []string{fmt.Sprintf("filesystems.%s.sizeBytes", id), fmt.Sprintf("%d", fs.sizeBytes)}
-			if fs.handoffRequest != nil {
-				resultChan <- []string{fmt.Sprintf("filesystems.%s.handoffRequest", id), toJsonString(*fs.handoffRequest)}
+			resultChan <- []string{fmt.Sprintf("filesystems.%s.currentState", id), fsState.CurrentState}
+			resultChan <- []string{fmt.Sprintf("filesystems.%s.status", id), fsState.Status}
+			resultChan <- []string{fmt.Sprintf("filesystems.%s.lastTransitionTimestamp", id), fmt.Sprintf("%d", fsState.LastTransitionTimestamp)}
+			resultChan <- []string{fmt.Sprintf("filesystems.%s.lastTransferRequest", id), toJsonString(fsState.LastTransferRequest)}
+			resultChan <- []string{fmt.Sprintf("filesystems.%s.lastTransferRequestId", id), fsState.LastTransferRequestID}
+			resultChan <- []string{fmt.Sprintf("filesystems.%s.dirtyDelta", id), fmt.Sprintf("%d", fsState.DirtyDelta)}
+			resultChan <- []string{fmt.Sprintf("filesystems.%s.sizeBytes", id), fmt.Sprintf("%d", fsState.SizeBytes)}
+			if fsState.HandoffRequest != nil {
+				resultChan <- []string{fmt.Sprintf("filesystems.%s.handoffRequest", id), toJsonString(*fsState.HandoffRequest)}
 			}
 			resultChan <- []string{fmt.Sprintf("filesystems.%s.DONE", id), "yes"}
 		}
