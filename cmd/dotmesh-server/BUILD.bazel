@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 load("@io_bazel_rules_docker//docker:docker.bzl", "docker_push")
 load("@io_bazel_rules_docker//container:container.bzl", "container_image")
 
@@ -25,7 +25,7 @@ go_library(
         "main.go",
         "metadata.go",
         "missingstate.go",
-        "mount.go",       
+        "mount.go",
         "pullinitiatorstate.go",
         "pullpeerstate.go",
         "pushinitiatorstate.go",
@@ -54,6 +54,7 @@ go_library(
         "//pkg/auth:go_default_library",
         "//pkg/client:go_default_library",
         "//pkg/container:go_default_library",
+        "//pkg/fsm:go_default_library",
         "//pkg/kv:go_default_library",
         "//pkg/notification:go_default_library",
         "//pkg/notification/nats:go_default_library",
@@ -114,4 +115,10 @@ docker_push(
     repository = "{CI_REPOSITORY}/dotmesh-server",
     stamp = 1,
     tag = "{STABLE_DOCKERTAG}",
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["statemachine_metadata_test.go"],
+    embed = [":go_default_library"],
 )
