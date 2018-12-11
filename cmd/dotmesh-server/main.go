@@ -29,8 +29,8 @@ import (
 )
 
 // initial setup
-const ROOT_FS = "dmfs"
-const META_KEY_PREFIX = "io.dotmesh:meta-"
+const ROOT_FS = types.RootFS
+const META_KEY_PREFIX = types.MetaKeyPrefix
 const ETCD_PREFIX = types.EtcdPrefix
 
 var ZFS string
@@ -155,6 +155,10 @@ func main() {
 		log.Fatalf("Unable to get Etcd client: '%s'", err)
 	}
 	config.EtcdClient = etcdClient
+
+	config.ZFSExecPath = ZFS
+	config.ZPoolPath = ZPOOL
+	config.PoolName = POOL
 
 	kvClient := kv.New(etcdClient, ETCD_PREFIX)
 	config.UserManager = user.New(kvClient)
