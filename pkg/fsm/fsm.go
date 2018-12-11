@@ -46,10 +46,20 @@ type FsConfig struct {
 }
 
 type FSM interface {
+	ID() string
 	Run()
 	GetStatus() string
 	GetCurrentState() string
 	Mounted() bool
+
+	Mount() (response *types.Event)
+	Unmount() (response *types.Event)
+
+	// TODO: review the call, maybe it's possible to internalize behaviour
+	PushCompleted(success bool)
+	// TODO: review the call, maybe it's possible to internalize behaviour
+	PublishNewSnaps(server string, payload interface{}) error
+	// TODO: review the call, maybe it's possible to internalize behaviour
 	TransitionSubscribe(channel string, ch chan interface{})
 	TransitionUnsubscribe(channel string, ch chan interface{})
 
@@ -61,7 +71,21 @@ type FSM interface {
 	ListSnapshots() map[string][]*types.Snapshot
 	SetSnapshots(nodeID string, snapshots []*types.Snapshot)
 
+	// Local snapshots from ZFS
+	ListLocalSnapshots() []*types.Snapshot
+
 	Submit(event *types.Event, requestID string) (reply chan *types.Event, err error)
+
+	// WriteFile - reads the supplied Contents io.Reader and writes into the volume,
+	// response will be sent to a provided Response channel
+	WriteFile(source *types.InputFile)
+
+	// ReadFile - reads a file from the volume into the supplied Contents io.Writer,
+	// response will be sent to a provided Response channel
+	ReadFile(destination *types.OutputFile)
+
+	// DumpState is used for diagnostics
+	DumpState() *FSMStateDump
 }
 
 // core functions used by files ending `state` which I couldn't think of a good place for.
@@ -122,6 +146,10 @@ func NewFilesystemMachine(cfg *FsConfig) *FsMachine {
 	}
 }
 
+func (f *FsMachine) ID() string {
+	return f.filesystemId
+}
+
 func (f *FsMachine) GetCurrentState() string {
 	return f.currentState
 }
@@ -138,14 +166,62 @@ func (f *FsMachine) TransitionUnsubscribe(channel string, ch chan interface{}) {
 	f.transitionObserver.Unsubscribe(channel, ch)
 }
 
+func (f *FsMachine) PublishNewSnaps(server string, payload interface{}) error {
+	return f.newSnapsOnServers.Publish(server, payload)
+}
+
 func (f *FsMachine) Mounted() bool {
 	return f.filesystem.Mounted
+}
+
+func (f *FsMachine) Mount() (response *types.Event) {
+	response, _ = f.mount()
+	return
+}
+
+func (f *FsMachine) Unmount() (response *types.Event) {
+	response, _ = f.unmount()
+	return
+}
+
+func (f *FsMachine) PushCompleted(success bool) {
+	f.pushCompleted <- success
+}
+
+type FSMStateDump struct {
+	Filesystem              *types.Filesystem
+	Status                  string
+	CurrentState            string
+	LastTransitionTimestamp int64
+
+	LastTransferRequest   types.TransferRequest
+	LastTransferRequestID string
+
+	HandoffRequest *types.Event
+
+	DirtyDelta int64
+	SizeBytes  int64
+}
+
+// DumpState - dumps internal FsMachine state
+// TODO: make copies instead of returning actual pointers
+func (f *FsMachine) DumpState() *FSMStateDump {
+	return &FSMStateDump{
+		Filesystem:              f.filesystem,
+		Status:                  f.status,
+		CurrentState:            f.currentState,
+		LastTransitionTimestamp: f.lastTransitionTimestamp,
+		LastTransferRequest:     f.lastTransferRequest,
+		LastTransferRequestID:   f.lastTransferRequestId,
+		HandoffRequest:          f.handoffRequest,
+		DirtyDelta:              f.dirtyDelta,
+		SizeBytes:               f.sizeBytes,
+	}
 }
 
 // Submit - submits event to a filesystem, returning the event stream for convenience so the caller
 // can listen for a response
 func (f *FsMachine) Submit(event *types.Event, requestID string) (reply chan *types.Event, err error) {
-	// f.requests <- event
 	if requestID == "" {
 		id, err := uuid.NewV4()
 		if err != nil {
