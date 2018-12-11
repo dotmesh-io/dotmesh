@@ -427,44 +427,13 @@ func (state *InMemoryState) MarkFilesystemAsLiveInEtcd(topLevelFilesystemId stri
 // shortcut for dispatching an event to a filesystem's fsMachine's event
 // stream, returning the event stream for convenience so the caller can listen
 // for a response
-func (s *InMemoryState) dispatchEvent(
-	filesystem string, e *Event, requestId string,
-) (chan *Event, error) {
-	if requestId == "" {
-		id, err := uuid.NewV4()
-		if err != nil {
-			return nil, err
-		}
-		requestId = id.String()
-	}
+func (s *InMemoryState) dispatchEvent(filesystem string, e *types.Event, requestId string) (chan *types.Event, error) {
 	fs, err := s.InitFilesystemMachine(filesystem)
 	if err != nil {
 		return nil, err
 	}
-	if e.Args == nil {
-		e.Args = &EventArgs{}
-	}
-	(*e.Args)["RequestId"] = requestId
-	fs.responsesLock.Lock()
-	defer fs.responsesLock.Unlock()
-	rc, ok := fs.responses[requestId]
-	if !ok {
-		responseChan := make(chan *Event)
-		fs.responses[requestId] = responseChan
-		rc = responseChan
-	}
 
-	// Now we have a response channel set up, it's safe to send the request.
-
-	// Don't block the entire etcd event-loop just because one fsMachine isn't
-	// ready to receive an event. Our response is a chan anyway, so consumers
-	// can synchronize on reading from that as they wish (for example, in
-	// another goroutine).
-	go func() {
-		fs.requests <- e
-	}()
-
-	return rc, nil
+	return fs.Submit(e, requestId)
 }
 
 func (s *InMemoryState) handleOneFilesystemMaster(node *client.Node) error {
@@ -495,17 +464,17 @@ func (s *InMemoryState) handleOneFilesystemMaster(node *client.Node) error {
 				"filesystem_id": fs,
 			}).Error("[handleOneFilesystemMaster] failed to initialize filesystem")
 		}
-		var responseChan chan *Event
+		var responseChan chan *types.Event
 		requestId := pieces[len(pieces)-1]
 		if node.Value == s.myNodeId {
 			log.Debugf("MOUNTING: %s=%s", fs, node.Value)
-			responseChan, err = s.dispatchEvent(fs, &Event{Name: "mount"}, requestId)
+			responseChan, err = s.dispatchEvent(fs, &types.Event{Name: "mount"}, requestId)
 			if err != nil {
 				return err
 			}
 		} else {
 			log.Debugf("UNMOUNTING: %s=%s", fs, node.Value)
-			responseChan, err = s.dispatchEvent(fs, &Event{Name: "unmount"}, requestId)
+			responseChan, err = s.dispatchEvent(fs, &types.Event{Name: "unmount"}, requestId)
 			if err != nil {
 				return err
 			}
@@ -526,34 +495,12 @@ func (s *InMemoryState) handleOneFilesystemDeletion(node *client.Node) error {
 	pieces := strings.Split(node.Key, "/")
 	fs := pieces[len(pieces)-1]
 
-	func() {
-		s.filesystemsLock.Lock()
-		defer s.filesystemsLock.Unlock()
-		f, ok := s.filesystems[fs]
-		if ok {
-			log.Infof("[handleOneFilesystemDeletion:%s] before initFs..  state: %s, status: %s", fs, f.currentState, f.status)
-		} else {
-			log.Infof("[handleOneFilesystemDeletion:%s] before initFs.. no fsMachine", fs)
-		}
-	}()
-
 	f, err := s.InitFilesystemMachine(fs)
 	if err != nil {
-		log.Infof("[handleOneFilesystemDeletion:%s] after initFs.. no fsMachine", fs)
+		log.Infof("[handleOneFilesystemDeletion:%s] after initFs.. no fsMachine, error: %s", fs, err)
 	} else {
-		log.Infof("[handleOneFilesystemDeletion:%s] after initFs.. state: %s, status: %s", fs, f.currentState, f.status)
+		log.Infof("[handleOneFilesystemDeletion:%s] after initFs.. state: %s, status: %s", fs, f.GetCurrentState(), f.GetStatus())
 	}
-
-	// func() {
-	// 	s.filesystemsLock.Lock()
-	// 	defer s.filesystemsLock.Unlock()
-	// 	f, ok := s.filesystems[fs]
-	// 	if ok {
-	// 		log.Infof("[handleOneFilesystemDeletion:%s] after initFs.. state: %s, status: %s", fs, f.currentState, f.status)
-	// 	} else {
-	// 		log.Infof("[handleOneFilesystemDeletion:%s] after initFs.. no fsMachine", fs)
-	// 	}
-	// }()
 
 	var responseChan chan *Event
 	// var err error
@@ -562,7 +509,7 @@ func (s *InMemoryState) handleOneFilesystemDeletion(node *client.Node) error {
 		return err
 	}
 	requestId := id.String()
-	responseChan, err = s.dispatchEvent(fs, &Event{Name: "delete"}, requestId)
+	responseChan, err = s.dispatchEvent(fs, &types.Event{Name: "delete"}, requestId)
 	if err != nil {
 		return err
 	}
@@ -573,16 +520,13 @@ func (s *InMemoryState) handleOneFilesystemDeletion(node *client.Node) error {
 }
 
 // make a global request, returning its id
-func (s *InMemoryState) globalFsRequestId(fs string, e *Event) (chan *Event, string, error) {
+func (s *InMemoryState) globalFsRequestId(fs string, e *types.Event) (chan *types.Event, string, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, "", err
 	}
 	requestId := id.String()
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		return nil, "", err
-	}
+
 	serialized, err := s.serializeEvent(e)
 	if err != nil {
 		log.Printf("globalFsRequest - error serializing %#v: %#v", e, err)
@@ -597,7 +541,7 @@ func (s *InMemoryState) globalFsRequestId(fs string, e *Event) (chan *Event, str
 		key,
 		serialized,
 	)
-	resp, err := kapi.Set(
+	resp, err := s.etcdClient.Set(
 		context.Background(),
 		key,
 		serialized,
@@ -612,7 +556,7 @@ func (s *InMemoryState) globalFsRequestId(fs string, e *Event) (chan *Event, str
 		// TODO become able to cope with becoming disconnected from etcd and
 		// then reconnecting and pick up where we left off (process any new
 		// responses)...
-		watcher := kapi.Watcher(
+		watcher := s.etcdClient.Watcher(
 			// TODO maybe responses should get their own IDs, so that there can be
 			// multiple responses to a given event (at present we just assume one)
 			fmt.Sprintf("%s/filesystems/responses/%s/%s", ETCD_PREFIX, fs, requestId),
@@ -894,7 +838,7 @@ func (s *InMemoryState) UpdateSnapshotsFromKnownState(server, filesystem string,
 		)
 	} else {
 		go func() {
-			err := fs.newSnapsOnServers.Publish(server, true) // TODO publish latest, as above
+			err := fs.PublishNewSnaps(server, true) // TODO publish latest, as above
 			if err != nil {
 				log.Printf(
 					"[updateSnapshotsFromKnownState] "+
