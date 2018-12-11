@@ -17,8 +17,8 @@ import (
 type StateFn func(*FsMachine) StateFn
 
 type StateManager interface {
-	InitFilesystemMachine(filesystemId string) (*FsMachine, error)
-	GetFilesystemMachine(filesystemId string) (*FsMachine, error)
+	InitFilesystemMachine(filesystemId string) (FSM, error)
+	GetFilesystemMachine(filesystemId string) (FSM, error)
 
 	// ActivateFilesystem(filesystemId string) error
 	AlignMountStateWithMasters(filesystemId string) error
