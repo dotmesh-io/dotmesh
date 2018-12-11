@@ -75,6 +75,16 @@ func (f *FsMachine) ListSnapshots() map[string][]*types.Snapshot {
 	return r
 }
 
+func (f *FsMachine) ListLocalSnapshots() []*types.Snapshot {
+	f.snapshotsLock.Lock()
+	defer f.snapshotsLock.Unlock()
+	result := []*types.Snapshot{}
+	for _, s := range f.filesystem.Snapshots {
+		result = append(result, s.DeepCopy())
+	}
+	return result
+}
+
 func (f *FsMachine) SetSnapshots(nodeID string, snapshots []*types.Snapshot) {
 	f.snapshotCacheMu.Lock()
 	f.snapshotCache[nodeID] = snapshots
