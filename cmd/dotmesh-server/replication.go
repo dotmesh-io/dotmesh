@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	// "log"
 	"net/http"
 	"os/exec"
 	"strings"
 
 	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 	"github.com/gorilla/mux"
 
@@ -20,8 +20,9 @@ import (
 
 // machinery for remote zfs replication
 
-const BUF_LEN = 131072         // 128kb of replication data sent per update (of etcd)
-const START_SNAPSHOT = "START" // meaning "the start of the filesystem"
+// const BUF_LEN = 131072         // 128kb of replication data sent per update (of etcd)
+const BUF_LEN = types.BufLength // 128kb of replication data sent per update (of etcd)
+const START_SNAPSHOT = "START"  // meaning "the start of the filesystem"
 
 func (z *ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// respond to GET requests with a ZFS data stream
@@ -233,7 +234,7 @@ func (z *ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	z.fromSnap = vars["fromSnap"]
 	z.toSnap = vars["toSnap"]
 	z.filesystem = vars["filesystem"]
-	_ = make([]byte, BUF_LEN)
+	// _ = make([]byte, BUF_LEN)
 
 	// TODO: add a coarse grained lock to start with: stop other writers from
 	// writing to this filesystem (unlike readers, this is strictly
