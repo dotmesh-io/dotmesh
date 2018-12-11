@@ -16,6 +16,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/dotmesh-io/dotmesh/pkg/container"
+	"github.com/dotmesh-io/dotmesh/pkg/fsm"
 	"github.com/dotmesh-io/dotmesh/pkg/notification"
 	"github.com/dotmesh-io/dotmesh/pkg/observer"
 	"github.com/dotmesh-io/dotmesh/pkg/registry"
@@ -26,7 +27,7 @@ import (
 
 type InMemoryState struct {
 	config          Config
-	filesystems     map[string]*fsMachine
+	filesystems     map[string]fsm.FSM
 	filesystemsLock *sync.RWMutex
 
 	myNodeId string
@@ -88,7 +89,7 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 	}
 	s := &InMemoryState{
 		config:          config,
-		filesystems:     make(map[string]*fsMachine),
+		filesystems:     make(map[string]fsm.FSM),
 		filesystemsLock: &sync.RWMutex{},
 		myNodeId:        localPoolId,
 		// karolis: MOVED TO REGISTRY
@@ -338,7 +339,7 @@ func (s *InMemoryState) notifyPushCompleted(filesystemId string, success bool) {
 		return
 	}
 	log.Printf("[notifyPushCompleted:%s] about to notify chan with success=%t", filesystemId, success)
-	f.pushCompleted <- success
+	f.PushCompleted(success)
 	log.Printf("[notifyPushCompleted:%s] done notify chan", filesystemId)
 }
 
@@ -349,7 +350,7 @@ func (s *InMemoryState) getCurrentState(filesystemId string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fs.getCurrentState(), nil
+	return fs.GetCurrentState(), nil
 	// s.filesystemsLock.RLock()
 	// defer s.filesystemsLock.RUnlock()
 	// f, ok := s.filesystems[filesystemId]
@@ -574,27 +575,23 @@ func (state *InMemoryState) reallyProcureFilesystem(ctx context.Context, name Vo
 			// though, so wait on that here.
 
 			state.filesystemsLock.Lock()
-			if state.filesystems[filesystemId].currentState == "active" {
+			if state.filesystems[filesystemId].GetCurrentState() == "active" {
 				// great - we're already active
 				log.Printf("Found %s was already active, giving it to Docker", filesystemId)
 				state.filesystemsLock.Unlock()
 			} else {
-				for state.filesystems[filesystemId].currentState != "active" {
+				for state.filesystems[filesystemId].GetCurrentState() != "active" {
 					log.Printf(
 						"%s was %s, waiting for it to change to active...",
-						filesystemId, state.filesystems[filesystemId].currentState,
+						filesystemId, state.filesystems[filesystemId].GetCurrentState(),
 					)
 					// wait for state change
 					stateChangeChan := make(chan interface{})
-					state.filesystems[filesystemId].transitionObserver.Subscribe(
-						"transitions", stateChangeChan,
-					)
+					state.filesystems[filesystemId].TransitionSubscribe("transitions", stateChangeChan)
 					state.filesystemsLock.Unlock()
 					<-stateChangeChan
 					state.filesystemsLock.Lock()
-					state.filesystems[filesystemId].transitionObserver.Unsubscribe(
-						"transitions", stateChangeChan,
-					)
+					state.filesystems[filesystemId].TransitionUnsubscribe("transitions", stateChangeChan)
 				}
 				log.Printf("%s finally changed to active, proceeding!", filesystemId)
 				state.filesystemsLock.Unlock()
@@ -605,7 +602,7 @@ func (state *InMemoryState) reallyProcureFilesystem(ctx context.Context, name Vo
 		if err != nil {
 			return "", err
 		}
-		filesystemId = fsMachine.filesystemId
+		filesystemId = fsMachine.ID()
 		if cloneName != "" {
 			return "", fmt.Errorf("Cannot use branch-pinning syntax (docker run -v volume@branch:/path) to create a non-existent volume with a non-master branch")
 		}
@@ -629,19 +626,12 @@ func (state *InMemoryState) procureFilesystem(ctx context.Context, name VolumeNa
 	return s, err
 }
 
-func (s *InMemoryState) CreateFilesystem(
-	ctx context.Context, filesystemName *VolumeName,
-) (*fsMachine, chan *Event, error) {
-
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		return nil, nil, err
-	}
+func (s *InMemoryState) CreateFilesystem(ctx context.Context, filesystemName *VolumeName) (fsm.FSM, chan *Event, error) {
 
 	// Check to see if it already partially exists, eg. in the registry but without a master
 	var filesystemId string
 
-	re, err := kapi.Get(
+	re, err := s.etcdClient.Get(
 		context.Background(),
 		fmt.Sprintf("%s/registry/filesystems/%s/%s", ETCD_PREFIX, filesystemName.Namespace, filesystemName.Name),
 		&client.GetOptions{},
@@ -680,7 +670,7 @@ func (s *InMemoryState) CreateFilesystem(
 		log.Printf("[CreateFilesystem] called with name=%+v, examining existing id %s", filesystemName, filesystemId)
 
 		// Check for an existing master mapping
-		_, err = kapi.Get(
+		_, err = s.etcdClient.Get(
 			context.Background(),
 			fmt.Sprintf("%s/filesystems/masters/%s", ETCD_PREFIX, filesystemId),
 			&client.GetOptions{},
@@ -701,7 +691,7 @@ func (s *InMemoryState) CreateFilesystem(
 
 	// synchronize with etcd first, setting master to us only if the key
 	// didn't previously exist, **before actually creating the filesystem**
-	_, err = kapi.Set(
+	_, err = s.etcdClient.Set(
 		context.Background(),
 		fmt.Sprintf("%s/filesystems/masters/%s", ETCD_PREFIX, filesystemId),
 		s.myNodeId,
