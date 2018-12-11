@@ -6,12 +6,9 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/dotmesh-io/dotmesh/pkg/container"
-	"github.com/dotmesh-io/dotmesh/pkg/observer"
-	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/nu7hatch/gouuid"
 	"golang.org/x/net/context"
 
@@ -20,58 +17,58 @@ import (
 
 // core functions used by files ending `state` which I couldn't think of a good place for.
 
-func newFilesystemMachine(filesystemId string, s *InMemoryState) *fsMachine {
-	// initialize the fsMachine with a filesystem struct that has bare minimum
-	// information (just the filesystem id) required to get started
-	return &fsMachine{
-		filesystem: &Filesystem{
-			Id: filesystemId,
-		},
-		// stored here as well to avoid excessive locking on filesystem struct,
-		// which gets clobbered, just to read its id
-		filesystemId:            filesystemId,
-		requests:                make(chan *Event),
-		innerRequests:           make(chan *Event),
-		innerResponses:          make(chan *Event),
-		fileInputIO:             make(chan *InputFile),
-		fileOutputIO:            make(chan *OutputFile),
-		responses:               map[string]chan *Event{},
-		responsesLock:           &sync.Mutex{},
-		snapshotsModified:       make(chan bool),
-		containerClient:         s.containers,
-		etcdClient:              s.etcdClient,
-		state:                   s,
-		userManager:             s.userManager,
-		registry:                s.registry,
-		newSnapsOnMaster:        s.newSnapsOnMaster,
-		localReceiveProgress:    s.localReceiveProgress,
-		snapshotsLock:           &sync.Mutex{},
-		newSnapsOnServers:       observer.NewObserver(fmt.Sprintf("newSnapsOnServers:%s", filesystemId)),
-		currentState:            "discovering",
-		status:                  "",
-		lastTransitionTimestamp: time.Now().UnixNano(),
-		transitionObserver:      observer.NewObserver(fmt.Sprintf("transitionObserver:%s", filesystemId)),
-		lastTransferRequest:     types.TransferRequest{},
+// func newFilesystemMachine(filesystemId string, s *InMemoryState) *fsMachine {
+// 	// initialize the fsMachine with a filesystem struct that has bare minimum
+// 	// information (just the filesystem id) required to get started
+// 	return &fsMachine{
+// 		filesystem: &Filesystem{
+// 			Id: filesystemId,
+// 		},
+// 		// stored here as well to avoid excessive locking on filesystem struct,
+// 		// which gets clobbered, just to read its id
+// 		filesystemId:            filesystemId,
+// 		requests:                make(chan *Event),
+// 		innerRequests:           make(chan *Event),
+// 		innerResponses:          make(chan *Event),
+// 		fileInputIO:             make(chan *InputFile),
+// 		fileOutputIO:            make(chan *OutputFile),
+// 		responses:               map[string]chan *Event{},
+// 		responsesLock:           &sync.Mutex{},
+// 		snapshotsModified:       make(chan bool),
+// 		containerClient:         s.containers,
+// 		etcdClient:              s.etcdClient,
+// 		state:                   s,
+// 		userManager:             s.userManager,
+// 		registry:                s.registry,
+// 		newSnapsOnMaster:        s.newSnapsOnMaster,
+// 		localReceiveProgress:    s.localReceiveProgress,
+// 		snapshotsLock:           &sync.Mutex{},
+// 		newSnapsOnServers:       observer.NewObserver(fmt.Sprintf("newSnapsOnServers:%s", filesystemId)),
+// 		currentState:            "discovering",
+// 		status:                  "",
+// 		lastTransitionTimestamp: time.Now().UnixNano(),
+// 		transitionObserver:      observer.NewObserver(fmt.Sprintf("transitionObserver:%s", filesystemId)),
+// 		lastTransferRequest:     types.TransferRequest{},
 
-		stateMachineMetadata:   make(map[string]map[string]string),
-		stateMachineMetadataMu: &sync.RWMutex{},
+// 		stateMachineMetadata:   make(map[string]map[string]string),
+// 		stateMachineMetadataMu: &sync.RWMutex{},
 
-		snapshotCache:   make(map[string][]*Snapshot),
-		snapshotCacheMu: &sync.RWMutex{},
-		// In the case where we're receiving a push (pushPeerState), it's the
-		// POST handler on our http server which handles the receiving of the
-		// snapshot. We need to coordinate with it so that we know when to
-		// reload the list of snapshots, update etcd and coordinate our own
-		// state changes, which we do via the POST handler sending on this
-		// channel.
-		pushCompleted:   make(chan bool),
-		dirtyDelta:      0,
-		sizeBytes:       0,
-		transferUpdates: make(chan TransferUpdate),
+// 		snapshotCache:   make(map[string][]*Snapshot),
+// 		snapshotCacheMu: &sync.RWMutex{},
+// 		// In the case where we're receiving a push (pushPeerState), it's the
+// 		// POST handler on our http server which handles the receiving of the
+// 		// snapshot. We need to coordinate with it so that we know when to
+// 		// reload the list of snapshots, update etcd and coordinate our own
+// 		// state changes, which we do via the POST handler sending on this
+// 		// channel.
+// 		pushCompleted:   make(chan bool),
+// 		dirtyDelta:      0,
+// 		sizeBytes:       0,
+// 		transferUpdates: make(chan TransferUpdate),
 
-		filesystemMetadataTimeout: s.config.FilesystemMetadataTimeout,
-	}
-}
+// 		filesystemMetadataTimeout: s.config.FilesystemMetadataTimeout,
+// 	}
+// }
 
 func (f *fsMachine) run() {
 	// TODO cancel this when we eventually support deletion
