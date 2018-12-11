@@ -352,11 +352,8 @@ func (f *FsMachine) retryPull(
 			Args: &types.EventArgs{"err": err, "filesystemId": toFilesystemId},
 		}, backoffState
 	}
-	localSnaps := func() []*types.Snapshot {
-		fsMachine.snapshotsLock.Lock()
-		defer fsMachine.snapshotsLock.Unlock()
-		return fsMachine.filesystem.Snapshots
-	}()
+	localSnaps := fsMachine.ListLocalSnapshots()
+
 	// if we're given a target snapshot, restrict f.filesystem.snapshots to
 	// that snapshot
 	remoteSnaps, err = restrictSnapshots(remoteSnaps, toSnapshotId)

@@ -18,13 +18,14 @@ import (
 	"time"
 
 	"github.com/dotmesh-io/dotmesh/pkg/observer"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 
 	log "github.com/sirupsen/logrus"
 )
 
 // NB: It's important that the following includes characters _not_ included in
 // the base64 alphabet. https://en.wikipedia.org/wiki/Base64
-var END_DOTMESH_PRELUDE []byte = []byte("!!END_PRELUDE!!")
+var END_DOTMESH_PRELUDE = types.EndDotmeshPrelude
 
 func consumePrelude(r io.Reader) (Prelude, error) {
 	// called when we know that there's a prelude to read from r.
@@ -296,7 +297,7 @@ func (s *InMemoryState) waitForFilesystemDeath(filesystemId string) {
 		defer s.filesystemsLock.Unlock()
 		fs, ok := s.filesystems[filesystemId]
 		if ok {
-			log.Printf("[waitForFilesystemDeath:%s] state: %s, status: %s", filesystemId, fs.currentState, fs.status)
+			log.Printf("[waitForFilesystemDeath:%s] state: %s, status: %s", filesystemId, fs.GetCurrentState(), fs.GetStatus())
 		} else {
 			log.Printf("[waitForFilesystemDeath:%s] no fsMachine", filesystemId)
 		}

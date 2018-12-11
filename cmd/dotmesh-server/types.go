@@ -1,9 +1,7 @@
 package main
 
 import (
-	"fmt"
 	"io"
-	"strings"
 	"sync"
 
 	"github.com/dotmesh-io/dotmesh/pkg/container"
@@ -221,11 +219,16 @@ type fsMachine struct {
 	filesystemMetadataTimeout int64
 }
 
-type EventArgs map[string]interface{}
-type Event struct {
-	Name string
-	Args *EventArgs
-}
+// EventArgs - alias to make refactoring easier,
+// TODO: use the types directly and remove alias
+type EventArgs = types.EventArgs
+type Event = types.Event
+
+// type EventArgs map[string]interface{}
+// type Event struct {
+// 	Name string
+// 	Args *EventArgs
+// }
 
 // InputFile is used to write files to the disk on the local node.
 type InputFile struct {
@@ -246,17 +249,17 @@ type OutputFile struct {
 	Response          chan *Event
 }
 
-func (ea EventArgs) String() string {
-	aggr := []string{}
-	for k, v := range ea {
-		aggr = append(aggr, fmt.Sprintf("%s: %+q", k, v))
-	}
-	return strings.Join(aggr, ", ")
-}
+// func (ea EventArgs) String() string {
+// 	aggr := []string{}
+// 	for k, v := range ea {
+// 		aggr = append(aggr, fmt.Sprintf("%s: %+q", k, v))
+// 	}
+// 	return strings.Join(aggr, ", ")
+// }
 
-func (e Event) String() string {
-	return fmt.Sprintf("<Event %s: %s>", e.Name, e.Args)
-}
+// func (e Event) String() string {
+// 	return fmt.Sprintf("<Event %s: %s>", e.Name, e.Args)
+// }
 
 type TransferPollResult struct {
 	TransferRequestId string
@@ -302,6 +305,11 @@ type Config struct {
 	FilesystemMetadataTimeout int64
 	UserManager               user.UserManager
 	EtcdClient                client.KeysAPI
+
+	// variables used to create fsm.FsMachine
+	ZFSExecPath string
+	ZPoolPath   string
+	PoolName    string
 }
 
 // refers to a clone's "pointer" to a filesystem id and its snapshot.
