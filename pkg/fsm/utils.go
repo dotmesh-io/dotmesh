@@ -10,17 +10,19 @@ import (
 	"time"
 
 	"github.com/dotmesh-io/dotmesh/pkg/types"
+	"github.com/dotmesh-io/dotmesh/pkg/zfs"
 
 	log "github.com/sirupsen/logrus"
 )
 
+// from filesystem id to a fully qualified ZFS filesystem
 func fq(poolName, fs string) string {
-	// from filesystem id to a fully qualified ZFS filesystem
-	return fmt.Sprintf("%s/%s/%s", poolName, types.RootFS, fs)
+	return zfs.FQ(poolName, fs)
 }
+
+// from fully qualified ZFS name to filesystem id, strip off prefix
 func unfq(poolName, fqfs string) string {
-	// from fully qualified ZFS name to filesystem id, strip off prefix
-	return fqfs[len(poolName+"/"+types.RootFS+"/"):]
+	return zfs.UnFQ(poolName, fqfs)
 }
 
 func getLogfile(logfile string) *os.File {
