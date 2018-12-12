@@ -76,6 +76,7 @@ func (s *InMemoryState) InitFilesystemMachine(filesystemId string) (fsm.FSM, err
 			ContainerClient:           s.containers,
 			LocalReceiveProgress:      s.localReceiveProgress,
 			NewSnapsOnMaster:          s.newSnapsOnMaster,
+			DeathObserver:             s.deathObserver,
 			FilesystemMetadataTimeout: s.config.FilesystemMetadataTimeout,
 			ZFSPath:                   ZFS,
 			ZPoolPath:                 ZPOOL,
@@ -90,7 +91,7 @@ func (s *InMemoryState) InitFilesystemMachine(filesystemId string) (fsm.FSM, err
 	}()
 	// NB: deleteFilesystem takes filesystemsLock
 	if deleted {
-		log.Debugf("[initFilesystemMachine] deleted fsMachine found, deleting locally")
+		log.Debugf("[initFilesystemMachine] deleted fsMachine '%s' found, deleting locally", filesystemId)
 		err := s.DeleteFilesystem(filesystemId)
 		if err != nil {
 			log.Errorf("Error deleting filesystem: %v", err)
