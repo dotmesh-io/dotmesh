@@ -5,8 +5,5 @@ go_library(
     srcs = ["metrics.go"],
     importpath = "github.com/dotmesh-io/dotmesh/pkg/metrics",
     visibility = ["//visibility:public"],
-    deps = [
-        "//vendor/github.com/prometheus/client_golang/prometheus:go_default_library",
-        "//vendor/github.com/sirupsen/logrus:go_default_library",
-    ],
+    deps = ["//vendor/github.com/prometheus/client_golang/prometheus:go_default_library"],
 )

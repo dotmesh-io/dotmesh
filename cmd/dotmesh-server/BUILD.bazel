@@ -1,48 +1,27 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 load("@io_bazel_rules_docker//docker:docker.bzl", "docker_push")
 load("@io_bazel_rules_docker//container:container.bzl", "container_image")
 
 go_library(
     name = "go_default_library",
     srcs = [
-        "activestate.go",
         "auth_handler.go",
-        "backoffstate.go",
         "checkupdates.go",
-        "communications.go",
         "controller.go",
         "controller_fsm.go",
-        "discoveringstate.go",
         "docker.go",
         "dockerclient.go",
         "etcd.go",
-        "failedstate.go",
-        "handoffstate.go",
         "http.go",
-        "inactivestate.go",
         "kubernetes.go",
         "liveness.go",
         "main.go",
         "metadata.go",
-        "missingstate.go",
-        "mount.go",
-        "pullinitiatorstate.go",
-        "pullpeerstate.go",
-        "pushinitiatorstate.go",
-        "pushpeerstate.go",
-        "receivingstate.go",
         "repl.go",
         "replication.go",
         "rpc.go",
         "s3.go",
         "s3_handlers.go",
-        "s3api.go",
-        "s3pullinitiatorstate.go",
-        "s3pushinitiatorstate.go",
-        "snapshotlogic.go",
-        "statemachine_metadata.go",
-        "statemachines.go",
-        "transfers.go",
         "types.go",
         "users.go",
         "utils.go",
@@ -115,10 +94,4 @@ docker_push(
     repository = "{CI_REPOSITORY}/dotmesh-server",
     stamp = 1,
     tag = "{STABLE_DOCKERTAG}",
-)
-
-go_test(
-    name = "go_default_test",
-    srcs = ["statemachine_metadata_test.go"],
-    embed = [":go_default_library"],
 )
