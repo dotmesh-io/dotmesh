@@ -115,7 +115,7 @@ func NewFilesystemMachine(cfg *FsConfig) *FsMachine {
 		state:                   cfg.StateManager,
 		userManager:             cfg.UserManager,
 		registry:                cfg.Registry,
-		newSnapsOnMaster:        cfg.LocalReceiveProgress,
+		newSnapsOnMaster:        cfg.NewSnapsOnMaster,
 		localReceiveProgress:    cfg.LocalReceiveProgress,
 		snapshotsLock:           &sync.Mutex{},
 		newSnapsOnServers:       observer.NewObserver(fmt.Sprintf("newSnapsOnServers:%s", cfg.FilesystemID)),
