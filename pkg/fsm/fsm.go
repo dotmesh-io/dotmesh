@@ -31,6 +31,7 @@ type FsConfig struct {
 	ContainerClient      container.Client
 	LocalReceiveProgress observer.Observer
 	NewSnapsOnMaster     observer.Observer
+	DeathObserver        observer.Observer
 
 	FilesystemMetadataTimeout int64
 
@@ -121,6 +122,7 @@ func NewFilesystemMachine(cfg *FsConfig) *FsMachine {
 		lastTransitionTimestamp: time.Now().UnixNano(),
 		transitionObserver:      observer.NewObserver(fmt.Sprintf("transitionObserver:%s", cfg.FilesystemID)),
 		lastTransferRequest:     types.TransferRequest{},
+		deathObserver:           cfg.DeathObserver,
 
 		stateMachineMetadata:   make(map[string]map[string]string),
 		stateMachineMetadataMu: &sync.RWMutex{},
@@ -262,7 +264,7 @@ func (f *FsMachine) Submit(event *types.Event, requestID string) (reply chan *ty
 func (f *FsMachine) Run() {
 	// TODO cancel this when we eventually support deletion
 	log.Printf("[run:%s] INIT", f.filesystemId)
-	go runWhileFilesystemLives(
+	go f.runWhileFilesystemLives(
 		f.markFilesystemAsLive,
 		"markFilesystemAsLive",
 		f.filesystemId,
@@ -273,21 +275,21 @@ func (f *FsMachine) Run() {
 	// because it blocks on a channel anyway; inserting a success
 	// backoff just means it'll be rate-limited as it'll sleep before
 	// processing each snapshot!
-	go runWhileFilesystemLives(
+	go f.runWhileFilesystemLives(
 		f.updateEtcdAboutSnapshots,
 		"updateEtcdAboutSnapshots",
 		f.filesystemId,
 		1*time.Second,
 		0*time.Second,
 	)
-	go runWhileFilesystemLives(
+	go f.runWhileFilesystemLives(
 		f.updateEtcdAboutTransfers,
 		"updateEtcdAboutTransfers",
 		f.filesystemId,
 		1*time.Second,
 		0*time.Second,
 	)
-	go runWhileFilesystemLives(
+	go f.runWhileFilesystemLives(
 		f.pollDirty,
 		"pollDirty",
 		f.filesystemId,
@@ -313,7 +315,7 @@ func (f *FsMachine) Run() {
 		// defer f.state.filesystemsLock.Unlock()
 		// We must hold the fslock while calling terminateRunners... to avoid a deadlock with
 		// waitForFilesystemDeath in utils.go
-		terminateRunnersWhileFilesystemLived(f.filesystemId)
+		f.terminateRunnersWhileFilesystemLived(f.filesystemId)
 		// delete(f.state.filesystems, f.filesystemId)
 
 		f.state.DeleteFilesystemFromMap(f.filesystemId)
@@ -355,6 +357,35 @@ func (f *FsMachine) Run() {
 		}
 		log.Printf("[run:%s] reading from external requests", f.filesystemId)
 	}
+}
+
+func (f *FsMachine) runWhileFilesystemLives(fn func() error, label string, filesystemId string, errorBackoff, successBackoff time.Duration) {
+	deathChan := make(chan interface{})
+	f.deathObserver.Subscribe(filesystemId, deathChan)
+	defer f.deathObserver.Unsubscribe(filesystemId, deathChan)
+
+	stillAlive := true
+	for stillAlive {
+		select {
+		case <-deathChan:
+			stillAlive = false
+		default:
+			err := fn()
+			if err != nil {
+				log.Printf(
+					"Error in runWhileFilesystemLives(%s@%s), retrying in %s: %s",
+					label, filesystemId, errorBackoff, err)
+				time.Sleep(errorBackoff)
+			} else {
+				time.Sleep(successBackoff)
+			}
+		}
+	}
+
+}
+
+func (f *FsMachine) terminateRunnersWhileFilesystemLived(filesystemId string) {
+	f.deathObserver.Publish(filesystemId, struct{ reason string }{"runWhileFilesystemLives"})
 }
 
 func (f *FsMachine) pollDirty() error {
@@ -420,20 +451,14 @@ func (f *FsMachine) getCurrentPollResult() types.TransferPollResult {
 }
 
 func (f *FsMachine) updateEtcdAboutTransfers() error {
-	// attempt to connect to etcd
-	// kapi, err := getEtcdKeysApi()
-	// if err != nil {
-	// return err
-	// }
-
 	pollResult := &(f.currentPollResult)
 
 	// wait until the state machine notifies us that it's changed the
 	// transfer state, but have an escape clause in case this filesystem
 	// is deleted so we don't block forever
 	deathChan := make(chan interface{})
-	deathObserver.Subscribe(f.filesystemId, deathChan)
-	defer deathObserver.Unsubscribe(f.filesystemId, deathChan)
+	f.deathObserver.Subscribe(f.filesystemId, deathChan)
+	defer f.deathObserver.Unsubscribe(f.filesystemId, deathChan)
 
 	for {
 		var update types.TransferUpdate
@@ -543,8 +568,8 @@ func (f *FsMachine) updateEtcdAboutSnapshots() error {
 	// snapshots, but have an escape clause in case this filesystem is
 	// deleted so we don't block forever
 	deathChan := make(chan interface{})
-	deathObserver.Subscribe(f.filesystemId, deathChan)
-	defer deathObserver.Unsubscribe(f.filesystemId, deathChan)
+	f.deathObserver.Subscribe(f.filesystemId, deathChan)
+	defer f.deathObserver.Unsubscribe(f.filesystemId, deathChan)
 
 	select {
 	case _ = <-f.snapshotsModified:

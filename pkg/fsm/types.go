@@ -73,6 +73,7 @@ type FsMachine struct {
 
 	localReceiveProgress observer.Observer
 	newSnapsOnMaster     observer.Observer
+	deathObserver        observer.Observer
 
 	// fsMachines live forever, whereas filesystem structs do not. so
 	// filesystem struct's snapshotLock can live here so that it doesn't get
