@@ -168,8 +168,8 @@ func main() {
 
 	s := NewInMemoryState(localPoolId, config)
 
-	for _, filesystemId := range findFilesystemIdsOnSystem() {
-		log.Printf("Initializing fsMachine for %s", filesystemId)
+	for _, filesystemId := range s.findFilesystemIdsOnSystem() {
+		log.Debugf("Initializing fsMachine for %s", filesystemId)
 		go func(fsID string) {
 			_, err := s.InitFilesystemMachine(fsID)
 			if err != nil {
