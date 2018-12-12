@@ -631,7 +631,7 @@ func (s *InMemoryState) deserializeEvent(node *client.Node) (*Event, error) {
 	return e, nil
 }
 
-func (s *InMemoryState) respondToEvent(fs, requestId string, response *Event, kapi client.KeysAPI) error {
+func (s *InMemoryState) respondToEvent(fs, requestId string, response *Event) error {
 	serialized, err := s.serializeEvent(response)
 	// TODO think more about handling error cases here, lest we cause deadlocks
 	// when the network is imperfect
@@ -641,7 +641,7 @@ func (s *InMemoryState) respondToEvent(fs, requestId string, response *Event, ka
 		log.Printf("Error while serializing an event response: %s", err)
 		return err
 	}
-	_, err = kapi.Set(
+	_, err = s.etcdClient.Set(
 		context.Background(),
 		fmt.Sprintf("%s/filesystems/responses/%s/%s", ETCD_PREFIX, fs, requestId),
 		serialized,
@@ -654,7 +654,7 @@ func (s *InMemoryState) respondToEvent(fs, requestId string, response *Event, ka
 	return nil
 }
 
-func (s *InMemoryState) deserializeDispatchAndRespond(fs string, node *client.Node, kapi client.KeysAPI) error {
+func (s *InMemoryState) deserializeDispatchAndRespond(fs string, node *client.Node) error {
 	// TODO 2-phase commit to avoid doubling up events after
 	// reading them, performing them, and then getting disconnected
 	// before cleaning them up?
@@ -662,7 +662,7 @@ func (s *InMemoryState) deserializeDispatchAndRespond(fs string, node *client.No
 	requestId := pieces[len(pieces)-1]
 
 	// check that there isn't a stale response already. if so, do nothing.
-	_, err := kapi.Get(
+	_, err := s.etcdClient.Get(
 		context.Background(),
 		fmt.Sprintf("%s/filesystems/responses/%s/%s", ETCD_PREFIX, fs, requestId),
 		nil,
@@ -682,9 +682,7 @@ func (s *InMemoryState) deserializeDispatchAndRespond(fs string, node *client.No
 	e, err := s.deserializeEvent(node)
 	if err != nil || e == nil {
 		// Respond to invalid events
-		_ = s.respondToEvent(fs, requestId,
-			&Event{Name: "invalid-request", Args: &EventArgs{"error": err, "request": e}},
-			kapi)
+		_ = s.respondToEvent(fs, requestId, &Event{Name: "invalid-request", Args: &EventArgs{"error": err, "request": e}})
 		return err
 	}
 
@@ -712,7 +710,7 @@ func (s *InMemoryState) deserializeDispatchAndRespond(fs string, node *client.No
 		internalResponse := <-c
 		log.Printf("Done putting it into internalResponse (%v, %v)", fs, c)
 
-		_ = s.respondToEvent(fs, requestId, internalResponse, kapi)
+		_ = s.respondToEvent(fs, requestId, internalResponse)
 	}()
 	return nil
 }
@@ -1131,7 +1129,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		}
 		return nil
 	}
-	var kapi client.KeysAPI
+
 	maybeDispatchEvent := func(node *client.Node) error {
 		// (0)/(1)dotmesh.io/(2)filesystems/
 		//     (3)requests/(4):filesystem/(5):request_id = request
@@ -1141,7 +1139,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		if ok && mine {
 			// only act on events for filesystems that etcd reports as
 			// belonging to me
-			if err := s.deserializeDispatchAndRespond(fs, node, kapi); err != nil {
+			if err := s.deserializeDispatchAndRespond(fs, node); err != nil {
 				return err
 			}
 		}
@@ -1156,17 +1154,12 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		return ""
 	}
 
-	func() {
-		s.etcdWaitTimestampLock.Lock()
-		defer s.etcdWaitTimestampLock.Unlock()
-		s.etcdWaitTimestamp = time.Now().UnixNano()
-		s.etcdWaitState = "connect"
-	}()
-
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		return err
-	}
+	// func() {
+	// 	s.etcdWaitTimestampLock.Lock()
+	// 	defer s.etcdWaitTimestampLock.Unlock()
+	// 	s.etcdWaitTimestamp = time.Now().UnixNano()
+	// 	s.etcdWaitState = "connect"
+	// }()
 
 	func() {
 		s.etcdWaitTimestampLock.Lock()
@@ -1177,7 +1170,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 
 	// Do this every time, even if it fails.  This is to handle the case where
 	// etcd gets wiped underneath us.
-	err = s.insertInitialAdminPassword()
+	err := s.insertInitialAdminPassword()
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error": err,
@@ -1192,7 +1185,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 	}()
 
 	// on first connect, fetch all of, well, everything
-	current, err := kapi.Get(context.Background(),
+	current, err := s.etcdClient.Get(context.Background(),
 		fmt.Sprint(ETCD_PREFIX),
 		&client.GetOptions{Recursive: true, Sort: false, Quorum: true},
 	)
@@ -1365,7 +1358,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 	})
 
 	// now watch for changes, and pipe them into the state machines
-	watcher := kapi.Watcher(
+	watcher := s.etcdClient.Watcher(
 		fmt.Sprintf(ETCD_PREFIX),
 		&client.WatcherOptions{
 			AfterIndex: current.Index, Recursive: true,
@@ -1394,7 +1387,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 				// Try to recover from this case. Just make a watcher from the
 				// current state, which means we'll have missed some events,
 				// but at least we won't crashloop.
-				watcher = kapi.Watcher(
+				watcher = s.etcdClient.Watcher(
 					fmt.Sprintf(ETCD_PREFIX),
 					&client.WatcherOptions{
 						// NB: no AfterIndex option, throw away interim
