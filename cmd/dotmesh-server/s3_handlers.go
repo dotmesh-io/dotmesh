@@ -239,7 +239,7 @@ func (s *S3Handler) readFile(resp http.ResponseWriter, req *http.Request, filesy
 		result := <-respCh
 
 		switch result.Name {
-		case eventNameReadFailed:
+		case types.EventNameReadFailed:
 			e, ok := (*result.Args)["err"].(string)
 			if ok {
 				http.Error(resp, e, 500)
@@ -283,7 +283,7 @@ func (s *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, files
 	result := <-respCh
 
 	switch result.Name {
-	case eventNameSaveFailed:
+	case types.EventNameSaveFailed:
 		e, ok := (*result.Args)["err"].(string)
 		if ok {
 			http.Error(resp, e, 500)
