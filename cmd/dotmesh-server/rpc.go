@@ -1317,7 +1317,10 @@ func (d *DotmeshRPC) S3Transfer(
 	args *types.S3TransferRequest,
 	result *string,
 ) error {
-	localVolumeName := VolumeName{args.LocalNamespace, args.LocalName}
+	localVolumeName := VolumeName{
+		Namespace: args.LocalNamespace,
+		Name:      args.LocalName,
+	}
 	// Remote name is welcome to be invalid, that's the far end's problem
 	err := validator.IsValidVolume(args.LocalNamespace, args.LocalName)
 	if err != nil {
