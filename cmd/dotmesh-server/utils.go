@@ -17,7 +17,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/dotmesh-io/dotmesh/pkg/observer"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 
 	log "github.com/sirupsen/logrus"
@@ -258,35 +257,35 @@ func runForever(f func() error, label string, errorBackoff, successBackoff time.
 	}
 }
 
-var deathObserver = observer.NewObserver("deathObserver")
+// var deathObserver = observer.NewObserver("deathObserver")
 
 // run while filesystem lives
-func runWhileFilesystemLives(f func() error, label string, filesystemId string, errorBackoff, successBackoff time.Duration) {
-	deathChan := make(chan interface{})
-	deathObserver.Subscribe(filesystemId, deathChan)
-	stillAlive := true
-	for stillAlive {
-		select {
-		case _ = <-deathChan:
-			stillAlive = false
-		default:
-			err := f()
-			if err != nil {
-				log.Printf(
-					"Error in runWhileFilesystemLives(%s@%s), retrying in %s: %s",
-					label, filesystemId, errorBackoff, err)
-				time.Sleep(errorBackoff)
-			} else {
-				time.Sleep(successBackoff)
-			}
-		}
-	}
-	deathObserver.Unsubscribe(filesystemId, deathChan)
-}
+// func runWhileFilesystemLives(f func() error, label string, filesystemId string, errorBackoff, successBackoff time.Duration) {
+// 	deathChan := make(chan interface{})
+// 	deathObserver.Subscribe(filesystemId, deathChan)
+// 	stillAlive := true
+// 	for stillAlive {
+// 		select {
+// 		case _ = <-deathChan:
+// 			stillAlive = false
+// 		default:
+// 			err := f()
+// 			if err != nil {
+// 				log.Printf(
+// 					"Error in runWhileFilesystemLives(%s@%s), retrying in %s: %s",
+// 					label, filesystemId, errorBackoff, err)
+// 				time.Sleep(errorBackoff)
+// 			} else {
+// 				time.Sleep(successBackoff)
+// 			}
+// 		}
+// 	}
+// 	deathObserver.Unsubscribe(filesystemId, deathChan)
+// }
 
-func terminateRunnersWhileFilesystemLived(filesystemId string) {
-	deathObserver.Publish(filesystemId, struct{ reason string }{"runWhileFilesystemLives"})
-}
+// func terminateRunnersWhileFilesystemLived(filesystemId string) {
+// 	deathObserver.Publish(filesystemId, struct{ reason string }{"runWhileFilesystemLives"})
+// }
 
 func (s *InMemoryState) waitForFilesystemDeath(filesystemId string) {
 	// We hold this lock to avoid a race between subscribe and check.
@@ -306,11 +305,11 @@ func (s *InMemoryState) waitForFilesystemDeath(filesystemId string) {
 			returnImmediately = true
 			return
 		}
-		deathObserver.Subscribe(filesystemId, deathChan)
+		s.deathObserver.Subscribe(filesystemId, deathChan)
 	}()
 	if !returnImmediately {
 		<-deathChan
-		deathObserver.Unsubscribe(filesystemId, deathChan)
+		s.deathObserver.Unsubscribe(filesystemId, deathChan)
 	}
 }
 
