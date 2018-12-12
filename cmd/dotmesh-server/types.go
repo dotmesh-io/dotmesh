@@ -1,16 +1,10 @@
 package main
 
 import (
-	"io"
-	"sync"
-
 	"github.com/dotmesh-io/dotmesh/pkg/container"
-	"github.com/dotmesh-io/dotmesh/pkg/observer"
-	"github.com/dotmesh-io/dotmesh/pkg/registry"
 
 	"github.com/coreos/etcd/client"
 
-	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 )
@@ -75,22 +69,8 @@ type VersionInfo struct {
 	Outdated            bool   `json:"outdated"`
 }
 
-// type fsMap map[string]*fsMachine
-
-type transferFn func(
-	f *fsMachine,
-	fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
-	transferRequestId string,
-	client *dmclient.JsonRpcClient, transferRequest *types.TransferRequest,
-) (*Event, stateFn)
-
-// Defaults are specified in main.go
-
 type SafeConfig struct {
 }
-
-// state machinery
-type stateFn func(*fsMachine) stateFn
 
 type Snapshot = types.Snapshot
 type Clone = types.Clone
@@ -99,167 +79,10 @@ type Metadata = types.Metadata
 
 type TransferUpdateKind int
 
-const (
-	TransferStart TransferUpdateKind = iota
-	TransferGotIds
-	TransferCalculatedSize
-	TransferTotalAndSize
-	TransferProgress
-	TransferIncrementIndex
-	TransferNextS3File
-	TransferSent
-	TransferFinished
-	TransferStatus
-
-	TransferGetCurrentPollResult
-)
-
-type TransferUpdate struct {
-	Kind TransferUpdateKind
-
-	Changes TransferPollResult
-
-	GetResult chan TransferPollResult
-}
-
-type StateManager interface {
-	InitFilesystemMachine(filesystemId string) (*fsMachine, error)
-	GetFilesystemMachine(filesystemId string) (*fsMachine, error)
-
-	// ActivateFilesystem(filesystemId string) error
-	AlignMountStateWithMasters(filesystemId string) error
-	ActivateClone(topLevelFilesystemId, originFilesystemId, originSnapshotId, newCloneFilesystemId, newBranchName string) (string, error)
-	DeleteFilesystem(filesystemId string) error
-	DeleteFilesystemFromMap(filesystemId string)
-	// current node ID
-	NodeID() string
-
-	UpdateSnapshotsFromKnownState(server, filesystem string, snapshots []*Snapshot) error
-	SnapshotsFor(server string, filesystemId string) ([]Snapshot, error)
-	SnapshotsForCurrentMaster(filesystemId string) ([]Snapshot, error)
-
-	AddressesForServer(server string) []string
-
-	// TODO: move under a separate interface for Etcd related things
-	MarkFilesystemAsLiveInEtcd(topLevelFilesystemId string) error
-}
-
-// a "filesystem machine" or "filesystem state machine"
-type fsMachine struct {
-	// which ZFS filesystem this statemachine is operating on
-	filesystemId string
-	filesystem   *Filesystem
-
-	// channels for uploading and downloading file data
-	fileInputIO  chan *InputFile
-	fileOutputIO chan *OutputFile
-
-	// channel of requests going in to the state machine
-	requests chan *Event
-	// inner versions of the above
-	innerRequests chan *Event
-	// inner responses don't need to be parameterized on request id because
-	// they're guaranteed to only have one goroutine reading on the channel.
-	innerResponses chan *Event
-	// channel of responses coming out of the state machine, indexed by request
-	// id so that multiple goroutines reading responses for the same filesystem
-	// id won't get the wrong result.
-	responses     map[string]chan *Event
-	responsesLock *sync.Mutex
-	// channel notifying etcd-updater whenever snapshot state changes
-	snapshotsModified chan bool
-	// pointer to global state, because it's convenient to have access to it
-	// state *InMemoryState
-
-	containerClient container.Client
-	etcdClient      client.KeysAPI
-	state           StateManager
-	userManager     user.UserManager
-	registry        registry.Registry
-
-	localReceiveProgress observer.Observer
-	newSnapsOnMaster     observer.Observer
-
-	// fsMachines live forever, whereas filesystem structs do not. so
-	// filesystem struct's snapshotLock can live here so that it doesn't get
-	// clobbered
-	snapshotsLock *sync.Mutex
-	// a place to store arguments to pass to the next state
-	handoffRequest *Event
-	// filesystem-sliced view of new snapshot events
-	newSnapsOnServers observer.Observer
-	// current state, status field for reporting/debugging and transition observer
-	currentState            string
-	status                  string
-	lastTransitionTimestamp int64
-	transitionObserver      observer.Observer
-	lastS3TransferRequest   types.S3TransferRequest
-	lastTransferRequest     types.TransferRequest
-	lastTransferRequestId   string
-	pushCompleted           chan bool
-	dirtyDelta              int64
-	sizeBytes               int64
-	transferUpdates         chan TransferUpdate
-	// only to be accessed via the updateEtcdAboutTransfers goroutine!
-	currentPollResult TransferPollResult
-
-	// state machine metadata
-	// Moved from InMemoryState:
-	// server id => filesystem id => state machine metadata
-	//globalStateCache:     make(map[string]map[string]map[string]string),
-
-	// new structure: NodeID => State machine metadata
-	stateMachineMetadata   map[string]map[string]string
-	stateMachineMetadataMu *sync.RWMutex
-
-	// NodeID => snapshot metadata
-	snapshotCache   map[string][]*Snapshot
-	snapshotCacheMu *sync.RWMutex
-
-	filesystemMetadataTimeout int64
-}
-
 // EventArgs - alias to make refactoring easier,
 // TODO: use the types directly and remove alias
 type EventArgs = types.EventArgs
 type Event = types.Event
-
-// type EventArgs map[string]interface{}
-// type Event struct {
-// 	Name string
-// 	Args *EventArgs
-// }
-
-// InputFile is used to write files to the disk on the local node.
-type InputFile struct {
-	Filename string
-	Contents io.Reader
-	User     string
-	Response chan *Event
-}
-
-// OutputFile is used to read files from the disk on the local node
-// this is always done against a specific, already mounted snapshotId
-// the mount path of the snapshot is passed through via SnapshotMountPath
-type OutputFile struct {
-	Filename          string
-	SnapshotMountPath string
-	Contents          io.Writer
-	User              string
-	Response          chan *Event
-}
-
-// func (ea EventArgs) String() string {
-// 	aggr := []string{}
-// 	for k, v := range ea {
-// 		aggr = append(aggr, fmt.Sprintf("%s: %+q", k, v))
-// 	}
-// 	return strings.Join(aggr, ", ")
-// }
-
-// func (e Event) String() string {
-// 	return fmt.Sprintf("<Event %s: %s>", e.Name, e.Args)
-// }
 
 type TransferPollResult struct {
 	TransferRequestId string
