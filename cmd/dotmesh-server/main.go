@@ -19,6 +19,9 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 
+	// registering metric counters
+	_ "github.com/dotmesh-io/dotmesh/pkg/metrics"
+
 	// notification provider
 	_ "github.com/dotmesh-io/dotmesh/pkg/notification/nats"
 
