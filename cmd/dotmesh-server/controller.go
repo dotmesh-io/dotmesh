@@ -32,33 +32,20 @@ type InMemoryState struct {
 
 	myNodeId string
 
-	// mastersCache     map[string]string
-	// mastersCacheLock *sync.RWMutex
-
 	serverAddressesCache     map[string]string
 	serverAddressesCacheLock *sync.RWMutex
-
-	// globalSnapshotCache     map[string]map[string][]snapshot
-	// globalSnapshotCacheLock *sync.RWMutex
-
-	// globalStateCache used for mostly metadata & debugging, can be moved into
-	// each fsMachine but we should only keep a map of server -> fsMachine then
-	// or just fsMachines since all know which server they are on
-	// globalStateCache         map[string]map[string]map[string]string
-	// globalStateCacheLock     *sync.RWMutex
 
 	globalContainerCache     map[string]containerInfo
 	globalContainerCacheLock *sync.RWMutex
 
-	etcdClient            client.KeysAPI
-	etcdWaitTimestamp     int64
-	etcdWaitState         string
-	etcdWaitTimestampLock *sync.Mutex
-	localReceiveProgress  observer.Observer
-	newSnapsOnMaster      observer.Observer
-	deathObserver         observer.Observer
-	registry              registry.Registry
-	// containers                 *DockerClient
+	etcdClient                 client.KeysAPI
+	etcdWaitTimestamp          int64
+	etcdWaitState              string
+	etcdWaitTimestampLock      *sync.Mutex
+	localReceiveProgress       observer.Observer
+	newSnapsOnMaster           observer.Observer
+	deathObserver              observer.Observer
+	registry                   registry.Registry
 	containers                 container.Client
 	containersLock             *sync.RWMutex
 	fetchRelatedContainersChan chan bool
