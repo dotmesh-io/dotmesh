@@ -2,8 +2,6 @@ package metrics
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
-
-	log "github.com/sirupsen/logrus"
 )
 
 func init() {
@@ -14,7 +12,6 @@ func init() {
 		RPCRequestDuration,
 		ZPoolCapacity,
 	)
-	log.Println("registering /metrics url as prometheus handler")
 }
 
 var (
