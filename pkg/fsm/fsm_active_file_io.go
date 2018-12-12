@@ -11,12 +11,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const EventNameSaveFailed = "save-failed"
-const EventNameSaveSuccess = "save-success"
-
-const EventNameReadFailed = "read-failed"
-const EventNameReadSuccess = "read-success"
-
 func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 	// create the default paths
 	destPath := fmt.Sprintf("%s/%s/%s", mnt(f.filesystemId), "__default__", file.Filename)
@@ -25,7 +19,7 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 	err := os.MkdirAll(directoryPath, 0775)
 	if err != nil {
 		file.Response <- &types.Event{
-			Name: EventNameSaveFailed,
+			Name: types.EventNameSaveFailed,
 			Args: &types.EventArgs{"err": fmt.Errorf("failed to create directory, error: %s", err)},
 		}
 		return backoffState
@@ -33,7 +27,7 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 	out, err := os.Create(destPath)
 	if err != nil {
 		file.Response <- &types.Event{
-			Name: EventNameSaveFailed,
+			Name: types.EventNameSaveFailed,
 			Args: &types.EventArgs{"err": fmt.Errorf("failed to create file, error: %s", err)},
 		}
 		return backoffState
@@ -52,7 +46,7 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 	bytes, err := io.Copy(out, file.Contents)
 	if err != nil {
 		file.Response <- &types.Event{
-			Name: EventNameSaveFailed,
+			Name: types.EventNameSaveFailed,
 			Args: &types.EventArgs{"err": fmt.Errorf("cannot to create a file, error: %s", err)},
 		}
 		return backoffState
@@ -68,14 +62,14 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 		}}})
 	if response.Name != "snapshotted" {
 		file.Response <- &types.Event{
-			Name: EventNameSaveFailed,
+			Name: types.EventNameSaveFailed,
 			Args: &types.EventArgs{"err": "file snapshot failed"},
 		}
 		return backoffState
 	}
 
 	file.Response <- &types.Event{
-		Name: EventNameSaveSuccess,
+		Name: types.EventNameSaveSuccess,
 		Args: &types.EventArgs{},
 	}
 
@@ -89,7 +83,7 @@ func (f *FsMachine) readFile(file *types.OutputFile) StateFn {
 	fileOnDisk, err := os.Open(sourcePath)
 	if err != nil {
 		file.Response <- &types.Event{
-			Name: EventNameReadFailed,
+			Name: types.EventNameReadFailed,
 			Args: &types.EventArgs{"err": fmt.Errorf("failed to read file, error: %s", err)},
 		}
 		return backoffState
@@ -106,14 +100,14 @@ func (f *FsMachine) readFile(file *types.OutputFile) StateFn {
 	_, err = io.Copy(file.Contents, fileOnDisk)
 	if err != nil {
 		file.Response <- &types.Event{
-			Name: EventNameReadFailed,
+			Name: types.EventNameReadFailed,
 			Args: &types.EventArgs{"err": fmt.Errorf("cannot stream file, error: %s", err)},
 		}
 		return backoffState
 	}
 
 	file.Response <- &types.Event{
-		Name: EventNameReadSuccess,
+		Name: types.EventNameReadSuccess,
 		Args: &types.EventArgs{},
 	}
 
