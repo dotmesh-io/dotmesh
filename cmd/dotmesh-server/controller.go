@@ -76,23 +76,12 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 		panic(err)
 	}
 	s := &InMemoryState{
-		config:          config,
-		filesystems:     make(map[string]fsm.FSM),
-		filesystemsLock: &sync.RWMutex{},
-		myNodeId:        localPoolId,
-		// karolis: MOVED TO REGISTRY
-		// filesystem => node id
-		// mastersCache:     make(map[string]string),
-		// mastersCacheLock: &sync.RWMutex{},
-		// server id => comma-separated IPv[46] addresses
+		config:                   config,
+		filesystems:              make(map[string]fsm.FSM),
+		filesystemsLock:          &sync.RWMutex{},
+		myNodeId:                 localPoolId,
 		serverAddressesCache:     make(map[string]string),
 		serverAddressesCacheLock: &sync.RWMutex{},
-		// server id => filesystem id => snapshot metadata
-		// globalSnapshotCache:     make(map[string]map[string][]snapshot),
-		// globalSnapshotCacheLock: &sync.RWMutex{},
-		// server id => filesystem id => state machine metadata
-		// globalStateCache:     make(map[string]map[string]map[string]string),
-		// globalStateCacheLock: &sync.RWMutex{},
 		// global container state (what containers are running where), filesystemId -> containerInfo
 		globalContainerCache:     make(map[string]containerInfo),
 		globalContainerCacheLock: &sync.RWMutex{},
