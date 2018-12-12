@@ -12,6 +12,7 @@ import (
 
 	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
+	"github.com/dotmesh-io/dotmesh/pkg/zfs"
 	"github.com/gorilla/mux"
 
 	log "github.com/sirupsen/logrus"
@@ -143,25 +144,25 @@ func (z *ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if z.fromSnap == "START" {
-		logZFSCommand(z.filesystem, fmt.Sprintf("%s send -p -R %s@%s", ZFS, fq(z.filesystem), z.toSnap))
+		logZFSCommand(z.filesystem, fmt.Sprintf("%s send -p -R %s@%s", z.state.config.ZFSExecPath, zfs.FQ(z.state.config.PoolName, z.filesystem), z.toSnap))
 		cmd = exec.Command(
 			// -R sends interim snapshots as well
-			ZFS, "send", "-p", "-R", fq(z.filesystem)+"@"+z.toSnap,
+			ZFS, "send", "-p", "-R", zfs.FQ(z.state.config.PoolName, z.filesystem)+"@"+z.toSnap,
 		)
 	} else {
 		var fromSnap string
 		// in clone case, z.fromSnap must be fully qualified
 		if strings.Contains(z.fromSnap, "@") {
 			// send a clone, so make it fully qualified
-			fromSnap = fq(z.fromSnap)
+			fromSnap = zfs.FQ(z.state.config.PoolName, z.fromSnap)
 		} else {
 			// presume it refers to a snapshot
 			fromSnap = z.fromSnap
 		}
-		logZFSCommand(z.filesystem, fmt.Sprintf("%s send -p -I %s %s@%s", ZFS, fromSnap, fq(z.filesystem), z.toSnap))
+		logZFSCommand(z.filesystem, fmt.Sprintf("%s send -p -I %s %s@%s", z.state.config.ZFSExecPath, fromSnap, zfs.FQ(z.state.config.PoolName, z.filesystem), z.toSnap))
 		cmd = exec.Command(
-			ZFS, "send", "-p",
-			"-I", fromSnap, fq(z.filesystem)+"@"+z.toSnap,
+			z.state.config.ZFSExecPath, "send", "-p",
+			"-I", fromSnap, zfs.FQ(z.state.config.PoolName, z.filesystem)+"@"+z.toSnap,
 		)
 	}
 
@@ -337,9 +338,9 @@ func (z *ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// and is therefore blocking on us to tell it we've finished, one way or another, via
 	// z.state.notifyPushCompleted(z.filesystem, true/false) so we'd better do that in every path.
 
-	logZFSCommand(z.filesystem, fmt.Sprintf("%s recv %s", ZFS, fq(z.filesystem)))
+	logZFSCommand(z.filesystem, fmt.Sprintf("%s recv %s", ZFS, zfs.FQ(z.state.config.PoolName, z.filesystem)))
 
-	cmd := exec.Command(ZFS, "recv", fq(z.filesystem))
+	cmd := exec.Command(ZFS, "recv", zfs.FQ(z.state.config.PoolName, z.filesystem))
 	pipeReader, pipeWriter := io.Pipe()
 	defer pipeReader.Close()
 	defer pipeWriter.Close()
@@ -425,7 +426,7 @@ func (z *ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	pipeWriter.Close()
 	_ = <-finished
 
-	err = applyPrelude(prelude, fq(z.filesystem))
+	err = applyPrelude(prelude, zfs.FQ(z.state.config.PoolName, z.filesystem))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(fmt.Sprintf("Unable to apply prelude for %s: %s\n", z.filesystem, err)))
