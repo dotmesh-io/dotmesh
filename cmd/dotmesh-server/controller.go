@@ -56,6 +56,7 @@ type InMemoryState struct {
 	etcdWaitTimestampLock *sync.Mutex
 	localReceiveProgress  observer.Observer
 	newSnapsOnMaster      observer.Observer
+	deathObserver         observer.Observer
 	registry              registry.Registry
 	// containers                 *DockerClient
 	containers                 container.Client
@@ -118,6 +119,7 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 		// such as slaves for that filesystem may subscribe to
 		newSnapsOnMaster:     observer.NewObserver("newSnapsOnMaster"),
 		localReceiveProgress: observer.NewObserver("localReceiveProgress"),
+		deathObserver:        observer.NewObserver("deathObserver"),
 		// containers that are running with dotmesh volumes by filesystem id
 		containers:     dockerClient,
 		containersLock: &sync.RWMutex{},
