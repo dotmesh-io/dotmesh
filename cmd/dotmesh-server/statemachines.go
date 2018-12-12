@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/dotmesh-io/dotmesh/pkg/container"
+	"github.com/dotmesh-io/dotmesh/pkg/metrics"
 	"github.com/nu7hatch/gouuid"
 	"golang.org/x/net/context"
 
@@ -403,7 +404,7 @@ func (f *fsMachine) transitionedTo(state string, status string) {
 		float64(now-f.lastTransitionTimestamp)/float64(time.Second),
 	)
 
-	transitionCounter.WithLabelValues(f.currentState, state, status).Add(1)
+	metrics.TransitionCounter.WithLabelValues(f.currentState, state, status).Add(1)
 
 	f.currentState = state
 	f.status = status

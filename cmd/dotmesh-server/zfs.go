@@ -12,6 +12,8 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"github.com/dotmesh-io/dotmesh/pkg/metrics"
 )
 
 // functions which relate to interacting directly with zfs
@@ -134,7 +136,7 @@ func (state *InMemoryState) reportZpoolCapacity() error {
 	if err != nil {
 		return err
 	}
-	zpoolCapacity.WithLabelValues(state.myNodeId, POOL).Set(capacity)
+	metrics.ZPoolCapacity.WithLabelValues(state.myNodeId, POOL).Set(capacity)
 	return nil
 }
 
