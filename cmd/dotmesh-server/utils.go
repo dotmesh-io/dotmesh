@@ -123,14 +123,6 @@ func out(s ...interface{}) {
 	os.Stdout.Write([]byte(ss))
 }
 
-func fq(fs string) string {
-	// from filesystem id to a fully qualified ZFS filesystem
-	return fmt.Sprintf("%s/%s/%s", POOL, ROOT_FS, fs)
-}
-func unfq(fqfs string) string {
-	// from fully qualified ZFS name to filesystem id, strip off prefix
-	return fqfs[len(POOL+"/"+ROOT_FS+"/"):]
-}
 func mnt(fs string) string {
 	// from filesystem id to the path it would be mounted at if it were mounted
 	mountPrefix := os.Getenv("MOUNT_PREFIX")

@@ -9,6 +9,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/dotmesh-io/dotmesh/pkg/client"
+	"github.com/dotmesh-io/dotmesh/pkg/zfs"
 )
 
 func (state *InMemoryState) runLivenessServer() {
@@ -49,7 +50,7 @@ func (state *InMemoryState) runLivenessServer() {
 		}
 
 		// Check the zpool exists
-		_, err = getZpoolCapacity()
+		_, err = zfs.GetZPoolCapacity(state.config.ZPoolPath, state.config.PoolName)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Zpool error: %v\n", err), http.StatusInternalServerError)
 			return
