@@ -217,9 +217,10 @@ func (s *InMemoryState) ActivateClone(topLevelFilesystemId, originFilesystemId, 
 	err := s.registry.RegisterClone(
 		newBranchName, topLevelFilesystemId,
 		Clone{
-			newCloneFilesystemId,
-			Origin{
-				originFilesystemId, originSnapshotId,
+			FilesystemId: newCloneFilesystemId,
+			Origin: Origin{
+				FilesystemId: originFilesystemId,
+				SnapshotId:   originSnapshotId,
 			},
 		},
 	)
