@@ -1,19 +1,21 @@
-package main
+package fsm
 
 import (
 	"fmt"
 	"log"
 	"os"
+
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 )
 
-func s3PushInitiatorState(f *fsMachine) stateFn {
+func s3PushInitiatorState(f *FsMachine) StateFn {
 	f.transitionedTo("s3PushInitiatorState", "requesting")
 	transferRequest := f.lastS3TransferRequest
 	transferRequestId := f.lastTransferRequestId
 
-	f.transferUpdates <- TransferUpdate{
-		Kind: TransferStart,
-		Changes: TransferPollResult{
+	f.transferUpdates <- types.TransferUpdate{
+		Kind: types.TransferStart,
+		Changes: types.TransferPollResult{
 			TransferRequestId: transferRequestId,
 			Direction:         transferRequest.Direction,
 			InitiatorNodeId:   f.state.NodeID(),
@@ -52,7 +54,7 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 	}
 	if latestSnap != nil {
 		if _, err := os.Stat(pathToS3Metadata); err == nil {
-			f.sendArgsEventUpdateUser(&EventArgs{"path": pathToS3Metadata}, "commit-already-in-s3", "Found s3 metadata for latest snap - nothing to push!")
+			f.sendArgsEventUpdateUser(&types.EventArgs{"path": pathToS3Metadata}, "commit-already-in-s3", "Found s3 metadata for latest snap - nothing to push!")
 			return discoveringState
 		} else if !os.IsNotExist(err) {
 			f.errorDuringTransfer("couldnt-stat-s3-meta-file", err)
@@ -68,13 +70,13 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 		pathToMount := fmt.Sprintf("%s/__default__", mountPoint)
 		paths, dirSize, err := getKeysForDir(pathToMount, "")
 		if err != nil {
-			f.sendEvent(&EventArgs{"err": err, "path": pathToMount}, "cant-get-keys-for-directory", "")
+			f.sendEvent(&types.EventArgs{"err": err, "path": pathToMount}, "cant-get-keys-for-directory", "")
 			return backoffState
 		}
 		// push everything to s3
-		f.transferUpdates <- TransferUpdate{
-			Kind: TransferTotalAndSize,
-			Changes: TransferPollResult{
+		f.transferUpdates <- types.TransferUpdate{
+			Kind: types.TransferTotalAndSize,
+			Changes: types.TransferPollResult{
 				Status: "beginning upload",
 				Total:  len(paths),
 				Size:   dirSize,
@@ -114,9 +116,9 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 		}
 
 		// create a new commit with the type "dotmesh.metadata_only" so that we can ignore it when detecting new commits
-		response, _ := f.snapshot(&Event{
+		response, _ := f.snapshot(&types.Event{
 			Name: "snapshot",
-			Args: &EventArgs{"metadata": Metadata{
+			Args: &types.EventArgs{"metadata": types.Metadata{
 				"message": "adding s3 metadata",
 				"type":    "dotmesh.metadata_only",
 			},
@@ -126,7 +128,7 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 			f.innerResponses <- response
 			err = f.updateUser("Could not take snapshot")
 			if err != nil {
-				f.sendEvent(&EventArgs{"err": err}, "cant-write-to-etcd", "cant write to etcd")
+				f.sendEvent(&types.EventArgs{"err": err}, "cant-write-to-etcd", "cant write to etcd")
 			}
 			return backoffState
 		}
@@ -135,11 +137,11 @@ func s3PushInitiatorState(f *fsMachine) stateFn {
 		// put something in S3 to let us know the filesystem ID/other dotmesh details in case we need to recover at a later stage
 	}
 	// todo set this to something more reasonable and do stuff with all of the above
-	f.transferUpdates <- TransferUpdate{
-		Kind: TransferFinished,
+	f.transferUpdates <- types.TransferUpdate{
+		Kind: types.TransferFinished,
 	}
 
-	f.innerResponses <- &Event{
+	f.innerResponses <- &types.Event{
 		Name: "s3-pushed",
 	}
 	return discoveringState

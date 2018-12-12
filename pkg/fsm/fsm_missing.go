@@ -1,18 +1,46 @@
-package main
+package fsm
 
 import (
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
+
+	"github.com/coreos/etcd/client"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
+
+	"golang.org/x/net/context"
 )
 
-func missingState(f *fsMachine) stateFn {
+func (f *FsMachine) isFilesystemDeletedInEtcd(fsId string) (bool, error) {
+
+	result, err := f.etcdClient.Get(
+		context.Background(),
+		fmt.Sprintf("%s/filesystems/deleted/%s", types.EtcdPrefix, fsId),
+		nil,
+	)
+
+	if err != nil {
+		if client.IsKeyNotFound(err) {
+			return false, nil
+		} else {
+			return false, err
+		}
+	}
+
+	if result != nil {
+		return true, nil
+	} else {
+		return false, nil
+	}
+}
+
+func missingState(f *FsMachine) StateFn {
 	f.transitionedTo("missing", "waiting")
 	log.Printf("entering missing state for %s", f.filesystemId)
 
 	// Are we missing because we're being deleted?
-	deleted, err := isFilesystemDeletedInEtcd(f.filesystemId)
+	deleted, err := f.isFilesystemDeletedInEtcd(f.filesystemId)
 	if err != nil {
 		log.Printf("Error trying to check for filesystem deletion while in missingState: %s", err)
 		return backoffState
@@ -49,12 +77,12 @@ func missingState(f *fsMachine) stateFn {
 			// thoroughness.
 			err := f.state.DeleteFilesystem(f.filesystemId)
 			if err != nil {
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "cant-delete",
-					Args: &EventArgs{"err": err},
+					Args: &types.EventArgs{"err": err},
 				}
 			} else {
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "deleted",
 				}
 			}
@@ -65,18 +93,18 @@ func missingState(f *fsMachine) stateFn {
 			// TODO dedupe
 			transferRequest, err := transferRequestify((*e.Args)["Transfer"])
 			if err != nil {
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "cant-cast-transfer-request",
-					Args: &EventArgs{"err": err},
+					Args: &types.EventArgs{"err": err},
 				}
 				return backoffState
 			}
 			f.lastTransferRequest = transferRequest
 			transferRequestId, ok := (*e.Args)["RequestId"].(string)
 			if !ok {
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "cant-cast-transfer-requestid",
-					Args: &EventArgs{"err": err},
+					Args: &types.EventArgs{"err": err},
 				}
 				return backoffState
 			}
@@ -84,9 +112,9 @@ func missingState(f *fsMachine) stateFn {
 
 			if f.lastTransferRequest.Direction == "push" {
 				// Can't push when we're missing.
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "cant-push-while-missing",
-					Args: &EventArgs{"request": e, "node": f.state.NodeID()},
+					Args: &types.EventArgs{"request": e, "node": f.state.NodeID()},
 				}
 				return backoffState
 			} else if f.lastTransferRequest.Direction == "pull" {
@@ -98,18 +126,18 @@ func missingState(f *fsMachine) stateFn {
 			// TODO dedupe
 			transferRequest, err := s3TransferRequestify((*e.Args)["Transfer"])
 			if err != nil {
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "cant-cast-s3-transfer-request",
-					Args: &EventArgs{"err": err},
+					Args: &types.EventArgs{"err": err},
 				}
 				return backoffState
 			}
 			f.lastS3TransferRequest = transferRequest
 			transferRequestId, ok := (*e.Args)["RequestId"].(string)
 			if !ok {
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "cant-cast-s3-transfer-requestid",
-					Args: &EventArgs{"err": err},
+					Args: &types.EventArgs{"err": err},
 				}
 				return backoffState
 			}
@@ -117,19 +145,19 @@ func missingState(f *fsMachine) stateFn {
 
 			if f.lastS3TransferRequest.Direction == "push" {
 				// Can't push when we're missing.
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "cant-push-while-missing",
-					Args: &EventArgs{"request": e, "node": f.state.NodeID()},
+					Args: &types.EventArgs{"request": e, "node": f.state.NodeID()},
 				}
 				return backoffState
 			} else if f.lastS3TransferRequest.Direction == "pull" {
-				logZFSCommand(f.filesystemId, fmt.Sprintf("%s %s %s", ZFS, "create", fq(f.filesystemId)))
-				out, err := exec.Command(ZFS, "create", fq(f.filesystemId)).CombinedOutput()
+				logZFSCommand(f.filesystemId, fmt.Sprintf("%s %s %s", f.zfsPath, "create", fq(f.poolName, f.filesystemId)))
+				out, err := exec.Command(f.zfsPath, "create", fq(f.poolName, f.filesystemId)).CombinedOutput()
 				if err != nil {
-					log.Printf("%v while trying to create %s", err, fq(f.filesystemId))
-					f.innerResponses <- &Event{
+					log.Printf("%v while trying to create %s", err, fq(f.poolName, f.filesystemId))
+					f.innerResponses <- &types.Event{
 						Name: "failed-create",
-						Args: &EventArgs{"err": err, "combined-output": string(out)},
+						Args: &types.EventArgs{"err": err, "combined-output": string(out)},
 					}
 					return backoffState
 				}
@@ -143,9 +171,9 @@ func missingState(f *fsMachine) stateFn {
 				}
 			} else {
 				log.Printf("Unknown direction %s, going to backoff", f.lastS3TransferRequest.Direction)
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "failed-s3-transfer",
-					Args: &EventArgs{"unknown-direction": f.lastS3TransferRequest.Direction},
+					Args: &types.EventArgs{"unknown-direction": f.lastS3TransferRequest.Direction},
 				}
 				return backoffState
 			}
@@ -156,18 +184,18 @@ func missingState(f *fsMachine) stateFn {
 			// TODO dedupe
 			transferRequest, err := transferRequestify((*e.Args)["Transfer"])
 			if err != nil {
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "cant-cast-transfer-request",
-					Args: &EventArgs{"err": err},
+					Args: &types.EventArgs{"err": err},
 				}
 				return backoffState
 			}
 			f.lastTransferRequest = transferRequest
 			transferRequestId, ok := (*e.Args)["RequestId"].(string)
 			if !ok {
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "cant-cast-transfer-requestid",
-					Args: &EventArgs{"err": err},
+					Args: &types.EventArgs{"err": err},
 				}
 				return backoffState
 			}
@@ -175,9 +203,9 @@ func missingState(f *fsMachine) stateFn {
 
 			if f.lastTransferRequest.Direction == "pull" {
 				// Can't provide for an initiator trying to pull when we're missing.
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "cant-provide-pull-while-missing",
-					Args: &EventArgs{"request": e, "node": f.state.NodeID()},
+					Args: &types.EventArgs{"request": e, "node": f.state.NodeID()},
 				}
 				return backoffState
 			} else if f.lastTransferRequest.Direction == "push" {
@@ -188,13 +216,13 @@ func missingState(f *fsMachine) stateFn {
 			f.transitionedTo("missing", "creating")
 			// ah - we are going to be created on this node, rather than
 			// received into from a master...
-			logZFSCommand(f.filesystemId, fmt.Sprintf("%s %s %s", ZFS, "create", fq(f.filesystemId)))
-			out, err := exec.Command(ZFS, "create", fq(f.filesystemId)).CombinedOutput()
+			logZFSCommand(f.filesystemId, fmt.Sprintf("%s %s %s", f.zfsPath, "create", fq(f.poolName, f.filesystemId)))
+			out, err := exec.Command(f.zfsPath, "create", fq(f.poolName, f.filesystemId)).CombinedOutput()
 			if err != nil {
-				log.Printf("%v while trying to create %s", err, fq(f.filesystemId))
-				f.innerResponses <- &Event{
+				log.Printf("%v while trying to create %s", err, fq(f.poolName, f.filesystemId))
+				f.innerResponses <- &types.Event{
 					Name: "failed-create",
-					Args: &EventArgs{"err": err, "combined-output": string(out)},
+					Args: &types.EventArgs{"err": err, "combined-output": string(out)},
 				}
 				return backoffState
 			}
@@ -202,13 +230,13 @@ func missingState(f *fsMachine) stateFn {
 			if responseEvent.Name == "mounted" {
 				subvolPath := fmt.Sprintf("%s/__default__", mnt(f.filesystemId))
 				if err := os.MkdirAll(subvolPath, 0777); err != nil {
-					f.innerResponses <- &Event{
+					f.innerResponses <- &types.Event{
 						Name: "failed-create-default-subdot",
-						Args: &EventArgs{"err": err},
+						Args: &types.EventArgs{"err": err},
 					}
 					return backoffState
 				} else {
-					f.innerResponses <- &Event{Name: "created"}
+					f.innerResponses <- &types.Event{Name: "created"}
 					return activeState
 				}
 			} else {
@@ -217,15 +245,15 @@ func missingState(f *fsMachine) stateFn {
 			}
 
 		} else if e.Name == "mount" {
-			f.innerResponses <- &Event{
+			f.innerResponses <- &types.Event{
 				Name: "nothing-to-mount",
-				Args: &EventArgs{},
+				Args: &types.EventArgs{},
 			}
 			return missingState
 		} else {
-			f.innerResponses <- &Event{
+			f.innerResponses <- &types.Event{
 				Name: "unhandled",
-				Args: &EventArgs{"current-state": f.currentState, "event": e},
+				Args: &types.EventArgs{"current-state": f.currentState, "event": e},
 			}
 			log.Printf("unhandled event %s while in missingState", e)
 		}

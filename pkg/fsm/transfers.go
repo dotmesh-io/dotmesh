@@ -1,4 +1,4 @@
-package main
+package fsm
 
 import (
 	"fmt"
@@ -76,11 +76,7 @@ func transferRequestify(in interface{}) (types.TransferRequest, error) {
 
 // for each clone, ensure its origin snapshot exists on the remote. if it
 // doesn't, transfer it.
-func (f *fsMachine) applyPath(
-	path PathToTopLevelFilesystem, transferFn transferFn,
-	transferRequestId string,
-	client *dmclient.JsonRpcClient, transferRequest *types.TransferRequest,
-) (*Event, stateFn) {
+func (f *FsMachine) applyPath(path types.PathToTopLevelFilesystem, transferFn transferFn, transferRequestId string, client *dmclient.JsonRpcClient, transferRequest *types.TransferRequest) (*types.Event, StateFn) {
 	/*
 		Case 1: single master filesystem
 		--------------------------------
@@ -152,8 +148,8 @@ func (f *fsMachine) applyPath(
 				latest snapshot on branch2
 	*/
 
-	var responseEvent *Event
-	var nextState stateFn
+	var responseEvent *types.Event
+	var nextState StateFn
 	var firstSnapshot string
 
 	log.Printf("[applyPath] applying path %#v", path)
@@ -181,29 +177,29 @@ func (f *fsMachine) applyPath(
 			"Response event != finished-{push,pull} or peer-up-to-date: %s", responseEvent,
 		)
 		f.updateTransfer("error", msg)
-		return &Event{
+		return &types.Event{
 			Name: "error-in-attempting-apply-path",
-			Args: &EventArgs{
+			Args: &types.EventArgs{
 				"error": msg,
 			},
 		}, backoffState
 	}
 	err := f.state.AlignMountStateWithMasters(path.TopLevelFilesystemId)
 	if err != nil {
-		return &Event{
+		return &types.Event{
 			Name: "error-maybe-mounting-filesystem",
-			Args: &EventArgs{"error": err, "filesystemId": path.TopLevelFilesystemId},
+			Args: &types.EventArgs{"error": err, "filesystemId": path.TopLevelFilesystemId},
 		}, backoffState
 	}
 	err = f.incrementPollResultIndex()
 	if err != nil {
-		return &Event{Name: "error-incrementing-poll-result",
-			Args: &EventArgs{"error": err}}, backoffState
+		return &types.Event{Name: "error-incrementing-poll-result",
+			Args: &types.EventArgs{"error": err}}, backoffState
 	}
 
 	for i, clone := range path.Clones {
 		// default empty-strings is fine
-		nextOrigin := Origin{}
+		nextOrigin := types.Origin{}
 		// is there a next (i+1'th) item? (i is zero-indexed)
 		if len(path.Clones) > i+1 {
 			// example: path.Clones is 2 items long, and we're on the second
@@ -228,9 +224,9 @@ func (f *fsMachine) applyPath(
 				"Response event != finished-{push,pull} or peer-up-to-date: %s", responseEvent,
 			)
 			f.updateTransfer("error", msg)
-			return &Event{
+			return &types.Event{
 					Name: "error-in-attempting-apply-path",
-					Args: &EventArgs{
+					Args: &types.EventArgs{
 						"error": msg,
 					},
 				},
@@ -238,14 +234,14 @@ func (f *fsMachine) applyPath(
 		}
 		err := f.state.AlignMountStateWithMasters(clone.Clone.FilesystemId)
 		if err != nil {
-			return &Event{
+			return &types.Event{
 				Name: "error-maybe-mounting-filesystem",
-				Args: &EventArgs{"error": err, "filesystemId": clone.Clone.FilesystemId},
+				Args: &types.EventArgs{"error": err, "filesystemId": clone.Clone.FilesystemId},
 			}, backoffState
 		}
 		err = f.incrementPollResultIndex()
 		if err != nil {
-			return &Event{Name: "error-incrementing-poll-result"},
+			return &types.Event{Name: "error-incrementing-poll-result"},
 				backoffState
 		}
 	}
@@ -258,8 +254,8 @@ func TransferPollResultFromTransferRequest(
 	nodeId string,
 	index, total int,
 	status string,
-) TransferPollResult {
-	return TransferPollResult{
+) types.TransferPollResult {
+	return types.TransferPollResult{
 		TransferRequestId: transferRequestId,
 		Peer:              transferRequest.Peer,
 		User:              transferRequest.User,

@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "fs_util.go",
+        "zpool.go",
+    ],
+    importpath = "github.com/dotmesh-io/dotmesh/pkg/zfs",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/types:go_default_library"],
+)

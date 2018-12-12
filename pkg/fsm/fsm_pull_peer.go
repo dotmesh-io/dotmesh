@@ -1,6 +1,8 @@
-package main
+package fsm
 
-func pullPeerState(f *fsMachine) stateFn {
+import "github.com/dotmesh-io/dotmesh/pkg/types"
+
+func pullPeerState(f *FsMachine) StateFn {
 	// This is kind-of a boring state. An authenticated user can GET a
 	// filesystem whenever. So arguably a valid implementation of pullPeerState
 	// is just to immediately go back to discoveringState. In the future, it
@@ -9,9 +11,9 @@ func pullPeerState(f *fsMachine) stateFn {
 	// events while this is happening? (Although I think we want to do that for
 	// GETs in general?)
 	f.transitionedTo("pullPeerState", "immediate-return")
-	f.innerResponses <- &Event{
+	f.innerResponses <- &types.Event{
 		Name: "awaiting-transfer",
-		Args: &EventArgs{},
+		Args: &types.EventArgs{},
 	}
 	return discoveringState
 }

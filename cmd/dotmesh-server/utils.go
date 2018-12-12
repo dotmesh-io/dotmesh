@@ -17,14 +17,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/dotmesh-io/dotmesh/pkg/observer"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 
 	log "github.com/sirupsen/logrus"
 )
 
 // NB: It's important that the following includes characters _not_ included in
 // the base64 alphabet. https://en.wikipedia.org/wiki/Base64
-var END_DOTMESH_PRELUDE []byte = []byte("!!END_PRELUDE!!")
+var END_DOTMESH_PRELUDE = types.EndDotmeshPrelude
 
 func consumePrelude(r io.Reader) (Prelude, error) {
 	// called when we know that there's a prelude to read from r.
@@ -123,14 +123,6 @@ func out(s ...interface{}) {
 	os.Stdout.Write([]byte(ss))
 }
 
-func fq(fs string) string {
-	// from filesystem id to a fully qualified ZFS filesystem
-	return fmt.Sprintf("%s/%s/%s", POOL, ROOT_FS, fs)
-}
-func unfq(fqfs string) string {
-	// from fully qualified ZFS name to filesystem id, strip off prefix
-	return fqfs[len(POOL+"/"+ROOT_FS+"/"):]
-}
 func mnt(fs string) string {
 	// from filesystem id to the path it would be mounted at if it were mounted
 	mountPrefix := os.Getenv("MOUNT_PREFIX")
@@ -257,35 +249,35 @@ func runForever(f func() error, label string, errorBackoff, successBackoff time.
 	}
 }
 
-var deathObserver = observer.NewObserver("deathObserver")
+// var deathObserver = observer.NewObserver("deathObserver")
 
 // run while filesystem lives
-func runWhileFilesystemLives(f func() error, label string, filesystemId string, errorBackoff, successBackoff time.Duration) {
-	deathChan := make(chan interface{})
-	deathObserver.Subscribe(filesystemId, deathChan)
-	stillAlive := true
-	for stillAlive {
-		select {
-		case _ = <-deathChan:
-			stillAlive = false
-		default:
-			err := f()
-			if err != nil {
-				log.Printf(
-					"Error in runWhileFilesystemLives(%s@%s), retrying in %s: %s",
-					label, filesystemId, errorBackoff, err)
-				time.Sleep(errorBackoff)
-			} else {
-				time.Sleep(successBackoff)
-			}
-		}
-	}
-	deathObserver.Unsubscribe(filesystemId, deathChan)
-}
+// func runWhileFilesystemLives(f func() error, label string, filesystemId string, errorBackoff, successBackoff time.Duration) {
+// 	deathChan := make(chan interface{})
+// 	deathObserver.Subscribe(filesystemId, deathChan)
+// 	stillAlive := true
+// 	for stillAlive {
+// 		select {
+// 		case _ = <-deathChan:
+// 			stillAlive = false
+// 		default:
+// 			err := f()
+// 			if err != nil {
+// 				log.Printf(
+// 					"Error in runWhileFilesystemLives(%s@%s), retrying in %s: %s",
+// 					label, filesystemId, errorBackoff, err)
+// 				time.Sleep(errorBackoff)
+// 			} else {
+// 				time.Sleep(successBackoff)
+// 			}
+// 		}
+// 	}
+// 	deathObserver.Unsubscribe(filesystemId, deathChan)
+// }
 
-func terminateRunnersWhileFilesystemLived(filesystemId string) {
-	deathObserver.Publish(filesystemId, struct{ reason string }{"runWhileFilesystemLives"})
-}
+// func terminateRunnersWhileFilesystemLived(filesystemId string) {
+// 	deathObserver.Publish(filesystemId, struct{ reason string }{"runWhileFilesystemLives"})
+// }
 
 func (s *InMemoryState) waitForFilesystemDeath(filesystemId string) {
 	// We hold this lock to avoid a race between subscribe and check.
@@ -296,7 +288,7 @@ func (s *InMemoryState) waitForFilesystemDeath(filesystemId string) {
 		defer s.filesystemsLock.Unlock()
 		fs, ok := s.filesystems[filesystemId]
 		if ok {
-			log.Printf("[waitForFilesystemDeath:%s] state: %s, status: %s", filesystemId, fs.currentState, fs.status)
+			log.Printf("[waitForFilesystemDeath:%s] state: %s, status: %s", filesystemId, fs.GetCurrentState(), fs.GetStatus())
 		} else {
 			log.Printf("[waitForFilesystemDeath:%s] no fsMachine", filesystemId)
 		}
@@ -305,11 +297,11 @@ func (s *InMemoryState) waitForFilesystemDeath(filesystemId string) {
 			returnImmediately = true
 			return
 		}
-		deathObserver.Subscribe(filesystemId, deathChan)
+		s.deathObserver.Subscribe(filesystemId, deathChan)
 	}()
 	if !returnImmediately {
 		<-deathChan
-		deathObserver.Unsubscribe(filesystemId, deathChan)
+		s.deathObserver.Unsubscribe(filesystemId, deathChan)
 	}
 }
 
@@ -341,7 +333,7 @@ func pipe(
 	startTime := time.Now().UnixNano()
 	var lastUpdate int64 // in UnixNano
 	var totalBytes int64
-	buffer := make([]byte, BUF_LEN)
+	buffer := make([]byte, types.BufLength)
 
 	// Incomplete idea below.
 	/*

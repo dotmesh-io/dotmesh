@@ -9,6 +9,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/dotmesh-io/dotmesh/pkg/client"
+	"github.com/dotmesh-io/dotmesh/pkg/zfs"
 )
 
 func (state *InMemoryState) runLivenessServer() {
@@ -33,12 +34,7 @@ func (state *InMemoryState) runLivenessServer() {
 	router.HandleFunc("/check", func(w http.ResponseWriter, r *http.Request) {
 		// Check we can connect to etcd
 
-		kapi, err := getEtcdKeysApi()
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Error connecting to etcd: %v\n", err), http.StatusInternalServerError)
-			return
-		}
-		_, err = kapi.Get(
+		_, err := state.etcdClient.Get(
 			context.Background(),
 			ETCD_PREFIX,
 			nil,
@@ -49,7 +45,7 @@ func (state *InMemoryState) runLivenessServer() {
 		}
 
 		// Check the zpool exists
-		_, err = getZpoolCapacity()
+		_, err = zfs.GetZPoolCapacity(state.config.ZPoolPath, state.config.PoolName)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Zpool error: %v\n", err), http.StatusInternalServerError)
 			return

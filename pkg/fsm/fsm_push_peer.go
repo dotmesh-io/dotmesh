@@ -1,12 +1,14 @@
-package main
+package fsm
 
 import (
 	"fmt"
 	"log"
 	"time"
+
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 )
 
-func pushPeerState(f *fsMachine) stateFn {
+func pushPeerState(f *FsMachine) StateFn {
 	// we are responsible for putting something back onto the channel
 	f.transitionedTo("pushPeerState", "running")
 
@@ -29,17 +31,17 @@ func pushPeerState(f *fsMachine) stateFn {
 		log.Printf(
 			"Can't receive push for filesystem while we can't list whether containers are using it",
 		)
-		f.innerResponses <- &Event{
+		f.innerResponses <- &types.Event{
 			Name: "error-listing-containers-during-push-receive",
-			Args: &EventArgs{"err": fmt.Sprintf("%v", err)},
+			Args: &types.EventArgs{"err": fmt.Sprintf("%v", err)},
 		}
 		return backoffState
 	}
 	if len(containers) > 0 {
 		log.Printf("Can't receive push for filesystem while containers are using it")
-		f.innerResponses <- &Event{
+		f.innerResponses <- &types.Event{
 			Name: "cannot-receive-push-while-containers-running",
-			Args: &EventArgs{"containers": containers},
+			Args: &types.EventArgs{"containers": containers},
 		}
 		return backoffState
 	}
@@ -59,9 +61,9 @@ func pushPeerState(f *fsMachine) stateFn {
 	ss, err := f.state.SnapshotsFor(f.state.NodeID(), f.filesystemId)
 	for _, s := range ss {
 		if s.Id == targetSnapshot {
-			f.innerResponses <- &Event{
+			f.innerResponses <- &types.Event{
 				Name: "receiving-push-complete",
-				Args: &EventArgs{},
+				Args: &types.EventArgs{},
 			}
 			log.Printf(
 				"[pushPeerState:%s] snaps-already-exist case, "+
@@ -108,9 +110,9 @@ func pushPeerState(f *fsMachine) stateFn {
 	// Here we are about to block, so confirm we are ready at this
 	// point or the caller won't start to push and unblock us
 	log.Printf("[pushPeerState:%s] clearing peer to send", f.filesystemId)
-	f.innerResponses <- &Event{
+	f.innerResponses <- &types.Event{
 		Name: "awaiting-transfer",
-		Args: &EventArgs{},
+		Args: &types.EventArgs{},
 	}
 
 	log.Printf("[pushPeerState:%s] blocking for ZFSReceiver to tell us to proceed via pushCompleted", f.filesystemId)
@@ -163,7 +165,7 @@ func pushPeerState(f *fsMachine) stateFn {
 			return backoffState
 		// check that the snapshot is the one we're expecting
 		case s := <-newSnapsOnMaster:
-			sn := s.(*Snapshot)
+			sn := s.(*types.Snapshot)
 			log.Printf(
 				"[pushPeerState] got snapshot %+v while waiting for one to arrive", sn,
 			)

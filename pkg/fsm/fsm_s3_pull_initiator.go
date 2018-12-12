@@ -1,13 +1,14 @@
-package main
+package fsm
 
 import (
 	"fmt"
 	"os"
 
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/nu7hatch/gouuid"
 )
 
-func s3PullInitiatorState(f *fsMachine) stateFn {
+func s3PullInitiatorState(f *FsMachine) StateFn {
 	f.transitionedTo("s3PullInitiatorState", "requesting")
 	transferRequest := f.lastS3TransferRequest
 	transferRequestId := f.lastTransferRequestId
@@ -17,7 +18,7 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 		return backoffState
 	}
 	if len(containers) > 0 {
-		f.sendArgsEventUpdateUser(&EventArgs{"containers": containers}, "cannot-pull-while-containers-running", "Can't pull into filesystem while containers are using it")
+		f.sendArgsEventUpdateUser(&types.EventArgs{"containers": containers}, "cannot-pull-while-containers-running", "Can't pull into filesystem while containers are using it")
 		return backoffState
 	}
 
@@ -40,9 +41,9 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 		return backoffState
 	}
 
-	f.transferUpdates <- TransferUpdate{
-		Kind: TransferStart,
-		Changes: TransferPollResult{
+	f.transferUpdates <- types.TransferUpdate{
+		Kind: types.TransferStart,
+		Changes: types.TransferPollResult{
 			TransferRequestId: transferRequestId,
 			Direction:         transferRequest.Direction,
 			InitiatorNodeId:   f.state.NodeID(),
@@ -96,26 +97,26 @@ func s3PullInitiatorState(f *fsMachine) stateFn {
 		if err != nil {
 			f.errorDuringTransfer("couldnt-write-s3-metadata-pull", err)
 		}
-		response, _ := f.snapshot(&Event{Name: "snapshot",
-			Args: &EventArgs{"metadata": Metadata{"message": "s3 content"},
+		response, _ := f.snapshot(&types.Event{Name: "snapshot",
+			Args: &types.EventArgs{"metadata": types.Metadata{"message": "s3 content"},
 				"snapshotId": snapshotId}})
 		if response.Name != "snapshotted" {
 			f.innerResponses <- response
 			err = f.updateUser("Could not take snapshot")
 			if err != nil {
-				f.sendEvent(&EventArgs{"err": err}, "cant-write-to-etcd", "cant write to etcd")
+				f.sendEvent(&types.EventArgs{"err": err}, "cant-write-to-etcd", "cant write to etcd")
 			}
 			return backoffState
 		}
 	}
 
-	f.transferUpdates <- TransferUpdate{
-		Kind: TransferFinished,
+	f.transferUpdates <- types.TransferUpdate{
+		Kind: types.TransferFinished,
 	}
 
-	f.innerResponses <- &Event{
+	f.innerResponses <- &types.Event{
 		Name: "s3-transferred",
-		Args: &EventArgs{},
+		Args: &types.EventArgs{},
 	}
 	return discoveringState
 }

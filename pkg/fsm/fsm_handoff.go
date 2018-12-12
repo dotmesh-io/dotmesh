@@ -1,10 +1,11 @@
-package main
+package fsm
 
 import (
 	"fmt"
 	"log"
 
 	"github.com/coreos/etcd/client"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"golang.org/x/net/context"
 )
 
@@ -12,7 +13,7 @@ import (
 // invariant: whenever a state function receives on the events channel, it
 // should respond with a response event, even in an error case.
 
-func handoffState(f *fsMachine) stateFn {
+func handoffState(f *FsMachine) StateFn {
 	f.transitionedTo("handoff", "starting...")
 	// I am a master, trying to move this filesystem to a slave.
 	// I got put into this state in response to a "move" event on f.requests,
@@ -32,9 +33,9 @@ func handoffState(f *fsMachine) stateFn {
 	if target == f.state.NodeID() {
 		errString := fmt.Sprintf("Error trying to handoff because myNodeId: %s and target: %s are the same", f.state.NodeID(), target)
 		log.Println(errString)
-		f.innerResponses <- &Event{
+		f.innerResponses <- &types.Event{
 			Name: "error-handoff-source-target-are-equal",
-			Args: &EventArgs{"err": errString},
+			Args: &types.EventArgs{"err": errString},
 		}
 		return backoffState
 	}
@@ -53,9 +54,9 @@ func handoffState(f *fsMachine) stateFn {
 	// possible fix.
 
 	// take a snapshot and wait for it to arrive on the target
-	response, _ := f.snapshot(&Event{
+	response, _ := f.snapshot(&types.Event{
 		Name: "snapshot",
-		Args: &EventArgs{"metadata": Metadata{
+		Args: &types.EventArgs{"metadata": types.Metadata{
 			"type":   "migration",
 			"author": "system",
 			"message": fmt.Sprintf(
@@ -104,11 +105,7 @@ waitingForSlaveSnapshot:
 		// through etcd yet, so use our definitive knowledge about our local
 		// state...
 
-		snaps := func() []*Snapshot {
-			f.snapshotsLock.Lock()
-			defer f.snapshotsLock.Unlock()
-			return f.filesystem.Snapshots
-		}()
+		snaps := f.ListLocalSnapshots()
 
 		f.transitionedTo(
 			"handoff",
@@ -154,7 +151,7 @@ waitingForSlaveSnapshot:
 				// go into discovery again and perform the check for the
 				// filesystem being deleted.
 				log.Printf("rejecting all %s", e)
-				f.innerResponses <- &Event{"busy-handoff", &EventArgs{}}
+				f.innerResponses <- &types.Event{"busy-handoff", &types.EventArgs{}}
 			case _ = <-newSnapsChan:
 				// TODO check that the latest snap is the one we expected
 				gotSnaps = true
@@ -165,23 +162,19 @@ waitingForSlaveSnapshot:
 	}
 	// cool, fs is quiesced and latest snap is on target. switch!
 
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		f.innerResponses <- &Event{Name: "failed-to-connect-to-etcd"}
-	}
-	_, err = kapi.Set(
+	_, err := f.etcdClient.Set(
 		context.Background(),
 		fmt.Sprintf(
-			"%s/filesystems/masters/%s", ETCD_PREFIX, f.filesystemId,
+			"%s/filesystems/masters/%s", types.EtcdPrefix, f.filesystemId,
 		),
 		target,
 		// only modify current master if I am indeed still the master
 		&client.SetOptions{PrevValue: f.state.NodeID()},
 	)
 	if err != nil {
-		f.innerResponses <- &Event{
+		f.innerResponses <- &types.Event{
 			Name: "failed-to-set-master-in-etcd",
-			Args: &EventArgs{
+			Args: &types.EventArgs{
 				"err":    err,
 				"target": f.filesystemId,
 				"node":   f.state.NodeID(),
@@ -189,6 +182,6 @@ waitingForSlaveSnapshot:
 		}
 		return backoffState
 	}
-	f.innerResponses <- &Event{Name: "moved"}
+	f.innerResponses <- &types.Event{Name: "moved"}
 	return inactiveState
 }

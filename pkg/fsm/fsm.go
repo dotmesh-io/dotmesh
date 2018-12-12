@@ -1,4 +1,4 @@
-package main
+package fsm
 
 import (
 	"encoding/json"
@@ -9,54 +9,127 @@ import (
 	"sync"
 	"time"
 
+	"github.com/coreos/etcd/client"
+
 	"github.com/dotmesh-io/dotmesh/pkg/container"
+	"github.com/dotmesh-io/dotmesh/pkg/metrics"
 	"github.com/dotmesh-io/dotmesh/pkg/observer"
+	"github.com/dotmesh-io/dotmesh/pkg/registry"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
+	"github.com/dotmesh-io/dotmesh/pkg/user"
+
 	"github.com/nu7hatch/gouuid"
 	"golang.org/x/net/context"
 
 	log "github.com/sirupsen/logrus"
 )
 
-// core functions used by files ending `state` which I couldn't think of a good place for.
+type FsConfig struct {
+	FilesystemID         string
+	StateManager         StateManager
+	Registry             registry.Registry
+	UserManager          user.UserManager
+	EtcdClient           client.KeysAPI
+	ContainerClient      container.Client
+	LocalReceiveProgress observer.Observer
+	NewSnapsOnMaster     observer.Observer
+	DeathObserver        observer.Observer
 
-func newFilesystemMachine(filesystemId string, s *InMemoryState) *fsMachine {
-	// initialize the fsMachine with a filesystem struct that has bare minimum
+	FilesystemMetadataTimeout int64
+
+	// zfs executable path
+	ZFSPath string
+	// zpool executable path
+	ZPoolPath string
+	// Previously known as main.MOUNT_ZFS
+	MountZFS string
+
+	// PoolName is a required
+	PoolName string
+}
+
+type FSM interface {
+	ID() string
+	Run()
+	GetStatus() string
+	GetCurrentState() string
+	Mounted() bool
+
+	Mount() (response *types.Event)
+	Unmount() (response *types.Event)
+
+	// TODO: review the call, maybe it's possible to internalize behaviour
+	PushCompleted(success bool)
+	// TODO: review the call, maybe it's possible to internalize behaviour
+	PublishNewSnaps(server string, payload interface{}) error
+	// TODO: review the call, maybe it's possible to internalize behaviour
+	TransitionSubscribe(channel string, ch chan interface{})
+	TransitionUnsubscribe(channel string, ch chan interface{})
+
+	// metadata API
+	GetMetadata(nodeID string) map[string]string
+	ListMetadata() map[string]map[string]string
+	SetMetadata(nodeID string, meta map[string]string)
+	GetSnapshots(nodeID string) []*types.Snapshot
+	ListSnapshots() map[string][]*types.Snapshot
+	SetSnapshots(nodeID string, snapshots []*types.Snapshot)
+
+	// Local snapshots from ZFS
+	ListLocalSnapshots() []*types.Snapshot
+
+	Submit(event *types.Event, requestID string) (reply chan *types.Event, err error)
+
+	// WriteFile - reads the supplied Contents io.Reader and writes into the volume,
+	// response will be sent to a provided Response channel
+	WriteFile(source *types.InputFile)
+
+	// ReadFile - reads a file from the volume into the supplied Contents io.Writer,
+	// response will be sent to a provided Response channel
+	ReadFile(destination *types.OutputFile)
+
+	// DumpState is used for diagnostics
+	DumpState() *FSMStateDump
+}
+
+// core functions used by files ending `state` which I couldn't think of a good place for.
+func NewFilesystemMachine(cfg *FsConfig) *FsMachine {
+	// initialize the FsMachine with a filesystem struct that has bare minimum
 	// information (just the filesystem id) required to get started
-	return &fsMachine{
-		filesystem: &Filesystem{
-			Id: filesystemId,
+	return &FsMachine{
+		filesystem: &types.Filesystem{
+			Id: cfg.FilesystemID,
 		},
 		// stored here as well to avoid excessive locking on filesystem struct,
 		// which gets clobbered, just to read its id
-		filesystemId:            filesystemId,
-		requests:                make(chan *Event),
-		innerRequests:           make(chan *Event),
-		innerResponses:          make(chan *Event),
-		fileInputIO:             make(chan *InputFile),
-		fileOutputIO:            make(chan *OutputFile),
-		responses:               map[string]chan *Event{},
+		filesystemId:            cfg.FilesystemID,
+		requests:                make(chan *types.Event),
+		innerRequests:           make(chan *types.Event),
+		innerResponses:          make(chan *types.Event),
+		fileInputIO:             make(chan *types.InputFile),
+		fileOutputIO:            make(chan *types.OutputFile),
+		responses:               map[string]chan *types.Event{},
 		responsesLock:           &sync.Mutex{},
 		snapshotsModified:       make(chan bool),
-		containerClient:         s.containers,
-		etcdClient:              s.etcdClient,
-		state:                   s,
-		userManager:             s.userManager,
-		registry:                s.registry,
-		newSnapsOnMaster:        s.newSnapsOnMaster,
-		localReceiveProgress:    s.localReceiveProgress,
+		containerClient:         cfg.ContainerClient,
+		etcdClient:              cfg.EtcdClient,
+		state:                   cfg.StateManager,
+		userManager:             cfg.UserManager,
+		registry:                cfg.Registry,
+		newSnapsOnMaster:        cfg.NewSnapsOnMaster,
+		localReceiveProgress:    cfg.LocalReceiveProgress,
 		snapshotsLock:           &sync.Mutex{},
-		newSnapsOnServers:       observer.NewObserver(fmt.Sprintf("newSnapsOnServers:%s", filesystemId)),
+		newSnapsOnServers:       observer.NewObserver(fmt.Sprintf("newSnapsOnServers:%s", cfg.FilesystemID)),
 		currentState:            "discovering",
 		status:                  "",
 		lastTransitionTimestamp: time.Now().UnixNano(),
-		transitionObserver:      observer.NewObserver(fmt.Sprintf("transitionObserver:%s", filesystemId)),
+		transitionObserver:      observer.NewObserver(fmt.Sprintf("transitionObserver:%s", cfg.FilesystemID)),
 		lastTransferRequest:     types.TransferRequest{},
+		deathObserver:           cfg.DeathObserver,
 
 		stateMachineMetadata:   make(map[string]map[string]string),
 		stateMachineMetadataMu: &sync.RWMutex{},
 
-		snapshotCache:   make(map[string][]*Snapshot),
+		snapshotCache:   make(map[string][]*types.Snapshot),
 		snapshotCacheMu: &sync.RWMutex{},
 		// In the case where we're receiving a push (pushPeerState), it's the
 		// POST handler on our http server which handles the receiving of the
@@ -67,16 +140,133 @@ func newFilesystemMachine(filesystemId string, s *InMemoryState) *fsMachine {
 		pushCompleted:   make(chan bool),
 		dirtyDelta:      0,
 		sizeBytes:       0,
-		transferUpdates: make(chan TransferUpdate),
+		transferUpdates: make(chan types.TransferUpdate),
 
-		filesystemMetadataTimeout: s.config.FilesystemMetadataTimeout,
+		filesystemMetadataTimeout: cfg.FilesystemMetadataTimeout,
+		zfsPath:                   cfg.ZFSPath,
+		mountZFS:                  cfg.MountZFS,
+		zpoolPath:                 cfg.ZPoolPath,
+		poolName:                  cfg.PoolName,
 	}
 }
 
-func (f *fsMachine) run() {
+func (f *FsMachine) ID() string {
+	return f.filesystemId
+}
+
+func (f *FsMachine) GetCurrentState() string {
+	return f.currentState
+}
+
+func (f *FsMachine) GetStatus() string {
+	return f.status
+}
+
+func (f *FsMachine) TransitionSubscribe(channel string, ch chan interface{}) {
+	f.transitionObserver.Subscribe(channel, ch)
+}
+
+func (f *FsMachine) TransitionUnsubscribe(channel string, ch chan interface{}) {
+	f.transitionObserver.Unsubscribe(channel, ch)
+}
+
+func (f *FsMachine) PublishNewSnaps(server string, payload interface{}) error {
+	return f.newSnapsOnServers.Publish(server, payload)
+}
+
+func (f *FsMachine) Mounted() bool {
+	return f.filesystem.Mounted
+}
+
+func (f *FsMachine) Mount() (response *types.Event) {
+	response, _ = f.mount()
+	return
+}
+
+func (f *FsMachine) Unmount() (response *types.Event) {
+	response, _ = f.unmount()
+	return
+}
+
+func (f *FsMachine) PushCompleted(success bool) {
+	f.pushCompleted <- success
+}
+
+type FSMStateDump struct {
+	Filesystem              *types.Filesystem
+	Status                  string
+	CurrentState            string
+	LastTransitionTimestamp int64
+
+	LastTransferRequest   types.TransferRequest
+	LastTransferRequestID string
+
+	HandoffRequest *types.Event
+
+	DirtyDelta int64
+	SizeBytes  int64
+}
+
+// DumpState - dumps internal FsMachine state
+// TODO: make copies instead of returning actual pointers
+func (f *FsMachine) DumpState() *FSMStateDump {
+	return &FSMStateDump{
+		Filesystem:              f.filesystem,
+		Status:                  f.status,
+		CurrentState:            f.currentState,
+		LastTransitionTimestamp: f.lastTransitionTimestamp,
+		LastTransferRequest:     f.lastTransferRequest,
+		LastTransferRequestID:   f.lastTransferRequestId,
+		HandoffRequest:          f.handoffRequest,
+		DirtyDelta:              f.dirtyDelta,
+		SizeBytes:               f.sizeBytes,
+	}
+}
+
+// Submit - submits event to a filesystem, returning the event stream for convenience so the caller
+// can listen for a response
+func (f *FsMachine) Submit(event *types.Event, requestID string) (reply chan *types.Event, err error) {
+	if requestID == "" {
+		id, err := uuid.NewV4()
+		if err != nil {
+			return nil, err
+		}
+		requestID = id.String()
+	}
+	// fs, err := s.InitFilesystemMachine(filesystem)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	if event.Args == nil {
+		event.Args = &types.EventArgs{}
+	}
+	(*event.Args)["RequestId"] = requestID
+	f.responsesLock.Lock()
+	defer f.responsesLock.Unlock()
+	rc, ok := f.responses[requestID]
+	if !ok {
+		responseChan := make(chan *types.Event)
+		f.responses[requestID] = responseChan
+		rc = responseChan
+	}
+
+	// Now we have a response channel set up, it's safe to send the request.
+
+	// Don't block the entire etcd event-loop just because one fsMachine isn't
+	// ready to receive an event. Our response is a chan anyway, so consumers
+	// can synchronize on reading from that as they wish (for example, in
+	// another goroutine).
+	go func() {
+		f.requests <- event
+	}()
+
+	return rc, nil
+}
+
+func (f *FsMachine) Run() {
 	// TODO cancel this when we eventually support deletion
 	log.Printf("[run:%s] INIT", f.filesystemId)
-	go runWhileFilesystemLives(
+	go f.runWhileFilesystemLives(
 		f.markFilesystemAsLive,
 		"markFilesystemAsLive",
 		f.filesystemId,
@@ -87,21 +277,21 @@ func (f *fsMachine) run() {
 	// because it blocks on a channel anyway; inserting a success
 	// backoff just means it'll be rate-limited as it'll sleep before
 	// processing each snapshot!
-	go runWhileFilesystemLives(
+	go f.runWhileFilesystemLives(
 		f.updateEtcdAboutSnapshots,
 		"updateEtcdAboutSnapshots",
 		f.filesystemId,
 		1*time.Second,
 		0*time.Second,
 	)
-	go runWhileFilesystemLives(
+	go f.runWhileFilesystemLives(
 		f.updateEtcdAboutTransfers,
 		"updateEtcdAboutTransfers",
 		f.filesystemId,
 		1*time.Second,
 		0*time.Second,
 	)
-	go runWhileFilesystemLives(
+	go f.runWhileFilesystemLives(
 		f.pollDirty,
 		"pollDirty",
 		f.filesystemId,
@@ -127,7 +317,7 @@ func (f *fsMachine) run() {
 		// defer f.state.filesystemsLock.Unlock()
 		// We must hold the fslock while calling terminateRunners... to avoid a deadlock with
 		// waitForFilesystemDeath in utils.go
-		terminateRunnersWhileFilesystemLived(f.filesystemId)
+		f.terminateRunnersWhileFilesystemLived(f.filesystemId)
 		// delete(f.state.filesystems, f.filesystemId)
 
 		f.state.DeleteFilesystemFromMap(f.filesystemId)
@@ -147,11 +337,11 @@ func (f *fsMachine) run() {
 		resp, more := <-f.innerResponses
 		if !more {
 			log.Printf("[run:%s] statemachine is finished", f.filesystemId)
-			resp = &Event{"filesystem-gone", &EventArgs{}}
+			resp = &types.Event{"filesystem-gone", &types.EventArgs{}}
 		}
 		log.Printf("[run:%s] got resp: %s", f.filesystemId, resp)
 		log.Printf("[run:%s] writing to external responses", f.filesystemId)
-		respChan, ok := func() (chan *Event, bool) {
+		respChan, ok := func() (chan *types.Event, bool) {
 			f.responsesLock.Lock()
 			defer f.responsesLock.Unlock()
 			respChan, ok := f.responses[(*req.Args)["RequestId"].(string)]
@@ -171,15 +361,39 @@ func (f *fsMachine) run() {
 	}
 }
 
-func (f *fsMachine) pollDirty() error {
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		return err
+func (f *FsMachine) runWhileFilesystemLives(fn func() error, label string, filesystemId string, errorBackoff, successBackoff time.Duration) {
+	deathChan := make(chan interface{})
+	f.deathObserver.Subscribe(filesystemId, deathChan)
+	defer f.deathObserver.Unsubscribe(filesystemId, deathChan)
+
+	stillAlive := true
+	for stillAlive {
+		select {
+		case <-deathChan:
+			stillAlive = false
+		default:
+			err := fn()
+			if err != nil {
+				log.Printf(
+					"Error in runWhileFilesystemLives(%s@%s), retrying in %s: %s",
+					label, filesystemId, errorBackoff, err)
+				time.Sleep(errorBackoff)
+			} else {
+				time.Sleep(successBackoff)
+			}
+		}
 	}
+
+}
+
+func (f *FsMachine) terminateRunnersWhileFilesystemLived(filesystemId string) {
+	f.deathObserver.Publish(filesystemId, struct{ reason string }{"runWhileFilesystemLives"})
+}
+
+func (f *FsMachine) pollDirty() error {
+
 	if f.filesystem.Mounted {
-		dirtyDelta, sizeBytes, err := getDirtyDelta(
-			f.filesystemId, f.latestSnapshot(),
-		)
+		dirtyDelta, sizeBytes, err := getDirtyDelta(f.zfsPath, f.poolName, f.filesystemId, f.latestSnapshot())
 		if err != nil {
 			return err
 		}
@@ -195,14 +409,8 @@ func (f *fsMachine) pollDirty() error {
 			if err != nil {
 				return err
 			}
-			_, err = kapi.Set(
-				context.Background(),
-				fmt.Sprintf(
-					"%s/filesystems/dirty/%s", ETCD_PREFIX, f.filesystemId,
-				),
-				string(serialized),
-				nil,
-			)
+
+			_, err = f.etcdClient.Set(context.Background(), fmt.Sprintf("%s/filesystems/dirty/%s", types.EtcdPrefix, f.filesystemId), string(serialized), nil)
 			if err != nil {
 				return err
 			}
@@ -212,7 +420,7 @@ func (f *fsMachine) pollDirty() error {
 }
 
 // return the latest snapshot id, or "" if none exists
-func (f *fsMachine) latestSnapshot() string {
+func (f *FsMachine) latestSnapshot() string {
 	f.snapshotsLock.Lock()
 	defer f.snapshotsLock.Unlock()
 	if len(f.filesystem.Snapshots) > 0 {
@@ -221,7 +429,7 @@ func (f *fsMachine) latestSnapshot() string {
 	return ""
 }
 
-func (f *fsMachine) getResponseChan(reqId string, e *Event) (chan *Event, error) {
+func (f *FsMachine) getResponseChan(reqId string, e *types.Event) (chan *types.Event, error) {
 	f.responsesLock.Lock()
 	defer f.responsesLock.Unlock()
 	respChan, ok := f.responses[reqId]
@@ -231,37 +439,31 @@ func (f *fsMachine) getResponseChan(reqId string, e *Event) (chan *Event, error)
 	return respChan, nil
 }
 
-func (f *fsMachine) markFilesystemAsLive() error {
+func (f *FsMachine) markFilesystemAsLive() error {
 	return f.state.MarkFilesystemAsLiveInEtcd(f.filesystemId)
 }
 
-func (f *fsMachine) getCurrentPollResult() TransferPollResult {
-	gr := make(chan TransferPollResult)
-	f.transferUpdates <- TransferUpdate{
-		Kind:      TransferGetCurrentPollResult,
+func (f *FsMachine) getCurrentPollResult() types.TransferPollResult {
+	gr := make(chan types.TransferPollResult)
+	f.transferUpdates <- types.TransferUpdate{
+		Kind:      types.TransferGetCurrentPollResult,
 		GetResult: gr,
 	}
 	return <-gr
 }
 
-func (f *fsMachine) updateEtcdAboutTransfers() error {
-	// attempt to connect to etcd
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		return err
-	}
-
+func (f *FsMachine) updateEtcdAboutTransfers() error {
 	pollResult := &(f.currentPollResult)
 
 	// wait until the state machine notifies us that it's changed the
 	// transfer state, but have an escape clause in case this filesystem
 	// is deleted so we don't block forever
 	deathChan := make(chan interface{})
-	deathObserver.Subscribe(f.filesystemId, deathChan)
-	defer deathObserver.Unsubscribe(f.filesystemId, deathChan)
+	f.deathObserver.Subscribe(f.filesystemId, deathChan)
+	defer f.deathObserver.Unsubscribe(f.filesystemId, deathChan)
 
 	for {
-		var update TransferUpdate
+		var update types.TransferUpdate
 		select {
 		case update = <-(f.transferUpdates):
 			log.Debugf("[updateEtcdAboutTransfers] Received command %#v", update)
@@ -271,42 +473,42 @@ func (f *fsMachine) updateEtcdAboutTransfers() error {
 		}
 
 		switch update.Kind {
-		case TransferStart:
+		case types.TransferStart:
 			(*pollResult) = update.Changes
-		case TransferGotIds:
+		case types.TransferGotIds:
 			pollResult.FilesystemId = update.Changes.FilesystemId
 			pollResult.StartingCommit = update.Changes.StartingCommit
 			pollResult.TargetCommit = update.Changes.TargetCommit
-		case TransferCalculatedSize:
+		case types.TransferCalculatedSize:
 			pollResult.Status = update.Changes.Status
 			pollResult.Size = update.Changes.Size
-		case TransferTotalAndSize:
+		case types.TransferTotalAndSize:
 			pollResult.Status = update.Changes.Status
 			pollResult.Total = update.Changes.Total
 			pollResult.Size = update.Changes.Size
-		case TransferProgress:
+		case types.TransferProgress:
 			pollResult.Sent = update.Changes.Sent
 			pollResult.NanosecondsElapsed = update.Changes.NanosecondsElapsed
 			pollResult.Status = update.Changes.Status
-		case TransferIncrementIndex:
+		case types.TransferIncrementIndex:
 			if pollResult.Index < pollResult.Total {
 				pollResult.Index++
 			}
 			pollResult.Sent += update.Changes.Size
-		case TransferNextS3File:
+		case types.TransferNextS3File:
 			pollResult.Index += 1
 			pollResult.Total += 1
 			pollResult.Size = update.Changes.Size
 			pollResult.Status = update.Changes.Status
-		case TransferSent:
+		case types.TransferSent:
 			pollResult.Sent = update.Changes.Sent
 			pollResult.Status = update.Changes.Status
-		case TransferFinished:
+		case types.TransferFinished:
 			pollResult.Status = "finished"
 			pollResult.Index = pollResult.Total
-		case TransferStatus:
+		case types.TransferStatus:
 			pollResult.Status = update.Changes.Status
-		case TransferGetCurrentPollResult:
+		case types.TransferGetCurrentPollResult:
 			update.GetResult <- *pollResult
 			continue
 		default:
@@ -325,12 +527,7 @@ func (f *fsMachine) updateEtcdAboutTransfers() error {
 		if err != nil {
 			return err
 		}
-		_, err = kapi.Set(
-			context.Background(),
-			fmt.Sprintf("%s/filesystems/transfers/%s", ETCD_PREFIX, pollResult.TransferRequestId),
-			string(serialized),
-			nil,
-		)
+		_, err = f.etcdClient.Set(context.Background(), fmt.Sprintf("%s/filesystems/transfers/%s", types.EtcdPrefix, pollResult.TransferRequestId), string(serialized), nil)
 		if err != nil {
 			return err
 		}
@@ -339,7 +536,7 @@ func (f *fsMachine) updateEtcdAboutTransfers() error {
 	}
 }
 
-func (f *fsMachine) updateEtcdAboutSnapshots() error {
+func (f *FsMachine) updateEtcdAboutSnapshots() error {
 	// as soon as we're connected, eagerly: if we know about some
 	// snapshots, **or the absence of them**, set this in etcd.
 	serialized, err := func() ([]byte, error) {
@@ -355,7 +552,7 @@ func (f *fsMachine) updateEtcdAboutSnapshots() error {
 	_, err = f.etcdClient.Set(
 		context.Background(),
 		fmt.Sprintf(
-			"%s/servers/snapshots/%s/%s", ETCD_PREFIX,
+			"%s/servers/snapshots/%s/%s", types.EtcdPrefix,
 			f.state.NodeID(), f.filesystemId,
 		),
 		string(serialized),
@@ -373,8 +570,8 @@ func (f *fsMachine) updateEtcdAboutSnapshots() error {
 	// snapshots, but have an escape clause in case this filesystem is
 	// deleted so we don't block forever
 	deathChan := make(chan interface{})
-	deathObserver.Subscribe(f.filesystemId, deathChan)
-	defer deathObserver.Unsubscribe(f.filesystemId, deathChan)
+	f.deathObserver.Subscribe(f.filesystemId, deathChan)
+	defer f.deathObserver.Unsubscribe(f.filesystemId, deathChan)
 
 	select {
 	case _ = <-f.snapshotsModified:
@@ -386,7 +583,7 @@ func (f *fsMachine) updateEtcdAboutSnapshots() error {
 	return nil
 }
 
-func (f *fsMachine) getCurrentState() string {
+func (f *FsMachine) getCurrentState() string {
 	// abusing snapshotsLock here, maybe we should have a separate lock over
 	// these fields
 	f.snapshotsLock.Lock()
@@ -394,7 +591,7 @@ func (f *fsMachine) getCurrentState() string {
 	return f.currentState
 }
 
-func (f *fsMachine) transitionedTo(state string, status string) {
+func (f *FsMachine) transitionedTo(state string, status string) {
 	// abusing snapshotsLock here, maybe we should have a separate lock over
 	// these fields
 	f.snapshotsLock.Lock()
@@ -406,19 +603,13 @@ func (f *fsMachine) transitionedTo(state string, status string) {
 		float64(now-f.lastTransitionTimestamp)/float64(time.Second),
 	)
 
-	transitionCounter.WithLabelValues(f.currentState, state, status).Add(1)
+	metrics.TransitionCounter.WithLabelValues(f.currentState, state, status).Add(1)
 
 	f.currentState = state
 	f.status = status
 	f.lastTransitionTimestamp = now
 	f.transitionObserver.Publish("transitions", state)
 
-	// update etcd
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		log.Printf("error connecting to etcd while trying to update states: %s", err)
-		return
-	}
 	update := map[string]string{
 		"state": state, "status": status,
 	}
@@ -427,12 +618,12 @@ func (f *fsMachine) transitionedTo(state string, status string) {
 		log.Printf("cannot serialize %s: %s", update, err)
 		return
 	}
-	_, err = kapi.Set(
+	_, err = f.etcdClient.Set(
 		context.Background(),
 		// .../:server/:filesystem = {"state": "inactive", "status": "pulling..."}
 		fmt.Sprintf(
 			"%s/servers/states/%s/%s",
-			ETCD_PREFIX, f.state.NodeID(), f.filesystemId,
+			types.EtcdPrefix, f.state.NodeID(), f.filesystemId,
 		),
 		string(serialized),
 		nil,
@@ -454,18 +645,18 @@ func (f *fsMachine) transitionedTo(state string, status string) {
 	f.stateMachineMetadataMu.Unlock()
 }
 
-func (f *fsMachine) snapshot(e *Event) (responseEvent *Event, nextState stateFn) {
-	var meta Metadata
+func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextState StateFn) {
+	var meta types.Metadata
 	if val, ok := (*e.Args)["metadata"]; ok {
 		meta = castToMetadata(val)
 	} else {
-		meta = Metadata{}
+		meta = types.Metadata{}
 	}
 	meta["timestamp"] = fmt.Sprintf("%d", time.Now().UnixNano())
 	metadataEncoded, err := encodeMetadata(meta)
 	if err != nil {
-		return &Event{
-			Name: "failed-metadata-encode", Args: &EventArgs{"err": err},
+		return &types.Event{
+			Name: "failed-metadata-encode", Args: &types.EventArgs{"err": err},
 		}, backoffState
 	}
 	var snapshotId string
@@ -473,8 +664,8 @@ func (f *fsMachine) snapshot(e *Event) (responseEvent *Event, nextState stateFn)
 	if !ok {
 		id, err := uuid.NewV4()
 		if err != nil {
-			return &Event{
-				Name: "failed-uuid", Args: &EventArgs{"err": err},
+			return &types.Event{
+				Name: "failed-uuid", Args: &types.EventArgs{"err": err},
 			}, backoffState
 		}
 		snapshotId = id.String()
@@ -483,54 +674,54 @@ func (f *fsMachine) snapshot(e *Event) (responseEvent *Event, nextState stateFn)
 	}
 	args := []string{"snapshot"}
 	args = append(args, metadataEncoded...)
-	args = append(args, fq(f.filesystemId)+"@"+snapshotId)
-	logZFSCommand(f.filesystemId, fmt.Sprintf("%s %s", ZFS, strings.Join(args, " ")))
-	out, err := exec.Command(ZFS, args...).CombinedOutput()
+	args = append(args, fq(f.poolName, f.filesystemId)+"@"+snapshotId)
+	logZFSCommand(f.filesystemId, fmt.Sprintf("%s %s", f.zfsPath, strings.Join(args, " ")))
+	out, err := exec.Command(f.zfsPath, args...).CombinedOutput()
 	log.Printf("[snapshot] Attempting: zfs %s", args)
 	if err != nil {
-		log.Printf("[snapshot] %v while trying to snapshot %s (%s)", err, fq(f.filesystemId), args)
-		return &Event{
+		log.Printf("[snapshot] %v while trying to snapshot %s (%s)", err, fq(f.poolName, f.filesystemId), args)
+		return &types.Event{
 			Name: "failed-snapshot",
-			Args: &EventArgs{"err": err, "combined-output": string(out)},
+			Args: &types.EventArgs{"err": err, "combined-output": string(out)},
 		}, backoffState
 	}
-	list, err := exec.Command(ZFS, "list", fq(f.filesystemId)+"@"+snapshotId).CombinedOutput()
+	list, err := exec.Command(f.zfsPath, "list", fq(f.poolName, f.filesystemId)+"@"+snapshotId).CombinedOutput()
 	if err != nil {
-		log.Printf("[snapshot] %v while trying to list snapshot %s (%s)", err, fq(f.filesystemId), args)
-		return &Event{
+		log.Printf("[snapshot] %v while trying to list snapshot %s (%s)", err, fq(f.poolName, f.filesystemId), args)
+		return &types.Event{
 			Name: "failed-snapshot",
-			Args: &EventArgs{"err": err, "combined-output": string(out)},
+			Args: &types.EventArgs{"err": err, "combined-output": string(out)},
 		}, backoffState
 	}
 	log.Printf("[snapshot] listed snapshot: '%q'", strconv.Quote(string(list)))
 	func() {
 		f.snapshotsLock.Lock()
 		defer f.snapshotsLock.Unlock()
-		log.Printf("[snapshot] Succeeded snapshotting (out: '%s'), saving: %+v", out, &Snapshot{
+		log.Printf("[snapshot] Succeeded snapshotting (out: '%s'), saving: %+v", out, &types.Snapshot{
 			Id: snapshotId, Metadata: meta,
 		})
 		f.filesystem.Snapshots = append(f.filesystem.Snapshots,
-			&Snapshot{Id: snapshotId, Metadata: meta})
+			&types.Snapshot{Id: snapshotId, Metadata: meta})
 	}()
 	err = f.snapshotsChanged()
 	if err != nil {
-		log.Printf("[snapshot] %v while trying to inform that snapshots changed %s (%s)", err, fq(f.filesystemId), args)
-		return &Event{
+		log.Printf("[snapshot] %v while trying to inform that snapshots changed %s (%s)", err, fq(f.poolName, f.filesystemId), args)
+		return &types.Event{
 			Name: "failed-snapshot-changed",
-			Args: &EventArgs{"err": err},
+			Args: &types.EventArgs{"err": err},
 		}, backoffState
 	}
-	return &Event{Name: "snapshotted", Args: &EventArgs{"SnapshotId": snapshotId}}, activeState
+	return &types.Event{Name: "snapshotted", Args: &types.EventArgs{"SnapshotId": snapshotId}}, activeState
 }
 
 // find the user-facing name of a given filesystem id. if we're a branch
 // (clone), return the name of our parent filesystem.
-func (f *fsMachine) name() (VolumeName, error) {
+func (f *FsMachine) name() (types.VolumeName, error) {
 	tlf, _, err := f.registry.LookupFilesystemById(f.filesystemId)
 	return tlf.MasterBranch.Name, err
 }
 
-func (f *fsMachine) containersRunning() ([]container.DockerContainer, error) {
+func (f *FsMachine) containersRunning() ([]container.DockerContainer, error) {
 	name, err := f.name()
 	if err != nil {
 		return []container.DockerContainer{}, err
@@ -538,7 +729,7 @@ func (f *fsMachine) containersRunning() ([]container.DockerContainer, error) {
 	return f.containerClient.Related(name.String())
 }
 
-func (f *fsMachine) stopContainers() error {
+func (f *FsMachine) stopContainers() error {
 	name, err := f.name()
 	if err != nil {
 		return err
@@ -546,7 +737,7 @@ func (f *fsMachine) stopContainers() error {
 	return f.containerClient.Stop(name.StringWithoutAdmin())
 }
 
-func (f *fsMachine) startContainers() error {
+func (f *FsMachine) startContainers() error {
 	name, err := f.name()
 	if err != nil {
 		return err
@@ -555,17 +746,17 @@ func (f *fsMachine) startContainers() error {
 }
 
 // probably the wrong way to do it
-func pointers(snapshots []Snapshot) []*Snapshot {
-	newList := []*Snapshot{}
+func pointers(snapshots []types.Snapshot) []*types.Snapshot {
+	newList := []*types.Snapshot{}
 	for _, snap := range snapshots {
-		s := &Snapshot{}
+		s := &types.Snapshot{}
 		*s = snap
 		newList = append(newList, s)
 	}
 	return newList
 }
 
-func (f *fsMachine) plausibleSnapRange() (*snapshotRange, error) {
+func (f *FsMachine) plausibleSnapRange() (*snapshotRange, error) {
 	// get all snapshots for the given filesystem on the current master, and
 	// then start a pull if we need to
 	snapshots, err := f.state.SnapshotsForCurrentMaster(f.filesystemId)
@@ -580,7 +771,7 @@ func (f *fsMachine) plausibleSnapRange() (*snapshotRange, error) {
 	return snapRange, err
 }
 
-func (f *fsMachine) attemptReceive() bool {
+func (f *FsMachine) attemptReceive() bool {
 	// Check whether there are any pull-able snaps of this filesystem on its
 	// current master
 
@@ -619,21 +810,21 @@ func (f *fsMachine) attemptReceive() bool {
 // either missing because you're about to be locally created or because the
 // filesystem exists somewhere else in the cluster
 
-func (f *fsMachine) discover() error {
+func (f *FsMachine) discover() error {
 	// discover system state synchronously
-	filesystem, err := discoverSystem(f.filesystemId)
+	filesystem, err := discoverSystem(f.zfsPath, f.poolName, f.filesystemId)
 	if err != nil {
 		return err
 	}
-	func() {
-		f.snapshotsLock.Lock()
-		defer f.snapshotsLock.Unlock()
-		f.filesystem = filesystem
-	}()
+
+	f.snapshotsLock.Lock()
+	f.filesystem = filesystem
+	f.snapshotsLock.Unlock()
+
 	return f.snapshotsChanged()
 }
 
-func (f *fsMachine) snapshotsChanged() error {
+func (f *FsMachine) snapshotsChanged() error {
 	// quite probably we just learned about some snapshots we didn't know about
 	// before
 	f.snapshotsModified <- true
@@ -642,7 +833,7 @@ func (f *fsMachine) snapshotsChanged() error {
 	// any observers in the process.
 	// XXX this _might_ break the fact that handoff doesn't check what snapshot
 	// it's notified about.
-	var snaps []*Snapshot
+	var snaps []*types.Snapshot
 	f.snapshotsLock.Lock()
 	for _, s := range f.filesystem.Snapshots {
 		snaps = append(snaps, s.DeepCopy())
@@ -660,9 +851,9 @@ func (f *fsMachine) snapshotsChanged() error {
 // that a clone depends on without promoting the clone... hmmm)
 
 // step 4: Make dotmesh aware of the new branch
-// ...something something fsmachine something etcd...
+// ...something something FsMachine something etcd...
 
-func (f *fsMachine) recoverFromDivergence(rollbackToId string) error {
+func (f *FsMachine) recoverFromDivergence(rollbackToId string) error {
 	// Mint an ID for the new branch
 	id, err := uuid.NewV4()
 	if err != nil {
@@ -671,7 +862,7 @@ func (f *fsMachine) recoverFromDivergence(rollbackToId string) error {
 	newFilesystemId := id.String()
 
 	// Roll back the filesystem to rollbackTo, but leaving the new filesystem pointing to its original state
-	err = stashBranch(f.filesystemId, newFilesystemId, rollbackToId)
+	err = stashBranch(f.zfsPath, f.poolName, f.filesystemId, newFilesystemId, rollbackToId)
 	if err != nil {
 		return err
 	}
@@ -699,9 +890,7 @@ func (f *fsMachine) recoverFromDivergence(rollbackToId string) error {
 	return nil
 }
 
-func calculateSendArgs(
-	fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
-) []string {
+func calculateSendArgs(poolName, fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string) []string {
 
 	// toFilesystemId
 	// snapRange.toSnap.Id
@@ -724,16 +913,16 @@ func calculateSendArgs(
 	if fromSnap == "START" {
 		// -R sends interim snapshots as well
 		sendArgs = []string{
-			"-p", "-R", fq(toFilesystemId) + "@" + toSnapshotId,
+			"-p", "-R", fq(poolName, toFilesystemId) + "@" + toSnapshotId,
 		}
 	} else {
 		// in clone case, fromSnap must be fully qualified
 		if strings.Contains(fromSnap, "@") {
 			// send a clone, so make it fully qualified
-			fromSnap = fq(fromSnap)
+			fromSnap = fq(poolName, fromSnap)
 		}
 		sendArgs = []string{
-			"-p", "-I", fromSnap, fq(toFilesystemId) + "@" + toSnapshotId,
+			"-p", "-I", fromSnap, fq(poolName, toFilesystemId) + "@" + toSnapshotId,
 		}
 	}
 	return sendArgs
@@ -760,14 +949,12 @@ func calculateSendArgs(
 		   Print machine-parsable verbose information about the stream
 		   package generated.
 */
-func predictSize(
-	fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
-) (int64, error) {
-	sendArgs := calculateSendArgs(fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId)
+func predictSize(zfsPath, poolName, fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string) (int64, error) {
+	sendArgs := calculateSendArgs(poolName, fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId)
 	predictArgs := []string{"send", "-nP"}
 	predictArgs = append(predictArgs, sendArgs...)
 
-	sizeCmd := exec.Command(ZFS, predictArgs...)
+	sizeCmd := exec.Command(zfsPath, predictArgs...)
 
 	log.Printf("[predictSize] predict command: %#v", sizeCmd)
 
@@ -794,7 +981,7 @@ func predictSize(
 	return size, nil
 }
 
-// TODO this method shouldn't really be on a fsMachine, because it is
+// TODO this method shouldn't really be on a FsMachine, because it is
 // parameterized by filesystemId (implicitly in pollResult, which varies over
 // phases of a multi-filesystem push)
 

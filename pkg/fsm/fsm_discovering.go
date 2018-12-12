@@ -1,10 +1,10 @@
-package main
+package fsm
 
 import (
 	"log"
 )
 
-func discoveringState(f *fsMachine) stateFn {
+func discoveringState(f *FsMachine) StateFn {
 	f.transitionedTo("discovering", "loading")
 	log.Printf("entering discovering state for %s", f.filesystemId)
 

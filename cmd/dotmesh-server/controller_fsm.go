@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/dotmesh-io/dotmesh/pkg/fsm"
+
 	"github.com/coreos/etcd/client"
 
 	log "github.com/sirupsen/logrus"
@@ -15,7 +17,7 @@ var (
 	ErrFilesystemDeleted = errors.New("filesystem no longer exists, it was deleted")
 )
 
-func (s *InMemoryState) GetFilesystemMachine(filesystemId string) (*fsMachine, error) {
+func (s *InMemoryState) GetFilesystemMachine(filesystemId string) (fsm.FSM, error) {
 	s.filesystemsLock.RLock()
 	defer s.filesystemsLock.RUnlock()
 	fsm, ok := s.filesystems[filesystemId]
@@ -25,10 +27,10 @@ func (s *InMemoryState) GetFilesystemMachine(filesystemId string) (*fsMachine, e
 	return fsm, nil
 }
 
-func (s *InMemoryState) InitFilesystemMachine(filesystemId string) (*fsMachine, error) {
+func (s *InMemoryState) InitFilesystemMachine(filesystemId string) (fsm.FSM, error) {
 	log.Debugf("[initFilesystemMachine] starting: %s", filesystemId)
 
-	fs, deleted := func() (*fsMachine, bool) {
+	fs, deleted := func() (fsm.FSM, bool) {
 		// s.filesystemsLock.Lock()
 		// defer s.filesystemsLock.Unlock()
 		s.filesystemsLock.RLock()
@@ -65,15 +67,31 @@ func (s *InMemoryState) InitFilesystemMachine(filesystemId string) (*fsMachine, 
 
 		log.Debugf("[initFilesystemMachine] initializing new fsMachine for %s", filesystemId)
 
-		s.filesystems[filesystemId] = newFilesystemMachine(filesystemId, s)
+		s.filesystems[filesystemId] = fsm.NewFilesystemMachine(&fsm.FsConfig{
+			FilesystemID:              filesystemId,
+			StateManager:              s,
+			Registry:                  s.registry,
+			UserManager:               s.userManager,
+			EtcdClient:                s.etcdClient,
+			ContainerClient:           s.containers,
+			LocalReceiveProgress:      s.localReceiveProgress,
+			NewSnapsOnMaster:          s.newSnapsOnMaster,
+			DeathObserver:             s.deathObserver,
+			FilesystemMetadataTimeout: s.config.FilesystemMetadataTimeout,
+			ZFSPath:                   ZFS,
+			ZPoolPath:                 ZPOOL,
+			MountZFS:                  MOUNT_ZFS,
+			PoolName:                  POOL,
+		})
 
-		go s.filesystems[filesystemId].run() // concurrently run state machine
-		return s.filesystems[filesystemId], deleted
+		go s.filesystems[filesystemId].Run() // concurrently run state machine
+
+		return s.filesystems[filesystemId], false
 
 	}()
 	// NB: deleteFilesystem takes filesystemsLock
 	if deleted {
-		log.Debugf("[initFilesystemMachine] deleted fsMachine found, deleting locally")
+		log.Debugf("[initFilesystemMachine] deleted fsMachine '%s' found, deleting locally", filesystemId)
 		err := s.DeleteFilesystem(filesystemId)
 		if err != nil {
 			log.Errorf("Error deleting filesystem: %v", err)
@@ -123,7 +141,7 @@ func (s *InMemoryState) DeleteFilesystem(filesystemId string) error {
 	}
 
 	// Actually remove from ZFS
-	err = deleteFilesystemInZFS(filesystemId)
+	err = s.deleteFilesystemInZFS(filesystemId)
 	if err != nil {
 		errors = append(errors, err)
 	}
@@ -145,7 +163,7 @@ func (s *InMemoryState) AlignMountStateWithMasters(filesystemId string) error {
 	// which may need to be mounted to match up with its desired mount state
 	// (as indicated by the "masters" state in etcd).
 	return tryUntilSucceeds(func() error {
-		fs, mounted, err := func() (*fsMachine, bool, error) {
+		fs, mounted, err := func() (fsm.FSM, bool, error) {
 			s.filesystemsLock.Lock()
 			defer s.filesystemsLock.Unlock()
 
@@ -163,9 +181,9 @@ func (s *InMemoryState) AlignMountStateWithMasters(filesystemId string) error {
 				filesystemId,
 				masterNode,
 				s.myNodeId,
-				fs.filesystem.Mounted,
+				fs.Mounted(),
 			)
-			return fs, fs.filesystem.Mounted, nil
+			return fs, fs.Mounted(), nil
 		}()
 		if err != nil {
 			return err
@@ -178,14 +196,14 @@ func (s *InMemoryState) AlignMountStateWithMasters(filesystemId string) error {
 
 		// not mounted but should be (we are the master)
 		if masterNode == s.myNodeId && !mounted {
-			responseEvent, _ := fs.mount()
+			responseEvent := fs.Mount()
 			if responseEvent.Name != "mounted" {
 				return fmt.Errorf("Couldn't mount filesystem: %v", responseEvent)
 			}
 		}
 		// mounted but shouldn't be (we are not the master)
 		if masterNode != s.myNodeId && mounted {
-			responseEvent, _ := fs.unmount()
+			responseEvent := fs.Unmount()
 			if responseEvent.Name != "unmounted" {
 				return fmt.Errorf("Couldn't unmount filesystem: %v", responseEvent)
 			}
@@ -199,9 +217,10 @@ func (s *InMemoryState) ActivateClone(topLevelFilesystemId, originFilesystemId, 
 	err := s.registry.RegisterClone(
 		newBranchName, topLevelFilesystemId,
 		Clone{
-			newCloneFilesystemId,
-			Origin{
-				originFilesystemId, originSnapshotId,
+			FilesystemId: newCloneFilesystemId,
+			Origin: Origin{
+				FilesystemId: originFilesystemId,
+				SnapshotId:   originSnapshotId,
 			},
 		},
 	)

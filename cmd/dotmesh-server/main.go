@@ -16,7 +16,11 @@ import (
 	"time"
 
 	"github.com/dotmesh-io/dotmesh/pkg/kv"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
+
+	// registering metric counters
+	_ "github.com/dotmesh-io/dotmesh/pkg/metrics"
 
 	// notification provider
 	_ "github.com/dotmesh-io/dotmesh/pkg/notification/nats"
@@ -28,9 +32,9 @@ import (
 )
 
 // initial setup
-const ROOT_FS = "dmfs"
-const META_KEY_PREFIX = "io.dotmesh:meta-"
-const ETCD_PREFIX = "/dotmesh.io"
+const ROOT_FS = types.RootFS
+const META_KEY_PREFIX = types.MetaKeyPrefix
+const ETCD_PREFIX = types.EtcdPrefix
 
 var ZFS string
 var MOUNT_ZFS string
@@ -155,13 +159,17 @@ func main() {
 	}
 	config.EtcdClient = etcdClient
 
+	config.ZFSExecPath = ZFS
+	config.ZPoolPath = ZPOOL
+	config.PoolName = POOL
+
 	kvClient := kv.New(etcdClient, ETCD_PREFIX)
 	config.UserManager = user.New(kvClient)
 
 	s := NewInMemoryState(localPoolId, config)
 
-	for _, filesystemId := range findFilesystemIdsOnSystem() {
-		log.Printf("Initializing fsMachine for %s", filesystemId)
+	for _, filesystemId := range s.findFilesystemIdsOnSystem() {
+		log.Debugf("Initializing fsMachine for %s", filesystemId)
 		go func(fsID string) {
 			_, err := s.InitFilesystemMachine(fsID)
 			if err != nil {

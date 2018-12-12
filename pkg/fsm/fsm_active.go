@@ -1,15 +1,16 @@
-package main
+package fsm
 
 import (
 	"fmt"
 	"os/exec"
 
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/nu7hatch/gouuid"
 
 	log "github.com/sirupsen/logrus"
 )
 
-func activeState(f *fsMachine) stateFn {
+func activeState(f *FsMachine) StateFn {
 	f.transitionedTo("active", "waiting")
 	log.Printf("entering active state for %s", f.filesystemId)
 	select {
@@ -21,12 +22,12 @@ func activeState(f *fsMachine) stateFn {
 		if e.Name == "delete" {
 			err := f.state.DeleteFilesystem(f.filesystemId)
 			if err != nil {
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "cant-delete",
-					Args: &EventArgs{"err": err},
+					Args: &types.EventArgs{"err": err},
 				}
 			} else {
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "deleted",
 				}
 			}
@@ -39,18 +40,18 @@ func activeState(f *fsMachine) stateFn {
 			toSnapshotId := (*e.Args)["ToSnapshotId"].(string)
 
 			size, err := predictSize(
-				fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
+				f.zfsPath, f.poolName, fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
 			)
 
 			if err != nil {
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "error-predict-size",
-					Args: &EventArgs{"err": err},
+					Args: &types.EventArgs{"err": err},
 				}
 			} else {
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "predictedSize",
-					Args: &EventArgs{"size": int64(size)},
+					Args: &types.EventArgs{"size": int64(size)},
 				}
 			}
 			return activeState
@@ -59,18 +60,18 @@ func activeState(f *fsMachine) stateFn {
 			// TODO dedupe
 			transferRequest, err := transferRequestify((*e.Args)["Transfer"])
 			if err != nil {
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "cant-cast-transfer-request",
-					Args: &EventArgs{"err": err},
+					Args: &types.EventArgs{"err": err},
 				}
 				return backoffState
 			}
 			f.lastTransferRequest = transferRequest
 			transferRequestId, ok := (*e.Args)["RequestId"].(string)
 			if !ok {
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "cant-cast-transfer-requestid",
-					Args: &EventArgs{"err": err},
+					Args: &types.EventArgs{"err": err},
 				}
 				return backoffState
 			}
@@ -87,18 +88,18 @@ func activeState(f *fsMachine) stateFn {
 			// TODO dedupe
 			transferRequest, err := s3TransferRequestify((*e.Args)["Transfer"])
 			if err != nil {
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "s3-cant-cast-transfer-request",
-					Args: &EventArgs{"err": err},
+					Args: &types.EventArgs{"err": err},
 				}
 				return backoffState
 			}
 			f.lastS3TransferRequest = transferRequest
 			transferRequestId, ok := (*e.Args)["RequestId"].(string)
 			if !ok {
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "s3-cant-cast-transfer-requestid",
-					Args: &EventArgs{"err": err},
+					Args: &types.EventArgs{"err": err},
 				}
 				return backoffState
 			}
@@ -115,18 +116,18 @@ func activeState(f *fsMachine) stateFn {
 			// TODO dedupe
 			transferRequest, err := transferRequestify((*e.Args)["Transfer"])
 			if err != nil {
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "cant-cast-transfer-request",
-					Args: &EventArgs{"err": err},
+					Args: &types.EventArgs{"err": err},
 				}
 				return backoffState
 			}
 			f.lastTransferRequest = transferRequest
 			transferRequestId, ok := (*e.Args)["RequestId"].(string)
 			if !ok {
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "cant-cast-transfer-requestid",
-					Args: &EventArgs{"err": err},
+					Args: &types.EventArgs{"err": err},
 				}
 				return backoffState
 			}
@@ -145,17 +146,17 @@ func activeState(f *fsMachine) stateFn {
 			containers, err := f.containersRunning()
 			if err != nil {
 				log.Printf("[activeState:%s] Can't move filesystem while we can't list whether containers are using it. %s", f.filesystemId, err)
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "error-listing-containers-during-move",
-					Args: &EventArgs{"err": err},
+					Args: &types.EventArgs{"err": err},
 				}
 				return backoffState
 			}
 			if len(containers) > 0 {
 				log.Printf("[activeState:%s] Can't move filesystem when containers are using it.", f.filesystemId)
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "cannot-move-while-containers-running",
-					Args: &EventArgs{"containers": containers},
+					Args: &types.EventArgs{"containers": containers},
 				}
 				return backoffState
 			}
@@ -172,17 +173,17 @@ func activeState(f *fsMachine) stateFn {
 			return state
 		} else if e.Name == "stash" {
 			snapshotId := (*e.Args)["snapshotId"].(string)
-			e := f.recoverFromDivergence(snapshotId)
-			if e != nil {
-				f.innerResponses <- &Event{
+			err := f.recoverFromDivergence(snapshotId)
+			if err != nil {
+				f.innerResponses <- &types.Event{
 					Name: "failed-stash",
-					Args: &EventArgs{"err": e},
+					Args: &types.EventArgs{"err": err},
 				}
 				return backoffState
 			}
-			f.innerResponses <- &Event{
+			f.innerResponses <- &types.Event{
 				Name: "stashed",
-				Args: &EventArgs{"NewBranchName": "TODO"},
+				Args: &types.EventArgs{"NewBranchName": "TODO"},
 			}
 			return discoveringState
 		} else if e.Name == "rollback" {
@@ -211,45 +212,45 @@ func activeState(f *fsMachine) stateFn {
 			if err != nil {
 				log.Printf(
 					"%v while trying to stop containers during rollback %s",
-					err, fq(f.filesystemId),
+					err, fq(f.poolName, f.filesystemId),
 				)
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "failed-stop-containers-during-rollback",
-					Args: &EventArgs{"err": err},
+					Args: &types.EventArgs{"err": err},
 				}
 				return backoffState
 			}
-			logZFSCommand(f.filesystemId, fmt.Sprintf("%s rollback -r %s@%s", ZFS, fq(f.filesystemId), rollbackTo))
-			out, err := exec.Command(ZFS, "rollback",
-				"-r", fq(f.filesystemId)+"@"+rollbackTo).CombinedOutput()
+			logZFSCommand(f.filesystemId, fmt.Sprintf("%s rollback -r %s@%s", f.zfsPath, fq(f.poolName, f.filesystemId), rollbackTo))
+			out, err := exec.Command(f.zfsPath, "rollback",
+				"-r", fq(f.poolName, f.filesystemId)+"@"+rollbackTo).CombinedOutput()
 			if err != nil {
-				log.Printf("%v while trying to rollback %s", err, fq(f.filesystemId))
-				f.innerResponses <- &Event{
+				log.Printf("%v while trying to rollback %s", err, fq(f.poolName, f.filesystemId))
+				f.innerResponses <- &types.Event{
 					Name: "failed-rollback",
-					Args: &EventArgs{"err": err, "combined-output": string(out)},
+					Args: &types.EventArgs{"err": err, "combined-output": string(out)},
 				}
 				return backoffState
 			}
 			if sliceIndex > 0 {
 				log.Printf("found index %d", sliceIndex)
 				log.Printf("snapshots before %+v", f.filesystem.Snapshots)
-				func() {
-					f.snapshotsLock.Lock()
-					defer f.snapshotsLock.Unlock()
-					f.filesystem.Snapshots = f.filesystem.Snapshots[:sliceIndex]
-				}()
+
+				f.snapshotsLock.Lock()
+				f.filesystem.Snapshots = f.filesystem.Snapshots[:sliceIndex]
+				f.snapshotsLock.Unlock()
+
 				err = f.snapshotsChanged()
 				if err != nil {
-					log.Printf("%v while trying to report that snapshots have changed %s", err, fq(f.filesystemId))
-					f.innerResponses <- &Event{
+					log.Printf("%v while trying to report that snapshots have changed %s", err, fq(f.poolName, f.filesystemId))
+					f.innerResponses <- &types.Event{
 						Name: "failed-rollback-snapshots-changed",
-						Args: &EventArgs{"err": err},
+						Args: &types.EventArgs{"err": err},
 					}
 					return backoffState
 				}
 				log.Printf("snapshots after %+v", f.filesystem.Snapshots)
 			} else {
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "no-such-snapshot",
 				}
 			}
@@ -257,15 +258,15 @@ func activeState(f *fsMachine) stateFn {
 			if err != nil {
 				log.Printf(
 					"%v while trying to start containers during rollback %s",
-					err, fq(f.filesystemId),
+					err, fq(f.poolName, f.filesystemId),
 				)
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "failed-start-containers-during-rollback",
-					Args: &EventArgs{"err": err},
+					Args: &types.EventArgs{"err": err},
 				}
 				return backoffState
 			}
-			f.innerResponses <- &Event{
+			f.innerResponses <- &types.Event{
 				Name: "rolled-back",
 			}
 			return activeState
@@ -287,45 +288,45 @@ func activeState(f *fsMachine) stateFn {
 
 			uuid, err := uuid.NewV4()
 			if err != nil {
-				f.innerResponses <- &Event{
-					Name: "failed-uuid", Args: &EventArgs{"err": err},
+				f.innerResponses <- &types.Event{
+					Name: "failed-uuid", Args: &types.EventArgs{"err": err},
 				}
 				return backoffState
 			}
 			newCloneFilesystemId := uuid.String()
 
-			logZFSCommand(f.filesystemId, fmt.Sprintf("%s clone %s@%s %s", ZFS, fq(f.filesystemId), originSnapshotId, fq(newCloneFilesystemId)))
+			logZFSCommand(f.filesystemId, fmt.Sprintf("%s clone %s@%s %s", f.zfsPath, fq(f.poolName, f.filesystemId), originSnapshotId, fq(f.poolName, newCloneFilesystemId)))
 			out, err := exec.Command(
-				ZFS, "clone",
-				fq(f.filesystemId)+"@"+originSnapshotId,
-				fq(newCloneFilesystemId),
+				f.zfsPath, "clone",
+				fq(f.poolName, f.filesystemId)+"@"+originSnapshotId,
+				fq(f.poolName, newCloneFilesystemId),
 			).CombinedOutput()
 			if err != nil {
-				log.Printf("%v while trying to clone %s", err, fq(f.filesystemId))
-				f.innerResponses <- &Event{
+				log.Printf("%v while trying to clone %s", err, fq(f.poolName, f.filesystemId))
+				f.innerResponses <- &types.Event{
 					Name: "failed-clone",
-					Args: &EventArgs{"err": err, "combined-output": string(out)},
+					Args: &types.EventArgs{"err": err, "combined-output": string(out)},
 				}
 				return backoffState
 			}
 
 			errorName, err := f.state.ActivateClone(topLevelFilesystemId, originFilesystemId, originSnapshotId, newCloneFilesystemId, newBranchName)
 			if err != nil {
-				f.innerResponses <- &Event{
-					Name: errorName, Args: &EventArgs{"err": err},
+				f.innerResponses <- &types.Event{
+					Name: errorName, Args: &types.EventArgs{"err": err},
 				}
 				return backoffState
 			}
 
-			f.innerResponses <- &Event{
+			f.innerResponses <- &types.Event{
 				Name: "cloned",
-				Args: &EventArgs{"newFilesystemId": newCloneFilesystemId},
+				Args: &types.EventArgs{"newFilesystemId": newCloneFilesystemId},
 			}
 			return activeState
 		} else if e.Name == "mount" {
-			f.innerResponses <- &Event{
+			f.innerResponses <- &types.Event{
 				Name: "mounted",
-				Args: &EventArgs{},
+				Args: &types.EventArgs{},
 			}
 			return activeState
 		} else if e.Name == "unmount" {
@@ -333,17 +334,17 @@ func activeState(f *fsMachine) stateFn {
 			containers, err := f.containersRunning()
 			if err != nil {
 				log.Printf("[activeState:%s] %s Can't unmount filesystem when we are unable to list containers using it", f.filesystemId, err)
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "error-listing-containers-during-unmount",
-					Args: &EventArgs{"err": err},
+					Args: &types.EventArgs{"err": err},
 				}
 				return backoffState
 			}
 			if len(containers) > 0 {
 				log.Printf("[activeState:%s] Can't unmount filesystem while containers are using it", f.filesystemId)
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "cannot-unmount-while-running-containers",
-					Args: &EventArgs{"containers": containers},
+					Args: &types.EventArgs{"containers": containers},
 				}
 				return backoffState
 			}
@@ -351,11 +352,11 @@ func activeState(f *fsMachine) stateFn {
 			f.innerResponses <- response
 			return state
 		} else {
-			f.innerResponses <- &Event{
+			f.innerResponses <- &types.Event{
 				Name: "unhandled",
-				Args: &EventArgs{"current-state": f.currentState, "event": e},
+				Args: &types.EventArgs{"current-state": f.currentState, "types.Event": e},
 			}
-			log.Printf("unhandled event %s while in activeState", e)
+			log.Printf("unhandled types.Event %s while in activeState", e)
 		}
 	}
 	// something unknown happened, go and check the state of the system after a

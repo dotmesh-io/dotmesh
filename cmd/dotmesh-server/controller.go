@@ -16,6 +16,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/dotmesh-io/dotmesh/pkg/container"
+	"github.com/dotmesh-io/dotmesh/pkg/fsm"
 	"github.com/dotmesh-io/dotmesh/pkg/notification"
 	"github.com/dotmesh-io/dotmesh/pkg/observer"
 	"github.com/dotmesh-io/dotmesh/pkg/registry"
@@ -26,37 +27,25 @@ import (
 
 type InMemoryState struct {
 	config          Config
-	filesystems     map[string]*fsMachine
+	filesystems     map[string]fsm.FSM
 	filesystemsLock *sync.RWMutex
 
 	myNodeId string
 
-	// mastersCache     map[string]string
-	// mastersCacheLock *sync.RWMutex
-
 	serverAddressesCache     map[string]string
 	serverAddressesCacheLock *sync.RWMutex
-
-	// globalSnapshotCache     map[string]map[string][]snapshot
-	// globalSnapshotCacheLock *sync.RWMutex
-
-	// globalStateCache used for mostly metadata & debugging, can be moved into
-	// each fsMachine but we should only keep a map of server -> fsMachine then
-	// or just fsMachines since all know which server they are on
-	// globalStateCache         map[string]map[string]map[string]string
-	// globalStateCacheLock     *sync.RWMutex
 
 	globalContainerCache     map[string]containerInfo
 	globalContainerCacheLock *sync.RWMutex
 
-	etcdClient            client.KeysAPI
-	etcdWaitTimestamp     int64
-	etcdWaitState         string
-	etcdWaitTimestampLock *sync.Mutex
-	localReceiveProgress  observer.Observer
-	newSnapsOnMaster      observer.Observer
-	registry              registry.Registry
-	// containers                 *DockerClient
+	etcdClient                 client.KeysAPI
+	etcdWaitTimestamp          int64
+	etcdWaitState              string
+	etcdWaitTimestampLock      *sync.Mutex
+	localReceiveProgress       observer.Observer
+	newSnapsOnMaster           observer.Observer
+	deathObserver              observer.Observer
+	registry                   registry.Registry
 	containers                 container.Client
 	containersLock             *sync.RWMutex
 	fetchRelatedContainersChan chan bool
@@ -87,23 +76,12 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 		panic(err)
 	}
 	s := &InMemoryState{
-		config:          config,
-		filesystems:     make(map[string]*fsMachine),
-		filesystemsLock: &sync.RWMutex{},
-		myNodeId:        localPoolId,
-		// karolis: MOVED TO REGISTRY
-		// filesystem => node id
-		// mastersCache:     make(map[string]string),
-		// mastersCacheLock: &sync.RWMutex{},
-		// server id => comma-separated IPv[46] addresses
+		config:                   config,
+		filesystems:              make(map[string]fsm.FSM),
+		filesystemsLock:          &sync.RWMutex{},
+		myNodeId:                 localPoolId,
 		serverAddressesCache:     make(map[string]string),
 		serverAddressesCacheLock: &sync.RWMutex{},
-		// server id => filesystem id => snapshot metadata
-		// globalSnapshotCache:     make(map[string]map[string][]snapshot),
-		// globalSnapshotCacheLock: &sync.RWMutex{},
-		// server id => filesystem id => state machine metadata
-		// globalStateCache:     make(map[string]map[string]map[string]string),
-		// globalStateCacheLock: &sync.RWMutex{},
 		// global container state (what containers are running where), filesystemId -> containerInfo
 		globalContainerCache:     make(map[string]containerInfo),
 		globalContainerCacheLock: &sync.RWMutex{},
@@ -117,6 +95,7 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 		// such as slaves for that filesystem may subscribe to
 		newSnapsOnMaster:     observer.NewObserver("newSnapsOnMaster"),
 		localReceiveProgress: observer.NewObserver("localReceiveProgress"),
+		deathObserver:        observer.NewObserver("deathObserver"),
 		// containers that are running with dotmesh volumes by filesystem id
 		containers:     dockerClient,
 		containersLock: &sync.RWMutex{},
@@ -338,7 +317,7 @@ func (s *InMemoryState) notifyPushCompleted(filesystemId string, success bool) {
 		return
 	}
 	log.Printf("[notifyPushCompleted:%s] about to notify chan with success=%t", filesystemId, success)
-	f.pushCompleted <- success
+	f.PushCompleted(success)
 	log.Printf("[notifyPushCompleted:%s] done notify chan", filesystemId)
 }
 
@@ -349,7 +328,7 @@ func (s *InMemoryState) getCurrentState(filesystemId string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fs.getCurrentState(), nil
+	return fs.GetCurrentState(), nil
 	// s.filesystemsLock.RLock()
 	// defer s.filesystemsLock.RUnlock()
 	// f, ok := s.filesystems[filesystemId]
@@ -574,27 +553,23 @@ func (state *InMemoryState) reallyProcureFilesystem(ctx context.Context, name Vo
 			// though, so wait on that here.
 
 			state.filesystemsLock.Lock()
-			if state.filesystems[filesystemId].currentState == "active" {
+			if state.filesystems[filesystemId].GetCurrentState() == "active" {
 				// great - we're already active
 				log.Printf("Found %s was already active, giving it to Docker", filesystemId)
 				state.filesystemsLock.Unlock()
 			} else {
-				for state.filesystems[filesystemId].currentState != "active" {
+				for state.filesystems[filesystemId].GetCurrentState() != "active" {
 					log.Printf(
 						"%s was %s, waiting for it to change to active...",
-						filesystemId, state.filesystems[filesystemId].currentState,
+						filesystemId, state.filesystems[filesystemId].GetCurrentState(),
 					)
 					// wait for state change
 					stateChangeChan := make(chan interface{})
-					state.filesystems[filesystemId].transitionObserver.Subscribe(
-						"transitions", stateChangeChan,
-					)
+					state.filesystems[filesystemId].TransitionSubscribe("transitions", stateChangeChan)
 					state.filesystemsLock.Unlock()
 					<-stateChangeChan
 					state.filesystemsLock.Lock()
-					state.filesystems[filesystemId].transitionObserver.Unsubscribe(
-						"transitions", stateChangeChan,
-					)
+					state.filesystems[filesystemId].TransitionUnsubscribe("transitions", stateChangeChan)
 				}
 				log.Printf("%s finally changed to active, proceeding!", filesystemId)
 				state.filesystemsLock.Unlock()
@@ -605,7 +580,7 @@ func (state *InMemoryState) reallyProcureFilesystem(ctx context.Context, name Vo
 		if err != nil {
 			return "", err
 		}
-		filesystemId = fsMachine.filesystemId
+		filesystemId = fsMachine.ID()
 		if cloneName != "" {
 			return "", fmt.Errorf("Cannot use branch-pinning syntax (docker run -v volume@branch:/path) to create a non-existent volume with a non-master branch")
 		}
@@ -629,19 +604,12 @@ func (state *InMemoryState) procureFilesystem(ctx context.Context, name VolumeNa
 	return s, err
 }
 
-func (s *InMemoryState) CreateFilesystem(
-	ctx context.Context, filesystemName *VolumeName,
-) (*fsMachine, chan *Event, error) {
-
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		return nil, nil, err
-	}
+func (s *InMemoryState) CreateFilesystem(ctx context.Context, filesystemName *VolumeName) (fsm.FSM, chan *Event, error) {
 
 	// Check to see if it already partially exists, eg. in the registry but without a master
 	var filesystemId string
 
-	re, err := kapi.Get(
+	re, err := s.etcdClient.Get(
 		context.Background(),
 		fmt.Sprintf("%s/registry/filesystems/%s/%s", ETCD_PREFIX, filesystemName.Namespace, filesystemName.Name),
 		&client.GetOptions{},
@@ -680,7 +648,7 @@ func (s *InMemoryState) CreateFilesystem(
 		log.Printf("[CreateFilesystem] called with name=%+v, examining existing id %s", filesystemName, filesystemId)
 
 		// Check for an existing master mapping
-		_, err = kapi.Get(
+		_, err = s.etcdClient.Get(
 			context.Background(),
 			fmt.Sprintf("%s/filesystems/masters/%s", ETCD_PREFIX, filesystemId),
 			&client.GetOptions{},
@@ -701,7 +669,7 @@ func (s *InMemoryState) CreateFilesystem(
 
 	// synchronize with etcd first, setting master to us only if the key
 	// didn't previously exist, **before actually creating the filesystem**
-	_, err = kapi.Set(
+	_, err = s.etcdClient.Set(
 		context.Background(),
 		fmt.Sprintf("%s/filesystems/masters/%s", ETCD_PREFIX, filesystemId),
 		s.myNodeId,

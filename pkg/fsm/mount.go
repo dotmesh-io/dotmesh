@@ -1,4 +1,4 @@
-package main
+package fsm
 
 import (
 	"fmt"
@@ -8,33 +8,63 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
+
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 )
 
-// stuff to do with mounting and unmounting filesystems
+// TODO: remove that environment getter and replace with parameter
+func mnt(fs string) string {
+	// from filesystem id to the path it would be mounted at if it were mounted
+	mountPrefix := os.Getenv("MOUNT_PREFIX")
+	if mountPrefix == "" {
+		panic(fmt.Sprintf("Environment variable MOUNT_PREFIX must be set\n"))
+	}
+	// carefully make this match...
+	// MOUNT_PREFIX will be like /dotmesh-test-pools/pool_123_1/mnt
+	// and we want to return
+	// /dotmesh-test-pools/pool_123_1/mnt/dmfs/:filesystemId
+	// fq(fs) gives pool_123_1/dmfs/:filesystemId
+	// so don't use it, construct it ourselves:
+	return fmt.Sprintf("%s/%s/%s", mountPrefix, types.RootFS, fs)
+}
 
-func (f *fsMachine) mountSnap(snapId string, readonly bool) (responseEvent *Event, nextState stateFn) {
+func unmnt(p string) (string, error) {
+	// From mount path to filesystem id
+	mountPrefix := os.Getenv("MOUNT_PREFIX")
+	if mountPrefix == "" {
+		return "", fmt.Errorf("Environment variable MOUNT_PREFIX must be set\n")
+	}
+	if strings.HasPrefix(p, mountPrefix+"/"+types.RootFS+"/") {
+		return strings.TrimPrefix(p, mountPrefix+"/"+types.RootFS+"/"), nil
+	} else {
+		return "", fmt.Errorf("Mount path %s does not start with %s/%s", p, mountPrefix, types.RootFS)
+	}
+}
+
+func (f *FsMachine) mountSnap(snapId string, readonly bool) (responseEvent *types.Event, nextState StateFn) {
 	fullId := f.filesystemId
 	if snapId != "" {
 		fullId += "@" + snapId
 	}
 	mountPath := mnt(fullId)
-	zfsPath := fq(fullId)
+	zfsPath := fq(f.poolName, fullId)
 	// only try to make the directory if it doesn't already exist
 	err := os.MkdirAll(mountPath, 0775)
 	if err != nil {
 		log.Printf("[mount:%s] %v while trying to mkdir mountpoint %s", fullId, err, zfsPath)
-		return &Event{
+		return &types.Event{
 			Name: "failed-mkdir-mountpoint",
-			Args: &EventArgs{"err": err},
+			Args: &types.EventArgs{"err": err},
 		}, backoffState
 	}
 	// only try to use mount.zfs if it's not already present in the output
 	// of calling "mount"
 	mounted, err := isFilesystemMounted(fullId)
 	if err != nil {
-		return &Event{
+		return &types.Event{
 			Name: "failed-checking-if-mounted",
-			Args: &EventArgs{"err": err},
+			Args: &types.EventArgs{"err": err},
 		}, backoffState
 	}
 	if !mounted {
@@ -43,17 +73,17 @@ func (f *fsMachine) mountSnap(snapId string, readonly bool) (responseEvent *Even
 			options += ",ro"
 		}
 		if snapId == "" {
-			logZFSCommand(fullId, fmt.Sprintf("%s set canmount=noauto %s", ZFS, zfsPath))
-			out, err := exec.Command(ZFS, "set", "canmount=noauto", zfsPath).CombinedOutput()
+			logZFSCommand(fullId, fmt.Sprintf("%s set canmount=noauto %s", f.zfsPath, zfsPath))
+			out, err := exec.Command(f.zfsPath, "set", "canmount=noauto", zfsPath).CombinedOutput()
 			if err != nil {
-				return &Event{
+				return &types.Event{
 					Name: "failed-settings-canmount-noauto",
-					Args: &EventArgs{"err": err, "out": out, "zfsPath": zfsPath},
+					Args: &types.EventArgs{"err": err, "out": out, "zfsPath": zfsPath},
 				}, backoffState
 			}
 		}
-		logZFSCommand(fullId, fmt.Sprintf("%s -o %s %s %s", MOUNT_ZFS, options, zfsPath, mountPath))
-		out, err := exec.Command(MOUNT_ZFS, "-o", options,
+		logZFSCommand(fullId, fmt.Sprintf("%s -o %s %s %s", f.mountZFS, options, zfsPath, mountPath))
+		out, err := exec.Command(f.mountZFS, "-o", options,
 			zfsPath, mountPath).CombinedOutput()
 		if err != nil {
 			log.Printf("[mount:%s] %v while trying to mount %s", fullId, err, zfsPath)
@@ -94,9 +124,9 @@ func (f *fsMachine) mountSnap(snapId string, readonly bool) (responseEvent *Even
 					return "", fmt.Errorf("unable to find %s in any /proc/*/mounts", fullId)
 				}()
 				if rerr != nil {
-					return &Event{
+					return &types.Event{
 						Name: "failed-finding-namespace-to-unmount",
-						Args: &EventArgs{
+						Args: &types.EventArgs{
 							"original-err": err, "original-combined-output": string(out),
 							"recovery-err": rerr,
 						},
@@ -112,9 +142,9 @@ func (f *fsMachine) mountSnap(snapId string, readonly bool) (responseEvent *Even
 					"umount", mountPath,
 				).CombinedOutput()
 				if rerr != nil {
-					return &Event{
+					return &types.Event{
 						Name: "failed-recovery-unmount",
-						Args: &EventArgs{
+						Args: &types.EventArgs{
 							"original-err": err, "original-combined-output": string(out),
 							"recovery-err": rerr, "recovery-combined-output": string(rout),
 						},
@@ -128,9 +158,9 @@ func (f *fsMachine) mountSnap(snapId string, readonly bool) (responseEvent *Even
 			}
 			// if there is an error - it means we could not mount so don't
 			// update the filesystem with mounted = true
-			return &Event{
+			return &types.Event{
 				Name: "failed-mount",
-				Args: &EventArgs{"err": err, "combined-output": string(out)},
+				Args: &types.EventArgs{"err": err, "combined-output": string(out)},
 			}, backoffState
 		}
 	}
@@ -140,10 +170,10 @@ func (f *fsMachine) mountSnap(snapId string, readonly bool) (responseEvent *Even
 	// mounted
 	f.snapshotsLock.Lock()
 	defer f.snapshotsLock.Unlock()
-	return &Event{Name: "mounted", Args: &EventArgs{"mount-path": mountPath}}, activeState
+	return &types.Event{Name: "mounted", Args: &types.EventArgs{"mount-path": mountPath}}, activeState
 }
 
-func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
+func (f *FsMachine) mount() (responseEvent *types.Event, nextState StateFn) {
 	response, nextState := f.mountSnap("", false)
 	if response.Name == "mounted" {
 		f.filesystem.Exists = true // needed in create case
@@ -152,7 +182,7 @@ func (f *fsMachine) mount() (responseEvent *Event, nextState stateFn) {
 	return response, nextState
 }
 
-func (f *fsMachine) unmount() (responseEvent *Event, nextState stateFn) {
+func (f *FsMachine) unmount() (responseEvent *types.Event, nextState StateFn) {
 	event, nextState := f.unmountSnap("")
 	if event.Name == "unmounted" {
 		f.filesystem.Mounted = false
@@ -160,38 +190,72 @@ func (f *fsMachine) unmount() (responseEvent *Event, nextState stateFn) {
 	return event, nextState
 }
 
-func (f *fsMachine) unmountSnap(snapId string) (responseEvent *Event, nextState stateFn) {
+func (f *FsMachine) unmountSnap(snapId string) (responseEvent *types.Event, nextState StateFn) {
 	fsPoint := f.filesystemId
 	if snapId != "" {
 		fsPoint += "@" + snapId
 	}
 	mounted, err := isFilesystemMounted(fsPoint)
 	if err != nil {
-		return &Event{
+		return &types.Event{
 			Name: "failed-checking-if-mounted",
-			Args: &EventArgs{"err": err},
+			Args: &types.EventArgs{"err": err},
 		}, backoffState
 	}
 	if mounted {
 		logZFSCommand(fsPoint, fmt.Sprintf("umount %s", mnt(fsPoint)))
 		out, err := exec.Command("umount", mnt(fsPoint)).CombinedOutput()
 		if err != nil {
-			log.Printf("%v while trying to unmount %s", err, fq(fsPoint))
-			return &Event{
+			log.Printf("%v while trying to unmount %s", err, fq(f.poolName, fsPoint))
+			return &types.Event{
 				Name: "failed-unmount",
-				Args: &EventArgs{"err": err, "combined-output": string(out)},
+				Args: &types.EventArgs{"err": err, "combined-output": string(out)},
 			}, backoffState
 		}
 		mounted, err := isFilesystemMounted(fsPoint)
 		if err != nil {
-			return &Event{
+			return &types.Event{
 				Name: "failed-checking-if-mounted",
-				Args: &EventArgs{"err": err},
+				Args: &types.EventArgs{"err": err},
 			}, backoffState
 		}
 		if mounted {
 			return f.unmountSnap(snapId)
 		}
 	}
-	return &Event{Name: "unmounted"}, inactiveState
+	return &types.Event{Name: "unmounted"}, inactiveState
+}
+
+func isFilesystemMounted(fs string) (bool, error) {
+	code, err := returnCode("mountpoint", mnt(fs))
+	if err != nil {
+		return false, err
+	}
+	return code == 0, nil
+}
+
+func returnCode(name string, arg ...string) (int, error) {
+	// Run a command and either get the returncode or an error if the command
+	// failed to execute, based on
+	// http://stackoverflow.com/questions/10385551/get-exit-code-go
+	cmd := exec.Command(name, arg...)
+	if err := cmd.Start(); err != nil {
+		return -1, err
+	}
+	if err := cmd.Wait(); err != nil {
+		if exiterr, ok := err.(*exec.ExitError); ok {
+			// The program has exited with an exit code != 0
+			// This works on both Unix and Windows. Although package
+			// syscall is generally platform dependent, WaitStatus is
+			// defined for both Unix and Windows and in both cases has
+			// an ExitStatus() method with the same signature.
+			if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
+				return status.ExitStatus(), nil
+			}
+		} else {
+			return -1, err
+		}
+	}
+	// got here, so err == nil
+	return 0, nil
 }

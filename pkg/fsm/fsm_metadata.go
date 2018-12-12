@@ -1,6 +1,8 @@
-package main
+package fsm
 
-func (f *fsMachine) GetMetadata(nodeID string) map[string]string {
+import "github.com/dotmesh-io/dotmesh/pkg/types"
+
+func (f *FsMachine) GetMetadata(nodeID string) map[string]string {
 	res := make(map[string]string)
 	f.stateMachineMetadataMu.RLock()
 	defer f.stateMachineMetadataMu.RUnlock()
@@ -15,7 +17,7 @@ func (f *fsMachine) GetMetadata(nodeID string) map[string]string {
 	return res
 }
 
-func (f *fsMachine) ListMetadata() map[string]map[string]string {
+func (f *FsMachine) ListMetadata() map[string]map[string]string {
 	res := make(map[string]map[string]string)
 	f.stateMachineMetadataMu.RLock()
 	for server, serverMeta := range f.stateMachineMetadata {
@@ -32,14 +34,14 @@ func (f *fsMachine) ListMetadata() map[string]map[string]string {
 	return res
 }
 
-func (f *fsMachine) SetMetadata(nodeID string, meta map[string]string) {
+func (f *FsMachine) SetMetadata(nodeID string, meta map[string]string) {
 	f.stateMachineMetadataMu.Lock()
 	f.stateMachineMetadata[nodeID] = meta
 	f.stateMachineMetadataMu.Unlock()
 }
 
-func (f *fsMachine) GetSnapshots(nodeID string) []*Snapshot {
-	res := []*Snapshot{}
+func (f *FsMachine) GetSnapshots(nodeID string) []*types.Snapshot {
+	res := []*types.Snapshot{}
 	f.snapshotCacheMu.RLock()
 	defer f.snapshotCacheMu.RUnlock()
 
@@ -55,15 +57,15 @@ func (f *fsMachine) GetSnapshots(nodeID string) []*Snapshot {
 	return res
 }
 
-func (f *fsMachine) ListSnapshots() map[string][]*Snapshot {
+func (f *FsMachine) ListSnapshots() map[string][]*types.Snapshot {
 	f.snapshotCacheMu.RLock()
 	defer f.snapshotCacheMu.RUnlock()
 
-	r := make(map[string][]*Snapshot)
+	r := make(map[string][]*types.Snapshot)
 
 	for key, snapshots := range f.snapshotCache {
 
-		snaps := make([]*Snapshot, len(snapshots))
+		snaps := make([]*types.Snapshot, len(snapshots))
 		for idx, s := range snapshots {
 			snaps[idx] = s.DeepCopy()
 		}
@@ -73,7 +75,17 @@ func (f *fsMachine) ListSnapshots() map[string][]*Snapshot {
 	return r
 }
 
-func (f *fsMachine) SetSnapshots(nodeID string, snapshots []*Snapshot) {
+func (f *FsMachine) ListLocalSnapshots() []*types.Snapshot {
+	f.snapshotsLock.Lock()
+	defer f.snapshotsLock.Unlock()
+	result := []*types.Snapshot{}
+	for _, s := range f.filesystem.Snapshots {
+		result = append(result, s.DeepCopy())
+	}
+	return result
+}
+
+func (f *FsMachine) SetSnapshots(nodeID string, snapshots []*types.Snapshot) {
 	f.snapshotCacheMu.Lock()
 	f.snapshotCache[nodeID] = snapshots
 	f.snapshotCacheMu.Unlock()

@@ -1,8 +1,9 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "go_default_library",
-    srcs = [  
+    srcs = [
+        "fsm_types.go",
         "notification.go",
         "tlf.go",
         "types.go",
@@ -14,4 +15,10 @@ go_library(
         "//pkg/auth:go_default_library",
         "//pkg/user:go_default_library",
     ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["types_test.go"],
+    embed = [":go_default_library"],
 )

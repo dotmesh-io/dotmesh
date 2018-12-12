@@ -1,10 +1,11 @@
-package main
+package fsm
 
 import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
+
+	// "log"
 	"net/http"
 	"os/exec"
 	"strings"
@@ -14,9 +15,11 @@ import (
 
 	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
+
+	log "github.com/sirupsen/logrus"
 )
 
-func pushInitiatorState(f *fsMachine) stateFn {
+func pushInitiatorState(f *FsMachine) StateFn {
 	// Deduce the latest snapshot in
 	// f.lastTransferRequest.LocalFilesystemName:LocalCloneName
 	// and try a few times to get it onto the target node.
@@ -30,19 +33,19 @@ func pushInitiatorState(f *fsMachine) stateFn {
 		transferRequest,
 	)
 	path, err := f.registry.DeducePathToTopLevelFilesystem(
-		VolumeName{transferRequest.LocalNamespace, transferRequest.LocalName},
+		types.VolumeName{transferRequest.LocalNamespace, transferRequest.LocalName},
 		transferRequest.LocalBranchName,
 	)
 	if err != nil {
-		f.innerResponses <- &Event{
+		f.innerResponses <- &types.Event{
 			Name: "cant-calculate-path-to-snapshot",
-			Args: &EventArgs{"err": err},
+			Args: &types.EventArgs{"err": err},
 		}
 		return backoffState
 	}
 
-	f.transferUpdates <- TransferUpdate{
-		Kind: TransferStart,
+	f.transferUpdates <- types.TransferUpdate{
+		Kind: types.TransferStart,
 		Changes: TransferPollResultFromTransferRequest(
 			transferRequestId, transferRequest, f.state.NodeID(),
 			1, 1+len(path.Clones), "syncing metadata",
@@ -66,11 +69,11 @@ func pushInitiatorState(f *fsMachine) stateFn {
 	// TODO tidy up argument passing here.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	responseEvent, nextState := f.applyPath(path, func(f *fsMachine,
+	responseEvent, nextState := f.applyPath(path, func(f *FsMachine,
 		fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
 		transferRequestId string,
 		client *dmclient.JsonRpcClient, transferRequest *types.TransferRequest,
-	) (*Event, stateFn) {
+	) (*types.Event, StateFn) {
 		return f.retryPush(
 			fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
 			transferRequestId, client, transferRequest, ctx,
@@ -84,14 +87,14 @@ func pushInitiatorState(f *fsMachine) stateFn {
 	return nextState
 }
 
-func (f *fsMachine) push(
+func (f *FsMachine) push(
 	fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
 	snapRange *snapshotRange,
 	transferRequest *types.TransferRequest,
 	transferRequestId *string,
 	client *dmclient.JsonRpcClient,
 	ctx context.Context,
-) (responseEvent *Event, nextState stateFn) {
+) (responseEvent *types.Event, nextState StateFn) {
 	filesystemId := toFilesystemId
 	fromSnapshotId = f.getCurrentPollResult().StartingCommit
 	f.updateTransfer("calculating size", "")
@@ -114,9 +117,9 @@ func (f *fsMachine) push(
 			transferRequest.ApiKey,
 		)
 		if err != nil {
-			return &Event{
+			return &types.Event{
 				Name: "push-initiator-cant-deduce-url",
-				Args: &EventArgs{"err": err},
+				Args: &types.EventArgs{"err": err},
 			}, backoffState
 		}
 	} else {
@@ -136,9 +139,9 @@ func (f *fsMachine) push(
 	)
 	if err != nil {
 		log.Printf("Attempting to push %s got %s", filesystemId, err)
-		return &Event{
+		return &types.Event{
 			Name: "error-starting-post-when-pushing",
-			Args: &EventArgs{"err": err},
+			Args: &types.EventArgs{"err": err},
 		}, backoffState
 	}
 
@@ -156,51 +159,51 @@ func (f *fsMachine) push(
 	//
 	snaps, err := f.state.SnapshotsFor(f.state.NodeID(), toFilesystemId)
 	if err != nil {
-		return &Event{
+		return &types.Event{
 			Name: "error-calculating-prelude",
-			Args: &EventArgs{"err": err, "filesystemId": toFilesystemId},
+			Args: &types.EventArgs{"err": err, "filesystemId": toFilesystemId},
 		}, backoffState
 	}
 	prelude, err := calculatePrelude(snaps, toSnapshotId)
 	if err != nil {
-		return &Event{
+		return &types.Event{
 			Name: "error-calculating-prelude",
-			Args: &EventArgs{"err": err, "filesystemId": toFilesystemId},
+			Args: &types.EventArgs{"err": err, "filesystemId": toFilesystemId},
 		}, backoffState
 	}
 
 	// TODO test whether toFilesystemId and toSnapshotId are set correctly,
 	// and consistently with snapRange?
 	sendArgs := calculateSendArgs(
-		fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
+		f.poolName, fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
 	)
 	realArgs := []string{"send"}
 	realArgs = append(realArgs, sendArgs...)
 
 	// XXX this doesn't need to happen every push(), just once above.
 	size, err := predictSize(
-		fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
+		f.zfsPath, f.poolName, fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
 	)
 	if err != nil {
-		return &Event{
+		return &types.Event{
 			Name: "error-predicting",
-			Args: &EventArgs{"err": err},
+			Args: &types.EventArgs{"err": err},
 		}, backoffState
 	}
 
 	log.Printf("[actualPush:%s] size: %d", filesystemId, size)
 
-	f.transferUpdates <- TransferUpdate{
-		Kind: TransferCalculatedSize,
-		Changes: TransferPollResult{
+	f.transferUpdates <- types.TransferUpdate{
+		Kind: types.TransferCalculatedSize,
+		Changes: types.TransferPollResult{
 			Status: "pushing",
 			Size:   size,
 		},
 	}
 
 	// proceed to do real send
-	logZFSCommand(filesystemId, fmt.Sprintf("%s %s", ZFS, strings.Join(realArgs, " ")))
-	cmd = exec.Command(ZFS, realArgs...)
+	logZFSCommand(filesystemId, fmt.Sprintf("%s %s", f.zfsPath, strings.Join(realArgs, " ")))
+	cmd = exec.Command(f.zfsPath, realArgs...)
 	pipeReader, pipeWriter := io.Pipe()
 
 	defer pipeWriter.Close()
@@ -209,9 +212,9 @@ func (f *fsMachine) push(
 	// we will write this to the pipe first, in the goroutine which writes
 	preludeEncoded, err := encodePrelude(prelude)
 	if err != nil {
-		return &Event{
+		return &types.Event{
 			Name: "cant-encode-prelude",
-			Args: &EventArgs{"err": err},
+			Args: &types.EventArgs{"err": err},
 		}, backoffState
 	}
 
@@ -223,12 +226,12 @@ func (f *fsMachine) push(
 		pipeReader, fmt.Sprintf("stdout of zfs send for %s", filesystemId),
 		postWriter, "http request body",
 		finished,
-		make(chan *Event),
-		func(e *Event, c chan *Event) {},
+		make(chan *types.Event),
+		func(e *types.Event, c chan *types.Event) {},
 		func(bytes int64, t int64) {
-			f.transferUpdates <- TransferUpdate{
-				Kind: TransferProgress,
-				Changes: TransferPollResult{
+			f.transferUpdates <- types.TransferUpdate{
+				Kind: types.TransferProgress,
+				Changes: types.TransferPollResult{
 					Status:             "pushing",
 					Sent:               bytes,
 					NanosecondsElapsed: t,
@@ -309,9 +312,9 @@ func (f *fsMachine) push(
 			_ = <-errch
 		}()
 		_ = <-finished
-		return &Event{
+		return &types.Event{
 			Name: "error-from-post-when-pushing",
-			Args: &EventArgs{"err": err},
+			Args: &types.EventArgs{"err": err},
 		}, backoffState
 	}
 	defer resp.Body.Close()
@@ -329,9 +332,9 @@ func (f *fsMachine) push(
 			_ = <-errch
 		}()
 		_ = <-finished
-		return &Event{
+		return &types.Event{
 			Name: "error-reading-push-response-body",
-			Args: &EventArgs{"err": err},
+			Args: &types.EventArgs{"err": err},
 		}, backoffState
 	}
 
@@ -342,9 +345,9 @@ func (f *fsMachine) push(
 			_ = <-errch
 		}()
 		_ = <-finished
-		return &Event{
+		return &types.Event{
 			Name: "error-pushing-posting",
-			Args: &EventArgs{
+			Args: &types.EventArgs{
 				"requestURL":      url,
 				"responseBody":    string(responseBody),
 				"statusCode":      fmt.Sprintf("%d", resp.StatusCode),
@@ -368,9 +371,9 @@ func (f *fsMachine) push(
 			"[actualPush:%s] Error from zfs send from %s => %s: %s, check zfs-send-errors.log",
 			filesystemId, fromSnapshotId, toSnapshotId, err,
 		)
-		return &Event{
+		return &types.Event{
 			Name: "error-from-writing-prelude-and-zfs-send",
-			Args: &EventArgs{"err": err},
+			Args: &types.EventArgs{"err": err},
 		}, backoffState
 	}
 
@@ -381,22 +384,22 @@ func (f *fsMachine) push(
 	pipeWriter.Close()
 	pipeReader.Close()
 
-	f.transferUpdates <- TransferUpdate{
-		Kind: TransferStatus,
-		Changes: TransferPollResult{
+	f.transferUpdates <- types.TransferUpdate{
+		Kind: types.TransferStatus,
+		Changes: types.TransferPollResult{
 			Status:  "finished",
 			Message: "",
 		},
 	}
 
 	// TODO update the transfer record, release the peer state machines
-	return &Event{
+	return &types.Event{
 		Name: "finished-push",
-		Args: &EventArgs{},
+		Args: &types.EventArgs{},
 	}, discoveringState
 }
 
-func stash(filesystemId, snapId string, client *dmclient.JsonRpcClient, ctx context.Context) (*Event, stateFn) {
+func stash(filesystemId, snapId string, client *dmclient.JsonRpcClient, ctx context.Context) (*types.Event, StateFn) {
 	var newBranch string
 	e := client.CallRemote(
 		ctx,
@@ -408,21 +411,21 @@ func stash(filesystemId, snapId string, client *dmclient.JsonRpcClient, ctx cont
 		&newBranch,
 	)
 	if e != nil {
-		return &Event{
-			Name: "failed-stashing-remote-end", Args: &EventArgs{"err": e},
+		return &types.Event{
+			Name: "failed-stashing-remote-end", Args: &types.EventArgs{"err": e},
 		}, backoffState
 	}
 	return nil, discoveringState
 }
 
-func (f *fsMachine) retryPush(
+func (f *FsMachine) retryPush(
 	fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string,
 	transferRequestId string,
 	client *dmclient.JsonRpcClient, transferRequest *types.TransferRequest, ctx context.Context,
-) (*Event, stateFn) {
+) (*types.Event, StateFn) {
 	// Let's go!
 	var retry int
-	var responseEvent *Event
+	var responseEvent *types.Event
 	nextState := backoffState
 
 	for retry < 5 {
@@ -432,19 +435,19 @@ func (f *fsMachine) retryPush(
 		default:
 		}
 		// TODO refactor this wrt retryPull
-		responseEvent, nextState = func() (*Event, stateFn) {
+		responseEvent, nextState = func() (*types.Event, StateFn) {
 			// Interpret empty toSnapshotId as "push to the latest snapshot"
 			if toSnapshotId == "" {
 				snaps, err := f.state.SnapshotsForCurrentMaster(toFilesystemId)
 				if err != nil {
-					return &Event{
-						Name: "failed-getting-local-snapshots", Args: &EventArgs{"err": err},
+					return &types.Event{
+						Name: "failed-getting-local-snapshots", Args: &types.EventArgs{"err": err},
 					}, backoffState
 				}
 				if len(snaps) == 0 {
-					return &Event{
+					return &types.Event{
 						Name: "no-snapshots-of-that-filesystem",
-						Args: &EventArgs{"filesystemId": toFilesystemId},
+						Args: &types.EventArgs{"filesystemId": toFilesystemId},
 					}, backoffState
 				}
 				toSnapshotId = snaps[len(snaps)-1].Id
@@ -453,7 +456,7 @@ func (f *fsMachine) retryPush(
 				"[retryPush] from (%s, %s) to (%s, %s)",
 				fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
 			)
-			var remoteSnaps []*Snapshot
+			var remoteSnaps []*types.Snapshot
 			err := client.CallRemote(
 				ctx,
 				"DotmeshRPC.CommitsById",
@@ -461,32 +464,26 @@ func (f *fsMachine) retryPush(
 				&remoteSnaps,
 			)
 			if err != nil {
-				return &Event{
-					Name: "failed-getting-remote-snapshots", Args: &EventArgs{"err": err},
+				return &types.Event{
+					Name: "failed-getting-remote-snapshots", Args: &types.EventArgs{"err": err},
 				}, backoffState
 			}
 			fsMachine, err := f.state.InitFilesystemMachine(toFilesystemId)
 			if err != nil {
-				return &Event{
+				return &types.Event{
 					Name: "retry-push-cant-find-filesystem-id",
-					Args: &EventArgs{"err": err, "filesystemId": toFilesystemId},
+					Args: &types.EventArgs{"err": err, "filesystemId": toFilesystemId},
 				}, backoffState
 			}
-			var snaps []*Snapshot
-
-			fsMachine.snapshotsLock.Lock()
-			for _, snapshot := range fsMachine.filesystem.Snapshots {
-				snaps = append(snaps, snapshot.DeepCopy())
-			}
-			fsMachine.snapshotsLock.Unlock()
+			snaps := fsMachine.ListLocalSnapshots()
 
 			// if we're given a target snapshot, restrict f.filesystem.snapshots to
 			// that snapshot
 			localSnaps, err := restrictSnapshots(snaps, toSnapshotId)
 			if err != nil {
-				return &Event{
+				return &types.Event{
 					Name: "restrict-snapshots-error",
-					Args: &EventArgs{"err": err, "filesystemId": toFilesystemId},
+					Args: &types.EventArgs{"err": err, "filesystemId": toFilesystemId},
 				}, backoffState
 			}
 			snapRange, err := canApply(localSnaps, remoteSnaps)
@@ -495,7 +492,7 @@ func (f *fsMachine) retryPush(
 				case *ToSnapsUpToDate:
 					// no action, we're up-to-date for this filesystem
 					f.updateTransfer("finished", "remote already up-to-date, nothing to do")
-					return &Event{
+					return &types.Event{
 						Name: "peer-up-to-date",
 					}, backoffState
 				// here we tell the other end to get it's house in order, then return an error so we go round the loop again to get the commit list etc.
@@ -505,7 +502,7 @@ func (f *fsMachine) retryPush(
 						if event != nil {
 							return event, state
 						} else {
-							return &Event{
+							return &types.Event{
 								Name: "stashed-remote-cluster",
 							}, backoffState
 						}
@@ -513,13 +510,13 @@ func (f *fsMachine) retryPush(
 				case *ToSnapsAhead:
 					if transferRequest.StashDivergence {
 						f.updateTransfer("finished", "The remote is ahead of the cluster you are pushing from - did you mean 'dm pull'?")
-						return &Event{
+						return &types.Event{
 							Name: "peer-up-to-date",
 						}, backoffState
 					}
 				}
-				return &Event{
-					Name: "error-in-canapply-when-pushing", Args: &EventArgs{"err": err},
+				return &types.Event{
+					Name: "error-in-canapply-when-pushing", Args: &types.EventArgs{"err": err},
 				}, backoffState
 
 			}
@@ -540,9 +537,9 @@ func (f *fsMachine) retryPush(
 				fromSnap = snapRange.fromSnap.Id
 			}
 
-			f.transferUpdates <- TransferUpdate{
-				Kind: TransferGotIds,
-				Changes: TransferPollResult{
+			f.transferUpdates <- types.TransferUpdate{
+				Kind: types.TransferGotIds,
+				Changes: types.TransferPollResult{
 					FilesystemId:   toFilesystemId,
 					StartingCommit: fromSnap,
 					TargetCommit:   snapRange.toSnap.Id,
@@ -556,8 +553,8 @@ func (f *fsMachine) retryPush(
 				ctx, "DotmeshRPC.RegisterTransfer", f.getCurrentPollResult(), &result,
 			)
 			if err != nil {
-				return &Event{
-					Name: "push-initiator-cant-register-transfer", Args: &EventArgs{"err": err},
+				return &types.Event{
+					Name: "push-initiator-cant-register-transfer", Args: &types.EventArgs{"err": err},
 				}, backoffState
 			}
 

@@ -1,4 +1,4 @@
-package main
+package fsm
 
 import (
 	"fmt"
@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-func backoffStateWithReason(reason string) func(f *fsMachine) stateFn {
-	return func(f *fsMachine) stateFn {
+func backoffStateWithReason(reason string) func(f *FsMachine) StateFn {
+	return func(f *FsMachine) StateFn {
 		f.transitionedTo("backoff", fmt.Sprintf("pausing due to %s", reason))
 		log.Printf("entering backoff state for %s", f.filesystemId)
 		// TODO if we know that we're supposed to be mounted or unmounted, based on
@@ -19,7 +19,7 @@ func backoffStateWithReason(reason string) func(f *fsMachine) stateFn {
 	}
 }
 
-func backoffState(f *fsMachine) stateFn {
+func backoffState(f *FsMachine) StateFn {
 	f.transitionedTo("backoff", "pausing")
 	log.Printf("entering backoff state for %s", f.filesystemId)
 	// TODO if we know that we're supposed to be mounted or unmounted, based on

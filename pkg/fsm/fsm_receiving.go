@@ -1,4 +1,4 @@
-package main
+package fsm
 
 import (
 	"bytes"
@@ -13,12 +13,13 @@ import (
 
 	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/dotmesh-io/dotmesh/pkg/registry"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 )
 
 // attempt to pull some snapshots from the master, based on some hint that it
 // might be possible now
-func receivingState(f *fsMachine) stateFn {
+func receivingState(f *FsMachine) StateFn {
 	f.transitionedTo("receiving", "calculating")
 	log.Printf("entering receiving state for %s", f.filesystemId)
 	snapRange, err := f.plausibleSnapRange()
@@ -133,8 +134,8 @@ func receivingState(f *fsMachine) stateFn {
 	)
 
 	f.transitionedTo("receiving", "starting")
-	logZFSCommand(f.filesystemId, fmt.Sprintf("%s recv %s", ZFS, fq(f.filesystemId)))
-	cmd := exec.Command(ZFS, "recv", fq(f.filesystemId))
+	logZFSCommand(f.filesystemId, fmt.Sprintf("%s recv %s", f.zfsPath, fq(f.poolName, f.filesystemId)))
+	cmd := exec.Command(f.zfsPath, "recv", fq(f.poolName, f.filesystemId))
 	pipeReader, pipeWriter := io.Pipe()
 	defer pipeReader.Close()
 	defer pipeWriter.Close()
@@ -154,7 +155,7 @@ func receivingState(f *fsMachine) stateFn {
 		finished,
 		f.innerRequests,
 		// put the event back on the channel in the cancellation case
-		func(e *Event, c chan *Event) { c <- e },
+		func(e *types.Event, c chan *types.Event) { c <- e },
 		func(bytes int64, t int64) {
 			f.transitionedTo("receiving",
 				fmt.Sprintf(
@@ -191,9 +192,9 @@ func receivingState(f *fsMachine) stateFn {
 		// in this case ZFS has detected a dirty filesystem
 		// let's do a snapshot and then we can let the divergence code handle it
 		if strings.Contains(stdErrString, "has been modified") {
-			response, _ := f.snapshot(&Event{
+			response, _ := f.snapshot(&types.Event{
 				Name: "snapshot",
-				Args: &EventArgs{"metadata": Metadata{
+				Args: &types.EventArgs{"metadata": types.Metadata{
 					"type":   "stashing",
 					"author": "system",
 					"message": fmt.Sprintf(
@@ -221,7 +222,7 @@ func receivingState(f *fsMachine) stateFn {
 		log.Printf("Successfully received %s => %s for %s", fromSnap, snapRange.toSnap.Id, f.filesystemId)
 	}
 	log.Printf("[pull] about to start applying prelude on %v", pipeReader)
-	err = applyPrelude(prelude, fq(f.filesystemId))
+	err = applyPrelude(f.zfsPath, prelude, fq(f.poolName, f.filesystemId))
 	if err != nil {
 		return backoffStateWithReason(fmt.Sprintf("receivingState: Error applying prelude: %+v", err))
 	}

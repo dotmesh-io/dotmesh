@@ -16,11 +16,11 @@ import (
 	rpcjson "github.com/gorilla/rpc/v2/json2"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/openzipkin/zipkin-go-opentracing/examples/middleware"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/satori/go.uuid"
 
 	"github.com/dotmesh-io/dotmesh/pkg/client"
+	"github.com/dotmesh-io/dotmesh/pkg/metrics"
 )
 
 const REQUEST_ID = "X-Request-Id"
@@ -31,39 +31,6 @@ type rpcTracking struct {
 }
 
 var rpcTracker = rpcTracking{rpcDuration: make(map[uuid.UUID]time.Time), mutex: &sync.Mutex{}}
-
-var (
-	requestCounter *prometheus.CounterVec = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "dm_req_total",
-			Help: "How many requests processed, partitioned by status code and method.",
-		},
-		[]string{"url", "http_method", "status_code"},
-	)
-
-	transitionCounter *prometheus.CounterVec = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "dm_state_transition_total",
-			Help: "How many state transitions take place partitioned by previous state (from), current state (to) and status",
-		},
-		[]string{"from", "to", "status"},
-	)
-
-	requestDuration *prometheus.SummaryVec = prometheus.NewSummaryVec(prometheus.SummaryOpts{
-		Name: "dm_req_duration_seconds",
-		Help: "Response time by method/http status code.",
-	}, []string{"url", "http_method", "status_code"})
-
-	rpcRequestDuration *prometheus.SummaryVec = prometheus.NewSummaryVec(prometheus.SummaryOpts{
-		Name: "dm_rpc_req_duration_seconds",
-		Help: "Response time by rpc method/http status code.",
-	}, []string{"url", "rpc_method", "status_code"})
-
-	zpoolCapacity *prometheus.GaugeVec = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "dm_zpool_usage_percentage",
-		Help: "Percentage of zpool capacity used.",
-	}, []string{"node_name", "pool_name"})
-)
 
 // setting up and running our http server
 // rpc and replication live in rpc.go and replication.go respectively
@@ -76,7 +43,6 @@ func (state *InMemoryState) runServer() {
 	}()
 
 	r := rpc.NewServer()
-	registerMetrics()
 	r.RegisterCodec(rpcjson.NewCodec(), "application/json")
 	r.RegisterCodec(rpcjson.NewCodec(), "application/json;charset=UTF-8")
 	r.RegisterInterceptFunc(rpcInterceptFunc)
@@ -169,15 +135,6 @@ func (state *InMemoryState) runServer() {
 	}
 }
 
-func registerMetrics() {
-	prometheus.MustRegister(requestCounter,
-		requestDuration,
-		transitionCounter,
-		zpoolCapacity,
-		rpcRequestDuration)
-	log.Println("registering /metrics url as prometheus handler")
-}
-
 func (state *InMemoryState) runUnixDomainServer() {
 	// if we have disabled flexvolume then we are not running inside Kubernetes
 	// and do not need the unix domain socket
@@ -256,8 +213,8 @@ func Instrument(state *InMemoryState) MetricsMiddleware {
 			defer func() {
 				duration := time.Since(startedAt)
 				statusCode := fmt.Sprintf("%v", irw.statusCode)
-				requestDuration.WithLabelValues(r.URL.String(), r.Method, statusCode).Observe(duration.Seconds())
-				requestCounter.WithLabelValues(r.URL.String(), r.Method, statusCode).Add(1)
+				metrics.RequestDuration.WithLabelValues(r.URL.String(), r.Method, statusCode).Observe(duration.Seconds())
+				metrics.RequestCounter.WithLabelValues(r.URL.String(), r.Method, statusCode).Add(1)
 			}()
 			h.ServeHTTP(irw, r)
 		})
@@ -281,7 +238,7 @@ func rpcAfterFunc(reqInfo *rpc.RequestInfo) {
 		}
 		duration := time.Since(startedAt)
 		statusCode := fmt.Sprintf("%v", reqInfo.StatusCode)
-		rpcRequestDuration.WithLabelValues(reqInfo.Request.URL.String(), reqInfo.Method, statusCode).Observe(duration.Seconds())
+		metrics.RPCRequestDuration.WithLabelValues(reqInfo.Request.URL.String(), reqInfo.Method, statusCode).Observe(duration.Seconds())
 		delete(rpcTracker.rpcDuration, reqUUID)
 	}
 }

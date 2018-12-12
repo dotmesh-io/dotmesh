@@ -1,8 +1,12 @@
-package main
+package fsm
 
 // functions that reason about sequences of snapshots
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/dotmesh-io/dotmesh/pkg/types"
+)
 
 // given two slices of snapshots (representing the snapshots of supposedly the
 // same filesystem on two nodes), calculate whether it's possible to apply a
@@ -45,7 +49,7 @@ import "fmt"
 // ToSnapsUpToDate: there are no new snapshots in fromSnaps to apply to
 //     toSnaps: toSnaps is already up-to-date.
 
-func canApply(fromSnaps []*Snapshot, toSnaps []*Snapshot) (*snapshotRange, error) {
+func canApply(fromSnaps []*types.Snapshot, toSnaps []*types.Snapshot) (*snapshotRange, error) {
 	// fromSnaps and toSnaps are in-order.
 	//
 	// case: fromSnaps empty
@@ -76,7 +80,7 @@ func canApply(fromSnaps []*Snapshot, toSnaps []*Snapshot) (*snapshotRange, error
 		toSnapKeys[snap.Id] = true
 	}
 
-	var latestCommon *Snapshot
+	var latestCommon *types.Snapshot
 	// find latest common snapshot
 	for i := len(fromSnaps) - 1; i >= 0; i-- {
 		maybeCommon := fromSnaps[i].Id
@@ -144,8 +148,8 @@ func canApply(fromSnaps []*Snapshot, toSnaps []*Snapshot) (*snapshotRange, error
 }
 
 type snapshotRange struct {
-	fromSnap *Snapshot
-	toSnap   *Snapshot
+	fromSnap *types.Snapshot
+	toSnap   *types.Snapshot
 }
 
 type NoFromSnaps struct{}
@@ -155,8 +159,8 @@ func (e *NoFromSnaps) Error() string {
 }
 
 type NoCommonSnapshots struct {
-	fromSnaps []*Snapshot
-	toSnaps   []*Snapshot
+	fromSnaps []*types.Snapshot
+	toSnaps   []*types.Snapshot
 }
 
 func (e *NoCommonSnapshots) Error() string {
@@ -164,7 +168,7 @@ func (e *NoCommonSnapshots) Error() string {
 }
 
 type ToSnapsDiverged struct {
-	latestCommonSnapshot Snapshot
+	latestCommonSnapshot types.Snapshot
 }
 
 func (e *ToSnapsDiverged) Error() string {
@@ -175,7 +179,7 @@ func (e *ToSnapsDiverged) Error() string {
 }
 
 type ToSnapsAhead struct {
-	latestCommonSnapshot Snapshot
+	latestCommonSnapshot types.Snapshot
 }
 
 func (e *ToSnapsAhead) Error() string {
@@ -186,4 +190,18 @@ type ToSnapsUpToDate struct{}
 
 func (e *ToSnapsUpToDate) Error() string {
 	return "toSnaps is up-to-date"
+}
+
+func restrictSnapshots(localSnaps []*types.Snapshot, toSnapshotId string) ([]*types.Snapshot, error) {
+	if toSnapshotId != "" {
+		newLocalSnaps := []*types.Snapshot{}
+		for _, s := range localSnaps {
+			newLocalSnaps = append(newLocalSnaps, s)
+			if s.Id == toSnapshotId {
+				return newLocalSnaps, nil
+			}
+		}
+		return newLocalSnaps, fmt.Errorf("Unable to find %s in %+v", toSnapshotId, localSnaps)
+	}
+	return localSnaps, nil
 }

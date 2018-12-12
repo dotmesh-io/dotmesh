@@ -1,25 +1,27 @@
-package main
+package fsm
 
 import (
 	"fmt"
-	"log"
+
+	"github.com/dotmesh-io/dotmesh/pkg/types"
+	log "github.com/sirupsen/logrus"
 )
 
-func inactiveState(f *fsMachine) stateFn {
+func inactiveState(f *FsMachine) StateFn {
 	f.transitionedTo("inactive", "waiting")
 	log.Printf("entering inactive state for %s", f.filesystemId)
 
-	handleEvent := func(e *Event) (bool, stateFn) {
+	handleEvent := func(e *types.Event) (bool, StateFn) {
 		f.transitionedTo("inactive", fmt.Sprintf("handling %s", e.Name))
 		if e.Name == "delete" {
 			err := f.state.DeleteFilesystem(f.filesystemId)
 			if err != nil {
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "cant-delete",
-					Args: &EventArgs{"err": err},
+					Args: &types.EventArgs{"err": err},
 				}
 			} else {
-				f.innerResponses <- &Event{
+				f.innerResponses <- &types.Event{
 					Name: "deleted",
 				}
 			}
@@ -31,16 +33,16 @@ func inactiveState(f *fsMachine) stateFn {
 			return true, nextState
 
 		} else if e.Name == "unmount" {
-			f.innerResponses <- &Event{
+			f.innerResponses <- &types.Event{
 				Name: "unmounted",
-				Args: &EventArgs{},
+				Args: &types.EventArgs{},
 			}
 			return true, inactiveState
 
 		} else {
-			f.innerResponses <- &Event{
+			f.innerResponses <- &types.Event{
 				Name: "unhandled",
-				Args: &EventArgs{"current-state": f.currentState, "event": e},
+				Args: &types.EventArgs{"current-state": f.currentState, "event": e},
 			}
 			log.Printf("[inactiveState:%s] unhandled event %s", f.filesystemId, e)
 		}

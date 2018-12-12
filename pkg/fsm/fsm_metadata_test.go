@@ -1,17 +1,19 @@
-package main
+package fsm
 
 import (
 	"sync"
 	"testing"
+
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 )
 
 func TestListMetadata(t *testing.T) {
-	fsm := &fsMachine{
-		snapshotCache:   make(map[string][]*Snapshot),
+	fsm := &FsMachine{
+		snapshotCache:   make(map[string][]*types.Snapshot),
 		snapshotCacheMu: &sync.RWMutex{},
 	}
 
-	fsm.SetSnapshots("123", []*Snapshot{
+	fsm.SetSnapshots("123", []*types.Snapshot{
 		{
 			Id: "1",
 			Metadata: map[string]string{
@@ -43,12 +45,12 @@ func TestListMetadata(t *testing.T) {
 }
 
 func TestGetSnapshots(t *testing.T) {
-	fsm := &fsMachine{
-		snapshotCache:   make(map[string][]*Snapshot),
+	fsm := &FsMachine{
+		snapshotCache:   make(map[string][]*types.Snapshot),
 		snapshotCacheMu: &sync.RWMutex{},
 	}
 
-	fsm.SetSnapshots("123", []*Snapshot{
+	fsm.SetSnapshots("123", []*types.Snapshot{
 		{
 			Id: "1",
 			Metadata: map[string]string{
@@ -68,12 +70,12 @@ func TestGetSnapshots(t *testing.T) {
 }
 
 func TestGetSnapshotsUnknownNode(t *testing.T) {
-	fsm := &fsMachine{
-		snapshotCache:   make(map[string][]*Snapshot),
+	fsm := &FsMachine{
+		snapshotCache:   make(map[string][]*types.Snapshot),
 		snapshotCacheMu: &sync.RWMutex{},
 	}
 
-	fsm.SetSnapshots("123", []*Snapshot{
+	fsm.SetSnapshots("123", []*types.Snapshot{
 		{
 			Id: "1",
 			Metadata: map[string]string{
