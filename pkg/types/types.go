@@ -215,3 +215,10 @@ var EndDotmeshPrelude []byte = []byte("!!END_PRELUDE!!")
 type Prelude struct {
 	SnapshotProperties []*Snapshot
 }
+
+const (
+	EventNameSaveFailed  = "save-failed"
+	EventNameSaveSuccess = "save-success"
+	EventNameReadFailed  = "read-failed"
+	EventNameReadSuccess = "read-success"
+)
