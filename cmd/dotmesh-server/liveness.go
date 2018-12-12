@@ -34,12 +34,7 @@ func (state *InMemoryState) runLivenessServer() {
 	router.HandleFunc("/check", func(w http.ResponseWriter, r *http.Request) {
 		// Check we can connect to etcd
 
-		kapi, err := getEtcdKeysApi()
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Error connecting to etcd: %v\n", err), http.StatusInternalServerError)
-			return
-		}
-		_, err = kapi.Get(
+		_, err := state.etcdClient.Get(
 			context.Background(),
 			ETCD_PREFIX,
 			nil,
