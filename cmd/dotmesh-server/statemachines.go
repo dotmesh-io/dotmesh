@@ -70,103 +70,103 @@ import (
 // 	}
 // }
 
-func (f *fsMachine) run() {
-	// TODO cancel this when we eventually support deletion
-	log.Printf("[run:%s] INIT", f.filesystemId)
-	go runWhileFilesystemLives(
-		f.markFilesystemAsLive,
-		"markFilesystemAsLive",
-		f.filesystemId,
-		time.Duration(f.filesystemMetadataTimeout/2)*time.Second,
-		time.Duration(f.filesystemMetadataTimeout/2)*time.Second,
-	)
-	// The success backoff time for updateEtcdAboutSnapshots is 0s
-	// because it blocks on a channel anyway; inserting a success
-	// backoff just means it'll be rate-limited as it'll sleep before
-	// processing each snapshot!
-	go runWhileFilesystemLives(
-		f.updateEtcdAboutSnapshots,
-		"updateEtcdAboutSnapshots",
-		f.filesystemId,
-		1*time.Second,
-		0*time.Second,
-	)
-	go runWhileFilesystemLives(
-		f.updateEtcdAboutTransfers,
-		"updateEtcdAboutTransfers",
-		f.filesystemId,
-		1*time.Second,
-		0*time.Second,
-	)
-	go runWhileFilesystemLives(
-		f.pollDirty,
-		"pollDirty",
-		f.filesystemId,
-		1*time.Second,
-		1*time.Second,
-	)
-	go func() {
-		for state := discoveringState; state != nil; {
-			state = state(f)
-		}
+// func (f *fsMachine) run() {
+// 	// TODO cancel this when we eventually support deletion
+// 	log.Printf("[run:%s] INIT", f.filesystemId)
+// 	go runWhileFilesystemLives(
+// 		f.markFilesystemAsLive,
+// 		"markFilesystemAsLive",
+// 		f.filesystemId,
+// 		time.Duration(f.filesystemMetadataTimeout/2)*time.Second,
+// 		time.Duration(f.filesystemMetadataTimeout/2)*time.Second,
+// 	)
+// 	// The success backoff time for updateEtcdAboutSnapshots is 0s
+// 	// because it blocks on a channel anyway; inserting a success
+// 	// backoff just means it'll be rate-limited as it'll sleep before
+// 	// processing each snapshot!
+// 	go runWhileFilesystemLives(
+// 		f.updateEtcdAboutSnapshots,
+// 		"updateEtcdAboutSnapshots",
+// 		f.filesystemId,
+// 		1*time.Second,
+// 		0*time.Second,
+// 	)
+// 	go runWhileFilesystemLives(
+// 		f.updateEtcdAboutTransfers,
+// 		"updateEtcdAboutTransfers",
+// 		f.filesystemId,
+// 		1*time.Second,
+// 		0*time.Second,
+// 	)
+// 	go runWhileFilesystemLives(
+// 		f.pollDirty,
+// 		"pollDirty",
+// 		f.filesystemId,
+// 		1*time.Second,
+// 		1*time.Second,
+// 	)
+// 	go func() {
+// 		for state := discoveringState; state != nil; {
+// 			state = state(f)
+// 		}
 
-		f.transitionedTo("gone", "")
+// 		f.transitionedTo("gone", "")
 
-		// Senders close channels, receivers check for closedness.
+// 		// Senders close channels, receivers check for closedness.
 
-		close(f.innerResponses)
+// 		close(f.innerResponses)
 
-		// TODO(karolis): check whether we really need to do this
-		// as filesytem is deleted from the cache in state.DeleteFilesystem
+// 		// TODO(karolis): check whether we really need to do this
+// 		// as filesytem is deleted from the cache in state.DeleteFilesystem
 
-		// Remove ourself from the filesystems map
-		// f.state.filesystemsLock.Lock()
-		// defer f.state.filesystemsLock.Unlock()
-		// We must hold the fslock while calling terminateRunners... to avoid a deadlock with
-		// waitForFilesystemDeath in utils.go
-		terminateRunnersWhileFilesystemLived(f.filesystemId)
-		// delete(f.state.filesystems, f.filesystemId)
+// 		// Remove ourself from the filesystems map
+// 		// f.state.filesystemsLock.Lock()
+// 		// defer f.state.filesystemsLock.Unlock()
+// 		// We must hold the fslock while calling terminateRunners... to avoid a deadlock with
+// 		// waitForFilesystemDeath in utils.go
+// 		terminateRunnersWhileFilesystemLived(f.filesystemId)
+// 		// delete(f.state.filesystems, f.filesystemId)
 
-		f.state.DeleteFilesystemFromMap(f.filesystemId)
+// 		f.state.DeleteFilesystemFromMap(f.filesystemId)
 
-		log.Printf("[run:%s] terminated", f.filesystemId)
-	}()
-	// proxy requests and responses, enforcing an ordering, to avoid accepting
-	// a new request before a response comes back, ie to serialize requests &
-	// responses per-statemachine (without blocking the entire etcd event loop,
-	// which asynchronously writes to the requests chan)
-	log.Printf("[run:%s] reading from external requests", f.filesystemId)
-	for req := range f.requests {
-		log.Printf("[run:%s] got req: %s", f.filesystemId, req)
-		log.Printf("[run:%s] writing to internal requests", f.filesystemId)
-		f.innerRequests <- req
-		log.Printf("[run:%s] reading from internal responses", f.filesystemId)
-		resp, more := <-f.innerResponses
-		if !more {
-			log.Printf("[run:%s] statemachine is finished", f.filesystemId)
-			resp = &Event{"filesystem-gone", &EventArgs{}}
-		}
-		log.Printf("[run:%s] got resp: %s", f.filesystemId, resp)
-		log.Printf("[run:%s] writing to external responses", f.filesystemId)
-		respChan, ok := func() (chan *Event, bool) {
-			f.responsesLock.Lock()
-			defer f.responsesLock.Unlock()
-			respChan, ok := f.responses[(*req.Args)["RequestId"].(string)]
-			return respChan, ok
-		}()
-		if ok {
-			respChan <- resp
-		} else {
-			log.Printf(
-				"[run:%s] unable to find response chan '%s'! dropping resp %s :/",
-				f.filesystemId,
-				(*req.Args)["RequestId"].(string),
-				resp,
-			)
-		}
-		log.Printf("[run:%s] reading from external requests", f.filesystemId)
-	}
-}
+// 		log.Printf("[run:%s] terminated", f.filesystemId)
+// 	}()
+// 	// proxy requests and responses, enforcing an ordering, to avoid accepting
+// 	// a new request before a response comes back, ie to serialize requests &
+// 	// responses per-statemachine (without blocking the entire etcd event loop,
+// 	// which asynchronously writes to the requests chan)
+// 	log.Printf("[run:%s] reading from external requests", f.filesystemId)
+// 	for req := range f.requests {
+// 		log.Printf("[run:%s] got req: %s", f.filesystemId, req)
+// 		log.Printf("[run:%s] writing to internal requests", f.filesystemId)
+// 		f.innerRequests <- req
+// 		log.Printf("[run:%s] reading from internal responses", f.filesystemId)
+// 		resp, more := <-f.innerResponses
+// 		if !more {
+// 			log.Printf("[run:%s] statemachine is finished", f.filesystemId)
+// 			resp = &Event{"filesystem-gone", &EventArgs{}}
+// 		}
+// 		log.Printf("[run:%s] got resp: %s", f.filesystemId, resp)
+// 		log.Printf("[run:%s] writing to external responses", f.filesystemId)
+// 		respChan, ok := func() (chan *Event, bool) {
+// 			f.responsesLock.Lock()
+// 			defer f.responsesLock.Unlock()
+// 			respChan, ok := f.responses[(*req.Args)["RequestId"].(string)]
+// 			return respChan, ok
+// 		}()
+// 		if ok {
+// 			respChan <- resp
+// 		} else {
+// 			log.Printf(
+// 				"[run:%s] unable to find response chan '%s'! dropping resp %s :/",
+// 				f.filesystemId,
+// 				(*req.Args)["RequestId"].(string),
+// 				resp,
+// 			)
+// 		}
+// 		log.Printf("[run:%s] reading from external requests", f.filesystemId)
+// 	}
+// }
 
 func (f *fsMachine) pollDirty() error {
 	kapi, err := getEtcdKeysApi()
@@ -241,147 +241,147 @@ func (f *fsMachine) getCurrentPollResult() TransferPollResult {
 	return <-gr
 }
 
-func (f *fsMachine) updateEtcdAboutTransfers() error {
-	// attempt to connect to etcd
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		return err
-	}
+// func (f *fsMachine) updateEtcdAboutTransfers() error {
+// 	// attempt to connect to etcd
+// 	kapi, err := getEtcdKeysApi()
+// 	if err != nil {
+// 		return err
+// 	}
 
-	pollResult := &(f.currentPollResult)
+// 	pollResult := &(f.currentPollResult)
 
-	// wait until the state machine notifies us that it's changed the
-	// transfer state, but have an escape clause in case this filesystem
-	// is deleted so we don't block forever
-	deathChan := make(chan interface{})
-	deathObserver.Subscribe(f.filesystemId, deathChan)
-	defer deathObserver.Unsubscribe(f.filesystemId, deathChan)
+// 	// wait until the state machine notifies us that it's changed the
+// 	// transfer state, but have an escape clause in case this filesystem
+// 	// is deleted so we don't block forever
+// 	deathChan := make(chan interface{})
+// 	deathObserver.Subscribe(f.filesystemId, deathChan)
+// 	defer deathObserver.Unsubscribe(f.filesystemId, deathChan)
 
-	for {
-		var update TransferUpdate
-		select {
-		case update = <-(f.transferUpdates):
-			log.Debugf("[updateEtcdAboutTransfers] Received command %#v", update)
-		case _ = <-deathChan:
-			log.Infof("[updateEtcdAboutTransfers] Terminating due to filesystem death")
-			return nil
-		}
+// 	for {
+// 		var update TransferUpdate
+// 		select {
+// 		case update = <-(f.transferUpdates):
+// 			log.Debugf("[updateEtcdAboutTransfers] Received command %#v", update)
+// 		case _ = <-deathChan:
+// 			log.Infof("[updateEtcdAboutTransfers] Terminating due to filesystem death")
+// 			return nil
+// 		}
 
-		switch update.Kind {
-		case TransferStart:
-			(*pollResult) = update.Changes
-		case TransferGotIds:
-			pollResult.FilesystemId = update.Changes.FilesystemId
-			pollResult.StartingCommit = update.Changes.StartingCommit
-			pollResult.TargetCommit = update.Changes.TargetCommit
-		case TransferCalculatedSize:
-			pollResult.Status = update.Changes.Status
-			pollResult.Size = update.Changes.Size
-		case TransferTotalAndSize:
-			pollResult.Status = update.Changes.Status
-			pollResult.Total = update.Changes.Total
-			pollResult.Size = update.Changes.Size
-		case TransferProgress:
-			pollResult.Sent = update.Changes.Sent
-			pollResult.NanosecondsElapsed = update.Changes.NanosecondsElapsed
-			pollResult.Status = update.Changes.Status
-		case TransferIncrementIndex:
-			if pollResult.Index < pollResult.Total {
-				pollResult.Index++
-			}
-			pollResult.Sent += update.Changes.Size
-		case TransferNextS3File:
-			pollResult.Index += 1
-			pollResult.Total += 1
-			pollResult.Size = update.Changes.Size
-			pollResult.Status = update.Changes.Status
-		case TransferSent:
-			pollResult.Sent = update.Changes.Sent
-			pollResult.Status = update.Changes.Status
-		case TransferFinished:
-			pollResult.Status = "finished"
-			pollResult.Index = pollResult.Total
-		case TransferStatus:
-			pollResult.Status = update.Changes.Status
-		case TransferGetCurrentPollResult:
-			update.GetResult <- *pollResult
-			continue
-		default:
-			return fmt.Errorf("Unknown transfer update kind in %#v", update)
-		}
+// 		switch update.Kind {
+// 		case TransferStart:
+// 			(*pollResult) = update.Changes
+// 		case TransferGotIds:
+// 			pollResult.FilesystemId = update.Changes.FilesystemId
+// 			pollResult.StartingCommit = update.Changes.StartingCommit
+// 			pollResult.TargetCommit = update.Changes.TargetCommit
+// 		case TransferCalculatedSize:
+// 			pollResult.Status = update.Changes.Status
+// 			pollResult.Size = update.Changes.Size
+// 		case TransferTotalAndSize:
+// 			pollResult.Status = update.Changes.Status
+// 			pollResult.Total = update.Changes.Total
+// 			pollResult.Size = update.Changes.Size
+// 		case TransferProgress:
+// 			pollResult.Sent = update.Changes.Sent
+// 			pollResult.NanosecondsElapsed = update.Changes.NanosecondsElapsed
+// 			pollResult.Status = update.Changes.Status
+// 		case TransferIncrementIndex:
+// 			if pollResult.Index < pollResult.Total {
+// 				pollResult.Index++
+// 			}
+// 			pollResult.Sent += update.Changes.Size
+// 		case TransferNextS3File:
+// 			pollResult.Index += 1
+// 			pollResult.Total += 1
+// 			pollResult.Size = update.Changes.Size
+// 			pollResult.Status = update.Changes.Status
+// 		case TransferSent:
+// 			pollResult.Sent = update.Changes.Sent
+// 			pollResult.Status = update.Changes.Status
+// 		case TransferFinished:
+// 			pollResult.Status = "finished"
+// 			pollResult.Index = pollResult.Total
+// 		case TransferStatus:
+// 			pollResult.Status = update.Changes.Status
+// 		case TransferGetCurrentPollResult:
+// 			update.GetResult <- *pollResult
+// 			continue
+// 		default:
+// 			return fmt.Errorf("Unknown transfer update kind in %#v", update)
+// 		}
 
-		// In all cases
-		if update.Changes.Message != "" {
-			pollResult.Message = update.Changes.Message
-		}
+// 		// In all cases
+// 		if update.Changes.Message != "" {
+// 			pollResult.Message = update.Changes.Message
+// 		}
 
-		// Send the update
-		log.Debugf("[updateEtcdAboutTransfers] pollResult = %#v", *pollResult)
+// 		// Send the update
+// 		log.Debugf("[updateEtcdAboutTransfers] pollResult = %#v", *pollResult)
 
-		serialized, err := json.Marshal(*pollResult)
-		if err != nil {
-			return err
-		}
-		_, err = kapi.Set(
-			context.Background(),
-			fmt.Sprintf("%s/filesystems/transfers/%s", ETCD_PREFIX, pollResult.TransferRequestId),
-			string(serialized),
-			nil,
-		)
-		if err != nil {
-			return err
-		}
+// 		serialized, err := json.Marshal(*pollResult)
+// 		if err != nil {
+// 			return err
+// 		}
+// 		_, err = kapi.Set(
+// 			context.Background(),
+// 			fmt.Sprintf("%s/filesystems/transfers/%s", ETCD_PREFIX, pollResult.TransferRequestId),
+// 			string(serialized),
+// 			nil,
+// 		)
+// 		if err != nil {
+// 			return err
+// 		}
 
-		// Go around the loop for the next command
-	}
-}
+// 		// Go around the loop for the next command
+// 	}
+// }
 
-func (f *fsMachine) updateEtcdAboutSnapshots() error {
-	// as soon as we're connected, eagerly: if we know about some
-	// snapshots, **or the absence of them**, set this in etcd.
-	serialized, err := func() ([]byte, error) {
-		f.snapshotsLock.Lock()
-		defer f.snapshotsLock.Unlock()
-		return json.Marshal(f.filesystem.Snapshots)
-	}()
+// func (f *fsMachine) updateEtcdAboutSnapshots() error {
+// 	// as soon as we're connected, eagerly: if we know about some
+// 	// snapshots, **or the absence of them**, set this in etcd.
+// 	serialized, err := func() ([]byte, error) {
+// 		f.snapshotsLock.Lock()
+// 		defer f.snapshotsLock.Unlock()
+// 		return json.Marshal(f.filesystem.Snapshots)
+// 	}()
 
-	// since we want atomic rewrites, we can just save the entire
-	// snapshot data in a single key, as a json list. this is easier to
-	// begin with! although we'll bump into the 1MB request limit in
-	// etcd eventually.
-	_, err = f.etcdClient.Set(
-		context.Background(),
-		fmt.Sprintf(
-			"%s/servers/snapshots/%s/%s", ETCD_PREFIX,
-			f.state.NodeID(), f.filesystemId,
-		),
-		string(serialized),
-		nil,
-	)
-	if err != nil {
-		return err
-	}
-	log.Debugf(
-		"[updateEtcdAboutSnapshots] successfully set new snaps for %s on %s",
-		f.filesystemId, f.state.NodeID(),
-	)
+// 	// since we want atomic rewrites, we can just save the entire
+// 	// snapshot data in a single key, as a json list. this is easier to
+// 	// begin with! although we'll bump into the 1MB request limit in
+// 	// etcd eventually.
+// 	_, err = f.etcdClient.Set(
+// 		context.Background(),
+// 		fmt.Sprintf(
+// 			"%s/servers/snapshots/%s/%s", ETCD_PREFIX,
+// 			f.state.NodeID(), f.filesystemId,
+// 		),
+// 		string(serialized),
+// 		nil,
+// 	)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	log.Debugf(
+// 		"[updateEtcdAboutSnapshots] successfully set new snaps for %s on %s",
+// 		f.filesystemId, f.state.NodeID(),
+// 	)
 
-	// wait until the state machine notifies us that it's changed the
-	// snapshots, but have an escape clause in case this filesystem is
-	// deleted so we don't block forever
-	deathChan := make(chan interface{})
-	deathObserver.Subscribe(f.filesystemId, deathChan)
-	defer deathObserver.Unsubscribe(f.filesystemId, deathChan)
+// 	// wait until the state machine notifies us that it's changed the
+// 	// snapshots, but have an escape clause in case this filesystem is
+// 	// deleted so we don't block forever
+// 	deathChan := make(chan interface{})
+// 	deathObserver.Subscribe(f.filesystemId, deathChan)
+// 	defer deathObserver.Unsubscribe(f.filesystemId, deathChan)
 
-	select {
-	case _ = <-f.snapshotsModified:
-		log.Debugf("[updateEtcdAboutSnapshots] going 'round the loop")
-	case _ = <-deathChan:
-		log.Infof("[updateEtcdAboutSnapshots] terminating due to filesystem death")
-	}
+// 	select {
+// 	case _ = <-f.snapshotsModified:
+// 		log.Debugf("[updateEtcdAboutSnapshots] going 'round the loop")
+// 	case _ = <-deathChan:
+// 		log.Infof("[updateEtcdAboutSnapshots] terminating due to filesystem death")
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
 func (f *fsMachine) getCurrentState() string {
 	// abusing snapshotsLock here, maybe we should have a separate lock over
