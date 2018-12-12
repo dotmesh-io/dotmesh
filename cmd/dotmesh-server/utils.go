@@ -341,7 +341,7 @@ func pipe(
 	startTime := time.Now().UnixNano()
 	var lastUpdate int64 // in UnixNano
 	var totalBytes int64
-	buffer := make([]byte, BUF_LEN)
+	buffer := make([]byte, types.BufLength)
 
 	// Incomplete idea below.
 	/*
