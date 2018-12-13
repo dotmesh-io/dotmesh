@@ -3,7 +3,6 @@ package types
 import (
 	"fmt"
 	"reflect"
-	"strings"
 
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 )
@@ -159,24 +158,6 @@ func (transferRequest TransferRequest) String() string {
 type StashRequest struct {
 	FilesystemId string
 	SnapshotId   string
-}
-
-type EventArgs map[string]interface{}
-type Event struct {
-	Name string
-	Args *EventArgs
-}
-
-func (ea EventArgs) String() string {
-	aggr := []string{}
-	for k, v := range ea {
-		aggr = append(aggr, fmt.Sprintf("%s: %+q", k, v))
-	}
-	return strings.Join(aggr, ", ")
-}
-
-func (e Event) String() string {
-	return fmt.Sprintf("<Event %s: %s>", e.Name, e.Args)
 }
 
 type Config struct {
