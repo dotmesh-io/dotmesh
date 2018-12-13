@@ -176,10 +176,11 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 
 func (s *S3Handler) mountFilesystemSnapshot(filesystemId string, snapshotId string) *Event {
 	snapshots, err := s.state.SnapshotsForCurrentMaster(filesystemId)
+	if err != nil {
+		return types.NewErrorEvent("snapshots-error", err)
+	}
 	if len(snapshots) == 0 {
-		return &Event{
-			Name: "no-snapshots-found",
-		}
+		return types.NewEvent("no-snapshots-found")
 	}
 	lastSnapshot := snapshots[len(snapshots)-1]
 	mountSnapshotId := lastSnapshot.Id
@@ -192,11 +193,7 @@ func (s *S3Handler) mountFilesystemSnapshot(filesystemId string, snapshotId stri
 			Args: &EventArgs{"snapId": mountSnapshotId}},
 	)
 	if err != nil {
-		// error here
-		log.Println(err)
-		return &Event{
-			Name: "mount-snapshot-error",
-		}
+		return types.NewErrorEvent("mount-snapshot-error", err)
 	}
 
 	e := <-responseChan
@@ -309,8 +306,19 @@ type BucketObject struct {
 }
 
 func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name string, filesystemId string, snapshotId string) {
+
+	start := time.Now()
 	e := s.mountFilesystemSnapshot(filesystemId, snapshotId)
-	if e.Name == "mounted" {
+	if time.Since(start) > 2*time.Second {
+		log.WithFields(log.Fields{
+			"filesystem_id": filesystemId,
+			"snapshot_id":   snapshotId,
+			"duration":      time.Since(start),
+		}).Warn("s3Handler.listBucket: listing bucket contents is getting slow")
+	}
+
+	switch e.Name {
+	case "mounted":
 		result := (*e.Args)["mount-path"].(string)
 		keys, _, err := getKeysForDir(result+"/__default__", "")
 		if err != nil {
@@ -330,22 +338,21 @@ func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name
 			}
 			bucket.Contents = append(bucket.Contents, object)
 		}
-		response, err := xml.Marshal(bucket)
+
+		enc := xml.NewEncoder(resp)
+		err = enc.Encode(&bucket)
 		if err != nil {
 			http.Error(resp, fmt.Sprintf("failed to marshal response body: %s", err), 500)
-			return
 		}
-		resp.WriteHeader(200)
-		resp.Write(response)
-	} else if e.Name == "no-snapshots-found" {
-		// throw up an error?
+		return
+
+	case "no-snapshots-found":
 		http.Error(resp, "No snaps to mount - commit before listing.", 400)
-	} else {
-		log.Println(e)
+	default:
 		log.WithFields(log.Fields{
 			"event":      e,
 			"filesystem": filesystemId,
 		}).Error("mount failed, returned event is not 'mounted'")
-		http.Error(resp, fmt.Sprintf("failed to mount filesystem (%s), check logs", e.Name), 500)
+		http.Error(resp, fmt.Sprintf("failed to mount filesystem (%s), error: %s", e.Name, e.Error()), 500)
 	}
 }

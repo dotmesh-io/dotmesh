@@ -195,10 +195,10 @@ func (z *ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"compress",
 	)
 
-	log.Printf(
-		"[ZFSSender:%s] Writing prelude of %d bytes (encoded): %s",
-		z.filesystem, len(preludeEncoded), preludeEncoded,
-	)
+	// log.Printf(
+	// 	"[ZFSSender:%s] Writing prelude of %d bytes (encoded): %s",
+	// 	z.filesystem, len(preludeEncoded), preludeEncoded,
+	// )
 	pipeWriter.Write(preludeEncoded)
 
 	log.Printf(
