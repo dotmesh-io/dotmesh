@@ -128,20 +128,15 @@ func guessIPv4Addresses() ([]string, error) {
 }
 
 // etcd listener
-func (state *InMemoryState) updateAddressesInEtcd() error {
+func (s *InMemoryState) updateAddressesInEtcd() error {
 	addresses, err := guessIPv4Addresses()
 	if err != nil {
 		return err
 	}
 
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		return err
-	}
-
-	_, err = kapi.Set(
+	_, err = s.etcdClient.Set(
 		context.Background(),
-		fmt.Sprintf("%s/servers/addresses/%s", ETCD_PREFIX, state.myNodeId),
+		fmt.Sprintf("%s/servers/addresses/%s", ETCD_PREFIX, s.myNodeId),
 		strings.Join(addresses, ","),
 		&client.SetOptions{TTL: 60 * time.Second},
 	)
@@ -178,15 +173,11 @@ func isFilesystemDeletedInEtcd(fsId string) (bool, error) {
 	}
 }
 
-func (state *InMemoryState) markFilesystemAsDeletedInEtcd(
+func (s *InMemoryState) markFilesystemAsDeletedInEtcd(
 	fsId, username string,
 	name VolumeName,
 	tlFsId, branch string,
 ) error {
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		return err
-	}
 
 	// Feel free to suggest additional useful things to put in the
 	// deletion audit trail.  The two that the system REQUIRES are
@@ -204,7 +195,7 @@ func (state *InMemoryState) markFilesystemAsDeletedInEtcd(
 		TopLevelFilesystemId string
 		Clone                string
 	}{
-		state.myNodeId,
+		s.myNodeId,
 		username,
 		time.Now(),
 
@@ -216,7 +207,7 @@ func (state *InMemoryState) markFilesystemAsDeletedInEtcd(
 		return err
 	}
 
-	_, err = kapi.Set(
+	_, err = s.etcdClient.Set(
 		context.Background(),
 		fmt.Sprintf("%s/filesystems/deleted/%s", ETCD_PREFIX, fsId),
 		string(auditTrail),
@@ -227,7 +218,7 @@ func (state *InMemoryState) markFilesystemAsDeletedInEtcd(
 	}
 
 	// Now mark it for eventual cleanup (when the liveness key expires)
-	_, err = kapi.Set(
+	_, err = s.etcdClient.Set(
 		context.Background(),
 		fmt.Sprintf("%s/filesystems/cleanupPending/%s", ETCD_PREFIX, fsId),
 		string(auditTrail),
@@ -251,13 +242,9 @@ type NameOrClone struct {
 	Clone                string
 }
 
-func (state *InMemoryState) cleanupDeletedFilesystems() error {
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		return err
-	}
+func (s *InMemoryState) cleanupDeletedFilesystems() error {
 
-	pending, err := listFilesystemsPendingCleanup(kapi)
+	pending, err := listFilesystemsPendingCleanup(s.etcdClient)
 	if err != nil {
 		return err
 	}
@@ -265,7 +252,7 @@ func (state *InMemoryState) cleanupDeletedFilesystems() error {
 	for fsId, names := range pending {
 		errors := make([]error, 0)
 		del := func(key string) {
-			_, err = kapi.Delete(
+			_, err = s.etcdClient.Delete(
 				context.Background(),
 				key,
 				&client.DeleteOptions{},
@@ -294,7 +281,7 @@ func (state *InMemoryState) cleanupDeletedFilesystems() error {
 				names.Name.Namespace,
 				names.Name.Name)
 
-			oldNode, err := kapi.Get(
+			oldNode, err := s.etcdClient.Get(
 				context.Background(),
 				key,
 				&client.GetOptions{},
@@ -317,7 +304,7 @@ func (state *InMemoryState) cleanupDeletedFilesystems() error {
 					errors = append(errors, err)
 				}
 				if currentData.Id == fsId {
-					_, err = kapi.Delete(
+					_, err = s.etcdClient.Delete(
 						context.Background(),
 						key,
 						&client.DeleteOptions{PrevValue: oldNode.Node.Value},
@@ -403,19 +390,15 @@ func listFilesystemsPendingCleanup(kapi client.KeysAPI) (map[string]NameOrClone,
 	return result, nil
 }
 
-func (state *InMemoryState) MarkFilesystemAsLiveInEtcd(topLevelFilesystemId string) error {
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		return err
-	}
+func (s *InMemoryState) MarkFilesystemAsLiveInEtcd(topLevelFilesystemId string) error {
 
 	key := fmt.Sprintf("%s/filesystems/live/%s", ETCD_PREFIX, topLevelFilesystemId)
-	ttl := time.Duration(state.config.FilesystemMetadataTimeout) * time.Second
+	ttl := time.Duration(s.config.FilesystemMetadataTimeout) * time.Second
 
-	_, err = kapi.Set(
+	_, err := s.etcdClient.Set(
 		context.Background(),
 		key,
-		state.myNodeId,
+		s.myNodeId,
 		&client.SetOptions{TTL: ttl},
 	)
 	if err != nil {
@@ -551,8 +534,12 @@ func (s *InMemoryState) globalFsRequestId(fs string, e *types.Event) (chan *type
 		log.Warnf("globalFsRequest - error setting %s: %s", e, err)
 		return nil, "", err
 	}
+
 	responseChan := make(chan *Event)
 	go func() {
+
+		defer close(responseChan)
+
 		// TODO become able to cope with becoming disconnected from etcd and
 		// then reconnecting and pick up where we left off (process any new
 		// responses)...
@@ -567,7 +554,6 @@ func (s *InMemoryState) globalFsRequestId(fs string, e *types.Event) (chan *type
 			responseChan <- &Event{
 				Name: "error-watcher-next", Args: &EventArgs{"err": err},
 			}
-			close(responseChan)
 			return
 		}
 		response, err := s.deserializeEvent(node.Node)
@@ -575,13 +561,11 @@ func (s *InMemoryState) globalFsRequestId(fs string, e *types.Event) (chan *type
 			responseChan <- &Event{
 				Name: "error-deserialize", Args: &EventArgs{"err": err},
 			}
-			close(responseChan)
+
 			return
 		}
 		responseChan <- response
 
-		// the one-off response chan has done its job here.
-		close(responseChan)
 		// also clean up the request and response nodes in etcd. (TODO: /not/
 		// doing this might actually be a good way to implement a log of all
 		// actions performed on the system). TODO why are we not doing this at
