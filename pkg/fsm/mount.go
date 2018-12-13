@@ -168,8 +168,6 @@ func (f *FsMachine) mountSnap(snapId string, readonly bool) (responseEvent *type
 	// trust that zero exit codes from mkdir && mount.zfs means
 	// that it worked and that the filesystem now exists and is
 	// mounted
-	f.snapshotsLock.Lock()
-	defer f.snapshotsLock.Unlock()
 	return &types.Event{Name: "mounted", Args: &types.EventArgs{"mount-path": mountPath}}, activeState
 }
 
