@@ -267,46 +267,46 @@ func (f *FsMachine) push(
 	errch := make(chan error)
 	go func() {
 		// This goroutine does all the writing to the HTTP POST
-		log.Printf(
-			"[actualPush:%s] Writing prelude of %d bytes (encoded): %s",
-			filesystemId,
-			len(preludeEncoded), preludeEncoded,
-		)
+		// log.Printf(
+		// 	"[actualPush:%s] Writing prelude of %d bytes (encoded): %s",
+		// 	filesystemId,
+		// 	len(preludeEncoded), preludeEncoded,
+		// )
 		_, err = pipeWriter.Write(preludeEncoded)
 		if err != nil {
-			log.Printf("[actualPush:%s] Error writing prelude: %+v (sent to errch)", filesystemId, err)
+			log.Errorf("[actualPush:%s] Error writing prelude: %+v (sent to errch)", filesystemId, err)
 			errch <- err
-			log.Printf("[actualPush:%s] errch accepted prelude error, woohoo", filesystemId)
+			log.Errorf("[actualPush:%s] errch accepted prelude error, woohoo", filesystemId)
 		}
 
-		log.Printf(
+		log.Infof(
 			"[actualPush:%s] About to Run() for %s => %s",
 			filesystemId, fromSnapshotId, toSnapshotId,
 		)
 
 		runErr := cmd.Run()
 
-		log.Printf(
+		log.Debugf(
 			"[actualPush:%s] Run() got result %s, about to put it into errch after closing pipeWriter",
 			filesystemId,
 			runErr,
 		)
 		err := pipeWriter.Close()
 		if err != nil {
-			log.Printf("[actualPush:%s] error closing pipeWriter: %s", filesystemId, err)
+			log.Errorf("[actualPush:%s] error closing pipeWriter: %s", filesystemId, err)
 		}
-		log.Printf(
+		log.Debugf(
 			"[actualPush:%s] Writing to errch: %+v",
 			filesystemId,
 			runErr,
 		)
 		errch <- runErr
-		log.Printf("[actualPush:%s] errch accepted it, woohoo", filesystemId)
+		log.Infof("[actualPush:%s] errch accepted it, woohoo", filesystemId)
 	}()
 
 	resp, err := postClient.Do(req)
 	if err != nil {
-		log.Printf("[actualPush:%s] error in postClient.Do: %s", filesystemId, err)
+		log.Errorf("[actualPush:%s] error in postClient.Do: %s", filesystemId, err)
 
 		go func() {
 			_ = <-errch
@@ -318,11 +318,11 @@ func (f *FsMachine) push(
 		}, backoffState
 	}
 	defer resp.Body.Close()
-	log.Printf("[actualPush:%s] started HTTP request", filesystemId)
+	log.Debugf("[actualPush:%s] started HTTP request", filesystemId)
 
 	responseBody, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf(
+		log.Errorf(
 			"[actualPush:%s] Got error while reading response body %s: %s",
 			filesystemId,
 			string(responseBody), err,
@@ -338,7 +338,7 @@ func (f *FsMachine) push(
 		}, backoffState
 	}
 
-	log.Printf("[actualPush:%s] Got response body while pushing: status %d, body %s", filesystemId, resp.StatusCode, string(responseBody))
+	// log.Printf("[actualPush:%s] Got response body while pushing: status %d, body %s", filesystemId, resp.StatusCode, string(responseBody))
 
 	if resp.StatusCode != 200 {
 		go func() {
@@ -356,18 +356,18 @@ func (f *FsMachine) push(
 		}, backoffState
 	}
 
-	log.Printf("[actualPush:%s] Waiting for finish signal...", filesystemId)
+	// log.Printf("[actualPush:%s] Waiting for finish signal...", filesystemId)
 	_ = <-finished
-	log.Printf("[actualPush:%s] Done!", filesystemId)
+	// log.Printf("[actualPush:%s] Done!", filesystemId)
 
-	log.Printf("[actualPush:%s] reading from errch", filesystemId)
+	// log.Printf("[actualPush:%s] reading from errch", filesystemId)
 	err = <-errch
-	log.Printf(
-		"[actualPush:%s] Finished Run() for %s => %s: %s",
-		filesystemId, fromSnapshotId, toSnapshotId, err,
-	)
+	// log.Printf(
+	// "[actualPush:%s] Finished Run() for %s => %s: %s",
+	// filesystemId, fromSnapshotId, toSnapshotId, err,
+	// )
 	if err != nil {
-		log.Printf(
+		log.Errorf(
 			"[actualPush:%s] Error from zfs send from %s => %s: %s, check zfs-send-errors.log",
 			filesystemId, fromSnapshotId, toSnapshotId, err,
 		)
@@ -380,7 +380,7 @@ func (f *FsMachine) push(
 	// XXX Adding the log messages below seemed to stop a deadlock, not sure
 	// why. For now, let's just leave them in...
 	// XXX what about closing post{Writer,Reader}?
-	log.Printf("[actualPush:%s] Closing pipes...", filesystemId)
+	// log.Printf("[actualPush:%s] Closing pipes...", filesystemId)
 	pipeWriter.Close()
 	pipeReader.Close()
 
