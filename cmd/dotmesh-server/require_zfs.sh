@@ -89,7 +89,10 @@ if [ -n "$CONTAINER_POOL_PVC_NAME" ]; then
     MOUNTPOINT=${WORK_ROOT}/mnt
     CONTAINER_MOUNT_PREFIX=${WORK_ROOT}/container_mnt
 
-    nsenter -t 1 -m -u -n -i /bin/sh -c "$EXTRA_HOST_COMMANDS ; mkdir -p $WORK_ROOT"
+    if [ -n "$EXTRA_HOST_COMMANDS"]; then
+        nsenter -t 1 -m -u -n -i /bin/sh -c "$EXTRA_HOST_COMMANDS"
+    fi
+    nsenter -t 1 -m -u -n -i /bin/sh -c "mkdir -p $WORK_ROOT"
 
     echo "Using $WORK_ROOT as a mount workspace."
 else
