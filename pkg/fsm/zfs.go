@@ -416,16 +416,16 @@ func discoverSystem(zfsExec, poolName, fs string) (*types.Filesystem, error) {
 						)
 						continue
 					}
-					if strings.Contains(fsSnapshot, "@") {
-						id := strings.Split(fsSnapshot, "@")[1]
-						_, ok := snapshotMeta[id]
-						if !ok {
-							snapshotMeta[id] = types.Metadata{}
-						}
-						snapshotMeta[id][keyEncoded] = string(decoded)
-					} else {
-						// TODO populate filesystemMeta
+				}
+				if strings.Contains(fsSnapshot, "@") {
+					id := strings.Split(fsSnapshot, "@")[1]
+					_, ok := snapshotMeta[id]
+					if !ok {
+						snapshotMeta[id] = types.Metadata{}
 					}
+					snapshotMeta[id][keyEncoded] = string(decoded)
+				} else {
+					// TODO populate filesystemMeta
 				}
 			}
 		}
