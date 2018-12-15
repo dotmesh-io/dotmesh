@@ -33,6 +33,9 @@ func encodeMetadata(meta types.Metadata) ([]string, error) {
 		if len(encoded) > 1024 {
 			return []string{}, fmt.Errorf("Encoded metadata value size exceeds 1024 bytes")
 		}
+		if v == "" {
+			encoded = "."
+		}
 		metadataEncoded = append(
 			metadataEncoded, "-o",
 			fmt.Sprintf("%s%s=%s", types.MetaKeyPrefix, k, encoded),

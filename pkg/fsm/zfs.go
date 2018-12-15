@@ -401,15 +401,21 @@ func discoverSystem(zfsExec, poolName, fs string) (*types.Filesystem, error) {
 				keyEncoded = keyEncoded[len(types.MetaKeyPrefix):]
 				// base64 decode or die
 				valueEncoded := shrapnel[2]
-
-				decoded, err := base64.StdEncoding.DecodeString(valueEncoded)
-				if err != nil {
-					log.Printf(
-						"Unable to base64 decode metadata value '%s' for %s",
-						valueEncoded,
-						fsSnapshot,
-					)
+				var decoded []byte
+				var err error
+				if valueEncoded == "." {
+					// special case to denote empty string
+					decoded = []byte("")
 				} else {
+					decoded, err = base64.StdEncoding.DecodeString(valueEncoded)
+					if err != nil {
+						log.Printf(
+							"Unable to base64 decode metadata value '%s' for %s",
+							valueEncoded,
+							fsSnapshot,
+						)
+						continue
+					}
 					if strings.Contains(fsSnapshot, "@") {
 						id := strings.Split(fsSnapshot, "@")[1]
 						_, ok := snapshotMeta[id]
