@@ -659,7 +659,7 @@ func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextSt
 	metadataEncoded, err := encodeMetadata(meta)
 	if err != nil {
 		return &types.Event{
-			Name: "failed-metadata-encode", Args: &types.EventArgs{"err": err},
+			Name: "failed-metadata-encode", Args: &types.EventArgs{"err": fmt.Sprintf("%v", err)},
 		}, backoffState
 	}
 	var snapshotId string
@@ -668,7 +668,7 @@ func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextSt
 		id, err := uuid.NewV4()
 		if err != nil {
 			return &types.Event{
-				Name: "failed-uuid", Args: &types.EventArgs{"err": err},
+				Name: "failed-uuid", Args: &types.EventArgs{"err": fmt.Sprintf("%v", err)},
 			}, backoffState
 		}
 		snapshotId = id.String()
@@ -685,7 +685,7 @@ func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextSt
 		log.Printf("[snapshot] %v while trying to snapshot %s (%s)", err, fq(f.poolName, f.filesystemId), args)
 		return &types.Event{
 			Name: "failed-snapshot",
-			Args: &types.EventArgs{"err": err, "combined-output": string(out)},
+			Args: &types.EventArgs{"err": fmt.Sprintf("%v", err), "combined-output": string(out)},
 		}, backoffState
 	}
 	list, err := exec.Command(f.zfsPath, "list", fq(f.poolName, f.filesystemId)+"@"+snapshotId).CombinedOutput()
@@ -693,7 +693,7 @@ func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextSt
 		log.Printf("[snapshot] %v while trying to list snapshot %s (%s)", err, fq(f.poolName, f.filesystemId), args)
 		return &types.Event{
 			Name: "failed-snapshot",
-			Args: &types.EventArgs{"err": err, "combined-output": string(out)},
+			Args: &types.EventArgs{"err": fmt.Sprintf("%v", err), "combined-output": string(out)},
 		}, backoffState
 	}
 	log.Printf("[snapshot] listed snapshot: '%q'", strconv.Quote(string(list)))
@@ -711,7 +711,7 @@ func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextSt
 		log.Printf("[snapshot] %v while trying to inform that snapshots changed %s (%s)", err, fq(f.poolName, f.filesystemId), args)
 		return &types.Event{
 			Name: "failed-snapshot-changed",
-			Args: &types.EventArgs{"err": err},
+			Args: &types.EventArgs{"err": fmt.Sprintf("%v", err)},
 		}, backoffState
 	}
 	return &types.Event{Name: "snapshotted", Args: &types.EventArgs{"SnapshotId": snapshotId}}, activeState
