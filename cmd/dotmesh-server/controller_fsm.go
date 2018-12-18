@@ -175,7 +175,14 @@ func (s *InMemoryState) AlignMountStateWithMasters(filesystemId string) error {
 				)
 				return nil, false, fmt.Errorf("cannot find %v in fsMachines", filesystemId)
 			}
-			masterNode, _ := s.registry.CurrentMasterNode(filesystemId)
+			masterNode, err := s.registry.CurrentMasterNode(filesystemId)
+			if err != nil {
+				log.WithFields(log.Fields{
+					"error":         err,
+					"filesystem_id": filesystemId,
+				}).Error("[AlignMountStateWithMasters] not doing anything - failed to get master node")
+				return nil, false, fmt.Errorf("cannot find master node, error: %s", err)
+			}
 			log.Printf(
 				"[AlignMountStateWithMasters] called for %v; masterFor=%v, myNodeId=%v; mounted=%t",
 				filesystemId,
