@@ -10,8 +10,8 @@ func discoveringState(f *FsMachine) StateFn {
 
 	err := f.discover()
 	if err != nil {
-		log.Printf("%v while discovering state", err)
-		return backoffState
+		log.Printf("got error '%v' while discovering state", err)
+		return failedState
 	}
 
 	if !f.filesystem.Exists {
