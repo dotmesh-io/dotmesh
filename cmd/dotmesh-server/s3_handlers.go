@@ -137,7 +137,7 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		http.Error(resp, fmt.Sprintf("master node for filesystem %s not found", localFilesystemId), 500)
 		return
 	}
-	if master != s.state.myNodeId {
+	if master != s.state.NodeID() {
 		admin, err := s.state.userManager.Get(&user.Query{Ref: "admin"})
 		if err != nil {
 			http.Error(resp, fmt.Sprintf("Can't get API key to proxy s3 request: %+v.\n", err), 500)
