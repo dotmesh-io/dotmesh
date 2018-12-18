@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	// "log"
 	"sort"
 	"sync"
@@ -30,7 +31,6 @@ type Registry interface {
 	Filesystems() []types.VolumeName
 	IdFromName(name types.VolumeName) (string, error)
 	GetByName(name types.VolumeName) (types.TopLevelFilesystem, error)
-	// FilesystemIds() []string
 	FilesystemIdsIncludingClones() []string
 	DeducePathToTopLevelFilesystem(name types.VolumeName, cloneName string) (types.PathToTopLevelFilesystem, error)
 
