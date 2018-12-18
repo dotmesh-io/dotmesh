@@ -1138,7 +1138,7 @@ func (d *DotmeshRPC) registerFilesystemBecomeMaster(
 	// TODO handle the case where the registry entry exists but the filesystems
 	// (fsMachine map) entry doesn't.
 
-	log.Printf("[registerFilesystemBecomeMaster] called: filesystemNamespace=%s, filesystemName=%s, cloneName=%s, filesystemId=%s path=%+v",
+	log.Debugf("[registerFilesystemBecomeMaster] called: filesystemNamespace=%s, filesystemName=%s, cloneName=%s, filesystemId=%s path=%+v",
 		filesystemNamespace, filesystemName, cloneName, filesystemId, path)
 
 	kapi, err := getEtcdKeysApi()
@@ -1178,15 +1178,6 @@ func (d *DotmeshRPC) registerFilesystemBecomeMaster(
 			}
 		}
 
-		// Only after we've made sure that the fsMachine won't immediately try
-		// to delete it (if it's being raised from the dead), ensure there's a
-		// filesystem machine for it (and its parents), otherwise it won't
-		// process any events. in the case where it already exists, this is a
-		// noop.
-		log.Printf("[registerFilesystemBecomeMaster] calling initFilesystemMachine for %s", f)
-		d.state.InitFilesystemMachine(f)
-		log.Printf("[registerFilesystemBecomeMaster] done initFilesystemMachine for %s", f)
-
 		_, err = kapi.Get(
 			context.Background(),
 			fmt.Sprintf(
@@ -1220,8 +1211,21 @@ func (d *DotmeshRPC) registerFilesystemBecomeMaster(
 			// to etcd meaning we don't have to wait for a watch
 			// this is cconsistent with the code in createFilesystem
 			d.state.registry.SetMasterNode(filesystemId, d.state.myNodeId)
-
 		}
+
+		// Only after we've made sure that the fsMachine won't immediately try
+		// to delete it (if it's being raised from the dead), ensure there's a
+		// filesystem machine for it (and its parents), otherwise it won't
+		// process any events. in the case where it already exists, this is a
+		// noop.
+		log.Infof("[registerFilesystemBecomeMaster] calling initFilesystemMachine for %s", f)
+		_, err = d.state.InitFilesystemMachine(f)
+		if err != nil {
+			log.Errorf("[registerFilesystemBecomeMaster] failed to initialize filesystem %s, error: %s", f, err)
+		} else {
+			log.Debugf("[registerFilesystemBecomeMaster] done initFilesystemMachine for %s", f)
+		}
+
 	}
 
 	// do this after, in case filesystemId already existed above
@@ -1245,7 +1249,7 @@ func (d *DotmeshRPC) registerFilesystemBecomeMaster(
 		}
 	}
 
-	log.Printf(
+	log.Debugf(
 		"[registerFilesystemBecomeMaster] set master and registered fs in registry for %s",
 		filesystemId,
 	)
