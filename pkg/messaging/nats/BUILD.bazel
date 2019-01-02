@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "nats_messenger.go",
+        "nats_server.go",
+        "server_cfg.go",
+    ],
+    importpath = "github.com/dotmesh-io/dotmesh/pkg/messaging/nats",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/messaging:go_default_library",
+        "//pkg/types:go_default_library",
+        "//vendor/github.com/nats-io/gnatsd/server:go_default_library",
+        "//vendor/github.com/nats-io/go-nats:go_default_library",
+        "//vendor/github.com/sirupsen/logrus:go_default_library",
+        "@com_github_nats_io_nats//:go_default_library",
+    ],
+)

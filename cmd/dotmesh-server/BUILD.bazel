@@ -34,6 +34,8 @@ go_library(
         "//pkg/container:go_default_library",
         "//pkg/fsm:go_default_library",
         "//pkg/kv:go_default_library",
+        "//pkg/messaging:go_default_library",
+        "//pkg/messaging/nats:go_default_library",
         "//pkg/metrics:go_default_library",
         "//pkg/notification:go_default_library",
         "//pkg/notification/nats:go_default_library",

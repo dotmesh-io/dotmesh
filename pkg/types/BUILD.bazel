@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "event.go",
         "fsm_types.go",
+        "messenger.go",
         "notification.go",
         "tlf.go",
         "types.go",
