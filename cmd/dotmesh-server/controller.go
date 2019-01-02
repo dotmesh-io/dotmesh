@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"reflect"
 
 	"os"
 	"sort"
@@ -17,9 +18,12 @@ import (
 
 	"github.com/dotmesh-io/dotmesh/pkg/container"
 	"github.com/dotmesh-io/dotmesh/pkg/fsm"
+	"github.com/dotmesh-io/dotmesh/pkg/messaging"
+	"github.com/dotmesh-io/dotmesh/pkg/messaging/nats"
 	"github.com/dotmesh-io/dotmesh/pkg/notification"
 	"github.com/dotmesh-io/dotmesh/pkg/observer"
 	"github.com/dotmesh-io/dotmesh/pkg/registry"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 
 	log "github.com/sirupsen/logrus"
@@ -37,6 +41,9 @@ type InMemoryState struct {
 
 	globalContainerCache     map[string]containerInfo
 	globalContainerCacheLock *sync.RWMutex
+
+	messenger       messaging.Messenger
+	messagingServer messaging.MessagingServer
 
 	etcdClient                 client.KeysAPI
 	etcdWaitTimestamp          int64
@@ -123,7 +130,116 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 	// a registry of names of filesystems and branches (clones) mapping to
 	// their ids
 	s.registry = registry.NewRegistry(config.UserManager, config.EtcdClient, ETCD_PREFIX)
+
+	err = s.initializeMessaging()
+	if err != nil {
+		log.WithFields(log.Fields{
+			"error": err,
+		}).Fatal("inMemoryState: messaging setup failed")
+	}
+
 	return s
+}
+
+func (s *InMemoryState) initializeMessaging() error {
+	// start NATS server
+	messagingServer, err := nats.NewServer(s.config.NatsConfig)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"error":       err,
+			"nats_config": s.config.NatsConfig,
+		}).Error("inMemoryState: failed to configure NATS server")
+		return err
+	}
+
+	err = messagingServer.Start()
+	if err != nil {
+		log.WithFields(log.Fields{
+			"error":       err,
+			"nats_config": s.config.NatsConfig,
+		}).Error("inMemoryState: failed to start NATS server")
+		return err
+	}
+
+	s.messagingServer = messagingServer
+
+	// initializing NATS client
+	messagingClient, err := nats.NewClient(s.config.NatsConfig)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"error":       err,
+			"nats_config": s.config.NatsConfig,
+		}).Error("inMemoryState: failed to initialize NATS client")
+		return err
+	}
+	s.messenger = messagingClient
+
+	go s.periodicMessagingClusterRoutesUpdate()
+	go s.subscribeToFilesystemRequests(context.Background())
+
+	return nil
+}
+
+func (s *InMemoryState) periodicMessagingClusterRoutesUpdate() {
+	ticker := time.NewTicker(5 * time.Second)
+
+	defer ticker.Stop()
+
+	for range ticker.C {
+		err := s.updateMessagingClusterConns()
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error": err,
+			}).Error("failed to update cluster routes")
+		}
+	}
+}
+
+func (s *InMemoryState) updateMessagingClusterConns() error {
+	new := []string{}
+
+	for _, v := range s.serverAddressesCache {
+		addresses := strings.Split(v, ",")
+		for _, a := range addresses {
+			new = append(new, fmt.Sprintf("nats://%s:%d", a, nats.DefaultClusterPort))
+		}
+	}
+
+	current := strings.Split(s.config.NatsConfig.RoutesStr, ",")
+	sort.Strings(new)
+	sort.Strings(current)
+
+	if len(new) > 0 && !reflect.DeepEqual(new, current) {
+		log.WithFields(log.Fields{
+			"new":     new,
+			"current": current,
+		}).Info("[inMemoryState.updateMessagingClusterConns] NATS routes changed, updating...")
+
+		s.config.NatsConfig.RoutesStr = strings.Join(new, ",")
+		s.messagingServer.Shutdown()
+
+		messagingServer, err := nats.NewServer(s.config.NatsConfig)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":       err,
+				"nats_config": s.config.NatsConfig,
+			}).Error("inMemoryState: failed to configure NATS server")
+			return err
+		}
+
+		err = messagingServer.Start()
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":       err,
+				"nats_config": s.config.NatsConfig,
+			}).Error("inMemoryState: failed to start NATS server")
+			return err
+		}
+
+		s.messagingServer = messagingServer
+	}
+
+	return nil
 }
 
 func (s *InMemoryState) resetRegistry() {
@@ -251,36 +367,10 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 		}
 		sort.Sort(ByAddress(servers))
 
-		// s.globalStateCacheLock.RLock()
-		// s.globalSnapshotCacheLock.RLock()
-
-		// if ok {
-		// 	// for _, server := range servers {
-
-		// 	// }
-		// 	// meta := fsm.GetMetadata()
-		// 	serverStateMachineMetadata := fsm.ListMetadata()
-
-		// 	for _, server := range servers {
-
-		// 		status := ""
-
-		// 		if len(serverStateMachineMetadata) == 0 {
-
-		// 		} else {
-		// 			d.ServerStatuses[server.Id] = serverStateMachineMetadata[]
-		// 		}
-		// 	}
-		// }
-
 		if ok {
 
 			for _, server := range servers {
-				// get current state and status for filesystem on server from our
-				// cache
-				// numSnapshots := len(s.globalSnapshotCache[server.Id][fs])
 				numSnapshots := len(fsm.GetSnapshots(server.Id))
-				// state, ok := s.globalStateCache[server.Id][fs]
 				state := fsm.GetMetadata(server.Id)
 				status := ""
 				if len(state) == 0 {
@@ -296,15 +386,54 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 			}
 		}
 
-		// }
-		// s.globalSnapshotCacheLock.RUnlock()
-		// s.globalStateCacheLock.RUnlock()
-
 		log.Debugf("[getOne] here is your volume: %v", d)
 		return d, nil
 	} else {
 		return DotmeshVolume{}, fmt.Errorf("Unable to find filesystem name for id %s", fs)
 	}
+}
+
+func (s *InMemoryState) subscribeToFilesystemRequests(ctx context.Context) error {
+	ch, err := s.messenger.Subscribe(ctx, &types.SubscribeQuery{
+		Type: types.EventTypeRequest,
+	})
+	if err != nil {
+		return err
+	}
+
+	for req := range ch {
+		go func(r *types.Event) {
+			err := s.processFilesystemEvent(r)
+			if err != nil {
+				log.WithFields(log.Fields{
+					"error":         err,
+					"filesystem_id": r.FilesystemID,
+					"request_id":    r.ID,
+				}).Error("failed to process filesystem event")
+			}
+		}(req)
+	}
+
+	return nil
+}
+
+func (s *InMemoryState) processFilesystemEvent(event *types.Event) error {
+	masterNode, ok := s.registry.GetMasterNode(event.FilesystemID)
+	if !ok {
+		return nil
+	}
+	if masterNode != s.NodeID() {
+		return nil
+	}
+
+	c, err := s.dispatchEvent(event.FilesystemID, event, event.ID)
+	if err != nil {
+		return err
+	}
+
+	internalResponse := <-c
+
+	return s.respondToEvent(event.FilesystemID, event.ID, internalResponse)
 }
 
 func (s *InMemoryState) notifyPushCompleted(filesystemId string, success bool) {
