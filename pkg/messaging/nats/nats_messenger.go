@@ -3,6 +3,7 @@ package nats
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/dotmesh-io/dotmesh/pkg/messaging"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
@@ -20,12 +21,29 @@ var (
 var _ messaging.Messenger = (*NatsMessenger)(nil)
 
 type NatsMessenger struct {
+	config        *ClientConfig
 	client        *nats.Conn
 	encodedClient *nats.EncodedConn
 }
 
-func NewClient(config *Config) (*NatsMessenger, error) {
-	client, err := nats.Connect(ConnectURL(config))
+type ClientConfig struct {
+	NatsURL           string
+	ConnectionTimeout int64
+}
+
+func NewClient(config *ClientConfig) (*NatsMessenger, error) {
+
+	if config.ConnectionTimeout == 0 {
+		config.ConnectionTimeout = 30
+	}
+
+	if config.NatsURL == "" {
+		return nil, fmt.Errorf("NATS client connection URL not set")
+	}
+	// DefaultURL = "nats://localhost:4222"
+
+	// "nats://127.0.0.1:32609"
+	client, err := nats.Connect(config.NatsURL)
 	if err != nil {
 		return nil, err
 	}
@@ -35,10 +53,70 @@ func NewClient(config *Config) (*NatsMessenger, error) {
 		return nil, err
 	}
 
-	return &NatsMessenger{
+	// testing
+	mc := &NatsMessenger{
 		client:        client,
 		encodedClient: ec,
-	}, nil
+		config:        config,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(config.ConnectionTimeout)*time.Second)
+	defer cancel()
+	err = mc.ensureConnected(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return mc, nil
+}
+
+func (m *NatsMessenger) Close() {
+	m.client.Close()
+}
+
+func (m *NatsMessenger) ensureConnected(ctx context.Context) error {
+	subject := "dotmesh.testsubject"
+	got := make(chan bool)
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("deadline exceeded")
+		case <-got:
+			log.Info("messenger: initial health check for NATS completed")
+			return nil
+		default:
+
+			sub, err := m.client.Subscribe(subject, func(msg *nats.Msg) {
+				got <- true
+			})
+			if err != nil {
+				log.WithFields(log.Fields{
+					"error": err,
+					"url":   m.config.NatsURL,
+				}).Warn("messenger: can't subscribe to a test event")
+				time.Sleep(500 * time.Millisecond)
+				continue
+			}
+
+			err = m.client.Publish(subject, []byte("foo"))
+			if err != nil {
+				log.WithFields(log.Fields{
+					"error": err,
+					"url":   m.config.NatsURL,
+				}).Warn("messenger: can't publish a test event")
+				sub.Unsubscribe()
+				time.Sleep(500 * time.Millisecond)
+
+				continue
+			}
+			time.Sleep(500 * time.Millisecond)
+			err = sub.Unsubscribe()
+			if err != nil {
+				log.WithError(err).Warn("messenger: failed to unsubscribe from a test event subscription")
+			}
+
+		}
+	}
 }
 
 func (m *NatsMessenger) Publish(event *types.Event) error {
