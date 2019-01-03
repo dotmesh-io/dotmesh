@@ -5,21 +5,20 @@ import (
 	"net"
 	"net/url"
 	"strconv"
-
-	"github.com/nats-io/nats"
 )
 
 const (
 	// DefaultPort is the default port for client connections.
-	DefaultPort = nats.DefaultPort
+	// DefaultPort = nats.DefaultPort
+	DefaultPort = 32609
 
 	// DefaultHost defaults to all interfaces.
 	DefaultHost = "0.0.0.0"
 
 	// DefaultClusterPort is the default cluster communication port.
-	DefaultClusterPort = 32607
+	DefaultClusterPort = 32610 // port for inbound route connections
 
-	DefaultHTTPPort = 32608
+	DefaultHTTPPort = 32611 // HTTP monitoring port
 )
 
 // Config holds the configuration for the messaging client and server.
@@ -42,8 +41,8 @@ func DefaultConfig() *Config {
 		ClusterPort: DefaultClusterPort,
 		HTTPPort:    DefaultHTTPPort,
 		Logtime:     true,
-		Debug:       false,
-		Trace:       false,
+		Debug:       true,
+		Trace:       true,
 	}
 }
 
