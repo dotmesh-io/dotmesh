@@ -27,10 +27,17 @@ func NewServer(config *Config) (*NatsServer, error) {
 	opts.Debug = config.Debug
 	opts.Trace = config.Trace
 
+	log.WithFields(log.Fields{
+		"port":         opts.Port,
+		"host":         opts.Host,
+		"http_port":    opts.HTTPPort,
+		"cluster_port": config.ClusterPort,
+		"debug":        opts.Debug,
+	}).Info("[NATS server] preparing server configuration")
 	// Configure cluster opts if explicitly set via flags.
 	err := configureClusterOpts(config.ClusterPort, &opts)
 	if err != nil {
-		server.PrintAndDie(err.Error())
+		return nil, fmt.Errorf("server configuration failed: %s", err)
 	}
 
 	s := server.New(&opts)
@@ -38,8 +45,12 @@ func NewServer(config *Config) (*NatsServer, error) {
 		return nil, fmt.Errorf("No NATS server object returned")
 	}
 
+	s.ConfigureLogger()
+
+	logger := NewLogger()
+
 	// Configure the logger based on the flags
-	s.SetLogger(NewLogger(), opts.Debug, opts.Trace)
+	s.SetLogger(logger, opts.Debug, opts.Trace)
 
 	return &NatsServer{
 		server: s,
@@ -48,13 +59,13 @@ func NewServer(config *Config) (*NatsServer, error) {
 }
 
 func (s *NatsServer) Start() error {
-	if s.server == nil {
-		return fmt.Errorf("server not initialized")
-	}
-	// Run server in Go routine.
-	go s.server.Start()
+	// if s.server == nil {
+	// 	return fmt.Errorf("server not initialized")
+	// }
 
+	go server.Run(s.server)
 	if s.server.ReadyForConnections(10 * time.Second) {
+		log.Info("[NATS server] ready for connections...")
 		return nil
 	}
 
