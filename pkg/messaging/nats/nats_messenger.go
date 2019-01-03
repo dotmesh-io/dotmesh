@@ -131,7 +131,7 @@ func (m *NatsMessenger) Subscribe(ctx context.Context, q *types.SubscribeQuery) 
 
 	respCh := make(chan *types.Event)
 
-	sub, err := m.encodedClient.Subscribe(fmt.Sprintf(RequestsSubjectTemplate, q.FilesystemID, q.RequestID), func(event *types.Event) {
+	sub, err := m.encodedClient.Subscribe(fmt.Sprintf(RequestsSubjectTemplate, q.GetFilesystemID(), q.GetRequestID()), func(event *types.Event) {
 		respCh <- event
 	})
 	if err != nil {
@@ -144,8 +144,8 @@ func (m *NatsMessenger) Subscribe(ctx context.Context, q *types.SubscribeQuery) 
 		if err != nil {
 			log.WithFields(log.Fields{
 				"error":         err,
-				"filesystem_id": q.FilesystemID,
-				"request_id":    q.RequestID,
+				"filesystem_id": q.GetFilesystemID(),
+				"request_id":    q.GetRequestID(),
 			}).Warn("[NatsMessenger.Subscribe] failed to unsubscribe")
 		}
 		close(respCh)
@@ -155,6 +155,12 @@ func (m *NatsMessenger) Subscribe(ctx context.Context, q *types.SubscribeQuery) 
 }
 
 func getSubject(event *types.Event) (string, error) {
+	if event.FilesystemID == "" {
+		return "", fmt.Errorf("event FilesystemID cannot be empty")
+	}
+	if event.ID == "" {
+		return "", fmt.Errorf("event ID cannot be empty")
+	}
 	var subject string
 	switch event.Type {
 	case types.EventTypeRequest:
