@@ -846,7 +846,7 @@ func (s *InMemoryState) UpdateSnapshotsFromKnownState(server, filesystem string,
 			go func() {
 				err := s.newSnapsOnMaster.Publish(filesystem, latest)
 				if err != nil {
-					log.Printf(
+					log.Errorf(
 						"[updateSnapshotsFromKnownState] "+
 							"error publishing to newSnapsOnMaster: %s",
 						err,

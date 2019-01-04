@@ -1451,7 +1451,7 @@ func (d *DotmeshRPC) RegisterTransfer(
 	args *TransferPollResult,
 	result *bool,
 ) error {
-	log.Printf("[RegisterTransfer] called with args: %+v", args)
+	log.Infof("[RegisterTransfer] called with args: %+v", args)
 
 	// We are the "remote" here. Local name is welcome to be invalid,
 	// that's the far end's problem
@@ -1468,12 +1468,12 @@ func (d *DotmeshRPC) RegisterTransfer(
 	if err != nil {
 		return err
 	}
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		return err
-	}
+	// kapi, err := getEtcdKeysApi()
+	// if err != nil {
+	// 	return err
+	// }
 
-	_, err = kapi.Set(
+	_, err = d.state.etcdClient.Set(
 		context.Background(),
 		fmt.Sprintf(
 			"%s/filesystems/transfers/%s", ETCD_PREFIX, args.TransferRequestId,
