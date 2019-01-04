@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/dotmesh-io/dotmesh/pkg/container"
+	"github.com/dotmesh-io/dotmesh/pkg/messaging/nats"
 
 	"github.com/coreos/etcd/client"
 
@@ -133,27 +134,8 @@ type Config struct {
 	ZFSExecPath string
 	ZPoolPath   string
 	PoolName    string
-}
 
-// refers to a clone's "pointer" to a filesystem id and its snapshot.
-//
-// note that a clone's Origin's FilesystemId may differ from the "top level"
-// filesystemId in the Registry's Clones map if the clone is attributed to a
-// top-level filesystem which is *transitively* its parent but not its direct
-// parent. In this case the Origin FilesystemId will always point to its direct
-// parent.
-
-func castToMetadata(val interface{}) Metadata {
-	meta, ok := val.(Metadata)
-	if !ok {
-		meta = Metadata{}
-		// massage the data into the right type
-		cast := val.(map[string]interface{})
-		for k, v := range cast {
-			meta[k] = v.(string)
-		}
-	}
-	return meta
+	NatsConfig *nats.Config
 }
 
 type Prelude struct {
