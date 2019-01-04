@@ -12,6 +12,9 @@ func init() {
 	gob.Register(&Metadata{})
 	gob.Register(&container.DockerContainer{})
 	gob.Register(&Event{})
+	gob.Register(&S3TransferRequest{})
+	gob.Register(&TransferRequest{})
+	gob.Register(&TransferPollResult{})
 }
 
 type EventType int
@@ -63,6 +66,9 @@ func NewErrorEvent(name string, err error) *Event {
 	}
 }
 
+// EventArgs is used to pass any dynamic structs through the event system.
+// Please not that if you send any events, they have to be registered with encoding/gob
+// Existing registration can be found in this file at the top
 type EventArgs map[string]interface{}
 
 func (ea EventArgs) String() string {
