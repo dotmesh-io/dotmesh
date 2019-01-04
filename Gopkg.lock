@@ -573,6 +573,18 @@
   version = "v1.6.0"
 
 [[projects]]
+  name = "github.com/nats-io/nats"
+  packages = ["."]
+  revision = "13c7fc7590db68b18f2015600f8765a02d705b5d"
+  version = "v1.7.0"
+
+[[projects]]
+  name = "github.com/nats-io/nkeys"
+  packages = ["."]
+  revision = "1546a3320a8f195a5b5c84aef8309377c2e411d5"
+  version = "v0.0.2"
+
+[[projects]]
   name = "github.com/nats-io/nuid"
   packages = ["."]
   revision = "289cccf02c178dc782430d534e3c1f5b72af807f"
@@ -724,6 +736,8 @@
   packages = [
     "bcrypt",
     "blowfish",
+    "ed25519",
+    "ed25519/internal/edwards25519",
     "pbkdf2",
     "scrypt",
     "ssh/terminal"
@@ -1014,6 +1028,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "89c0bd9aee0514a4a9194006188ce87b6a68a096e4c82d22062efd99e93e391e"
+  inputs-digest = "0511182eddf618451313a938a28f5f0a406ddd5b12d7bfc4a73b3d3e6d9c55da"
   solver-name = "gps-cdcl"
   solver-version = 1
