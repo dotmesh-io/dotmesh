@@ -131,7 +131,17 @@ func (m *NatsMessenger) Subscribe(ctx context.Context, q *types.SubscribeQuery) 
 
 	respCh := make(chan *types.Event)
 
-	sub, err := m.encodedClient.Subscribe(fmt.Sprintf(RequestsSubjectTemplate, q.GetFilesystemID(), q.GetRequestID()), func(event *types.Event) {
+	var template string
+	switch q.Type {
+	case types.EventTypeRequest:
+		template = RequestsSubjectTemplate
+	case types.EventTypeResponse:
+		template = ResponseSubjectTemplate
+	default:
+		return nil, fmt.Errorf("unknown event type: %v", q.Type)
+	}
+
+	sub, err := m.encodedClient.Subscribe(fmt.Sprintf(template, q.GetFilesystemID(), q.GetRequestID()), func(event *types.Event) {
 		respCh <- event
 	})
 	if err != nil {
