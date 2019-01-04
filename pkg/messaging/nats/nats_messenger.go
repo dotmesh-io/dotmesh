@@ -48,7 +48,7 @@ func NewClient(config *ClientConfig) (*NatsMessenger, error) {
 		return nil, err
 	}
 
-	ec, err := nats.NewEncodedConn(client, nats.GOB_ENCODER)
+	ec, err := nats.NewEncodedConn(client, nats.JSON_ENCODER)
 	if err != nil {
 		return nil, err
 	}
