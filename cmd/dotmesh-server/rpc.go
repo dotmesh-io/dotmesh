@@ -793,7 +793,7 @@ func (d *DotmeshRPC) StashAfter(
 	if e.Name == "stashed" {
 		log.Printf("Stashed %s", args.FilesystemId)
 	} else {
-		return maybeError(e)
+		return maybeError(e, "stashed")
 	}
 	*newBranch = (*e.Args)["NewBranchName"].(string)
 	return nil
@@ -884,7 +884,7 @@ func (d *DotmeshRPC) Commit(
 		log.Printf("Snapshotted %s", filesystemId)
 		*result = (*e.Args)["SnapshotId"].(string)
 	} else {
-		return maybeError(e)
+		return maybeError(e, "snapshotted")
 	}
 	return nil
 }
@@ -932,7 +932,7 @@ func (d *DotmeshRPC) MountCommit(
 		log.Printf("snapshot mounted %s for filesystem %s", args.CommitId, args.FilesystemId)
 		*result = (*e.Args)["mount-path"].(string)
 	} else {
-		return maybeError(e)
+		return maybeError(e, "mounted")
 	}
 	return nil
 }
@@ -991,13 +991,13 @@ func (d *DotmeshRPC) Rollback(
 		)
 		*result = true
 	} else {
-		return maybeError(e)
+		return maybeError(e, "rolled-back")
 	}
 	return nil
 }
 
-func maybeError(e *Event) error {
-	log.Printf("Unexpected response %s - %#v", e.Name, e.Args)
+func maybeError(e *Event, expected string) error {
+	log.Printf("Unexpected response '%s' (expected: '%s') - %#v", e.Name, expected, e.Args)
 	err, ok := (*e.Args)["err"]
 	if ok {
 		castedErr, ok2 := err.(error)
@@ -1111,7 +1111,7 @@ func (d *DotmeshRPC) Branch(
 		)
 		*result = true
 	} else {
-		return maybeError(e)
+		return maybeError(e, "cloned")
 	}
 	return nil
 }
@@ -1720,7 +1720,7 @@ func (d *DotmeshRPC) Transfer(
 					if e.Name == "snapshotted" {
 						log.Printf("Stash on diverge requested with dirty data so snapshotted %s", filesystemId)
 					} else {
-						return maybeError(e)
+						return maybeError(e, "snapshotted")
 					}
 				} else {
 					// TODO backoff and retry above
@@ -2084,7 +2084,7 @@ func (d *DotmeshRPC) PredictSize(
 	if e.Name == "predictedSize" {
 		*result = int64((*e.Args)["size"].(float64))
 	} else {
-		return maybeError(e)
+		return maybeError(e, "predictedSize")
 	}
 	return nil
 }
