@@ -2,10 +2,11 @@ package fsm
 
 import (
 	"fmt"
-	"log"
 
 	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // stuff used to do transfers, both for DM and S3
@@ -13,7 +14,7 @@ import (
 func s3TransferRequestify(in interface{}) (types.S3TransferRequest, error) {
 	typed, ok := in.(map[string]interface{})
 	if !ok {
-		log.Printf("[s3TransferRequestify] Unable to cast %s to map[string]interface{}", in)
+		log.Errorf("[s3TransferRequestify] Unable to cast %#v to map[string]interface{}", in)
 		return types.S3TransferRequest{}, fmt.Errorf(
 			"Unable to cast %s to map[string]interface{}", in,
 		)
@@ -39,9 +40,11 @@ func s3TransferRequestify(in interface{}) (types.S3TransferRequest, error) {
 func transferRequestify(in interface{}) (types.TransferRequest, error) {
 	typed, ok := in.(map[string]interface{})
 	if !ok {
-		log.Printf("[transferRequestify] Unable to cast %s to map[string]interface{}", in)
+		log.WithFields(log.Fields{
+			"payload": in,
+		}).Errorf("[transferRequestify] Unable to cast %#v to map[string]interface{}", in)
 		return types.TransferRequest{}, fmt.Errorf(
-			"Unable to cast %s to map[string]interface{}", in,
+			"Unable to cast %#v to map[string]interface{}", in,
 		)
 	}
 	var port int
