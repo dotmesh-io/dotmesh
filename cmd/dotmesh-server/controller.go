@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"reflect"
 
 	"os"
 	"sort"
@@ -19,7 +18,6 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/container"
 	"github.com/dotmesh-io/dotmesh/pkg/fsm"
 	"github.com/dotmesh-io/dotmesh/pkg/messaging"
-	"github.com/dotmesh-io/dotmesh/pkg/messaging/nats"
 	"github.com/dotmesh-io/dotmesh/pkg/notification"
 	"github.com/dotmesh-io/dotmesh/pkg/observer"
 	"github.com/dotmesh-io/dotmesh/pkg/registry"
@@ -135,111 +133,11 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error": err,
-		}).Fatal("inMemoryState: messaging setup failed")
+		}).Fatal("[NATS] inMemoryState: messaging setup failed")
+		os.Exit(1)
 	}
 
 	return s
-}
-
-func (s *InMemoryState) initializeMessaging() error {
-	// start NATS server
-	messagingServer, err := nats.NewServer(s.config.NatsConfig)
-	if err != nil {
-		log.WithFields(log.Fields{
-			"error":       err,
-			"nats_config": s.config.NatsConfig,
-		}).Error("inMemoryState: failed to configure NATS server")
-		return err
-	}
-
-	err = messagingServer.Start()
-	if err != nil {
-		log.WithFields(log.Fields{
-			"error":       err,
-			"nats_config": s.config.NatsConfig,
-		}).Error("inMemoryState: failed to start NATS server")
-		return err
-	}
-
-	s.messagingServer = messagingServer
-
-	// initializing NATS client
-	messagingClient, err := nats.NewClient(s.config.NatsConfig)
-	if err != nil {
-		log.WithFields(log.Fields{
-			"error":       err,
-			"nats_config": s.config.NatsConfig,
-		}).Error("inMemoryState: failed to initialize NATS client")
-		return err
-	}
-	s.messenger = messagingClient
-
-	go s.periodicMessagingClusterRoutesUpdate()
-	go s.subscribeToFilesystemRequests(context.Background())
-
-	return nil
-}
-
-func (s *InMemoryState) periodicMessagingClusterRoutesUpdate() {
-	ticker := time.NewTicker(5 * time.Second)
-
-	defer ticker.Stop()
-
-	for range ticker.C {
-		err := s.updateMessagingClusterConns()
-		if err != nil {
-			log.WithFields(log.Fields{
-				"error": err,
-			}).Error("failed to update cluster routes")
-		}
-	}
-}
-
-func (s *InMemoryState) updateMessagingClusterConns() error {
-	new := []string{}
-
-	for _, v := range s.serverAddressesCache {
-		addresses := strings.Split(v, ",")
-		for _, a := range addresses {
-			new = append(new, fmt.Sprintf("nats://%s:%d", a, nats.DefaultClusterPort))
-		}
-	}
-
-	current := strings.Split(s.config.NatsConfig.RoutesStr, ",")
-	sort.Strings(new)
-	sort.Strings(current)
-
-	if len(new) > 0 && !reflect.DeepEqual(new, current) {
-		log.WithFields(log.Fields{
-			"new":     new,
-			"current": current,
-		}).Info("[inMemoryState.updateMessagingClusterConns] NATS routes changed, updating...")
-
-		s.config.NatsConfig.RoutesStr = strings.Join(new, ",")
-		s.messagingServer.Shutdown()
-
-		messagingServer, err := nats.NewServer(s.config.NatsConfig)
-		if err != nil {
-			log.WithFields(log.Fields{
-				"error":       err,
-				"nats_config": s.config.NatsConfig,
-			}).Error("inMemoryState: failed to configure NATS server")
-			return err
-		}
-
-		err = messagingServer.Start()
-		if err != nil {
-			log.WithFields(log.Fields{
-				"error":       err,
-				"nats_config": s.config.NatsConfig,
-			}).Error("inMemoryState: failed to start NATS server")
-			return err
-		}
-
-		s.messagingServer = messagingServer
-	}
-
-	return nil
 }
 
 func (s *InMemoryState) resetRegistry() {
@@ -393,28 +291,42 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 	}
 }
 
-func (s *InMemoryState) subscribeToFilesystemRequests(ctx context.Context) error {
-	ch, err := s.messenger.Subscribe(ctx, &types.SubscribeQuery{
-		Type: types.EventTypeRequest,
-	})
-	if err != nil {
-		return err
-	}
+func (s *InMemoryState) subscribeToFilesystemRequests(ctx context.Context) {
 
-	for req := range ch {
-		go func(r *types.Event) {
-			err := s.processFilesystemEvent(r)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			ch, err := s.messenger.Subscribe(ctx, &types.SubscribeQuery{
+				Type: types.EventTypeRequest,
+			})
 			if err != nil {
-				log.WithFields(log.Fields{
-					"error":         err,
-					"filesystem_id": r.FilesystemID,
-					"request_id":    r.ID,
-				}).Error("failed to process filesystem event")
+				if err != nil {
+					log.WithFields(log.Fields{
+						"error": err,
+						"host":  s.config.NatsConfig.Host,
+						"port":  s.config.NatsConfig.Port,
+					}).Error("[NATS] failed to subscribe to filesystem events, retrying...")
+				}
+				time.Sleep(1 * time.Second)
+				continue
 			}
-		}(req)
-	}
 
-	return nil
+			for req := range ch {
+				go func(r *types.Event) {
+					err := s.processFilesystemEvent(r)
+					if err != nil {
+						log.WithFields(log.Fields{
+							"error":         err,
+							"filesystem_id": r.FilesystemID,
+							"request_id":    r.ID,
+						}).Error("[NATS] failed to process filesystem event")
+					}
+				}(req)
+			}
+		}
+	}
 }
 
 func (s *InMemoryState) processFilesystemEvent(event *types.Event) error {
