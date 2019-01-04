@@ -96,6 +96,7 @@ func transportFromTLS(certFile, keyFile, caFile string) (*http.Transport, error)
 	return transport, nil
 }
 
+// TODO: why?
 func guessIPv4Addresses() ([]string, error) {
 	override := os.Getenv("YOUR_IPV4_ADDRS")
 	if override != "" {
@@ -503,90 +504,128 @@ func (s *InMemoryState) handleOneFilesystemDeletion(node *client.Node) error {
 }
 
 // make a global request, returning its id
-func (s *InMemoryState) globalFsRequestId(fs string, e *types.Event) (chan *types.Event, string, error) {
+func (s *InMemoryState) globalFsRequestId(fs string, event *types.Event) (chan *types.Event, string, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, "", err
 	}
-	requestId := id.String()
+	requestID := id.String()
 
-	serialized, err := s.serializeEvent(e)
-	if err != nil {
-		log.Printf("globalFsRequest - error serializing %#v: %#v", e, err)
-		return nil, "", err
-	}
-	if serialized == "" {
-		log.Printf("globalFsRequest - serialization produced an empty string %#v", e)
-		return nil, "", fmt.Errorf("Serialization of %#v produced an empty string", e)
-	}
-	key := fmt.Sprintf("%s/filesystems/requests/%s/%s", ETCD_PREFIX, fs, requestId)
-	log.Printf("globalFsRequest: setting '%s' to '%s'",
-		key,
-		serialized,
-	)
-	resp, err := s.etcdClient.Set(
-		context.Background(),
-		key,
-		serialized,
-		&client.SetOptions{PrevExist: client.PrevNoExist, TTL: 604800 * time.Second},
-	)
-	if err != nil {
-		log.Warnf("globalFsRequest - error setting %s: %s", e, err)
-		return nil, "", err
-	}
+	event.ID = requestID
+	event.FilesystemID = fs
 
-	responseChan := make(chan *Event)
+	// serialized, err := s.serializeEvent(e)
+	// if err != nil {
+	// 	log.Printf("globalFsRequest - error serializing %#v: %#v", e, err)
+	// 	return nil, "", err
+	// }
+	// if serialized == "" {
+	// 	log.Printf("globalFsRequest - serialization produced an empty string %#v", e)
+	// 	return nil, "", fmt.Errorf("Serialization of %#v produced an empty string", e)
+	// }
+	// key := fmt.Sprintf("%s/filesystems/requests/%s/%s", ETCD_PREFIX, fs, requestId)
+	// log.Printf("globalFsRequest: setting '%s' to '%s'",
+	// 	key,
+	// 	serialized,
+	// )
+	// resp, err := s.etcdClient.Set(
+	// 	context.Background(),
+	// 	key,
+	// 	serialized,
+	// 	&client.SetOptions{PrevExist: client.PrevNoExist, TTL: 604800 * time.Second},
+	// )
+
+	responseChan := make(chan *types.Event)
+
 	go func() {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
 		defer close(responseChan)
 
-		// TODO become able to cope with becoming disconnected from etcd and
-		// then reconnecting and pick up where we left off (process any new
-		// responses)...
-		watcher := s.etcdClient.Watcher(
-			// TODO maybe responses should get their own IDs, so that there can be
-			// multiple responses to a given event (at present we just assume one)
-			fmt.Sprintf("%s/filesystems/responses/%s/%s", ETCD_PREFIX, fs, requestId),
-			&client.WatcherOptions{AfterIndex: resp.Node.CreatedIndex, Recursive: true},
-		)
-		node, err := watcher.Next(context.Background())
+		rc, err := s.messenger.Subscribe(ctx, &types.SubscribeQuery{
+			Type:         types.EventTypeResponse,
+			FilesystemID: fs,
+			RequestID:    requestID,
+		})
 		if err != nil {
-			responseChan <- &Event{
-				Name: "error-watcher-next", Args: &EventArgs{"err": err},
-			}
+			log.WithFields(log.Fields{
+				"error":         err,
+				"filesystem_id": fs,
+				"request_id":    requestID,
+			}).Error("[globalFsRequestId] failed to subscribe for responses")
 			return
 		}
-		response, err := s.deserializeEvent(node.Node)
-		if err != nil {
-			responseChan <- &Event{
-				Name: "error-deserialize", Args: &EventArgs{"err": err},
-			}
-
+		// waiting for the first event
+		select {
+		case event := <-rc:
+			responseChan <- event
 			return
 		}
-		responseChan <- response
-
-		// also clean up the request and response nodes in etcd. (TODO: /not/
-		// doing this might actually be a good way to implement a log of all
-		// actions performed on the system). TODO why are we not doing this at
-		// all any more? Something to do with a race where events showed up
-		// empty. (Actually, empty events correspond to a deletion, ie a TTL
-		// timeout, I think.) Oh and we added a TTL.
-		/*
-			for _, cleanup := range []string{"requests", "responses"} {
-				_, err = kapi.Delete(
-					context.Background(),
-					fmt.Sprintf("%s/filesystems/%s/%s/%s", ETCD_PREFIX, cleanup, fs, requestId),
-					nil,
-				)
-				if err != nil {
-					log.Printf("Error while trying to cleanup %s %s %s: %s", cleanup, fs, requestId, err)
-				}
-			}
-		*/
-
 	}()
-	return responseChan, id.String(), nil
+
+	err = s.messenger.Publish(event)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"error":         err,
+			"filesystem_id": fs,
+			"request_id":    requestID,
+		}).Errorf("[globalFsRequest] error dispatching event %s: %s", event, err)
+		return nil, "", err
+	}
+
+	// responseChan := make(chan *Event)
+	// go func() {
+
+	// 	defer close(responseChan)
+
+	// 	// TODO become able to cope with becoming disconnected from etcd and
+	// 	// then reconnecting and pick up where we left off (process any new
+	// 	// responses)...
+	// 	watcher := s.etcdClient.Watcher(
+	// 		// TODO maybe responses should get their own IDs, so that there can be
+	// 		// multiple responses to a given event (at present we just assume one)
+	// 		fmt.Sprintf("%s/filesystems/responses/%s/%s", ETCD_PREFIX, fs, requestId),
+	// 		&client.WatcherOptions{AfterIndex: resp.Node.CreatedIndex, Recursive: true},
+	// 	)
+	// 	node, err := watcher.Next(context.Background())
+	// 	if err != nil {
+	// 		responseChan <- &Event{
+	// 			Name: "error-watcher-next", Args: &EventArgs{"err": err},
+	// 		}
+	// 		return
+	// 	}
+	// 	response, err := s.deserializeEvent(node.Node)
+	// 	if err != nil {
+	// 		responseChan <- &Event{
+	// 			Name: "error-deserialize", Args: &EventArgs{"err": err},
+	// 		}
+
+	// 		return
+	// 	}
+	// 	responseChan <- response
+
+	// 	// also clean up the request and response nodes in etcd. (TODO: /not/
+	// 	// doing this might actually be a good way to implement a log of all
+	// 	// actions performed on the system). TODO why are we not doing this at
+	// 	// all any more? Something to do with a race where events showed up
+	// 	// empty. (Actually, empty events correspond to a deletion, ie a TTL
+	// 	// timeout, I think.) Oh and we added a TTL.
+	// 	/*
+	// 		for _, cleanup := range []string{"requests", "responses"} {
+	// 			_, err = kapi.Delete(
+	// 				context.Background(),
+	// 				fmt.Sprintf("%s/filesystems/%s/%s/%s", ETCD_PREFIX, cleanup, fs, requestId),
+	// 				nil,
+	// 			)
+	// 			if err != nil {
+	// 				log.Printf("Error while trying to cleanup %s %s %s: %s", cleanup, fs, requestId, err)
+	// 			}
+	// 		}
+	// 	*/
+
+	// }()
+	return responseChan, requestID, nil
 }
 
 // attempt to register an event in etcd upon which the current master for that
@@ -616,88 +655,96 @@ func (s *InMemoryState) deserializeEvent(node *client.Node) (*Event, error) {
 }
 
 func (s *InMemoryState) respondToEvent(fs, requestId string, response *Event) error {
-	serialized, err := s.serializeEvent(response)
-	// TODO think more about handling error cases here, lest we cause deadlocks
-	// when the network is imperfect
-	// TODO can we make all etcd requests idempotent, e.g. by generating the id
-	// for a new snapshot in the requester?
-	if err != nil {
-		log.Printf("Error while serializing an event response: %s", err)
-		return err
-	}
-	_, err = s.etcdClient.Set(
-		context.Background(),
-		fmt.Sprintf("%s/filesystems/responses/%s/%s", ETCD_PREFIX, fs, requestId),
-		serialized,
-		&client.SetOptions{PrevExist: client.PrevNoExist, TTL: 604800 * time.Second},
-	)
-	if err != nil {
-		log.Printf("Error while setting event response in etcd: %s", err)
-		return err
-	}
-	return nil
+
+	response.Type = types.EventTypeResponse
+	response.ID = requestId
+	response.FilesystemID = fs
+
+	return s.messenger.Publish(response)
+
+	// serialized, err := s.serializeEvent(response)
+	// // TODO think more about handling error cases here, lest we cause deadlocks
+	// // when the network is imperfect
+	// // TODO can we make all etcd requests idempotent, e.g. by generating the id
+	// // for a new snapshot in the requester?
+	// if err != nil {
+	// 	log.Printf("Error while serializing an event response: %s", err)
+	// 	return err
+	// }
+	// _, err = s.etcdClient.Set(
+	// 	context.Background(),
+	// 	fmt.Sprintf("%s/filesystems/responses/%s/%s", ETCD_PREFIX, fs, requestId),
+	// 	serialized,
+	// 	&client.SetOptions{PrevExist: client.PrevNoExist, TTL: 604800 * time.Second},
+	// )
+	// if err != nil {
+	// 	log.Printf("Error while setting event response in etcd: %s", err)
+	// 	return err
+	// }
+
+	// return
 }
 
-func (s *InMemoryState) deserializeDispatchAndRespond(fs string, node *client.Node) error {
-	// TODO 2-phase commit to avoid doubling up events after
-	// reading them, performing them, and then getting disconnected
-	// before cleaning them up?
-	pieces := strings.Split(node.Key, "/")
-	requestId := pieces[len(pieces)-1]
+// func (s *InMemoryState) deserializeDispatchAndRespond(fs string, node *client.Node) error {
+// 	// TODO 2-phase commit to avoid doubling up events after
+// 	// reading them, performing them, and then getting disconnected
+// 	// before cleaning them up?
+// 	pieces := strings.Split(node.Key, "/")
+// 	requestId := pieces[len(pieces)-1]
 
-	// check that there isn't a stale response already. if so, do nothing.
-	_, err := s.etcdClient.Get(
-		context.Background(),
-		fmt.Sprintf("%s/filesystems/responses/%s/%s", ETCD_PREFIX, fs, requestId),
-		nil,
-	)
-	if err == nil {
-		// OK, there's a stale response. Leave it alone and don't re-perform
-		// the action. But this is not an error (don't error out and reconnect
-		// to etcd, or you'll get stuck in a loop).
-		return nil
-	}
-	if !client.IsKeyNotFound(err) {
-		// Some error other than key not found. The key-not-found is the
-		// expected, happy path.
-		return err
-	}
+// 	// check that there isn't a stale response already. if so, do nothing.
+// 	_, err := s.etcdClient.Get(
+// 		context.Background(),
+// 		fmt.Sprintf("%s/filesystems/responses/%s/%s", ETCD_PREFIX, fs, requestId),
+// 		nil,
+// 	)
+// 	if err == nil {
+// 		// OK, there's a stale response. Leave it alone and don't re-perform
+// 		// the action. But this is not an error (don't error out and reconnect
+// 		// to etcd, or you'll get stuck in a loop).
+// 		return nil
+// 	}
+// 	if !client.IsKeyNotFound(err) {
+// 		// Some error other than key not found. The key-not-found is the
+// 		// expected, happy path.
+// 		return err
+// 	}
 
-	e, err := s.deserializeEvent(node)
-	if err != nil || e == nil {
-		// Respond to invalid events
-		_ = s.respondToEvent(fs, requestId, &Event{Name: "invalid-request", Args: &EventArgs{"error": err, "request": e}})
-		return err
-	}
+// 	e, err := s.deserializeEvent(node)
+// 	if err != nil || e == nil {
+// 		// Respond to invalid events
+// 		_ = s.respondToEvent(fs, requestId, &Event{Name: "invalid-request", Args: &EventArgs{"error": err, "request": e}})
+// 		return err
+// 	}
 
-	// channel is the internal channel from etcd => state machines.
-	// listen on that channel, and when a response comes back from the local
-	// state machine, send it back out as an etcd response
+// 	// channel is the internal channel from etcd => state machines.
+// 	// listen on that channel, and when a response comes back from the local
+// 	// state machine, send it back out as an etcd response
 
-	// don't block processing of further events on getting a response to this:
-	// in particular, the "move" command depends on sub-commands being
-	// processed (it requires this dispatch/response loop to work reentrantly),
-	// specifically so that a server performing a handoff can be notified that
-	// the server it is handing off to has received the snapshots that it made
-	// available to it as part of the handoff. so, run this in a goroutine;
-	// it's ok to return early because the response is just going back into
-	// etcd and anyone waiting for it will be waiting on the response key to
-	// show up, not on the return of this function.
+// 	// don't block processing of further events on getting a response to this:
+// 	// in particular, the "move" command depends on sub-commands being
+// 	// processed (it requires this dispatch/response loop to work reentrantly),
+// 	// specifically so that a server performing a handoff can be notified that
+// 	// the server it is handing off to has received the snapshots that it made
+// 	// available to it as part of the handoff. so, run this in a goroutine;
+// 	// it's ok to return early because the response is just going back into
+// 	// etcd and anyone waiting for it will be waiting on the response key to
+// 	// show up, not on the return of this function.
 
-	log.Printf("About to dispatch %#v to %s", e, fs)
-	c, err := s.dispatchEvent(fs, e, requestId)
-	if err != nil {
-		return err
-	}
-	log.Printf("Got response chan %v, %s for %v", c, err, fs)
-	go func() {
-		internalResponse := <-c
-		log.Printf("Done putting it into internalResponse (%v, %v)", fs, c)
+// 	log.Printf("About to dispatch %#v to %s", e, fs)
+// 	c, err := s.dispatchEvent(fs, e, requestId)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	log.Printf("Got response chan %v, %s for %v", c, err, fs)
+// 	go func() {
+// 		internalResponse := <-c
+// 		log.Printf("Done putting it into internalResponse (%v, %v)", fs, c)
 
-		_ = s.respondToEvent(fs, requestId, internalResponse)
-	}()
-	return nil
-}
+// 		_ = s.respondToEvent(fs, requestId, internalResponse)
+// 	}()
+// 	return nil
+// }
 
 // Update our local record of who has which snapshots, either based on learning
 // from etcd or learning about our own snapshots (the latter is necessary
@@ -1114,21 +1161,22 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		return nil
 	}
 
-	maybeDispatchEvent := func(node *client.Node) error {
-		// (0)/(1)dotmesh.io/(2)filesystems/
-		//     (3)requests/(4):filesystem/(5):request_id = request
-		pieces := strings.Split(node.Key, "/")
-		fs := pieces[4]
-		mine, ok := filesystemBelongsToMe[fs]
-		if ok && mine {
-			// only act on events for filesystems that etcd reports as
-			// belonging to me
-			if err := s.deserializeDispatchAndRespond(fs, node); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
+	// // TODO: REMOVE
+	// maybeDispatchEvent := func(node *client.Node) error {
+	// 	// (0)/(1)dotmesh.io/(2)filesystems/
+	// 	//     (3)requests/(4):filesystem/(5):request_id = request
+	// 	pieces := strings.Split(node.Key, "/")
+	// 	fs := pieces[4]
+	// 	mine, ok := filesystemBelongsToMe[fs]
+	// 	if ok && mine {
+	// 		// only act on events for filesystems that etcd reports as
+	// 		// belonging to me
+	// 		if err := s.deserializeDispatchAndRespond(fs, node); err != nil {
+	// 			return err
+	// 		}
+	// 	}
+	// 	return nil
+	// }
 	getVariant := func(node *client.Node) string {
 		// e.g. "masters" in (0)/(1)dotmesh.io/(2)filesystems/(3)masters/(4)1b25b8f5...
 		pieces := strings.Split(node.Key, "/")
@@ -1145,12 +1193,11 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 	// 	s.etcdWaitState = "connect"
 	// }()
 
-	func() {
-		s.etcdWaitTimestampLock.Lock()
-		defer s.etcdWaitTimestampLock.Unlock()
-		s.etcdWaitTimestamp = time.Now().UnixNano()
-		s.etcdWaitState = "insert initial admin password if not exists"
-	}()
+	s.etcdWaitTimestampLock.Lock()
+
+	s.etcdWaitTimestamp = time.Now().UnixNano()
+	s.etcdWaitState = "insert initial admin password if not exists"
+	s.etcdWaitTimestampLock.Unlock()
 
 	// Do this every time, even if it fails.  This is to handle the case where
 	// etcd gets wiped underneath us.
@@ -1161,12 +1208,10 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		}).Error("failed to create initial admin")
 	}
 
-	func() {
-		s.etcdWaitTimestampLock.Lock()
-		defer s.etcdWaitTimestampLock.Unlock()
-		s.etcdWaitTimestamp = time.Now().UnixNano()
-		s.etcdWaitState = "initial get"
-	}()
+	s.etcdWaitTimestampLock.Lock()
+	s.etcdWaitTimestamp = time.Now().UnixNano()
+	s.etcdWaitState = "initial get"
+	s.etcdWaitTimestampLock.Unlock()
 
 	// on first connect, fetch all of, well, everything
 	current, err := s.etcdClient.Get(context.Background(),
@@ -1177,16 +1222,14 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		return err
 	}
 
-	func() {
-		s.etcdWaitTimestampLock.Lock()
-		defer s.etcdWaitTimestampLock.Unlock()
-		s.etcdWaitTimestamp = time.Now().UnixNano()
-		s.etcdWaitState = "initial processing"
-	}()
+	s.etcdWaitTimestampLock.Lock()
+	s.etcdWaitTimestamp = time.Now().UnixNano()
+	s.etcdWaitState = "initial processing"
+	s.etcdWaitTimestampLock.Unlock()
 
 	// find the masters and requests nodes
 	var masters *client.Node
-	var requests *client.Node
+	// var requests *client.Node
 	var serverAddresses *client.Node
 	var serverSnapshots *client.Node
 	var serverStates *client.Node
@@ -1215,25 +1258,43 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		// an explicit distributed transaction to ensure exactly one
 		// node does it.
 		for _, child := range parent.Nodes {
-			if getVariant(child) == "filesystems/masters" {
+			switch getVariant(child) {
+			case "filesystems/masters":
 				masters = child
-			} else if getVariant(child) == "filesystems/requests" {
-				requests = child
-			} else if getVariant(child) == "servers/addresses" {
+			case "servers/addresses":
 				serverAddresses = child
-			} else if getVariant(child) == "servers/snapshots" {
+			case "servers/snapshots":
 				serverSnapshots = child
-			} else if getVariant(child) == "servers/states" {
+			case "servers/states":
 				serverStates = child
-			} else if getVariant(child) == "registry/filesystems" {
+			case "registry/filesystems":
 				registryFilesystems = child
-			} else if getVariant(child) == "registry/clones" {
+			case "registry/clones":
 				registryClones = child
-			} else if getVariant(child) == "filesystems/transfers" {
+			case "filesystems/transfers":
 				interclusterTransfers = child
-			} else if getVariant(child) == "filesystems/dirty" {
+			case "filesystems/dirty":
 				dirtyFilesystems = child
 			}
+			// if getVariant(child) == "filesystems/masters" {
+			// 	masters = child
+			// } else if getVariant(child) == "filesystems/requests" {
+			// 	requests = child
+			// } else if getVariant(child) == "servers/addresses" {
+			// 	serverAddresses = child
+			// } else if getVariant(child) == "servers/snapshots" {
+			// 	serverSnapshots = child
+			// } else if getVariant(child) == "servers/states" {
+			// 	serverStates = child
+			// } else if getVariant(child) == "registry/filesystems" {
+			// 	registryFilesystems = child
+			// } else if getVariant(child) == "registry/clones" {
+			// 	registryClones = child
+			// } else if getVariant(child) == "filesystems/transfers" {
+			// 	interclusterTransfers = child
+			// } else if getVariant(child) == "filesystems/dirty" {
+			// 	dirtyFilesystems = child
+			// }
 		}
 	}
 
@@ -1318,15 +1379,16 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 			}
 		}
 	}
-	if requests != nil {
-		for _, requestsForFilesystem := range requests.Nodes {
-			for _, node := range requestsForFilesystem.Nodes {
-				if err = maybeDispatchEvent(node); err != nil {
-					return err
-				}
-			}
-		}
-	}
+	// TODO: REMOVE
+	// if requests != nil {
+	// 	for _, requestsForFilesystem := range requests.Nodes {
+	// 		for _, node := range requestsForFilesystem.Nodes {
+	// 			if err = maybeDispatchEvent(node); err != nil {
+	// 				return err
+	// 			}
+	// 		}
+	// 	}
+	// }
 	// now that our state is initialized, maybe we're in a good place to
 	// interrogate docker for running containers as part of initial
 	// bootstrap, and also start the docker plugin
@@ -1425,6 +1487,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		}
 
 		variant := getVariant(node.Node)
+
 		if variant == "filesystems/masters" {
 
 			/*
@@ -1440,10 +1503,6 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 			}
 		} else if variant == "filesystems/deleted" {
 			if err = s.handleOneFilesystemDeletion(node.Node); err != nil {
-				return err
-			}
-		} else if variant == "filesystems/requests" {
-			if err = maybeDispatchEvent(node.Node); err != nil {
 				return err
 			}
 		} else if variant == "servers/addresses" {
