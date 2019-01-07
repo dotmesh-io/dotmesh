@@ -73,13 +73,13 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 		ContainerMountDirLock: &containerMountDirLock,
 	})
 	if err != nil {
-		panic(err)
+		log.WithFields(log.Fields{
+			"error":                  err,
+			"container_mount_prefix": CONTAINER_MOUNT_PREFIX,
+		}).Fatal("inMemoryState: failed to configure docker client")
+		os.Exit(1)
 	}
 
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		panic(err)
-	}
 	s := &InMemoryState{
 		config:                   config,
 		filesystems:              make(map[string]fsm.FSM),
@@ -91,7 +91,7 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 		globalContainerCache:     make(map[string]containerInfo),
 		globalContainerCacheLock: &sync.RWMutex{},
 		// When did we start waiting for etcd?
-		etcdClient:            kapi,
+		etcdClient:            config.EtcdClient,
 		etcdWaitTimestamp:     0,
 		etcdWaitState:         "",
 		etcdWaitTimestampLock: &sync.Mutex{},
@@ -123,6 +123,7 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 		log.WithFields(log.Fields{
 			"error": err,
 		}).Fatal("inMemoryState: failed to configure notification publisher")
+		os.Exit(1)
 	}
 	s.publisher = publisher
 	// a registry of names of filesystems and branches (clones) mapping to
