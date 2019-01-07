@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dotmesh-io/dotmesh/pkg/messaging/nats"
@@ -85,10 +86,36 @@ func (s *InMemoryState) periodicMessagingClusterRoutesUpdate() {
 	}
 }
 
+func probeURL(url string) error {
+	httpClient := http.DefaultClient
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"error":   err,
+			"address": url,
+		}).Error("[NATS] failed to prepare request for NATS connectivity check")
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	req = req.WithContext(ctx)
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"error":   err,
+			"address": url,
+		}).Debug("[NATS] ping failed")
+		return err
+	}
+	resp.Body.Close()
+	return nil
+}
+
 func (s *InMemoryState) updateMessagingClusterConns() error {
 	new := []string{}
 
-	httpClient := http.DefaultClient
+	mu := &sync.Mutex{}
+	// httpClient := http.DefaultClient
 
 	for nodeID, v := range s.serverAddressesCache {
 		if nodeID == s.NodeID() {
@@ -96,31 +123,26 @@ func (s *InMemoryState) updateMessagingClusterConns() error {
 			continue
 		}
 		addresses := strings.Split(v, ",")
+
+		wg := &sync.WaitGroup{}
+		wg.Add(len(addresses))
 		for _, a := range addresses {
-
-			req, err := http.NewRequest("GET", fmt.Sprintf("http://%s:%d", a, nats.DefaultHTTPPort), nil)
-
-			if err != nil {
-				log.WithFields(log.Fields{
-					"error":   err,
-					"address": a,
-					"port":    nats.DefaultHTTPPort,
-				}).Error("[NATS] failed to prepare request for NATS connectivity check")
-				continue
-			}
-
-			_, err = httpClient.Do(req)
-			if err != nil {
-				log.WithFields(log.Fields{
-					"error":   err,
-					"address": a,
-					"port":    nats.DefaultHTTPPort,
-				}).Warn("[NATS] ping failed")
-				continue
-			}
-
-			new = append(new, fmt.Sprintf("nats://%s:%d", a, nats.DefaultClusterPort))
+			httpURL := fmt.Sprintf("http://%s:%d", a, nats.DefaultHTTPPort)
+			clusterURL := fmt.Sprintf("nats://%s:%d", a, nats.DefaultClusterPort)
+			go func(url, cluster string) {
+				defer wg.Done()
+				err := probeURL(url)
+				if err != nil {
+					// nothing to do
+					return
+				}
+				mu.Lock()
+				new = append(new, cluster)
+				mu.Unlock()
+			}(httpURL, clusterURL)
 		}
+
+		wg.Wait()
 	}
 
 	current := strings.Split(s.config.NatsConfig.RoutesStr, ",")
