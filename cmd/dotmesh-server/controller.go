@@ -17,9 +17,11 @@ import (
 
 	"github.com/dotmesh-io/dotmesh/pkg/container"
 	"github.com/dotmesh-io/dotmesh/pkg/fsm"
+	"github.com/dotmesh-io/dotmesh/pkg/messaging"
 	"github.com/dotmesh-io/dotmesh/pkg/notification"
 	"github.com/dotmesh-io/dotmesh/pkg/observer"
 	"github.com/dotmesh-io/dotmesh/pkg/registry"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 
 	log "github.com/sirupsen/logrus"
@@ -37,6 +39,9 @@ type InMemoryState struct {
 
 	globalContainerCache     map[string]containerInfo
 	globalContainerCacheLock *sync.RWMutex
+
+	messenger       messaging.Messenger
+	messagingServer messaging.MessagingServer
 
 	etcdClient                 client.KeysAPI
 	etcdWaitTimestamp          int64
@@ -68,13 +73,13 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 		ContainerMountDirLock: &containerMountDirLock,
 	})
 	if err != nil {
-		panic(err)
+		log.WithFields(log.Fields{
+			"error":                  err,
+			"container_mount_prefix": CONTAINER_MOUNT_PREFIX,
+		}).Fatal("inMemoryState: failed to configure docker client")
+		os.Exit(1)
 	}
 
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		panic(err)
-	}
 	s := &InMemoryState{
 		config:                   config,
 		filesystems:              make(map[string]fsm.FSM),
@@ -86,7 +91,7 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 		globalContainerCache:     make(map[string]containerInfo),
 		globalContainerCacheLock: &sync.RWMutex{},
 		// When did we start waiting for etcd?
-		etcdClient:            kapi,
+		etcdClient:            config.EtcdClient,
 		etcdWaitTimestamp:     0,
 		etcdWaitState:         "",
 		etcdWaitTimestampLock: &sync.Mutex{},
@@ -118,11 +123,21 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 		log.WithFields(log.Fields{
 			"error": err,
 		}).Fatal("inMemoryState: failed to configure notification publisher")
+		os.Exit(1)
 	}
 	s.publisher = publisher
 	// a registry of names of filesystems and branches (clones) mapping to
 	// their ids
 	s.registry = registry.NewRegistry(config.UserManager, config.EtcdClient, ETCD_PREFIX)
+
+	err = s.initializeMessaging()
+	if err != nil {
+		log.WithFields(log.Fields{
+			"error": err,
+		}).Fatal("[NATS] inMemoryState: messaging setup failed")
+		os.Exit(1)
+	}
+
 	return s
 }
 
@@ -180,7 +195,7 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 		return DotmeshVolume{}, err
 	}
 
-	log.Debugf("[getOne] starting for %v", fs)
+	// log.Debugf("[getOne] starting for %v", fs)
 
 	if tlf, clone, err := s.registry.LookupFilesystemById(fs); err == nil {
 		authorized, err := tlf.Authorize(ctx)
@@ -196,11 +211,11 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 		// if not exists, 0 is fine
 		s.globalDirtyCacheLock.RLock()
 
-		log.WithFields(log.Fields{
-			"fs":     fs,
-			"master": master,
-			"cache":  s.globalDirtyCache,
-		}).Debug("[getOne] looking up fs with master in cache")
+		// log.WithFields(log.Fields{
+		// 	"fs":     fs,
+		// 	"master": master,
+		// 	"cache":  s.globalDirtyCache,
+		// }).Debug("[getOne] looking up fs with master in cache")
 
 		dirty, ok := s.globalDirtyCache[fs]
 		var dirtyBytes int64
@@ -251,36 +266,10 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 		}
 		sort.Sort(ByAddress(servers))
 
-		// s.globalStateCacheLock.RLock()
-		// s.globalSnapshotCacheLock.RLock()
-
-		// if ok {
-		// 	// for _, server := range servers {
-
-		// 	// }
-		// 	// meta := fsm.GetMetadata()
-		// 	serverStateMachineMetadata := fsm.ListMetadata()
-
-		// 	for _, server := range servers {
-
-		// 		status := ""
-
-		// 		if len(serverStateMachineMetadata) == 0 {
-
-		// 		} else {
-		// 			d.ServerStatuses[server.Id] = serverStateMachineMetadata[]
-		// 		}
-		// 	}
-		// }
-
 		if ok {
 
 			for _, server := range servers {
-				// get current state and status for filesystem on server from our
-				// cache
-				// numSnapshots := len(s.globalSnapshotCache[server.Id][fs])
 				numSnapshots := len(fsm.GetSnapshots(server.Id))
-				// state, ok := s.globalStateCache[server.Id][fs]
 				state := fsm.GetMetadata(server.Id)
 				status := ""
 				if len(state) == 0 {
@@ -296,15 +285,68 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 			}
 		}
 
-		// }
-		// s.globalSnapshotCacheLock.RUnlock()
-		// s.globalStateCacheLock.RUnlock()
-
-		log.Debugf("[getOne] here is your volume: %v", d)
+		// log.Debugf("[getOne] here is your volume: %v", d)
 		return d, nil
 	} else {
 		return DotmeshVolume{}, fmt.Errorf("Unable to find filesystem name for id %s", fs)
 	}
+}
+
+func (s *InMemoryState) subscribeToFilesystemRequests(ctx context.Context) {
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			ch, err := s.messenger.Subscribe(ctx, &types.SubscribeQuery{
+				Type: types.EventTypeRequest,
+			})
+			if err != nil {
+				if err != nil {
+					log.WithFields(log.Fields{
+						"error": err,
+						"host":  s.config.NatsConfig.Host,
+						"port":  s.config.NatsConfig.Port,
+					}).Error("[NATS] failed to subscribe to filesystem events, retrying...")
+				}
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
+			for req := range ch {
+				go func(r *types.Event) {
+					err := s.processFilesystemEvent(r)
+					if err != nil {
+						log.WithFields(log.Fields{
+							"error":         err,
+							"filesystem_id": r.FilesystemID,
+							"request_id":    r.ID,
+						}).Error("[NATS] failed to process filesystem event")
+					}
+				}(req)
+			}
+		}
+	}
+}
+
+func (s *InMemoryState) processFilesystemEvent(event *types.Event) error {
+	masterNode, ok := s.registry.GetMasterNode(event.FilesystemID)
+	if !ok {
+		return nil
+	}
+	if masterNode != s.NodeID() {
+		return nil
+	}
+
+	c, err := s.dispatchEvent(event.FilesystemID, event, event.ID)
+	if err != nil {
+		return err
+	}
+
+	internalResponse := <-c
+
+	return s.respondToEvent(event.FilesystemID, event.ID, internalResponse)
 }
 
 func (s *InMemoryState) notifyPushCompleted(filesystemId string, success bool) {

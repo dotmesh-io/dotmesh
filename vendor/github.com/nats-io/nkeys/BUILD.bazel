@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "crc16.go",
+        "keypair.go",
+        "main.go",
+        "public.go",
+        "strkey.go",
+    ],
+    importmap = "github.com/dotmesh-io/dotmesh/vendor/github.com/nats-io/nkeys",
+    importpath = "github.com/nats-io/nkeys",
+    visibility = ["//visibility:public"],
+    deps = ["//vendor/golang.org/x/crypto/ed25519:go_default_library"],
+)

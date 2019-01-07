@@ -151,7 +151,7 @@ waitingForSlaveSnapshot:
 				// go into discovery again and perform the check for the
 				// filesystem being deleted.
 				log.Printf("rejecting all %s", e)
-				f.innerResponses <- &types.Event{"busy-handoff", &types.EventArgs{}}
+				f.innerResponses <- types.NewEvent("busy-handoff")
 			case _ = <-newSnapsChan:
 				// TODO check that the latest snap is the one we expected
 				gotSnaps = true

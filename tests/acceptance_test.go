@@ -1006,45 +1006,6 @@ func TestSingleNode(t *testing.T) {
 		}
 	})
 
-	t.Run("InvalidRequest", func(t *testing.T) {
-		fsname := citools.UniqName()
-		citools.RunOnNode(t, node1, "dm init "+fsname)
-		resp := citools.OutputFromRunOnNode(t, node1, "dm list")
-		if !strings.Contains(resp, fsname) {
-			t.Error("unable to find volume name in ouput")
-		}
-
-		fsId := strings.TrimSpace(
-			citools.OutputFromRunOnNode(t, node1, "dm dot show -H | grep masterBranchId | cut -f 2"),
-		)
-
-		// Inject an invalid request
-		resp, err := citools.DoSetDebugFlag(
-			f[0].GetNode(0).IP,
-			"admin",
-			f[0].GetNode(0).ApiKey,
-			"SendMangledEvent",
-			fsId,
-		)
-		if err != nil {
-			t.Error(err)
-		}
-
-		if !strings.Contains(resp, "invalid-request") {
-			t.Errorf("Response didn't contained 'invalid-request', should be something like '{\"Name\":\"invalid-request\",\"Args\":{\"error\":{\"Offset\":1},\"request\":null}}' but was: %s", resp)
-		}
-
-		// Check filesystem still works to some extent
-		citools.RunOnNode(t, node1, "dm switch "+fsname)
-		citools.RunOnNode(t, node1, "dm commit -m \"Jabberwocky\"")
-		st := citools.OutputFromRunOnNode(t, node1, "dm log")
-
-		if !strings.Contains(st, "Jabberwocky") {
-			t.Error(fmt.Sprintf("We didn't get the commit back from dm log: %+v", st))
-		}
-
-	})
-
 	t.Run("ApiKeys", func(t *testing.T) {
 		apiKey := f[0].GetNode(0).ApiKey
 		password := f[0].GetNode(0).Password
@@ -1699,9 +1660,11 @@ func TestTwoDoubleNodeClusters(t *testing.T) {
 func TestTwoSingleNodeClusters(t *testing.T) {
 	citools.TeardownFinishedTestRuns()
 
+	secondClusterPort := 30009
+
 	f := citools.Federation{
-		citools.NewCluster(1),              // cluster_0_node_0
-		citools.NewClusterOnPort(32609, 1), // cluster_1_node_0
+		citools.NewCluster(1),                          // cluster_0_node_0
+		citools.NewClusterOnPort(secondClusterPort, 1), // cluster_1_node_0
 	}
 	defer citools.TestMarkForCleanup(f)
 	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
@@ -1715,7 +1678,7 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 	node2 := f[1].GetNode(0).Container
 
 	t.Run("SpecifyPort", func(t *testing.T) {
-		citools.RunOnNode(t, node1, "echo "+f[1].GetNode(0).ApiKey+" | dm remote add funny_port_remote admin@"+f[1].GetNode(0).IP+":32609")
+		citools.RunOnNode(t, node1, "echo "+f[1].GetNode(0).ApiKey+" | dm remote add funny_port_remote admin@"+f[1].GetNode(0).IP+":"+strconv.Itoa(secondClusterPort))
 	})
 
 	t.Run("PushCommitBranchExtantBase", func(t *testing.T) {

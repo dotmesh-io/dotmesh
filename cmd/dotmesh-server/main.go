@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/dotmesh-io/dotmesh/pkg/kv"
+	"github.com/dotmesh-io/dotmesh/pkg/messaging/nats"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 
@@ -78,6 +79,7 @@ func main() {
 	// TODO: remove the different domains concept and have a proxy to services
 	config = Config{
 		FilesystemMetadataTimeout: FILESYSTEM_METADATA_TIMEOUT_INT,
+		NatsConfig:                nats.DefaultConfig(),
 	}
 
 	POOL = os.Getenv("POOL")
@@ -131,7 +133,8 @@ func main() {
 
 	zRoot := os.Getenv("ZFS_USERLAND_ROOT")
 	if zRoot == "" {
-		panic("Must specify ZFS_USERLAND_ROOT, e.g. /opt/zfs-0.7")
+		fmt.Println("Must specify ZFS_USERLAND_ROOT, e.g. /opt/zfs-0.7")
+		os.Exit(1)
 	}
 	ZFS = zRoot + "/sbin/zfs"
 	MOUNT_ZFS = zRoot + "/sbin/mount.zfs"
@@ -228,7 +231,6 @@ func main() {
 		go runForever(s.fetchAndWatchEtcd, "fetchAndWatchEtcd",
 			1*time.Second, 1*time.Second,
 		)
-		// s.repl()
 	} else {
 		runForever(s.fetchAndWatchEtcd, "fetchAndWatchEtcd",
 			1*time.Second, 1*time.Second,
