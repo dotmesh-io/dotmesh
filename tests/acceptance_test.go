@@ -1006,45 +1006,6 @@ func TestSingleNode(t *testing.T) {
 		}
 	})
 
-	t.Run("InvalidRequest", func(t *testing.T) {
-		fsname := citools.UniqName()
-		citools.RunOnNode(t, node1, "dm init "+fsname)
-		resp := citools.OutputFromRunOnNode(t, node1, "dm list")
-		if !strings.Contains(resp, fsname) {
-			t.Error("unable to find volume name in ouput")
-		}
-
-		fsId := strings.TrimSpace(
-			citools.OutputFromRunOnNode(t, node1, "dm dot show -H | grep masterBranchId | cut -f 2"),
-		)
-
-		// Inject an invalid request
-		resp, err := citools.DoSetDebugFlag(
-			f[0].GetNode(0).IP,
-			"admin",
-			f[0].GetNode(0).ApiKey,
-			"SendMangledEvent",
-			fsId,
-		)
-		if err != nil {
-			t.Error(err)
-		}
-
-		if !strings.Contains(resp, "invalid-request") {
-			t.Errorf("Response didn't contained 'invalid-request', should be something like '{\"Name\":\"invalid-request\",\"Args\":{\"error\":{\"Offset\":1},\"request\":null}}' but was: %s", resp)
-		}
-
-		// Check filesystem still works to some extent
-		citools.RunOnNode(t, node1, "dm switch "+fsname)
-		citools.RunOnNode(t, node1, "dm commit -m \"Jabberwocky\"")
-		st := citools.OutputFromRunOnNode(t, node1, "dm log")
-
-		if !strings.Contains(st, "Jabberwocky") {
-			t.Error(fmt.Sprintf("We didn't get the commit back from dm log: %+v", st))
-		}
-
-	})
-
 	t.Run("ApiKeys", func(t *testing.T) {
 		apiKey := f[0].GetNode(0).ApiKey
 		password := f[0].GetNode(0).Password

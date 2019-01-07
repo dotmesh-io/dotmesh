@@ -194,7 +194,7 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 		return DotmeshVolume{}, err
 	}
 
-	log.Debugf("[getOne] starting for %v", fs)
+	// log.Debugf("[getOne] starting for %v", fs)
 
 	if tlf, clone, err := s.registry.LookupFilesystemById(fs); err == nil {
 		authorized, err := tlf.Authorize(ctx)
@@ -210,11 +210,11 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 		// if not exists, 0 is fine
 		s.globalDirtyCacheLock.RLock()
 
-		log.WithFields(log.Fields{
-			"fs":     fs,
-			"master": master,
-			"cache":  s.globalDirtyCache,
-		}).Debug("[getOne] looking up fs with master in cache")
+		// log.WithFields(log.Fields{
+		// 	"fs":     fs,
+		// 	"master": master,
+		// 	"cache":  s.globalDirtyCache,
+		// }).Debug("[getOne] looking up fs with master in cache")
 
 		dirty, ok := s.globalDirtyCache[fs]
 		var dirtyBytes int64
@@ -284,7 +284,7 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 			}
 		}
 
-		log.Debugf("[getOne] here is your volume: %v", d)
+		// log.Debugf("[getOne] here is your volume: %v", d)
 		return d, nil
 	} else {
 		return DotmeshVolume{}, fmt.Errorf("Unable to find filesystem name for id %s", fs)

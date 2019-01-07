@@ -2310,38 +2310,7 @@ func (d *DotmeshRPC) SetDebugFlag(
 		e := <-responseChan
 		log.Printf("[SetDebugFlag] deliberately unhandled event replied with %#v", e)
 		*result = fmt.Sprintf("%#v", e)
-	case "SendMangledEvent":
-		filesystemId := args.FlagValue
 
-		kapi, err := getEtcdKeysApi()
-		if err != nil {
-			return err
-		}
-
-		key := fmt.Sprintf("%s/filesystems/requests/%s/INVALID", ETCD_PREFIX, filesystemId)
-		resp, err := kapi.Set(
-			context.Background(),
-			key,
-			"{", // Nasty invalid JSON
-			&client.SetOptions{PrevExist: client.PrevNoExist, TTL: 604800 * time.Second},
-		)
-		if err != nil {
-			log.Warnf("[SetDebugFlag:SendMangledEvent] - error setting %s: %s", key, err)
-			return err
-		}
-
-		watcher := kapi.Watcher(
-			// TODO maybe responses should get their own IDs, so that there can be
-			// multiple responses to a given event (at present we just assume one)
-			fmt.Sprintf("%s/filesystems/responses/%s/INVALID", ETCD_PREFIX, filesystemId),
-			&client.WatcherOptions{AfterIndex: resp.Node.CreatedIndex, Recursive: true},
-		)
-		node, err := watcher.Next(context.Background())
-		if err != nil {
-			return err
-		}
-
-		*result = node.Node.Value
 	default:
 		*result = ""
 		return fmt.Errorf("Unknown debug flag %s", args.FlagName)
