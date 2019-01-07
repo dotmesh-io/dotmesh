@@ -15,8 +15,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// initializeMessaging - sets up server, client and starts periodic route synchronization from the
+// known server list.
 func (s *InMemoryState) initializeMessaging() error {
-	log.SetLevel(log.DebugLevel)
 	// start NATS server
 	messagingServer, err := nats.NewServer(s.config.NatsConfig)
 	if err != nil {

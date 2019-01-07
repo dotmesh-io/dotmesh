@@ -1345,7 +1345,9 @@ func (d *DotmeshRPC) S3Transfer(
 	}
 	region, err := s3manager.GetBucketRegion(r.Context(), sess, args.RemoteName, "us-west-1")
 	if err != nil {
-		fmt.Printf("[S3Transfer] Got err from S3: %#v", err)
+		log.WithFields(log.Fields{
+			"error": err,
+		}).Error("[S3Transfer] got error from s3")
 		return fmt.Errorf("Could not get bucket region - does the bucket exist?")
 	}
 	// I don't think region actually matters, but if none is supplied the client complains
@@ -1354,7 +1356,11 @@ func (d *DotmeshRPC) S3Transfer(
 	// Check the bucket exists, and that we can access it
 	output, err = svc.HeadBucket(&s3.HeadBucketInput{Bucket: &args.RemoteName})
 	if err != nil {
-		fmt.Printf("[S3Transfer] %#v, error: %#v", output, err)
+		// fmt.Printf("[S3Transfer] %#v, error: %#v", output, err)
+		log.WithFields(log.Fields{
+			"error":  err,
+			"output": output,
+		}).Error("[S3Transfer] got error while checking if bucket exists")
 		return fmt.Errorf("Head request failed - do the remote credentials have access to this bucket?")
 	}
 	log.Printf("[S3Transfer] starting with %+v", safeS3(*args))
