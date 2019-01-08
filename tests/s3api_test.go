@@ -126,15 +126,17 @@ func TestS3Api(t *testing.T) {
 		firstCommitId := commitIdsList[0]
 		secondCommitId := commitIdsList[1]
 
+		t.Logf("running (first commit): '%s'", fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", host.Password, dotName, firstCommitId))
 		respFirstCommit := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", host.Password, dotName, firstCommitId))
-		if !strings.Contains(respFirstCommit, "helloworld1") {
-			fmt.Printf(respFirstCommit)
-			t.Error("The first commit did not contain the correct file data")
+		expected1 := "helloworld1"
+		if !strings.Contains(respFirstCommit, expected1) {
+			t.Errorf("The first commit did not contain the correct file data (expected '%s', got: '%s')", expected1, respFirstCommit)
 		}
+		t.Logf("running (second commit): '%s'", fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", host.Password, dotName, secondCommitId))
 		respSecondCommit := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", host.Password, dotName, secondCommitId))
-		if !strings.Contains(respSecondCommit, "helloworld2") {
-			fmt.Printf(respSecondCommit)
-			t.Error("The second commit did not contain the correct file data")
+		expected2 := "helloworld2"
+		if !strings.Contains(respSecondCommit, expected2) {
+			t.Errorf("The second commit did not contain the correct file data (expected '%s', got: '%s')", expected2, respSecondCommit)
 		}
 	})
 }
