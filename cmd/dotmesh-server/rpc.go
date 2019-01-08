@@ -1910,6 +1910,49 @@ func (d *DotmeshRPC) AllDotsAndBranches(
 	return nil
 }
 
+func (d *DotmeshRPC) Fork(
+	r *http.Request,
+	args *struct {
+		MasterBranchID string
+		Collaborator   string
+	},
+	result *bool,
+) error {
+
+	// TODO #611: strip this out and replace it with a check to make sure they're in the collaborators list
+	err := ensureAdminUser(r)
+	if err != nil {
+		return err
+	}
+	_, _, err = d.state.registry.LookupFilesystemById(args.MasterBranchID)
+	if err != nil {
+		return err
+	}
+	_, err = d.usersManager.Get(&user.Query{Ref: args.Collaborator})
+	if err != nil {
+		return err
+	}
+
+	responseChan, _, err := d.state.globalFsRequestId(
+		args.MasterBranchID,
+		&Event{Name: "fork",
+			Args: &EventArgs{
+				"ForkUser": args.Collaborator,
+			},
+		},
+	)
+	if err != nil {
+		return err
+	}
+	go func() {
+		// asynchronously throw away the response, transfers can be polled via
+		// their own entries in etcd
+		e := <-responseChan
+		log.Printf("finished transfer of %+v, %+v", args, e)
+	}()
+	return nil
+}
+
 func (d *DotmeshRPC) AddCollaborator(
 	r *http.Request,
 	args *struct {

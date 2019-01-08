@@ -1,10 +1,16 @@
 package main
 
 import (
-	"testing"
-
+	"fmt"
 	"github.com/dotmesh-io/citools"
+	"strings"
+	"testing"
 )
+
+type ForkRequest struct {
+	MasterBranchID string
+	Collaborator   string
+}
 
 func TestForks(t *testing.T) {
 	// single node tests
@@ -19,6 +25,7 @@ func TestForks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to start cluster, error: %s", err)
 	}
+	node1Name := f[0].GetNode(0).Container
 	bobKey := "bob is great"
 
 	// Create user bob on the first node
@@ -43,7 +50,7 @@ func TestForks(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		lookupResp := ""
+		var lookupResp string
 		err = citools.DoRPC(f[0].GetNode(0).IP, "bob", bobKey,
 			"DotmeshRPC.Lookup",
 			VolumeName{Namespace: "bob", Name: fsname},
@@ -54,10 +61,19 @@ func TestForks(t *testing.T) {
 		forkResp := false
 		err = citools.DoRPC(f[0].GetNode(0).IP, "admin", f[0].GetNode(0).ApiKey,
 			"DotmeshRPC.Fork",
-			lookupResp,
+			ForkRequest{
+				MasterBranchID: lookupResp,
+				Collaborator:   "alice",
+			},
 			&forkResp)
 		if err != nil {
 			t.Error(err)
+		}
+		citools.RunOnNode(t, node1Name, fmt.Sprintf("echo %s | dm remote add alice alice@localhost", aliceKey))
+		citools.RunOnNode(t, node1Name, "dm remote switch alice")
+		output := citools.OutputFromRunOnNode(t, node1Name, "dm list")
+		if !strings.Contains(output, fsname) {
+			t.Errorf("Did not find dot %s in output. Got: %s", fsname, output)
 		}
 	})
 
