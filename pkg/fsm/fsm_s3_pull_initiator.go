@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/dotmesh-io/dotmesh/pkg/types"
+	"github.com/dotmesh-io/dotmesh/pkg/utils"
 	"github.com/nu7hatch/gouuid"
 )
 
@@ -23,13 +24,13 @@ func s3PullInitiatorState(f *FsMachine) StateFn {
 	}
 
 	// create the default paths
-	destPath := fmt.Sprintf("%s/%s", mnt(f.filesystemId), "__default__")
+	destPath := fmt.Sprintf("%s/%s", utils.Mnt(f.filesystemId), "__default__")
 	err = os.MkdirAll(destPath, 0775)
 	if err != nil {
 		f.errorDuringTransfer("cannot-create-default-dir", err)
 		return backoffState
 	}
-	versionsPath := fmt.Sprintf("%s/%s", mnt(f.filesystemId), "dm.s3-versions")
+	versionsPath := fmt.Sprintf("%s/%s", utils.Mnt(f.filesystemId), "dm.s3-versions")
 	err = os.MkdirAll(versionsPath, 0775)
 	if err != nil {
 		f.errorDuringTransfer("cannot-create-versions-metadata-dir", err)
@@ -86,7 +87,7 @@ func s3PullInitiatorState(f *FsMachine) StateFn {
 			return backoffState
 		}
 		snapshotId := id.String()
-		path := fmt.Sprintf("%s/%s", mnt(f.filesystemId), "dm.s3-versions")
+		path := fmt.Sprintf("%s/%s", utils.Mnt(f.filesystemId), "dm.s3-versions")
 		err = os.MkdirAll(path, 0775)
 		if err != nil {
 			f.errorDuringTransfer("couldnt-create-metadata-subdot", err)

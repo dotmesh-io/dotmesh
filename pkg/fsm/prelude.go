@@ -24,7 +24,7 @@ func calculatePrelude(snaps []types.Snapshot, toSnapshotId string) (types.Prelud
 		pointerSnaps = append(pointerSnaps, &snapshots)
 	}
 	var err error
-	prelude.SnapshotProperties, err = RestrictSnapshots(pointerSnaps, toSnapshotId)
+	prelude.SnapshotProperties, err = restrictSnapshots(pointerSnaps, toSnapshotId)
 	if err != nil {
 		return prelude, err
 	}

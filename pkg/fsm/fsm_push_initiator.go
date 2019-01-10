@@ -7,7 +7,6 @@ import (
 
 	// "log"
 	"net/http"
-	"os/exec"
 	"time"
 
 	"golang.org/x/net/context"
@@ -144,9 +143,6 @@ func (f *FsMachine) push(
 		}, backoffState
 	}
 
-	// TODO remove duplication (with replication.go)
-	// command writes into pipe
-	var cmd *exec.Cmd
 	// https://github.com/zfsonlinux/zfs/pull/5189
 	//
 	// Due to the above issues, -R doesn't send user properties on

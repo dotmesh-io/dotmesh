@@ -23,7 +23,9 @@ func doSimpleZFSCommand(cmd *exec.Cmd, description string) error {
 	return nil
 }
 
-func logZFSCommand(filesystemId, command string) {
+// TODO: why not use a logger and using a file with it
+// then tune the level? This is used aalllll over the codebase.
+func LogZFSCommand(filesystemId, command string) {
 	// Disabled by default; we need to change the code and recompile to enable this.
 	if false {
 		f, err := os.OpenFile(os.Getenv("POOL_LOGFILE"), os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)

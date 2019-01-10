@@ -15,6 +15,7 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/zfs"
 	"github.com/gorilla/mux"
 
+	"github.com/dotmesh-io/dotmesh/pkg/utils"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -99,7 +100,7 @@ func (z *ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		finished := make(chan bool)
 		log.Printf("[ZFSSender:ServeHTTP] Got HTTP response %+v", resp.StatusCode)
 		w.WriteHeader(resp.StatusCode)
-		go pipe(resp.Body, url,
+		go utils.Pipe(resp.Body, url,
 			w, "proxied pull recipient",
 			finished,
 			make(chan *Event),

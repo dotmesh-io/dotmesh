@@ -9,7 +9,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/dotmesh-io/dotmesh/pkg/client"
-	"github.com/dotmesh-io/dotmesh/pkg/zfs"
 )
 
 func (state *InMemoryState) runLivenessServer() {

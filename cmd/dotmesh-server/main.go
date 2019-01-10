@@ -18,7 +18,6 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/kv"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
-	"github.com/dotmesh-io/dotmesh/pkg/zfs"
 
 	// registering metric counters
 	_ "github.com/dotmesh-io/dotmesh/pkg/metrics"
@@ -29,7 +28,6 @@ import (
 	"github.com/opentracing/opentracing-go"
 	zipkin "github.com/openzipkin/zipkin-go-opentracing"
 
-	"github.com/dotmesh-io/dotmesh/pkg/utils"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -139,7 +137,7 @@ func main() {
 	MOUNT_ZFS = zRoot + "/sbin/mount.zfs"
 	ZPOOL = zRoot + "/sbin/zpool"
 	ips, _ := guessIPv4Addresses()
-	log.Printf("Detected my node ID as %s (%s)", localPoolId, ips)
+	log.Printf("Detected my node IPs as %s", ips)
 
 	etcdClient, err := getEtcdKeysApi()
 	if err != nil {
@@ -154,7 +152,7 @@ func main() {
 	kvClient := kv.New(etcdClient, ETCD_PREFIX)
 	config.UserManager = user.New(kvClient)
 
-	s := NewInMemoryState(localPoolId, config)
+	s := NewInMemoryState(config)
 
 	for _, filesystemId := range s.zfs.FindFilesystemIdsOnSystem() {
 		log.Debugf("Initializing fsMachine for %s", filesystemId)

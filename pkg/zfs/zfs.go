@@ -2,6 +2,7 @@ package zfs
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"os/exec"
@@ -15,6 +16,9 @@ import (
 	"io"
 	"os"
 )
+
+// this should be a coverall interface for the usage of zfs.
+// TODO refactor usage here so that there's less duplication
 
 type ZFS interface {
 	GetZPoolCapacity() (float64, error)
@@ -31,9 +35,11 @@ type ZFS interface {
 	Clone(filesystemId, originSnapshotId, newCloneFilesystemId string) ([]byte, error)
 	Rollback(filesystemId, snapshotId string) ([]byte, error)
 	Create(filesystemId string) ([]byte, error)
-	Recv(pipeReader *io.PipeReader, toFilesystemId string) error
+	Recv(pipeReader *io.PipeReader, toFilesystemId string, errBuffer *bytes.Buffer) error
 	ApplyPrelude(prelude types.Prelude, fs string) error
 	Send(fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string, preludeEncoded []byte) (*io.PipeReader, chan error)
+	SetCanmount(filesystemId, snapshotId string) ([]byte, error)
+	Mount(filesystemId, snapshotId string, options string, mountPath string) ([]byte, error)
 }
 
 type zfs struct {
@@ -71,6 +77,16 @@ func NewZFS(zfsPath, zpoolPath, poolName, mountZFS string) (ZFS, error) {
 	return zfsInter, nil
 }
 
+func (z *zfs) FQ(filesystemId string) string {
+	// todo this is probably too much indirection, shift FQ into here when it's no longer used anywhere
+	return FQ(z.poolName, filesystemId)
+}
+
+func (z *zfs) fullZFSFilesystemPath(filesystemId, snapshotId string) string {
+	fqFilesystemId := z.FQ(FullIdWithSnapshot(filesystemId, snapshotId))
+	return fqFilesystemId
+}
+
 func (z *zfs) Create(filesystemId string) ([]byte, error) {
 	return z.runOnFilesystem(filesystemId, "", []string{"create"})
 }
@@ -79,13 +95,32 @@ func (z *zfs) Rollback(filesystemId, snapshotId string) ([]byte, error) {
 	return z.runOnFilesystem(filesystemId, snapshotId, []string{"rollback", "-r"})
 }
 
-func (z *zfs) runOnFilesystem(filesystemId, snapshotId string, args []string) ([]byte, error) {
-	fullName := z.FQ(filesystemId)
-	if snapshotId != "" {
-		fullName += "@" + snapshotId
+func (z *zfs) SetCanmount(filesystemId, snapshotId string) ([]byte, error) {
+	return z.runOnFilesystem(filesystemId, snapshotId, []string{"set", "canmount=noauto"})
+}
+
+func (z *zfs) Mount(filesystemId, snapshotId, options, mountPath string) ([]byte, error) {
+	fullFilesystemId := FullIdWithSnapshot(filesystemId, snapshotId)
+	zfsFullId := z.fullZFSFilesystemPath(filesystemId, snapshotId)
+	// TODO less redirection here too?
+	err := os.MkdirAll(mountPath, 0775)
+	if err != nil {
+		log.Printf("[Mount:%s] %v while trying to create dir %s", fullFilesystemId, err, mountPath)
+		return nil, err
 	}
+	LogZFSCommand(filesystemId, fmt.Sprintf("%s -o %s %s %s", z.mountZFS, options, zfsFullId, mountPath))
+	output, err := exec.Command(z.mountZFS, "-o", options, zfsFullId, mountPath).CombinedOutput()
+	if err != nil {
+		log.Printf("[Mount:%s] %v while trying to mount %s", fullFilesystemId, err, zfsFullId)
+		return nil, err
+	}
+	return output, err
+}
+
+func (z *zfs) runOnFilesystem(filesystemId, snapshotId string, args []string) ([]byte, error) {
+	fullName := z.fullZFSFilesystemPath(filesystemId, snapshotId)
 	args = append(args, fullName)
-	logZFSCommand(filesystemId, fmt.Sprintf("%s %s", z.zfsPath, strings.Join(args, " ")))
+	LogZFSCommand(filesystemId, fmt.Sprintf("%s %s", z.zfsPath, strings.Join(args, " ")))
 	output, err := exec.Command(z.zfsPath, args...).CombinedOutput()
 	if err != nil {
 		log.Printf("%v while trying run command %s %s", err, z.zfsPath, strings.Join(args, " "))
@@ -93,14 +128,11 @@ func (z *zfs) runOnFilesystem(filesystemId, snapshotId string, args []string) ([
 	return output, err
 }
 
-func (z *zfs) FQ(filesystemId string) string {
-	return FQ(z.poolName, filesystemId)
-}
 func (z *zfs) Snapshot(filesystemId string, snapshotId string, metadataEncoded []string) ([]byte, error) {
 	args := []string{"snapshot"}
 	args = append(args, metadataEncoded...)
-	args = append(args, z.FQ(filesystemId)+"@"+snapshotId)
-	logZFSCommand(filesystemId, fmt.Sprintf("%s %s", z.zfsPath, strings.Join(args, " ")))
+	args = append(args, z.fullZFSFilesystemPath(filesystemId, snapshotId))
+	LogZFSCommand(filesystemId, fmt.Sprintf("%s %s", z.zfsPath, strings.Join(args, " ")))
 	log.Printf("[zfs.Snapshot] Attempting: zfs %s", args)
 	output, err := exec.Command(z.zfsPath, args...).CombinedOutput()
 	if err != nil {
@@ -110,10 +142,7 @@ func (z *zfs) Snapshot(filesystemId string, snapshotId string, metadataEncoded [
 }
 
 func (z *zfs) List(filesystemId, snapshotId string) ([]byte, error) {
-	entry := z.FQ(filesystemId)
-	if snapshotId != "" {
-		entry += "@" + snapshotId
-	}
+	entry := z.fullZFSFilesystemPath(filesystemId, snapshotId)
 	output, err := exec.Command(z.zfsPath, "list", entry).CombinedOutput()
 	if err != nil {
 		log.Printf("[list] %v while trying to list snapshot for filesystem %s", err, z.FQ(filesystemId))
@@ -122,7 +151,7 @@ func (z *zfs) List(filesystemId, snapshotId string) ([]byte, error) {
 }
 
 func (z *zfs) Clone(filesystemId, originSnapshotId, newCloneFilesystemId string) ([]byte, error) {
-	logZFSCommand(filesystemId, fmt.Sprintf("%s clone %s@%s %s", z.zfsPath, z.FQ(filesystemId), originSnapshotId, z.FQ(newCloneFilesystemId)))
+	LogZFSCommand(filesystemId, fmt.Sprintf("%s clone %s %s", z.zfsPath, z.fullZFSFilesystemPath(filesystemId, originSnapshotId), z.FQ(newCloneFilesystemId)))
 	out, err := exec.Command(
 		z.zfsPath, "clone",
 		z.FQ(filesystemId)+"@"+originSnapshotId,
@@ -316,7 +345,7 @@ func (z *zfs) FindFilesystemIdsOnSystem() []string {
 }
 
 func (z *zfs) DeleteFilesystemInZFS(fs string) error {
-	logZFSCommand(fs, fmt.Sprintf("%s destroy -r %s", z.zfsPath, FQ(z.poolName, fs)))
+	LogZFSCommand(fs, fmt.Sprintf("%s destroy -r %s", z.zfsPath, FQ(z.poolName, fs)))
 	cmd := exec.Command(z.zfsPath, "destroy", "-r", FQ(z.poolName, fs))
 	err := doSimpleZFSCommand(cmd, fmt.Sprintf("delete filesystem %s (full name: %s)", fs, FQ(z.poolName, fs)))
 	return err
@@ -431,7 +460,7 @@ func (z *zfs) StashBranch(existingFs string, newFs string, rollbackTo string) er
 
 	log.Debugf("ABS TEST: Got mountpoints: %#v\n", mounts)
 
-	logZFSCommand(existingFs, fmt.Sprintf("%s rename %s %s", z.zfsPath, z.FQ(existingFs), z.FQ(newFs)))
+	LogZFSCommand(existingFs, fmt.Sprintf("%s rename %s %s", z.zfsPath, z.FQ(existingFs), z.FQ(newFs)))
 	err = doSimpleZFSCommand(exec.Command(z.zfsPath, "rename", z.FQ(existingFs), z.FQ(newFs)),
 		fmt.Sprintf("rename filesystem %s (%s) to %s (%s) for retroBranch",
 			existingFs, z.FQ(existingFs),
@@ -442,7 +471,7 @@ func (z *zfs) StashBranch(existingFs string, newFs string, rollbackTo string) er
 		return err
 	}
 
-	logZFSCommand(existingFs, fmt.Sprintf("%s clone %s@%s %s", z.zfsPath, z.FQ(newFs), rollbackTo, z.FQ(existingFs)))
+	LogZFSCommand(existingFs, fmt.Sprintf("%s clone %s@%s %s", z.zfsPath, z.FQ(newFs), rollbackTo, z.FQ(existingFs)))
 	err = doSimpleZFSCommand(exec.Command(z.zfsPath, "clone", z.FQ(newFs)+"@"+rollbackTo, z.FQ(existingFs)),
 		fmt.Sprintf("clone snapshot %s of filesystem %s (%s) to %s (%s) for retroBranch",
 			rollbackTo, newFs, z.FQ(newFs)+"@"+rollbackTo,
@@ -453,7 +482,7 @@ func (z *zfs) StashBranch(existingFs string, newFs string, rollbackTo string) er
 		return err
 	}
 
-	logZFSCommand(existingFs, fmt.Sprintf("%s promote %s", z.zfsPath, z.FQ(existingFs)))
+	LogZFSCommand(existingFs, fmt.Sprintf("%s promote %s", z.zfsPath, z.FQ(existingFs)))
 	err = doSimpleZFSCommand(exec.Command(z.zfsPath, "promote", z.FQ(existingFs)),
 		fmt.Sprintf("promote filesystem %s (%s) for retroBranch",
 			existingFs, z.FQ(existingFs),
@@ -604,7 +633,7 @@ func (z *zfs) Send(fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotI
 	)
 	realArgs := []string{"send"}
 	realArgs = append(realArgs, sendArgs...)
-	logZFSCommand(fromFilesystemId, fmt.Sprintf("%s %s", z.zfsPath, strings.Join(realArgs, " ")))
+	LogZFSCommand(fromFilesystemId, fmt.Sprintf("%s %s", z.zfsPath, strings.Join(realArgs, " ")))
 	cmd := exec.Command(z.zfsPath, realArgs...)
 	pipeReader, pipeWriter := io.Pipe()
 	defer pipeWriter.Close()

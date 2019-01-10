@@ -4,36 +4,23 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"github.com/dotmesh-io/dotmesh/pkg/types"
+	"github.com/dotmesh-io/dotmesh/pkg/utils"
+	"github.com/dotmesh-io/dotmesh/pkg/zfs"
 )
 
 // TODO: remove that environment getter and replace with parameter
 
 func (f *FsMachine) mountSnap(snapId string, readonly bool) (responseEvent *types.Event, nextState StateFn) {
-	fullId := f.filesystemId
-	if snapId != "" {
-		fullId += "@" + snapId
-	}
-	mountPath := mnt(fullId)
-	zfsPath := fq(f.poolName, fullId)
-	// only try to make the directory if it doesn't already exist
-	err := os.MkdirAll(mountPath, 0775)
-	if err != nil {
-		log.Printf("[mount:%s] %v while trying to mkdir mountpoint %s", fullId, err, zfsPath)
-		return &types.Event{
-			Name: "failed-mkdir-mountpoint",
-			Args: &types.EventArgs{"err": err},
-		}, backoffState
-	}
 	// only try to use mount.zfs if it's not already present in the output
 	// of calling "mount"
-	mounted, err := isFilesystemMounted(fullId)
+	fullId := zfs.FullIdWithSnapshot(f.filesystemId, snapId)
+	mounted, err := utils.IsFilesystemMounted(fullId)
+	mountPath := utils.Mnt(fullId)
 	if err != nil {
 		return &types.Event{
 			Name: "failed-checking-if-mounted",
@@ -46,20 +33,16 @@ func (f *FsMachine) mountSnap(snapId string, readonly bool) (responseEvent *type
 			options += ",ro"
 		}
 		if snapId == "" {
-			logZFSCommand(fullId, fmt.Sprintf("%s set canmount=noauto %s", f.zfsPath, zfsPath))
-			out, err := exec.Command(f.zfsPath, "set", "canmount=noauto", zfsPath).CombinedOutput()
+			out, err := f.zfs.SetCanmount(f.filesystemId, snapId)
 			if err != nil {
 				return &types.Event{
 					Name: "failed-settings-canmount-noauto",
-					Args: &types.EventArgs{"err": err, "out": out, "zfsPath": zfsPath},
+					Args: &types.EventArgs{"err": err, "out": out, "zfsPath": f.zfs.FQ(fullId)},
 				}, backoffState
 			}
 		}
-		logZFSCommand(fullId, fmt.Sprintf("%s -o %s %s %s", f.mountZFS, options, zfsPath, mountPath))
-		out, err := exec.Command(f.mountZFS, "-o", options,
-			zfsPath, mountPath).CombinedOutput()
+		out, err := f.zfs.Mount(f.filesystemId, snapId, options, mountPath)
 		if err != nil {
-			log.Printf("[mount:%s] %v while trying to mount %s", fullId, err, zfsPath)
 			if strings.Contains(string(out), "already mounted") {
 				// This can happen when the filesystem is mounted in some other
 				// namespace for some reason. Try searching for it in all
@@ -109,7 +92,8 @@ func (f *FsMachine) mountSnap(snapId string, readonly bool) (responseEvent *type
 					"[mount:%s] attempting recovery-unmount in ns %s after %v/%v",
 					fullId, firstPidNSToUnmount, err, string(out),
 				)
-				logZFSCommand(fullId, fmt.Sprintf("nsenter -t %s -m -u -n -i umount %s", firstPidNSToUnmount, mountPath))
+				// this is a misnomer as it's not actually a zfs command...
+				zfs.LogZFSCommand(fullId, fmt.Sprintf("nsenter -t %s -m -u -n -i umount %s", firstPidNSToUnmount, mountPath))
 				rout, rerr := exec.Command(
 					"nsenter", "-t", firstPidNSToUnmount, "-m", "-u", "-n", "-i",
 					"umount", mountPath,
@@ -166,7 +150,7 @@ func (f *FsMachine) unmountSnap(snapId string) (responseEvent *types.Event, next
 	if snapId != "" {
 		fsPoint += "@" + snapId
 	}
-	mounted, err := isFilesystemMounted(fsPoint)
+	mounted, err := utils.IsFilesystemMounted(fsPoint)
 	if err != nil {
 		return &types.Event{
 			Name: "failed-checking-if-mounted",
@@ -174,16 +158,16 @@ func (f *FsMachine) unmountSnap(snapId string) (responseEvent *types.Event, next
 		}, backoffState
 	}
 	if mounted {
-		logZFSCommand(fsPoint, fmt.Sprintf("umount %s", mnt(fsPoint)))
-		out, err := exec.Command("umount", mnt(fsPoint)).CombinedOutput()
+		zfs.LogZFSCommand(fsPoint, fmt.Sprintf("umount %s", utils.Mnt(fsPoint)))
+		out, err := exec.Command("umount", utils.Mnt(fsPoint)).CombinedOutput()
 		if err != nil {
-			log.Printf("%v while trying to unmount %s", err, fq(f.poolName, fsPoint))
+			log.Printf("%v while trying to unmount %s", err, f.zfs.FQ(fsPoint))
 			return &types.Event{
 				Name: "failed-unmount",
 				Args: &types.EventArgs{"err": err, "combined-output": string(out)},
 			}, backoffState
 		}
-		mounted, err := isFilesystemMounted(fsPoint)
+		mounted, err := utils.IsFilesystemMounted(fsPoint)
 		if err != nil {
 			return &types.Event{
 				Name: "failed-checking-if-mounted",

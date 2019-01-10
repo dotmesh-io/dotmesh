@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/dotmesh-io/dotmesh/pkg/types"
+	"github.com/dotmesh-io/dotmesh/pkg/utils"
 )
 
 func s3PushInitiatorState(f *FsMachine) StateFn {
@@ -35,7 +36,7 @@ func s3PushInitiatorState(f *FsMachine) StateFn {
 		f.updateUser("Could not mount filesystem@commit readonly")
 		return backoffState
 	}
-	mountPoint := mnt(fmt.Sprintf("%s@%s", f.filesystemId, latestSnap.Id))
+	mountPoint := utils.Mnt(fmt.Sprintf("%s@%s", f.filesystemId, latestSnap.Id))
 
 	snaps, err := f.state.SnapshotsForCurrentMaster(f.filesystemId)
 	if len(snaps) == 0 {
@@ -44,7 +45,7 @@ func s3PushInitiatorState(f *FsMachine) StateFn {
 		return backoffState
 	}
 	metadataSnap := snaps[len(snaps)-1]
-	pathToS3Metadata := fmt.Sprintf("%s@%s/dm.s3-versions/%s", mnt(f.filesystemId), metadataSnap.Id, latestSnap.Id)
+	pathToS3Metadata := fmt.Sprintf("%s@%s/dm.s3-versions/%s", utils.Mnt(f.filesystemId), metadataSnap.Id, latestSnap.Id)
 	log.Printf("[s3PushInitiatorState] path to s3 metadata: %s", pathToS3Metadata)
 	event, _ = f.mountSnap(metadataSnap.Id, true)
 	if event.Name != "mounted" {
@@ -102,7 +103,7 @@ func s3PushInitiatorState(f *FsMachine) StateFn {
 		// }
 		// check if there is anything in s3 that isn't in this list - if there is, delete it
 		// create a file under the last commit id in the appropriate place + dump out the new versions to it
-		directoryPath := fmt.Sprintf("%s/dm.s3-versions", mnt(f.filesystemId))
+		directoryPath := fmt.Sprintf("%s/dm.s3-versions", utils.Mnt(f.filesystemId))
 		dirtyPathToS3Meta := fmt.Sprintf("%s/%s", directoryPath, latestSnap.Id)
 		err = os.MkdirAll(directoryPath, 0775)
 		if err != nil {

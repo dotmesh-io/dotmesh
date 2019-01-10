@@ -6,7 +6,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os/exec"
 	"strings"
 
 	"golang.org/x/net/context"
@@ -213,7 +212,7 @@ func receivingState(f *FsMachine) StateFn {
 		log.Printf("Successfully received %s => %s for %s", fromSnap, snapRange.toSnap.Id, f.filesystemId)
 	}
 	log.Printf("[pull] about to start applying prelude on %v", pipeReader)
-	err = applyPrelude(f.zfsPath, prelude, fq(f.poolName, f.filesystemId))
+	err = f.zfs.ApplyPrelude(prelude, f.filesystemId)
 	if err != nil {
 		return backoffStateWithReason(fmt.Sprintf("receivingState: Error applying prelude: %+v", err))
 	}
