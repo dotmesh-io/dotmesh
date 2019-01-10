@@ -21,6 +21,7 @@ import (
 
 	"github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/dotmesh-io/dotmesh/pkg/metrics"
+	"github.com/dotmesh-io/dotmesh/pkg/utils"
 )
 
 const REQUEST_ID = "X-Request-Id"
@@ -130,7 +131,7 @@ func (state *InMemoryState) runServer() {
 	}
 
 	if err != nil {
-		out(fmt.Sprintf("Unable to listen on port %s: '%s'\n", client.SERVER_PORT, err))
+		utils.Out(fmt.Sprintf("Unable to listen on port %s: '%s'\n", client.SERVER_PORT, err))
 		log.Fatalf("Unable to listen on port %s: '%s'", client.SERVER_PORT, err)
 	}
 }

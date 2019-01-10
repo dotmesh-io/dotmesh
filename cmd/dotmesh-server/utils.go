@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/dotmesh-io/dotmesh/pkg/types"
-
+	"github.com/dotmesh-io/dotmesh/pkg/utils"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -26,44 +26,8 @@ import (
 // the base64 alphabet. https://en.wikipedia.org/wiki/Base64
 var END_DOTMESH_PRELUDE = types.EndDotmeshPrelude
 
-func consumePrelude(r io.Reader) (Prelude, error) {
-	// called when we know that there's a prelude to read from r.
-
-	// read a byte at a time, so that we leave the reader ready for someone
-	// else.
-	b := make([]byte, 1)
-	finished := false
-	buf := []byte{}
-
-	for !finished {
-		_, err := r.Read(b)
-		if err == io.EOF {
-			return Prelude{}, fmt.Errorf("Stream ended before prelude completed")
-		}
-		if err != nil {
-			return Prelude{}, err
-		}
-		buf = append(buf, b...)
-		idx := bytes.Index(buf, END_DOTMESH_PRELUDE)
-		if idx != -1 {
-			preludeEncoded := buf[0:idx]
-			data, err := base64.StdEncoding.DecodeString(string(preludeEncoded))
-			if err != nil {
-				return Prelude{}, err
-			}
-			p := Prelude{}
-			err = json.Unmarshal(data, &p)
-			if err != nil {
-				return Prelude{}, err
-			}
-			return p, nil
-		}
-	}
-	return Prelude{}, nil
-}
-
 // apply the instructions encoded in the prelude to the system
-func applyPrelude(prelude Prelude, fqfs string) error {
+func applyPrelude(prelude types.Prelude, fqfs string) error {
 	// iterate over it setting zfs user properties accordingly.
 	log.Printf("[applyPrelude] Got prelude: %+v", prelude)
 	for _, j := range prelude.SnapshotProperties {
@@ -113,16 +77,6 @@ func encodePrelude(prelude Prelude) ([]byte, error) {
 	return encoded, nil
 }
 
-// utility functions
-func out(s ...interface{}) {
-	stringified := []string{}
-	for _, item := range s {
-		stringified = append(stringified, fmt.Sprintf("%v", item))
-	}
-	ss := strings.Join(stringified, " ")
-	os.Stdout.Write([]byte(ss))
-}
-
 func mnt(fs string) string {
 	// from filesystem id to the path it would be mounted at if it were mounted
 	mountPrefix := os.Getenv("MOUNT_PREFIX")
@@ -151,7 +105,7 @@ func unmnt(p string) (string, error) {
 }
 
 func isFilesystemMounted(fs string) (bool, error) {
-	code, err := returnCode("mountpoint", mnt(fs))
+	code, err := utils.ReturnCode("mountpoint", mnt(fs))
 	if err != nil {
 		return false, err
 	}
@@ -189,32 +143,6 @@ func deleteContainerMntSymlink(id VolumeName) error {
 
 	// Deletion happened OK
 	return nil
-}
-
-func returnCode(name string, arg ...string) (int, error) {
-	// Run a command and either get the returncode or an error if the command
-	// failed to execute, based on
-	// http://stackoverflow.com/questions/10385551/get-exit-code-go
-	cmd := exec.Command(name, arg...)
-	if err := cmd.Start(); err != nil {
-		return -1, err
-	}
-	if err := cmd.Wait(); err != nil {
-		if exiterr, ok := err.(*exec.ExitError); ok {
-			// The program has exited with an exit code != 0
-			// This works on both Unix and Windows. Although package
-			// syscall is generally platform dependent, WaitStatus is
-			// defined for both Unix and Windows and in both cases has
-			// an ExitStatus() method with the same signature.
-			if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
-				return status.ExitStatus(), nil
-			}
-		} else {
-			return -1, err
-		}
-	}
-	// got here, so err == nil
-	return 0, nil
 }
 
 func getLogfile(logfile string) *os.File {
@@ -302,175 +230,6 @@ func (s *InMemoryState) waitForFilesystemDeath(filesystemId string) {
 	if !returnImmediately {
 		<-deathChan
 		s.deathObserver.Unsubscribe(filesystemId, deathChan)
-	}
-}
-
-// general purpose function, intended to be runnable in a goroutine, which
-// reads bytes from a Reader and writes them to a Writer, closing the Writer
-// when the Reader yields EOF. should be useable both to pipe command outputs
-// into http responses, as well as piping http requests into command inputs.
-//
-// when EOF is read from the Reader, it writes true into the finished chan to
-// notify of completion.
-//
-// it also performs non-blocking reads on the canceller channel during the
-// loop, and aborts reading, closing both Reader and Writer in that case.
-// when cancellation happens, cancelFunc is run with the object that was read
-// from the canceller chan, in case it needs to be reused. we assume that
-// Events flow over the canceller chan.
-//
-// if the writer implements http.Flusher, Flush() is called after each write.
-
-// TODO: pipe would be better named Copy
-
-func pipe(
-	r io.Reader, rDesc string, w io.Writer, wDesc string,
-	finished chan bool, canceller chan *Event,
-	cancelFunc func(*Event, chan *Event),
-	notifyFunc func(int64, int64),
-	compressMode string,
-) {
-	startTime := time.Now().UnixNano()
-	var lastUpdate int64 // in UnixNano
-	var totalBytes int64
-	buffer := make([]byte, types.BufLength)
-
-	// Incomplete idea below.
-	/*
-		// async buffer e.g. let the network read up to 32MiB of data that's
-		// already been written to the buffer without blocking the buffer, or let
-		// zfs write 32MiB of data that hasn't been read yet without stalling it
-		nioBufOut := niobuffer.New(1024 * 1024 * 1024 * 32)
-		bufROut, w := nio.Pipe(nioBufOut)
-		go func() {
-			nio.Copy(originalW, bufROut, nioBufOut)
-		}()
-		nioBufIn := niobuffer.New(1024 * 1024 * 1024 * 32)
-		r, bufWIn := nio.Pipe(nioBufIn)
-		go func() {
-			nio.Copy(bufWIn, originalR, nioBufIn)
-		}()
-	*/
-
-	// only call f() if 1 sec of nanosecs elapsed since last call to f()
-	rateLimit := func(f func()) {
-		if time.Now().UnixNano()-lastUpdate > 1e+9 {
-			f()
-			lastUpdate = time.Now().UnixNano()
-		}
-	}
-
-	handleErr := func(message string, r io.Reader, w io.Writer, r2 io.Reader, w2 io.Writer) {
-		if message != "" {
-			log.Printf("[pipe:handleErr] " + message)
-		}
-		// NB: c.Close returns unhandled err here, and below.
-		if c, ok := r.(io.Closer); ok {
-			c.Close()
-		}
-		if c, ok := w.(io.Closer); ok {
-			c.Close()
-		}
-		if c, ok := r2.(io.Closer); ok {
-			c.Close()
-		}
-		if c, ok := w2.(io.Closer); ok {
-			c.Close()
-		}
-		finished <- true
-	}
-
-	var writer io.Writer
-	var reader io.Reader
-	var err error
-
-	log.Printf("[PIPE] reader %s => writer %s, COMPRESSMODE=%s", rDesc, wDesc, compressMode)
-
-	if compressMode == "compress" {
-		writer = gzip.NewWriter(w)
-		reader = r
-	} else if compressMode == "decompress" {
-		reader, err = gzip.NewReader(r)
-		if err != nil {
-			handleErr(fmt.Sprintf("Unable to create gzip reader: %s", err), r, w, r, w)
-			return
-		}
-		writer = w
-	} else if compressMode == "none" {
-		// no compression
-		reader = r
-		writer = w
-	} else {
-		handleErr(
-			fmt.Sprintf(
-				"Unsupported compression mode %s, choose one of 'compress', "+
-					"'decompress' or 'none'",
-				compressMode,
-			), r, w, r, w,
-		)
-		return
-	}
-
-	for {
-		select {
-		case e := <-canceller:
-			// call the cancellation function asynchronously, because it may
-			// block, and we don't want to deadlock
-			go cancelFunc(e, canceller)
-			handleErr(
-				fmt.Sprintf("Cancelling pipe from %s to %s because %s event "+
-					"received on cancellation channel", rDesc, wDesc, e),
-				reader, writer, r, w,
-			)
-			return
-		default:
-			// non-blocking read
-		}
-		nr, err := reader.Read(buffer)
-		if nr > 0 {
-			data := buffer[0:nr]
-			nw, wErr := writer.Write(data)
-			if nw != nr {
-				handleErr(fmt.Sprintf("short write %d (read) != %d (written)", nr, nw), reader, writer, r, w)
-				return
-			}
-			if f, ok := writer.(http.Flusher); ok {
-				f.Flush()
-			}
-			if f, ok := writer.(*gzip.Writer); ok {
-				// special case, we know we might have to flush the writer in
-				// case of a small replication stream (and we're not speaking
-				// directly to an http.Flusher any more)
-				f.Flush()
-			}
-			totalBytes += int64(nr)
-			rateLimit(func() {
-				// rate limit to once per second to avoid hammering notifyFunc
-				// on fast connections.
-				notifyFunc(totalBytes, time.Now().UnixNano()-startTime)
-			})
-			if wErr != nil {
-				handleErr(fmt.Sprintf("Error writing to %s: %s", wDesc, wErr), reader, writer, r, w)
-				return
-			}
-		}
-		// NB: handleErr as the final thing we do in both of the following
-		// cases because it's polite to stop notifying (notifyFunc) after we're
-		// said we're finished (handleErr).
-
-		if err == io.EOF {
-			// sync notification here (and in error case below) in case the
-			// caller depends on synchronous notification of final state before
-			// exit
-			notifyFunc(totalBytes, time.Now().UnixNano()-startTime)
-			// expected case, log no error
-			handleErr("", reader, writer, r, w)
-			return
-		} else if err != nil {
-			notifyFunc(totalBytes, time.Now().UnixNano()-startTime)
-			handleErr(fmt.Sprintf("Error reading from %s: %s", rDesc, err), reader, writer, r, w)
-			return
-		}
 	}
 }
 

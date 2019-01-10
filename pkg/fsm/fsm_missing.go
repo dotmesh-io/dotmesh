@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 
 	"github.com/coreos/etcd/client"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
-
+	"github.com/dotmesh-io/dotmesh/pkg/utils"
 	"golang.org/x/net/context"
 )
 
@@ -151,13 +150,11 @@ func missingState(f *FsMachine) StateFn {
 				}
 				return backoffState
 			} else if f.lastS3TransferRequest.Direction == "pull" {
-				logZFSCommand(f.filesystemId, fmt.Sprintf("%s %s %s", f.zfsPath, "create", fq(f.poolName, f.filesystemId)))
-				out, err := exec.Command(f.zfsPath, "create", fq(f.poolName, f.filesystemId)).CombinedOutput()
+				output, err := f.zfs.Create(f.filesystemId)
 				if err != nil {
-					log.Printf("%v while trying to create %s", err, fq(f.poolName, f.filesystemId))
 					f.innerResponses <- &types.Event{
 						Name: "failed-create",
-						Args: &types.EventArgs{"err": err, "combined-output": string(out)},
+						Args: &types.EventArgs{"err": err, "combined-output": string(output)},
 					}
 					return backoffState
 				}
@@ -216,19 +213,17 @@ func missingState(f *FsMachine) StateFn {
 			f.transitionedTo("missing", "creating")
 			// ah - we are going to be created on this node, rather than
 			// received into from a master...
-			logZFSCommand(f.filesystemId, fmt.Sprintf("%s %s %s", f.zfsPath, "create", fq(f.poolName, f.filesystemId)))
-			out, err := exec.Command(f.zfsPath, "create", fq(f.poolName, f.filesystemId)).CombinedOutput()
+			output, err := f.zfs.Create(f.filesystemId)
 			if err != nil {
-				log.Printf("%v while trying to create %s", err, fq(f.poolName, f.filesystemId))
 				f.innerResponses <- &types.Event{
 					Name: "failed-create",
-					Args: &types.EventArgs{"err": err, "combined-output": string(out)},
+					Args: &types.EventArgs{"err": err, "combined-output": string(output)},
 				}
 				return backoffState
 			}
 			responseEvent, nextState := f.mount()
 			if responseEvent.Name == "mounted" {
-				subvolPath := fmt.Sprintf("%s/__default__", mnt(f.filesystemId))
+				subvolPath := fmt.Sprintf("%s/__default__", utils.Mnt(f.filesystemId))
 				if err := os.MkdirAll(subvolPath, 0777); err != nil {
 					f.innerResponses <- &types.Event{
 						Name: "failed-create-default-subdot",

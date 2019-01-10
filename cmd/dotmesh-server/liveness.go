@@ -45,7 +45,7 @@ func (state *InMemoryState) runLivenessServer() {
 		}
 
 		// Check the zpool exists
-		_, err = zfs.GetZPoolCapacity(state.config.ZPoolPath, state.config.PoolName)
+		_, err = state.zfs.GetZPoolCapacity()
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Zpool error: %v\n", err), http.StatusInternalServerError)
 			return

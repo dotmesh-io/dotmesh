@@ -18,6 +18,7 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/kv"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
+	"github.com/dotmesh-io/dotmesh/pkg/zfs"
 
 	// registering metric counters
 	_ "github.com/dotmesh-io/dotmesh/pkg/metrics"
@@ -28,6 +29,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	zipkin "github.com/openzipkin/zipkin-go-opentracing"
 
+	"github.com/dotmesh-io/dotmesh/pkg/utils"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -136,20 +138,6 @@ func main() {
 	ZFS = zRoot + "/sbin/zfs"
 	MOUNT_ZFS = zRoot + "/sbin/mount.zfs"
 	ZPOOL = zRoot + "/sbin/zpool"
-
-	localPoolId, err := findLocalPoolId()
-	if err != nil {
-		out("Unable to determine pool ID. Make sure to run me as root.\n" +
-			"Please create a ZFS pool called '" + POOL + "'.\n" +
-			"The following commands will create a toy pool-in-a-file:\n\n" +
-			"    sudo truncate -s 10G /pool-datafile\n" +
-			"    sudo zpool create pool /pool-datafile\n\n" +
-			"Otherwise, see 'man zpool' for how to create a real pool.\n" +
-			"If you don't have the 'zpool' tool installed, on Ubuntu 16.04, run:\n\n" +
-			"    sudo apt-get install zfsutils-linux\n\n" +
-			"On other distributions, follow the instructions at http://zfsonlinux.org/\n")
-		log.Fatalf("Unable to find pool ID, I don't know who I am :( %s %s", err, localPoolId)
-	}
 	ips, _ := guessIPv4Addresses()
 	log.Printf("Detected my node ID as %s (%s)", localPoolId, ips)
 
@@ -168,7 +156,7 @@ func main() {
 
 	s := NewInMemoryState(localPoolId, config)
 
-	for _, filesystemId := range s.findFilesystemIdsOnSystem() {
+	for _, filesystemId := range s.zfs.FindFilesystemIdsOnSystem() {
 		log.Debugf("Initializing fsMachine for %s", filesystemId)
 		go func(fsID string) {
 			_, err := s.InitFilesystemMachine(fsID)
@@ -217,7 +205,7 @@ func main() {
 		1*time.Second, 1*time.Second,
 	)
 	// kick off reporting on zpool status
-	go runForever(s.reportZpoolCapacity, "reportZPoolUsageReporter",
+	go runForever(s.zfs.ReportZpoolCapacity, "reportZPoolUsageReporter",
 		10*time.Minute, 10*time.Minute,
 	)
 

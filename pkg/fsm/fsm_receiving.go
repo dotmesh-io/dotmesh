@@ -132,21 +132,11 @@ func receivingState(f *FsMachine) StateFn {
 		url,
 		f.filesystemId, fromSnap, snapRange.toSnap.Id,
 	)
-
-	f.transitionedTo("receiving", "starting")
-	logZFSCommand(f.filesystemId, fmt.Sprintf("%s recv %s", f.zfsPath, fq(f.poolName, f.filesystemId)))
-	cmd := exec.Command(f.zfsPath, "recv", fq(f.poolName, f.filesystemId))
 	pipeReader, pipeWriter := io.Pipe()
 	defer pipeReader.Close()
 	defer pipeWriter.Close()
 
-	stdErrBuffer := &bytes.Buffer{}
-
-	cmd.Stdin = pipeReader
-	cmd.Stdout = getLogfile("zfs-recv-stdout")
-	cmd.Stderr = stdErrBuffer
-	//getLogfile("zfs-recv-stderr")
-
+	f.transitionedTo("receiving", "starting")
 	finished := make(chan bool)
 
 	go pipe(
@@ -178,7 +168,8 @@ func receivingState(f *FsMachine) StateFn {
 	}
 	log.Printf("[pull] Got prelude %v", prelude)
 
-	err = cmd.Run()
+	stdErrBuffer := &bytes.Buffer{}
+	err = f.zfs.Recv(pipeReader, f.filesystemId, stdErrBuffer)
 	f.transitionedTo("receiving", "finished zfs recv")
 	pipeReader.Close()
 	pipeWriter.Close()

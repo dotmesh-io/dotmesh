@@ -8,12 +8,13 @@ import (
 
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 
+	"github.com/dotmesh-io/dotmesh/pkg/utils"
 	log "github.com/sirupsen/logrus"
 )
 
 func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 	// create the default paths
-	destPath := fmt.Sprintf("%s/%s/%s", mnt(f.filesystemId), "__default__", file.Filename)
+	destPath := fmt.Sprintf("%s/%s/%s", utils.Mnt(f.filesystemId), "__default__", file.Filename)
 	log.Printf("Saving file to %s", destPath)
 	directoryPath := destPath[:strings.LastIndex(destPath, "/")]
 	err := os.MkdirAll(directoryPath, 0775)

@@ -21,6 +21,7 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/observer"
 	"github.com/dotmesh-io/dotmesh/pkg/registry"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
+	"github.com/dotmesh-io/dotmesh/pkg/zfs"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -58,6 +59,7 @@ type InMemoryState struct {
 
 	debugPartialFailCreateFilesystem bool
 	versionInfo                      *VersionInfo
+	zfs                              zfs.ZFS
 }
 
 // typically methods on the InMemoryState "god object"
@@ -68,6 +70,7 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 		ContainerMountDirLock: &containerMountDirLock,
 	})
 	if err != nil {
+		// why do we panic so much here?
 		panic(err)
 	}
 
@@ -75,6 +78,13 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 	if err != nil {
 		panic(err)
 	}
+
+	zfsInterface, err := zfs.NewZFS(config.ZFSExecPath, config.ZPoolPath, POOL, ROOT_FS, config.PoolName)
+	if err != nil {
+		// CG added this one but not a fan of panicing rather than returning
+		panic(err)
+	}
+
 	s := &InMemoryState{
 		config:                   config,
 		filesystems:              make(map[string]fsm.FSM),
@@ -110,6 +120,7 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 		userManager:               config.UserManager,
 		// publisher:                 ,
 		versionInfo: &VersionInfo{InstalledVersion: serverVersion},
+		zfs:         zfsInterface,
 	}
 
 	publisher := notification.New(context.Background())

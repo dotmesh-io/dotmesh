@@ -25,22 +25,6 @@ func unfq(poolName, fqfs string) string {
 	return zfs.UnFQ(poolName, fqfs)
 }
 
-func getLogfile(logfile string) *os.File {
-	// if LOG_TO_STDOUT {
-	// TODO: make configurable
-	if true {
-		return os.Stdout
-	}
-	f, err := os.OpenFile(
-		fmt.Sprintf("%s.log", logfile),
-		os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666,
-	)
-	if err != nil {
-		log.Fatalf("error opening file: %v", err)
-	}
-	return f
-}
-
 // general purpose function, intended to be runnable in a goroutine, which
 // reads bytes from a Reader and writes them to a Writer, closing the Writer
 // when the Reader yields EOF. should be useable both to pipe command outputs
@@ -58,7 +42,6 @@ func getLogfile(logfile string) *os.File {
 // if the writer implements http.Flusher, Flush() is called after each write.
 
 // TODO: pipe would be better named Copy
-
 func pipe(
 	r io.Reader, rDesc string, w io.Writer, wDesc string,
 	finished chan bool, canceller chan *types.Event,
@@ -208,14 +191,4 @@ func pipe(
 			return
 		}
 	}
-}
-
-// utility functions
-func out(s ...interface{}) {
-	stringified := []string{}
-	for _, item := range s {
-		stringified = append(stringified, fmt.Sprintf("%v", item))
-	}
-	ss := strings.Join(stringified, " ")
-	os.Stdout.Write([]byte(ss))
 }

@@ -14,33 +14,6 @@ import (
 )
 
 // TODO: remove that environment getter and replace with parameter
-func mnt(fs string) string {
-	// from filesystem id to the path it would be mounted at if it were mounted
-	mountPrefix := os.Getenv("MOUNT_PREFIX")
-	if mountPrefix == "" {
-		panic(fmt.Sprintf("Environment variable MOUNT_PREFIX must be set\n"))
-	}
-	// carefully make this match...
-	// MOUNT_PREFIX will be like /dotmesh-test-pools/pool_123_1/mnt
-	// and we want to return
-	// /dotmesh-test-pools/pool_123_1/mnt/dmfs/:filesystemId
-	// fq(fs) gives pool_123_1/dmfs/:filesystemId
-	// so don't use it, construct it ourselves:
-	return fmt.Sprintf("%s/%s/%s", mountPrefix, types.RootFS, fs)
-}
-
-func unmnt(p string) (string, error) {
-	// From mount path to filesystem id
-	mountPrefix := os.Getenv("MOUNT_PREFIX")
-	if mountPrefix == "" {
-		return "", fmt.Errorf("Environment variable MOUNT_PREFIX must be set\n")
-	}
-	if strings.HasPrefix(p, mountPrefix+"/"+types.RootFS+"/") {
-		return strings.TrimPrefix(p, mountPrefix+"/"+types.RootFS+"/"), nil
-	} else {
-		return "", fmt.Errorf("Mount path %s does not start with %s/%s", p, mountPrefix, types.RootFS)
-	}
-}
 
 func (f *FsMachine) mountSnap(snapId string, readonly bool) (responseEvent *types.Event, nextState StateFn) {
 	fullId := f.filesystemId
@@ -222,38 +195,4 @@ func (f *FsMachine) unmountSnap(snapId string) (responseEvent *types.Event, next
 		}
 	}
 	return &types.Event{Name: "unmounted"}, inactiveState
-}
-
-func isFilesystemMounted(fs string) (bool, error) {
-	code, err := returnCode("mountpoint", mnt(fs))
-	if err != nil {
-		return false, err
-	}
-	return code == 0, nil
-}
-
-func returnCode(name string, arg ...string) (int, error) {
-	// Run a command and either get the returncode or an error if the command
-	// failed to execute, based on
-	// http://stackoverflow.com/questions/10385551/get-exit-code-go
-	cmd := exec.Command(name, arg...)
-	if err := cmd.Start(); err != nil {
-		return -1, err
-	}
-	if err := cmd.Wait(); err != nil {
-		if exiterr, ok := err.(*exec.ExitError); ok {
-			// The program has exited with an exit code != 0
-			// This works on both Unix and Windows. Although package
-			// syscall is generally platform dependent, WaitStatus is
-			// defined for both Unix and Windows and in both cases has
-			// an ExitStatus() method with the same signature.
-			if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
-				return status.ExitStatus(), nil
-			}
-		} else {
-			return -1, err
-		}
-	}
-	// got here, so err == nil
-	return 0, nil
 }

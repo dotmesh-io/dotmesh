@@ -1,9 +1,6 @@
 package fsm
 
 import (
-	"fmt"
-	"os/exec"
-
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/nu7hatch/gouuid"
 
@@ -39,8 +36,8 @@ func activeState(f *FsMachine) StateFn {
 			toFilesystemId := (*e.Args)["ToFilesystemId"].(string)
 			toSnapshotId := (*e.Args)["ToSnapshotId"].(string)
 
-			size, err := predictSize(
-				f.zfsPath, f.poolName, fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
+			size, err := f.zfs.PredictSize(
+				fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
 			)
 
 			if err != nil {
@@ -212,7 +209,7 @@ func activeState(f *FsMachine) StateFn {
 			if err != nil {
 				log.Printf(
 					"%v while trying to stop containers during rollback %s",
-					err, fq(f.poolName, f.filesystemId),
+					err, f.zfs.FQ(f.filesystemId),
 				)
 				f.innerResponses <- &types.Event{
 					Name: "failed-stop-containers-during-rollback",
@@ -220,14 +217,11 @@ func activeState(f *FsMachine) StateFn {
 				}
 				return backoffState
 			}
-			logZFSCommand(f.filesystemId, fmt.Sprintf("%s rollback -r %s@%s", f.zfsPath, fq(f.poolName, f.filesystemId), rollbackTo))
-			out, err := exec.Command(f.zfsPath, "rollback",
-				"-r", fq(f.poolName, f.filesystemId)+"@"+rollbackTo).CombinedOutput()
+			output, err := f.zfs.Rollback(f.filesystemId, rollbackTo)
 			if err != nil {
-				log.Printf("%v while trying to rollback %s", err, fq(f.poolName, f.filesystemId))
 				f.innerResponses <- &types.Event{
 					Name: "failed-rollback",
-					Args: &types.EventArgs{"err": err, "combined-output": string(out)},
+					Args: &types.EventArgs{"err": err, "combined-output": string(output)},
 				}
 				return backoffState
 			}
@@ -241,7 +235,7 @@ func activeState(f *FsMachine) StateFn {
 
 				err = f.snapshotsChanged()
 				if err != nil {
-					log.Printf("%v while trying to report that snapshots have changed %s", err, fq(f.poolName, f.filesystemId))
+					log.Printf("%v while trying to report that snapshots have changed %s", err, f.zfs.FQ(f.filesystemId))
 					f.innerResponses <- &types.Event{
 						Name: "failed-rollback-snapshots-changed",
 						Args: &types.EventArgs{"err": err},
@@ -258,7 +252,7 @@ func activeState(f *FsMachine) StateFn {
 			if err != nil {
 				log.Printf(
 					"%v while trying to start containers during rollback %s",
-					err, fq(f.poolName, f.filesystemId),
+					err, f.zfs.FQ(f.filesystemId),
 				)
 				f.innerResponses <- &types.Event{
 					Name: "failed-start-containers-during-rollback",
@@ -294,18 +288,11 @@ func activeState(f *FsMachine) StateFn {
 				return backoffState
 			}
 			newCloneFilesystemId := uuid.String()
-
-			logZFSCommand(f.filesystemId, fmt.Sprintf("%s clone %s@%s %s", f.zfsPath, fq(f.poolName, f.filesystemId), originSnapshotId, fq(f.poolName, newCloneFilesystemId)))
-			out, err := exec.Command(
-				f.zfsPath, "clone",
-				fq(f.poolName, f.filesystemId)+"@"+originSnapshotId,
-				fq(f.poolName, newCloneFilesystemId),
-			).CombinedOutput()
+			output, err := f.zfs.Clone(f.filesystemId, originSnapshotId, newCloneFilesystemId)
 			if err != nil {
-				log.Printf("%v while trying to clone %s", err, fq(f.poolName, f.filesystemId))
 				f.innerResponses <- &types.Event{
 					Name: "failed-clone",
-					Args: &types.EventArgs{"err": err, "combined-output": string(out)},
+					Args: &types.EventArgs{"err": err, "combined-output": string(output)},
 				}
 				return backoffState
 			}

@@ -141,7 +141,7 @@ func (s *InMemoryState) DeleteFilesystem(filesystemId string) error {
 	}
 
 	// Actually remove from ZFS
-	err = s.deleteFilesystemInZFS(filesystemId)
+	err = s.zfs.deleteFilesystemInZFS(filesystemId)
 	if err != nil {
 		errors = append(errors, err)
 	}

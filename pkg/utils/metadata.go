@@ -1,8 +1,9 @@
-package main
+package utils
 
 import (
 	"encoding/base64"
 	"fmt"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"regexp"
 )
 
@@ -10,7 +11,7 @@ const keyRegex = "[a-z]+[a-z0-9-]*"
 
 var rxKeyRegex = regexp.MustCompile(keyRegex)
 
-func encodeMetadata(meta Metadata) ([]string, error) {
+func EncodeMetadata(meta types.Metadata) ([]string, error) {
 	/*
 	   Encode a map of key value pairs into metadata-setting zfs command
 	   list-of-command-arguments (as part of 'zfs snapshot'), ie:
@@ -33,7 +34,7 @@ func encodeMetadata(meta Metadata) ([]string, error) {
 		}
 		metadataEncoded = append(
 			metadataEncoded, "-o",
-			fmt.Sprintf("%s%s=%s", META_KEY_PREFIX, k, encoded),
+			fmt.Sprintf("%s%s=%s", types.MetaKeyPrefix, k, encoded),
 		)
 	}
 	return metadataEncoded, nil

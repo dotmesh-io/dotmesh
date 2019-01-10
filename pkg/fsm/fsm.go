@@ -3,7 +3,6 @@ package fsm
 import (
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,6 +16,7 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/registry"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
+	"github.com/dotmesh-io/dotmesh/pkg/zfs"
 
 	"github.com/nu7hatch/gouuid"
 	"golang.org/x/net/context"
@@ -95,6 +95,10 @@ type FSM interface {
 func NewFilesystemMachine(cfg *FsConfig) *FsMachine {
 	// initialize the FsMachine with a filesystem struct that has bare minimum
 	// information (just the filesystem id) required to get started
+	zfsInter, err := zfs.NewZFS(cfg.ZFSPath, cfg.ZPoolPath, cfg.PoolName, cfg.MountZFS)
+	if err != nil {
+		log.Fatalf("Failed initialising zfs interface, %s", err.Error())
+	}
 	return &FsMachine{
 		filesystem: &types.Filesystem{
 			Id: cfg.FilesystemID,
@@ -143,10 +147,7 @@ func NewFilesystemMachine(cfg *FsConfig) *FsMachine {
 		transferUpdates: make(chan types.TransferUpdate),
 
 		filesystemMetadataTimeout: cfg.FilesystemMetadataTimeout,
-		zfsPath:                   cfg.ZFSPath,
-		mountZFS:                  cfg.MountZFS,
-		zpoolPath:                 cfg.ZPoolPath,
-		poolName:                  cfg.PoolName,
+		zfs:                       zfsInter,
 	}
 }
 
@@ -396,7 +397,7 @@ func (f *FsMachine) terminateRunnersWhileFilesystemLived(filesystemId string) {
 func (f *FsMachine) pollDirty() error {
 
 	if f.filesystem.Mounted {
-		dirtyDelta, sizeBytes, err := getDirtyDelta(f.zfsPath, f.poolName, f.filesystemId, f.latestSnapshot())
+		dirtyDelta, sizeBytes, err := f.zfs.GetDirtyDelta(f.filesystemId, f.latestSnapshot())
 		if err != nil {
 			return err
 		}
@@ -675,32 +676,26 @@ func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextSt
 	} else {
 		snapshotId = snapshotIdInter.(string)
 	}
-	args := []string{"snapshot"}
-	args = append(args, metadataEncoded...)
-	args = append(args, fq(f.poolName, f.filesystemId)+"@"+snapshotId)
-	logZFSCommand(f.filesystemId, fmt.Sprintf("%s %s", f.zfsPath, strings.Join(args, " ")))
-	out, err := exec.Command(f.zfsPath, args...).CombinedOutput()
-	log.Printf("[snapshot] Attempting: zfs %s", args)
+	output, err := f.zfs.Snapshot(f.filesystemId, snapshotId, metadataEncoded)
 	if err != nil {
-		log.Printf("[snapshot] %v while trying to snapshot %s (%s)", err, fq(f.poolName, f.filesystemId), args)
 		return &types.Event{
 			Name: "failed-snapshot",
-			Args: &types.EventArgs{"err": fmt.Sprintf("%v", err), "combined-output": string(out)},
+			Args: &types.EventArgs{"err": fmt.Sprintf("%v", err), "combined-output": string(output)},
 		}, backoffState
 	}
-	list, err := exec.Command(f.zfsPath, "list", fq(f.poolName, f.filesystemId)+"@"+snapshotId).CombinedOutput()
+	list, err := f.zfs.List(f.filesystemId, snapshotId)
 	if err != nil {
-		log.Printf("[snapshot] %v while trying to list snapshot %s (%s)", err, fq(f.poolName, f.filesystemId), args)
 		return &types.Event{
 			Name: "failed-snapshot",
-			Args: &types.EventArgs{"err": fmt.Sprintf("%v", err), "combined-output": string(out)},
+			Args: &types.EventArgs{"err": fmt.Sprintf("%v", err), "combined-output": string(output)},
 		}, backoffState
 	}
+
 	log.Printf("[snapshot] listed snapshot: '%q'", strconv.Quote(string(list)))
 	func() {
 		f.snapshotsLock.Lock()
 		defer f.snapshotsLock.Unlock()
-		log.Printf("[snapshot] Succeeded snapshotting (out: '%s'), saving: %+v", out, &types.Snapshot{
+		log.Printf("[snapshot] Succeeded snapshotting (out: '%s'), saving: %+v", output, &types.Snapshot{
 			Id: snapshotId, Metadata: meta,
 		})
 		f.filesystem.Snapshots = append(f.filesystem.Snapshots,
@@ -708,7 +703,7 @@ func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextSt
 	}()
 	err = f.snapshotsChanged()
 	if err != nil {
-		log.Printf("[snapshot] %v while trying to inform that snapshots changed %s (%s)", err, fq(f.poolName, f.filesystemId), args)
+		log.Printf("[snapshot] %v while trying to inform that snapshots changed %s", err, f.zfs.FQ(f.filesystemId))
 		return &types.Event{
 			Name: "failed-snapshot-changed",
 			Args: &types.EventArgs{"err": fmt.Sprintf("%v", err)},
@@ -815,7 +810,7 @@ func (f *FsMachine) attemptReceive() bool {
 
 func (f *FsMachine) discover() error {
 	// discover system state synchronously
-	filesystem, err := discoverSystem(f.zfsPath, f.poolName, f.filesystemId)
+	filesystem, err := f.zfs.DiscoverSystem(f.filesystemId)
 	if err != nil {
 		return err
 	}
@@ -865,7 +860,7 @@ func (f *FsMachine) recoverFromDivergence(rollbackToId string) error {
 	newFilesystemId := id.String()
 
 	// Roll back the filesystem to rollbackTo, but leaving the new filesystem pointing to its original state
-	err = stashBranch(f.zfsPath, f.poolName, f.filesystemId, newFilesystemId, rollbackToId)
+	err = f.zfs.StashBranch(f.filesystemId, newFilesystemId, rollbackToId)
 	if err != nil {
 		return err
 	}
@@ -891,97 +886,6 @@ func (f *FsMachine) recoverFromDivergence(rollbackToId string) error {
 	}
 
 	return nil
-}
-
-func calculateSendArgs(poolName, fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string) []string {
-
-	// toFilesystemId
-	// snapRange.toSnap.Id
-	// snapRange.fromSnap == nil?  --> fromSnapshotId == ""?
-	// snapRange.fromSnap.Id
-
-	var sendArgs []string
-	var fromSnap string
-	if fromSnapshotId == "" {
-		fromSnap = "START"
-		if fromFilesystemId != "" { // XXX wtf
-			// This is a clone-origin based send
-			fromSnap = fmt.Sprintf(
-				"%s@%s", fromFilesystemId, fromSnapshotId,
-			)
-		}
-	} else {
-		fromSnap = fromSnapshotId
-	}
-	if fromSnap == "START" {
-		// -R sends interim snapshots as well
-		sendArgs = []string{
-			"-p", "-R", fq(poolName, toFilesystemId) + "@" + toSnapshotId,
-		}
-	} else {
-		// in clone case, fromSnap must be fully qualified
-		if strings.Contains(fromSnap, "@") {
-			// send a clone, so make it fully qualified
-			fromSnap = fq(poolName, fromSnap)
-		}
-		sendArgs = []string{
-			"-p", "-I", fromSnap, fq(poolName, toFilesystemId) + "@" + toSnapshotId,
-		}
-	}
-	return sendArgs
-}
-
-/*
-		Discover total number of bytes in replication stream by asking nicely:
-
-			luke@hostess:/foo$ sudo zfs send -nP pool/foo@now2
-			full    pool/foo@now2   105050056
-			size    105050056
-			luke@hostess:/foo$ sudo zfs send -nP -I pool/foo@now pool/foo@now2
-			incremental     now     pool/foo@now2   105044936
-			size    105044936
-
-	   -n
-
-		   Do a dry-run ("No-op") send.  Do not generate any actual send
-		   data.  This is useful in conjunction with the -v or -P flags to
-		   determine what data will be sent.
-
-	   -P
-
-		   Print machine-parsable verbose information about the stream
-		   package generated.
-*/
-func predictSize(zfsPath, poolName, fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string) (int64, error) {
-	sendArgs := calculateSendArgs(poolName, fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId)
-	predictArgs := []string{"send", "-nP"}
-	predictArgs = append(predictArgs, sendArgs...)
-
-	sizeCmd := exec.Command(zfsPath, predictArgs...)
-
-	log.Printf("[predictSize] predict command: %#v", sizeCmd)
-
-	out, err := sizeCmd.CombinedOutput()
-	log.Printf("[predictSize] Output of predict command: %v", string(out))
-	if err != nil {
-		log.Printf("[predictSize] Got error on predict command: %v", err)
-		return 0, err
-	}
-	shrap := strings.Split(string(out), "\n")
-	if len(shrap) < 2 {
-		return 0, fmt.Errorf("Not enough lines in output %v", string(out))
-	}
-	sizeLine := shrap[len(shrap)-2]
-	shrap = strings.Fields(sizeLine)
-	if len(shrap) < 2 {
-		return 0, fmt.Errorf("Not enough fields in %v", sizeLine)
-	}
-
-	size, err := strconv.ParseInt(shrap[1], 10, 64)
-	if err != nil {
-		return 0, err
-	}
-	return size, nil
 }
 
 // TODO this method shouldn't really be on a FsMachine, because it is
