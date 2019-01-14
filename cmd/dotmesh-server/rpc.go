@@ -793,7 +793,7 @@ func (d *DotmeshRPC) StashAfter(
 	if e.Name == "stashed" {
 		log.Printf("Stashed %s", args.FilesystemId)
 	} else {
-		return maybeError(e)
+		return maybeError(e, "stashed")
 	}
 	*newBranch = (*e.Args)["NewBranchName"].(string)
 	return nil
@@ -884,7 +884,7 @@ func (d *DotmeshRPC) Commit(
 		log.Printf("Snapshotted %s", filesystemId)
 		*result = (*e.Args)["SnapshotId"].(string)
 	} else {
-		return maybeError(e)
+		return maybeError(e, "snapshotted")
 	}
 	return nil
 }
@@ -932,7 +932,7 @@ func (d *DotmeshRPC) MountCommit(
 		log.Printf("snapshot mounted %s for filesystem %s", args.CommitId, args.FilesystemId)
 		*result = (*e.Args)["mount-path"].(string)
 	} else {
-		return maybeError(e)
+		return maybeError(e, "mounted")
 	}
 	return nil
 }
@@ -991,13 +991,13 @@ func (d *DotmeshRPC) Rollback(
 		)
 		*result = true
 	} else {
-		return maybeError(e)
+		return maybeError(e, "rolled-back")
 	}
 	return nil
 }
 
-func maybeError(e *Event) error {
-	log.Printf("Unexpected response %s - %#v", e.Name, e.Args)
+func maybeError(e *Event, expected string) error {
+	log.Printf("Unexpected response '%s' (expected: '%s') - %#v", e.Name, expected, e.Args)
 	err, ok := (*e.Args)["err"]
 	if ok {
 		castedErr, ok2 := err.(error)
@@ -1111,7 +1111,7 @@ func (d *DotmeshRPC) Branch(
 		)
 		*result = true
 	} else {
-		return maybeError(e)
+		return maybeError(e, "cloned")
 	}
 	return nil
 }
@@ -1345,7 +1345,9 @@ func (d *DotmeshRPC) S3Transfer(
 	}
 	region, err := s3manager.GetBucketRegion(r.Context(), sess, args.RemoteName, "us-west-1")
 	if err != nil {
-		fmt.Printf("[S3Transfer] Got err from S3: %#v", err)
+		log.WithFields(log.Fields{
+			"error": err,
+		}).Error("[S3Transfer] got error from s3")
 		return fmt.Errorf("Could not get bucket region - does the bucket exist?")
 	}
 	// I don't think region actually matters, but if none is supplied the client complains
@@ -1354,7 +1356,11 @@ func (d *DotmeshRPC) S3Transfer(
 	// Check the bucket exists, and that we can access it
 	output, err = svc.HeadBucket(&s3.HeadBucketInput{Bucket: &args.RemoteName})
 	if err != nil {
-		fmt.Printf("[S3Transfer] %#v, error: %#v", output, err)
+		// fmt.Printf("[S3Transfer] %#v, error: %#v", output, err)
+		log.WithFields(log.Fields{
+			"error":  err,
+			"output": output,
+		}).Error("[S3Transfer] got error while checking if bucket exists")
 		return fmt.Errorf("Head request failed - do the remote credentials have access to this bucket?")
 	}
 	log.Printf("[S3Transfer] starting with %+v", safeS3(*args))
@@ -1451,7 +1457,7 @@ func (d *DotmeshRPC) RegisterTransfer(
 	args *TransferPollResult,
 	result *bool,
 ) error {
-	log.Printf("[RegisterTransfer] called with args: %+v", args)
+	log.Infof("[RegisterTransfer] called with args: %+v", args)
 
 	// We are the "remote" here. Local name is welcome to be invalid,
 	// that's the far end's problem
@@ -1468,12 +1474,12 @@ func (d *DotmeshRPC) RegisterTransfer(
 	if err != nil {
 		return err
 	}
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		return err
-	}
+	// kapi, err := getEtcdKeysApi()
+	// if err != nil {
+	// 	return err
+	// }
 
-	_, err = kapi.Set(
+	_, err = d.state.etcdClient.Set(
 		context.Background(),
 		fmt.Sprintf(
 			"%s/filesystems/transfers/%s", ETCD_PREFIX, args.TransferRequestId,
@@ -1720,7 +1726,7 @@ func (d *DotmeshRPC) Transfer(
 					if e.Name == "snapshotted" {
 						log.Printf("Stash on diverge requested with dirty data so snapshotted %s", filesystemId)
 					} else {
-						return maybeError(e)
+						return maybeError(e, "snapshotted")
 					}
 				} else {
 					// TODO backoff and retry above
@@ -2127,7 +2133,7 @@ func (d *DotmeshRPC) PredictSize(
 	if e.Name == "predictedSize" {
 		*result = int64((*e.Args)["size"].(float64))
 	} else {
-		return maybeError(e)
+		return maybeError(e, "predictedSize")
 	}
 	return nil
 }
@@ -2353,38 +2359,7 @@ func (d *DotmeshRPC) SetDebugFlag(
 		e := <-responseChan
 		log.Printf("[SetDebugFlag] deliberately unhandled event replied with %#v", e)
 		*result = fmt.Sprintf("%#v", e)
-	case "SendMangledEvent":
-		filesystemId := args.FlagValue
 
-		kapi, err := getEtcdKeysApi()
-		if err != nil {
-			return err
-		}
-
-		key := fmt.Sprintf("%s/filesystems/requests/%s/INVALID", ETCD_PREFIX, filesystemId)
-		resp, err := kapi.Set(
-			context.Background(),
-			key,
-			"{", // Nasty invalid JSON
-			&client.SetOptions{PrevExist: client.PrevNoExist, TTL: 604800 * time.Second},
-		)
-		if err != nil {
-			log.Warnf("[SetDebugFlag:SendMangledEvent] - error setting %s: %s", key, err)
-			return err
-		}
-
-		watcher := kapi.Watcher(
-			// TODO maybe responses should get their own IDs, so that there can be
-			// multiple responses to a given event (at present we just assume one)
-			fmt.Sprintf("%s/filesystems/responses/%s/INVALID", ETCD_PREFIX, filesystemId),
-			&client.WatcherOptions{AfterIndex: resp.Node.CreatedIndex, Recursive: true},
-		)
-		node, err := watcher.Next(context.Background())
-		if err != nil {
-			return err
-		}
-
-		*result = node.Node.Value
 	default:
 		*result = ""
 		return fmt.Errorf("Unknown debug flag %s", args.FlagName)

@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -16,6 +15,8 @@ import (
 	"time"
 
 	"github.com/dotmesh-io/dotmesh/pkg/auth"
+
+	log "github.com/sirupsen/logrus"
 )
 
 const PLUGINS_DIR = "/run/docker/plugins"
@@ -550,11 +551,11 @@ func writeResponseErr(err error, w http.ResponseWriter) {
 func (state *InMemoryState) cleanupDockerFilesystemState() error {
 	err := filepath.Walk(CONTAINER_MOUNT_PREFIX, func(symlinkPath string, info os.FileInfo, err error) error {
 		if info == nil {
-			log.Printf("[cleanupDockerFilesystemState] found something with no fileinfo: %s", symlinkPath)
+			log.Debugf("[cleanupDockerFilesystemState] found something with no fileinfo: %s", symlinkPath)
 		} else {
 			if !info.IsDir() {
 				target, err := os.Readlink(symlinkPath)
-				log.Printf("[cleanupDockerFilesystemState] Found %s -> %s", symlinkPath, target)
+				log.Debugf("[cleanupDockerFilesystemState] Found %s -> %s", symlinkPath, target)
 				if err != nil {
 					if os.IsNotExist(err) {
 						// It's already gone, nothing to clean up.
@@ -564,7 +565,7 @@ func (state *InMemoryState) cleanupDockerFilesystemState() error {
 					}
 				} else {
 					fsid, err := unmnt(target)
-					log.Printf("[cleanupDockerFilesystemState] Found %s -> %s extracted fsid %s", symlinkPath, target, fsid)
+					log.Debugf("[cleanupDockerFilesystemState] Found %s -> %s extracted fsid %s", symlinkPath, target, fsid)
 					if err != nil {
 						return err
 					}
@@ -575,7 +576,7 @@ func (state *InMemoryState) cleanupDockerFilesystemState() error {
 					}
 
 					if deleted {
-						log.Printf("[cleanupDockerFilesystemState] %s -> %s -> %s - deleting", symlinkPath, target, fsid)
+						log.Debugf("[cleanupDockerFilesystemState] %s -> %s -> %s - deleting", symlinkPath, target, fsid)
 						if err := os.Remove(symlinkPath); err != nil {
 							return err
 						}

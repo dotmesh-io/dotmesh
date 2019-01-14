@@ -12,9 +12,11 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 
+	"github.com/dotmesh-io/dotmesh/pkg/messaging/nats"
 	"github.com/golang/glog"
 	"k8s.io/api/core/v1"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	//"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/labels"
@@ -28,10 +30,11 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 
+	"net/http"
+
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"net/http"
 )
 
 // k8s API docs:
@@ -1080,6 +1083,21 @@ func (c *dotmeshController) createServerPod(podName string, node string, env []v
 						{
 							Name:          "dotmesh-live",
 							ContainerPort: int32(32608),
+							Protocol:      v1.ProtocolTCP,
+						},
+						{
+							Name:          "nats-client",
+							ContainerPort: int32(nats.DefaultPort),
+							Protocol:      v1.ProtocolTCP,
+						},
+						{
+							Name:          "nats-cluster",
+							ContainerPort: int32(nats.DefaultClusterPort),
+							Protocol:      v1.ProtocolTCP,
+						},
+						{
+							Name:          "nats-http",
+							ContainerPort: int32(nats.DefaultHTTPPort),
 							Protocol:      v1.ProtocolTCP,
 						},
 					},
