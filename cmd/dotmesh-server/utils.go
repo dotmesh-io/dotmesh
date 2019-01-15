@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -28,7 +27,7 @@ func applyPrelude(prelude types.Prelude, fqfs string) error {
 	// iterate over it setting zfs user properties accordingly.
 	log.Printf("[applyPrelude] Got prelude: %+v", prelude)
 	for _, j := range prelude.SnapshotProperties {
-		metadataEncoded, err := encodeMetadata(j.Metadata)
+		metadataEncoded, err := utils.EncodeMetadata(j.Metadata)
 		if err != nil {
 			return err
 		}

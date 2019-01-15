@@ -14,6 +14,7 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/registry"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
+	"github.com/dotmesh-io/dotmesh/pkg/utils"
 )
 
 // attempt to pull some snapshots from the master, based on some hint that it
@@ -138,7 +139,7 @@ func receivingState(f *FsMachine) StateFn {
 	f.transitionedTo("receiving", "starting")
 	finished := make(chan bool)
 
-	go pipe(
+	go utils.Pipe(
 		resp.Body, fmt.Sprintf("http response body for %s", f.filesystemId),
 		pipeWriter, "stdin of zfs recv",
 		finished,
@@ -160,7 +161,7 @@ func receivingState(f *FsMachine) StateFn {
 	)
 
 	log.Printf("[pull] about to start consuming prelude on %v", pipeReader)
-	prelude, err := consumePrelude(pipeReader)
+	prelude, err := ConsumePrelude(pipeReader)
 	if err != nil {
 		_ = <-finished
 		return backoffStateWithReason(fmt.Sprintf("receivingState: error consuming prelude: %+v", err))

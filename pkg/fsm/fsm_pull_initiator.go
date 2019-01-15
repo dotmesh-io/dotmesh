@@ -11,6 +11,7 @@ import (
 
 	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
+	"github.com/dotmesh-io/dotmesh/pkg/utils"
 )
 
 func pullInitiatorState(f *FsMachine) StateFn {
@@ -220,7 +221,7 @@ func (f *FsMachine) pull(
 	pipeReader, pipeWriter := io.Pipe()
 	defer pipeReader.Close()
 	defer pipeWriter.Close()
-	go pipe(
+	go utils.Pipe(
 		resp.Body, fmt.Sprintf("http response body for %s", toFilesystemId),
 		pipeWriter, "stdin of zfs recv",
 		finished,
@@ -251,7 +252,7 @@ func (f *FsMachine) pull(
 	)
 
 	log.Printf("[pull] about to start consuming prelude on %v", pipeReader)
-	prelude, err := consumePrelude(pipeReader)
+	prelude, err := ConsumePrelude(pipeReader)
 	if err != nil {
 		_ = <-finished
 		return &types.Event{

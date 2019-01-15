@@ -15,6 +15,7 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/zfs"
 	"github.com/gorilla/mux"
 
+	"github.com/dotmesh-io/dotmesh/pkg/fsm"
 	"github.com/dotmesh-io/dotmesh/pkg/utils"
 	log "github.com/sirupsen/logrus"
 )
@@ -48,7 +49,7 @@ func (z *ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if masterNodeID != z.state.myNodeId {
+	if masterNodeID != z.state.zfs.GetPoolID() {
 		admin, err := z.state.userManager.Get(&user.Query{Ref: "admin"})
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -145,7 +146,7 @@ func (z *ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if z.fromSnap == "START" {
-		logZFSCommand(z.filesystem, fmt.Sprintf("%s send -p -R %s@%s", z.state.config.ZFSExecPath, zfs.FQ(z.state.config.PoolName, z.filesystem), z.toSnap))
+		zfs.LogZFSCommand(z.filesystem, fmt.Sprintf("%s send -p -R %s@%s", z.state.config.ZFSExecPath, zfs.FQ(z.state.config.PoolName, z.filesystem), z.toSnap))
 		cmd = exec.Command(
 			// -R sends interim snapshots as well
 			ZFS, "send", "-p", "-R", zfs.FQ(z.state.config.PoolName, z.filesystem)+"@"+z.toSnap,
@@ -160,7 +161,7 @@ func (z *ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// presume it refers to a snapshot
 			fromSnap = z.fromSnap
 		}
-		logZFSCommand(z.filesystem, fmt.Sprintf("%s send -p -I %s %s@%s", z.state.config.ZFSExecPath, fromSnap, zfs.FQ(z.state.config.PoolName, z.filesystem), z.toSnap))
+		zfs.LogZFSCommand(z.filesystem, fmt.Sprintf("%s send -p -I %s %s@%s", z.state.config.ZFSExecPath, fromSnap, zfs.FQ(z.state.config.PoolName, z.filesystem), z.toSnap))
 		cmd = exec.Command(
 			z.state.config.ZFSExecPath, "send", "-p",
 			"-I", fromSnap, zfs.FQ(z.state.config.PoolName, z.filesystem)+"@"+z.toSnap,
@@ -186,7 +187,7 @@ func (z *ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	cmd.Stderr = getLogfile("zfs-send-errors")
 
 	finished := make(chan bool)
-	go pipe(
+	go utils.Pipe(
 		pipeReader, fmt.Sprintf("stdout of zfs send for %s", z.filesystem),
 		w, "http response body",
 		finished,
@@ -259,7 +260,7 @@ func (z *ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if masterNodeID == z.state.myNodeId {
+	if masterNodeID == z.state.zfs.GetPoolID() {
 		if state != "pushPeerState" {
 			w.WriteHeader(http.StatusNotFound)
 			w.Write([]byte(fmt.Sprintf(
@@ -321,7 +322,7 @@ func (z *ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		finished := make(chan bool)
 		log.Printf("[ZFSReceiver:%s] Got HTTP response %+v", z.filesystem, resp.StatusCode)
 		w.WriteHeader(resp.StatusCode)
-		go pipe(resp.Body, url,
+		go utils.Pipe(resp.Body, url,
 			w, "proxied push recipient",
 			finished,
 			make(chan *Event),
@@ -339,7 +340,7 @@ func (z *ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// and is therefore blocking on us to tell it we've finished, one way or another, via
 	// z.state.notifyPushCompleted(z.filesystem, true/false) so we'd better do that in every path.
 
-	logZFSCommand(z.filesystem, fmt.Sprintf("%s recv %s", ZFS, zfs.FQ(z.state.config.PoolName, z.filesystem)))
+	zfs.LogZFSCommand(z.filesystem, fmt.Sprintf("%s recv %s", ZFS, zfs.FQ(z.state.config.PoolName, z.filesystem)))
 
 	cmd := exec.Command(ZFS, "recv", zfs.FQ(z.state.config.PoolName, z.filesystem))
 	pipeReader, pipeWriter := io.Pipe()
@@ -353,7 +354,7 @@ func (z *ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	cmd.Stderr = &errBuffer
 	finished := make(chan bool)
 
-	go pipe(
+	go utils.Pipe(
 		r.Body, fmt.Sprintf("http request body for %s", z.filesystem),
 		pipeWriter, "zfs recv stdin", finished,
 		make(chan *Event),
@@ -375,7 +376,7 @@ func (z *ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	)
 
 	log.Printf("[ZFSReceiver:%s] about to start consuming prelude on %v", z.filesystem, pipeReader)
-	prelude, err := consumePrelude(pipeReader)
+	prelude, err := fsm.ConsumePrelude(pipeReader)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(fmt.Sprintf("Unable to parse prelude for %s: %s\n", z.filesystem, err)))

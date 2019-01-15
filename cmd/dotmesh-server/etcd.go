@@ -136,7 +136,7 @@ func (s *InMemoryState) updateAddressesInEtcd() error {
 
 	_, err = s.etcdClient.Set(
 		context.Background(),
-		fmt.Sprintf("%s/servers/addresses/%s", ETCD_PREFIX, s.myNodeId),
+		fmt.Sprintf("%s/servers/addresses/%s", ETCD_PREFIX, s.zfs.GetPoolID()),
 		strings.Join(addresses, ","),
 		&client.SetOptions{TTL: 60 * time.Second},
 	)
@@ -195,7 +195,7 @@ func (s *InMemoryState) markFilesystemAsDeletedInEtcd(
 		TopLevelFilesystemId string
 		Clone                string
 	}{
-		s.myNodeId,
+		s.zfs.GetPoolID(),
 		username,
 		time.Now(),
 
@@ -398,7 +398,7 @@ func (s *InMemoryState) MarkFilesystemAsLiveInEtcd(topLevelFilesystemId string) 
 	_, err := s.etcdClient.Set(
 		context.Background(),
 		key,
-		s.myNodeId,
+		s.zfs.GetPoolID(),
 		&client.SetOptions{TTL: ttl},
 	)
 	if err != nil {
@@ -449,7 +449,7 @@ func (s *InMemoryState) handleOneFilesystemMaster(node *client.Node) error {
 		}
 		var responseChan chan *types.Event
 		requestId := pieces[len(pieces)-1]
-		if node.Value == s.myNodeId {
+		if node.Value == s.zfs.GetPoolID() {
 			log.Debugf("MOUNTING: %s=%s", fs, node.Value)
 			responseChan, err = s.dispatchEvent(fs, &types.Event{Name: "mount"}, requestId)
 			if err != nil {
@@ -880,7 +880,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 			// }
 			// s.mastersCache[fs] = node.Value
 
-			if node.Value == s.myNodeId {
+			if node.Value == s.zfs.GetPoolID() {
 				filesystemBelongsToMe[filesystemID] = true
 			} else {
 				filesystemBelongsToMe[filesystemID] = false
@@ -979,7 +979,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		server := pieces[4]
 		filesystem := pieces[5]
 
-		if server == s.myNodeId {
+		if server == s.zfs.GetPoolID() {
 			// Don't listen to updates from etcd about ourselves -
 			// because we update that by calling
 			// updateSnapshotsFromKnownState from the discovery code, and

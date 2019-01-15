@@ -21,6 +21,7 @@ import (
 // TODO refactor usage here so that there's less duplication
 
 type ZFS interface {
+	GetPoolID() string
 	GetZPoolCapacity() (float64, error)
 	ReportZpoolCapacity() error
 	FindFilesystemIdsOnSystem() []string
@@ -75,6 +76,10 @@ func NewZFS(zfsPath, zpoolPath, poolName, mountZFS string) (ZFS, error) {
 	}
 	zfsInter.poolId = poolId
 	return zfsInter, nil
+}
+
+func (z *zfs) GetPoolID() string {
+	return z.poolId
 }
 
 func (z *zfs) FQ(filesystemId string) string {

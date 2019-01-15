@@ -12,7 +12,7 @@ import (
 
 func calculatePrelude(snaps []types.Snapshot, toSnapshotId string) (types.Prelude, error) {
 	var prelude types.Prelude
-	// snaps, err := s.SnapshotsFor(s.myNodeId, toFilesystemId)
+	// snaps, err := s.SnapshotsFor(s.zfs.GetPoolID(), toFilesystemId)
 	// if err != nil {
 	// 	return prelude, err
 	// }
@@ -31,7 +31,7 @@ func calculatePrelude(snaps []types.Snapshot, toSnapshotId string) (types.Prelud
 	return prelude, nil
 }
 
-func consumePrelude(r io.Reader) (types.Prelude, error) {
+func ConsumePrelude(r io.Reader) (types.Prelude, error) {
 	// called when we know that there's a prelude to read from r.
 
 	// read a byte at a time, so that we leave the reader ready for someone

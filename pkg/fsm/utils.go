@@ -1,16 +1,7 @@
 package fsm
 
 import (
-	"compress/gzip"
-	"fmt"
-	"io"
-	"net/http"
-	"time"
-
-	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/zfs"
-
-	log "github.com/sirupsen/logrus"
 )
 
 // from filesystem id to a fully qualified ZFS filesystem

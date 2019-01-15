@@ -31,8 +31,6 @@ type InMemoryState struct {
 	filesystems     map[string]fsm.FSM
 	filesystemsLock *sync.RWMutex
 
-	myNodeId string
-
 	serverAddressesCache     map[string]string
 	serverAddressesCacheLock *sync.RWMutex
 
@@ -64,7 +62,7 @@ type InMemoryState struct {
 
 // typically methods on the InMemoryState "god object"
 
-func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
+func NewInMemoryState(config Config) *InMemoryState {
 	dockerClient, err := container.New(&container.Options{
 		ContainerMountPrefix:  CONTAINER_MOUNT_PREFIX,
 		ContainerMountDirLock: &containerMountDirLock,
@@ -79,7 +77,7 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 		panic(err)
 	}
 
-	zfsInterface, err := zfs.NewZFS(config.ZFSExecPath, config.ZPoolPath, POOL, ROOT_FS, config.PoolName)
+	zfsInterface, err := zfs.NewZFS(config.ZFSExecPath, config.ZPoolPath, POOL, config.PoolName)
 	if err != nil {
 		// CG added this one but not a fan of panicing rather than returning
 		panic(err)
@@ -89,7 +87,6 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 		config:                   config,
 		filesystems:              make(map[string]fsm.FSM),
 		filesystemsLock:          &sync.RWMutex{},
-		myNodeId:                 localPoolId,
 		serverAddressesCache:     make(map[string]string),
 		serverAddressesCacheLock: &sync.RWMutex{},
 		// global container state (what containers are running where), filesystemId -> containerInfo
@@ -143,7 +140,7 @@ func (s *InMemoryState) resetRegistry() {
 
 func calculatePrelude(snaps []Snapshot, toSnapshotId string) (Prelude, error) {
 	var prelude Prelude
-	// snaps, err := s.SnapshotsFor(s.myNodeId, toFilesystemId)
+	// snaps, err := s.SnapshotsFor(s.zfs.GetPoolID(), toFilesystemId)
 	// if err != nil {
 	// 	return prelude, err
 	// }
@@ -164,7 +161,7 @@ func calculatePrelude(snaps []Snapshot, toSnapshotId string) (Prelude, error) {
 
 // func (s *InMemoryState) calculatePrelude(toFilesystemId, toSnapshotId string) (Prelude, error) {
 // 	var prelude Prelude
-// 	snaps, err := s.SnapshotsFor(s.myNodeId, toFilesystemId)
+// 	snaps, err := s.SnapshotsFor(s.zfs.GetPoolID(), toFilesystemId)
 // 	if err != nil {
 // 		return prelude, err
 // 	}
@@ -419,7 +416,7 @@ func (s *InMemoryState) findRelatedContainers() error {
 
 	myFilesystems := []string{}
 
-	filesystems := s.registry.ListMasterNodes(&registry.ListMasterNodesQuery{NodeID: s.myNodeId})
+	filesystems := s.registry.ListMasterNodes(&registry.ListMasterNodesQuery{NodeID: s.zfs.GetPoolID()})
 	for fs := range filesystems {
 		myFilesystems = append(myFilesystems, fs)
 	}
@@ -435,12 +432,12 @@ func (s *InMemoryState) findRelatedContainers() error {
 		var value containerInfo
 		if ok {
 			value = containerInfo{
-				Server:     s.myNodeId,
+				Server:     s.zfs.GetPoolID(),
 				Containers: theContainers,
 			}
 		} else {
 			value = containerInfo{
-				Server:     s.myNodeId,
+				Server:     s.zfs.GetPoolID(),
 				Containers: []container.DockerContainer{},
 			}
 		}
@@ -510,20 +507,20 @@ func (state *InMemoryState) reallyProcureFilesystem(ctx context.Context, name Vo
 		if err != nil {
 			return "", err
 		}
-		if master == state.myNodeId {
+		if master == state.zfs.GetPoolID() {
 			log.Printf("Volume already here, we are done %s", filesystemId)
 			return filesystemId, nil
 		} else if master == "" {
 			return "", fmt.Errorf("Internal error: The volume name exists, but the volume does not (have a master). Name:%s Clone:%s ID:%s", name, cloneName, filesystemId)
 		} else {
-			log.Printf("Triggering move request for filesystem: %s from master: %s to me: %s", filesystemId, master, state.myNodeId)
+			log.Printf("Triggering move request for filesystem: %s from master: %s to me: %s", filesystemId, master, state.zfs.GetPoolID())
 			// put in a request for the current master of the filesystem to
 			// move it to me
 			responseChan, err := state.globalFsRequest(
 				filesystemId,
 				&Event{
 					Name: "move",
-					Args: &EventArgs{"target": state.myNodeId},
+					Args: &EventArgs{"target": state.zfs.GetPoolID()},
 				},
 			)
 			if err != nil {
@@ -533,7 +530,7 @@ func (state *InMemoryState) reallyProcureFilesystem(ctx context.Context, name Vo
 				"Attempting to move %s from %s to me (%s)",
 				filesystemId,
 				master,
-				state.myNodeId,
+				state.zfs.GetPoolID(),
 			)
 			var e *Event
 			select {
@@ -551,12 +548,12 @@ func (state *InMemoryState) reallyProcureFilesystem(ctx context.Context, name Vo
 			}
 			log.Printf(
 				"Attempting to move %s from %s to me (%s)",
-				filesystemId, master, state.myNodeId,
+				filesystemId, master, state.zfs.GetPoolID(),
 			)
 			if e.Name != "moved" {
 				return "", fmt.Errorf(
 					"failed to move %s from %s to %s: %s",
-					filesystemId, master, state.myNodeId, e,
+					filesystemId, master, state.zfs.GetPoolID(), e,
 				)
 			}
 			// great - the current master thinks it's handed off to us.
@@ -683,7 +680,7 @@ func (s *InMemoryState) CreateFilesystem(ctx context.Context, filesystemName *Vo
 	_, err = s.etcdClient.Set(
 		context.Background(),
 		fmt.Sprintf("%s/filesystems/masters/%s", ETCD_PREFIX, filesystemId),
-		s.myNodeId,
+		s.zfs.GetPoolID(),
 		&client.SetOptions{PrevExist: client.PrevNoExist},
 	)
 	if err != nil {
@@ -695,7 +692,7 @@ func (s *InMemoryState) CreateFilesystem(ctx context.Context, filesystemName *Vo
 	}
 
 	// update mastersCache with what we know
-	s.registry.SetMasterNode(filesystemId, s.myNodeId)
+	s.registry.SetMasterNode(filesystemId, s.zfs.GetPoolID())
 
 	// go ahead and create the filesystem
 	fs, err := s.InitFilesystemMachine(filesystemId)

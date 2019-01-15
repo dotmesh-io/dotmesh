@@ -112,7 +112,7 @@ func main() {
 		opentracing.InitGlobalTracer(tracer)
 	}
 	if len(os.Args) > 1 && os.Args[1] == "--temporary-error-plugin" {
-		s := NewInMemoryState("<unknown>", config)
+		s := NewInMemoryState(config)
 		s.runErrorPlugin()
 		return
 	}

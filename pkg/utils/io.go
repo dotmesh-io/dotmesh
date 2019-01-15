@@ -1,10 +1,15 @@
 package utils
 
 import (
+	"compress/gzip"
 	"fmt"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 	log "github.com/sirupsen/logrus"
+	"io"
+	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
 func Out(s ...interface{}) {

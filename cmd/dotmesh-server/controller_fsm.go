@@ -103,7 +103,7 @@ func (s *InMemoryState) InitFilesystemMachine(filesystemId string) (fsm.FSM, err
 }
 
 func (s *InMemoryState) NodeID() string {
-	return s.myNodeId
+	return s.zfs.GetPoolID()
 }
 
 func (s *InMemoryState) DeleteFilesystemFromMap(filesystemId string) {
@@ -141,7 +141,7 @@ func (s *InMemoryState) DeleteFilesystem(filesystemId string) error {
 	}
 
 	// Actually remove from ZFS
-	err = s.zfs.deleteFilesystemInZFS(filesystemId)
+	err = s.zfs.DeleteFilesystemInZFS(filesystemId)
 	if err != nil {
 		errors = append(errors, err)
 	}
@@ -187,7 +187,7 @@ func (s *InMemoryState) AlignMountStateWithMasters(filesystemId string) error {
 				"[AlignMountStateWithMasters] called for %v; masterFor=%v, myNodeId=%v; mounted=%t",
 				filesystemId,
 				masterNode,
-				s.myNodeId,
+				s.zfs.GetPoolID(),
 				fs.Mounted(),
 			)
 			return fs, fs.Mounted(), nil
@@ -202,14 +202,14 @@ func (s *InMemoryState) AlignMountStateWithMasters(filesystemId string) error {
 		}
 
 		// not mounted but should be (we are the master)
-		if masterNode == s.myNodeId && !mounted {
+		if masterNode == s.zfs.GetPoolID() && !mounted {
 			responseEvent := fs.Mount()
 			if responseEvent.Name != "mounted" {
 				return fmt.Errorf("Couldn't mount filesystem: %v", responseEvent)
 			}
 		}
 		// mounted but shouldn't be (we are not the master)
-		if masterNode != s.myNodeId && mounted {
+		if masterNode != s.zfs.GetPoolID() && mounted {
 			responseEvent := fs.Unmount()
 			if responseEvent.Name != "unmounted" {
 				return fmt.Errorf("Couldn't unmount filesystem: %v", responseEvent)
@@ -247,7 +247,7 @@ func (s *InMemoryState) ActivateClone(topLevelFilesystemId, originFilesystemId, 
 		fmt.Sprintf(
 			"%s/filesystems/masters/%s", ETCD_PREFIX, newCloneFilesystemId,
 		),
-		s.myNodeId,
+		s.zfs.GetPoolID(),
 		// only modify current master if this is a new filesystem id
 		&client.SetOptions{PrevExist: client.PrevNoExist},
 	)

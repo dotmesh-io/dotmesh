@@ -13,6 +13,7 @@ import (
 
 	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
+	"github.com/dotmesh-io/dotmesh/pkg/utils"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -199,7 +200,7 @@ func (f *FsMachine) push(
 	pipeReader, errch := f.zfs.Send(fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId, preludeEncoded)
 
 	finished := make(chan bool)
-	go pipe(
+	go utils.Pipe(
 		pipeReader, fmt.Sprintf("stdout of zfs send for %s", filesystemId),
 		postWriter, "http request body",
 		finished,
