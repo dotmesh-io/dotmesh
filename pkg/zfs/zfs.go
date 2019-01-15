@@ -41,6 +41,7 @@ type ZFS interface {
 	Send(fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string, preludeEncoded []byte) (*io.PipeReader, chan error)
 	SetCanmount(filesystemId, snapshotId string) ([]byte, error)
 	Mount(filesystemId, snapshotId string, options string, mountPath string) ([]byte, error)
+	Fork(filesystemId, latestSnapshot, forkFilesystemId string) ([]byte, error)
 }
 
 type zfs struct {
@@ -685,4 +686,22 @@ func (z *zfs) Send(fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotI
 		log.Infof("[actualPush:%s] errch accepted it, woohoo", fromFilesystemId)
 	}()
 	return pipeReader, errch
+}
+
+func (z *zfs) Fork(filesystemId, latestSnapshot, forkFilesystemId string) ([]byte, error) {
+	sendCommand := exec.Command(z.zfsPath, "send", "-R", z.fullZFSFilesystemPath(filesystemId, latestSnapshot))
+	recvCommand := exec.Command(z.zfsPath, "recv", z.fullZFSFilesystemPath(forkFilesystemId, ""))
+	in, out, err := os.Pipe()
+	if err != nil {
+		return nil, err
+	}
+	recvCommand.Stdin = in
+	sendCommand.Stdout = out
+	go func() {
+		err := sendCommand.Run()
+		if err != nil {
+			log.Errorf("Error running zfs send command %#v: %#v", sendCommand, err)
+		}
+	}()
+	return recvCommand.CombinedOutput()
 }

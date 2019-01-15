@@ -3,8 +3,6 @@ package fsm
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -670,25 +668,9 @@ func (f *FsMachine) fork(e *types.Event) (responseEvent *types.Event, nextState 
 		return types.NewErrorEvent("cannot-fork:error-registering-fork", err), activeState
 	}
 
-	// FIXME: zfs send -R pool/dmfs/<fs-id@snapshot-id> | zfs receive pool/dmfs/<new-fs-id>
-	sendCommand := exec.Command(f.zfsPath, "send", "-R", fq(f.poolName, f.filesystemId)+"@"+latestSnap)
-	recvCommand := exec.Command(f.zfsPath, "recv", fq(f.poolName, forkId))
-	in, out, err := os.Pipe()
+	_, err = f.zfs.Fork(f.filesystemId, latestSnap, forkId)
 	if err != nil {
-		return types.NewErrorEvent("cannot-fork:error-creating-pipe", err), activeState
-	}
-	recvCommand.Stdin = in
-	sendCommand.Stdout = out
-	go func() {
-		err := sendCommand.Run()
-		if err != nil {
-			log.Errorf("Error running zfs send command %#v: %#v", sendCommand, err)
-		}
-	}()
-	result, err := recvCommand.CombinedOutput()
-	if err != nil {
-		log.Errorf("Error running zfs receive command %#v: %#v", sendCommand, err)
-		return types.NewErrorEvent("cannot-fork:error-transferring-data", err), activeState
+		return types.NewErrorEvent("cannot-fork:error-running-zfs-send-then-recv", err), activeState
 	}
 
 	// go ahead and create the filesystem machine
