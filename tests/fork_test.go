@@ -9,7 +9,8 @@ import (
 
 type ForkRequest struct {
 	MasterBranchID string
-	Collaborator   string
+	ForkNamespace  string
+	ForkName       string
 }
 
 func TestForks(t *testing.T) {
@@ -42,6 +43,7 @@ func TestForks(t *testing.T) {
 
 	t.Run("CreateThenFork", func(t *testing.T) {
 		fsname := citools.UniqName()
+		fsname2 := citools.UniqName()
 		createResp := false
 		err = citools.DoRPC(f[0].GetNode(0).IP, "bob", bobKey,
 			"DotmeshRPC.Create",
@@ -63,7 +65,8 @@ func TestForks(t *testing.T) {
 			"DotmeshRPC.Fork",
 			ForkRequest{
 				MasterBranchID: lookupResp,
-				Collaborator:   "alice",
+				ForkNamespace:  "alice",
+				ForkName:       fsname2,
 			},
 			&forkResp)
 		if err != nil {
@@ -72,9 +75,8 @@ func TestForks(t *testing.T) {
 		citools.RunOnNode(t, node1Name, fmt.Sprintf("echo %s | dm remote add alice alice@localhost", aliceKey))
 		citools.RunOnNode(t, node1Name, "dm remote switch alice")
 		output := citools.OutputFromRunOnNode(t, node1Name, "dm list")
-		if !strings.Contains(output, fsname) {
-			t.Errorf("Did not find dot %s in output. Got: %s", fsname, output)
+		if !strings.Contains(output, fsname2) {
+			t.Errorf("Did not find dot %s in output. Got: %s", fsname2, output)
 		}
 	})
-
 }

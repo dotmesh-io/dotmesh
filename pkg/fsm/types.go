@@ -35,6 +35,8 @@ type StateManager interface {
 
 	AddressesForServer(server string) []string
 
+	RegisterNewFilesystem(namespace, name, filesystemId string) error
+
 	// TODO: move under a separate interface for Etcd related things
 	MarkFilesystemAsLiveInEtcd(topLevelFilesystemId string) error
 }

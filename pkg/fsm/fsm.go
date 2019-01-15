@@ -638,6 +638,71 @@ func (f *FsMachine) transitionedTo(state string, status string) {
 	f.stateMachineMetadataMu.Unlock()
 }
 
+func (f *FsMachine) fork(e *types.Event) (responseEvent *types.Event, nextState StateFn) {
+	forkNamespace, ok := (*e.Args)["ForkNamespace"]
+	if !ok {
+		return &types.Event{Name: "cannot-fork:namespace-needed"}, activeState
+	}
+	forkName, ok := (*e.Args)["ForkName"]
+	if !ok {
+		return &types.Event{Name: "cannot-fork:name-needed"}, activeState
+	}
+
+	// Mint a new UUID
+	id, err := uuid.NewV4()
+	if err != nil {
+		return types.NewErrorEvent("cannot-fork:error-creating-fork-id", err), activeState
+	}
+	forkId := id.String()
+
+	// Find our latest snapshot ID
+	latestSnap := f.latestSnapshot()
+	if latestSnap == "" {
+		return &types.Event{Name: "cannot-fork:filesystem-without-snapshots"}, activeState
+	}
+
+	// Register in registry
+	err := f.state.RegisterNewFilesystem(forkNamespace, forkName, forkId)
+	if err != nil {
+		return types.NewErrorEvent("cannot-fork:error-registering-fork", err), activeState
+	}
+
+	// FIXME: zfs send -R pool/dmfs/<fs-id@snapshot-id> | zfs receive pool/dmfs/<new-fs-id>
+	sendCommand, err := exec.Command(f.zfsPath, "send", "-R", fq(f.poolName, f.filesystemId)+"@"+latestSnap)
+	if err != nil {
+		return types.NewErrorEvent("cannot-fork:error-creating-send-command", err), activeState
+	}
+	recvCommand, err := exec.Command(f.zfsPath, "recv", fq(f.poolName, forkId))
+	if err != nil {
+		return types.NewErrorEvent("cannot-fork:error-creating-receive-command", err), activeState
+	}
+	in, out, err := os.Pipe()
+	if err != nil {
+		return types.NewErrorEvent("cannot-fork:error-creating-pipe", err), activeState
+	}
+	recvCommand.Stdin = in
+	sendCommand.Stdout = out
+	go func() {
+		err := sendCommand.Run()
+		if err != nil {
+			log.Errorf("Error running zfs send command %#v: %#v", sendCommand, err)
+		}
+	}()
+	result, err := recvCommand.CombinedOutput()
+	if err != nil {
+		log.Errorf("Error running zfs receive command %#v: %#v", sendCommand, err)
+		return types.NewErrorEvent("cannot-fork:error-transferring-data", err), activeState
+	}
+
+	// go ahead and create the filesystem machine
+	_, err := s.InitFilesystemMachine(forkId)
+	if err != nil {
+		return types.NewErrorEvent("cannot-fork:error-activating-statemachine", err), activeState
+	}
+
+	return &types.Event{Name: "forked", Args: &types.EventArgs{"ForkId": forkId}}, activeState
+}
+
 func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextState StateFn) {
 	var err error
 	var meta types.Metadata

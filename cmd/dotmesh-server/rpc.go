@@ -1920,7 +1920,8 @@ func (d *DotmeshRPC) Fork(
 	r *http.Request,
 	args *struct {
 		MasterBranchID string
-		Collaborator   string
+		ForkNamespace  string
+		ForkName       string
 	},
 	result *bool,
 ) error {
@@ -1930,11 +1931,8 @@ func (d *DotmeshRPC) Fork(
 	if err != nil {
 		return err
 	}
+
 	_, _, err = d.state.registry.LookupFilesystemById(args.MasterBranchID)
-	if err != nil {
-		return err
-	}
-	_, err = d.usersManager.Get(&user.Query{Ref: args.Collaborator})
 	if err != nil {
 		return err
 	}
@@ -1943,7 +1941,8 @@ func (d *DotmeshRPC) Fork(
 		args.MasterBranchID,
 		&Event{Name: "fork",
 			Args: &EventArgs{
-				"ForkUser": args.Collaborator,
+				"ForkNamespace": args.ForkNamespace,
+				"ForkName":      args.ForkName,
 			},
 		},
 	)
