@@ -492,9 +492,11 @@ func (r *DefaultRegistry) UpdateFilesystemFromEtcd(name types.VolumeName, rf typ
 			// if that's even the right level of abstraction. At time of writing,
 			// the only thing that seems to reasonably construct a
 			// TopLevelFilesystem is rpc's AllVolumesAndClones.
-			MasterBranch:  types.DotmeshVolume{Id: rf.Id, Name: name},
-			Owner:         owner.SafeUser(),
-			Collaborators: collaborators,
+			MasterBranch:         types.DotmeshVolume{Id: rf.Id, Name: name},
+			Owner:                owner.SafeUser(),
+			Collaborators:        collaborators,
+			ForkParentId:         rf.ForkParentId,
+			ForkParentSnapshotId: rf.ForkParentSnapshotId,
 		}
 	}
 	return nil

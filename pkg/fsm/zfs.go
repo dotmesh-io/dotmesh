@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 
@@ -475,6 +476,8 @@ func zfsFork(zfsPath, poolName, originId, originSnapshotId, forkId string) error
 
 	sendResultChan := make(chan error)
 
+	start := time.Now()
+
 	go func() {
 		err := sendCommand.Run()
 
@@ -498,6 +501,11 @@ func zfsFork(zfsPath, poolName, originId, originSnapshotId, forkId string) error
 	if err != nil {
 		return err
 	}
+
+	t := time.Now()
+	elapsed := t.Sub(start)
+
+	log.WithField("duration", fmt.Sprintf("%v", elapsed)).Info("ZFS fork completed")
 
 	return nil
 }

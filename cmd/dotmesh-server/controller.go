@@ -246,14 +246,16 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 		// s.globalSnapshotCacheLock.RUnlock()
 
 		d := DotmeshVolume{
-			Name:           tlf.MasterBranch.Name,
-			Branch:         clone,
-			Master:         master,
-			DirtyBytes:     dirtyBytes,
-			SizeBytes:      sizeBytes,
-			Id:             fs,
-			CommitCount:    commitCount,
-			ServerStatuses: map[string]string{},
+			Name:                 tlf.MasterBranch.Name,
+			Branch:               clone,
+			Master:               master,
+			DirtyBytes:           dirtyBytes,
+			SizeBytes:            sizeBytes,
+			Id:                   fs,
+			CommitCount:          commitCount,
+			ServerStatuses:       map[string]string{},
+			ForkParentId:         tlf.ForkParentId,
+			ForkParentSnapshotId: tlf.ForkParentSnapshotId,
 		}
 		s.serverAddressesCacheLock.Lock()
 		defer s.serverAddressesCacheLock.Unlock()

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/dotmesh-io/citools"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 
 	natsServer "github.com/nats-io/gnatsd/server"
 	natsTest "github.com/nats-io/gnatsd/test"
@@ -3317,16 +3318,7 @@ func TestStressHandover(t *testing.T) {
 	})
 }
 
-type DotmeshVolume struct {
-	Id             string
-	Name           VolumeName
-	Branch         string
-	Master         string
-	SizeBytes      int64
-	DirtyBytes     int64
-	CommitCount    int64
-	ServerStatuses map[string]string // serverId => status
-}
+type DotmeshVolume = types.DotmeshVolume
 
 type VolumeName struct {
 	Namespace string
