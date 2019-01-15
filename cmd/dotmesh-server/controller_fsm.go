@@ -292,3 +292,40 @@ func (s *InMemoryState) AddressesForServer(server string) []string {
 	}
 	return strings.Split(addresses, ",")
 }
+
+func (s *InMemoryState) RegisterNewFilesystem(namespace, name, filesystemId string) error {
+
+	re, err := s.etcdClient.Get(
+		context.Background(),
+		fmt.Sprintf("%s/registry/filesystems/%s/%s", ETCD_PREFIX, forkNamespace, forkName),
+		&client.GetOptions{},
+	)
+	switch {
+	case err != nil && !client.IsKeyNotFound(err):
+		return err
+	case err != nil && client.IsKeyNotFound(err):
+		// Doesn't already exist, we can proceed as usual
+	default:
+		return err
+	}
+
+	err = s.registry.RegisterFilesystem(ctx, VolumeName{Namespace: forkNamespace, Name: forkName}, forkId)
+	if err != nil {
+		return err
+	}
+
+	_, err = s.etcdClient.Set(
+		context.Background(),
+		fmt.Sprintf("%s/filesystems/masters/%s", ETCD_PREFIX, forkId),
+		f.state.myNodeId,
+		&client.SetOptions{PrevExist: client.PrevNoExist},
+	)
+	if err != nil {
+		return err
+	}
+
+	// update mastersCache with what we know
+	s.registry.SetMasterNode(forkId, f.state.myNodeId)
+
+	return nil
+}

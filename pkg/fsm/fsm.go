@@ -234,10 +234,7 @@ func (f *FsMachine) Submit(event *types.Event, requestID string) (reply chan *ty
 		}
 		requestID = id.String()
 	}
-	// fs, err := s.InitFilesystemMachine(filesystem)
-	// if err != nil {
-	// 	return nil, err
-	// }
+
 	if event.Args == nil {
 		event.Args = &types.EventArgs{}
 	}
@@ -299,7 +296,9 @@ func (f *FsMachine) Run() {
 		1*time.Second,
 		1*time.Second,
 	)
+
 	go func() {
+
 		for state := discoveringState; state != nil; {
 			state = state(f)
 		}
@@ -325,6 +324,7 @@ func (f *FsMachine) Run() {
 
 		log.Printf("[run:%s] terminated", f.filesystemId)
 	}()
+
 	// proxy requests and responses, enforcing an ordering, to avoid accepting
 	// a new request before a response comes back, ie to serialize requests &
 	// responses per-statemachine (without blocking the entire etcd event loop,
@@ -433,16 +433,6 @@ func (f *FsMachine) latestSnapshot() string {
 	return ""
 }
 
-func (f *FsMachine) getResponseChan(reqId string, e *types.Event) (chan *types.Event, error) {
-	f.responsesLock.Lock()
-	defer f.responsesLock.Unlock()
-	respChan, ok := f.responses[reqId]
-	if !ok {
-		return nil, fmt.Errorf("No such request id response channel %s", reqId)
-	}
-	return respChan, nil
-}
-
 func (f *FsMachine) markFilesystemAsLive() error {
 	return f.state.MarkFilesystemAsLiveInEtcd(f.filesystemId)
 }
@@ -457,7 +447,7 @@ func (f *FsMachine) getCurrentPollResult() types.TransferPollResult {
 }
 
 func (f *FsMachine) updateEtcdAboutTransfers() error {
-	pollResult := &(f.currentPollResult)
+	pollResult := f.currentPollResult
 
 	// wait until the state machine notifies us that it's changed the
 	// transfer state, but have an escape clause in case this filesystem
@@ -478,7 +468,7 @@ func (f *FsMachine) updateEtcdAboutTransfers() error {
 
 		switch update.Kind {
 		case types.TransferStart:
-			(*pollResult) = update.Changes
+			pollResult = update.Changes
 		case types.TransferGotIds:
 			pollResult.FilesystemId = update.Changes.FilesystemId
 			pollResult.StartingCommit = update.Changes.StartingCommit
@@ -513,7 +503,7 @@ func (f *FsMachine) updateEtcdAboutTransfers() error {
 		case types.TransferStatus:
 			pollResult.Status = update.Changes.Status
 		case types.TransferGetCurrentPollResult:
-			update.GetResult <- *pollResult
+			update.GetResult <- pollResult
 			continue
 		default:
 			return fmt.Errorf("Unknown transfer update kind in %#v", update)
@@ -525,9 +515,9 @@ func (f *FsMachine) updateEtcdAboutTransfers() error {
 		}
 
 		// Send the update
-		log.Debugf("[updateEtcdAboutTransfers] pollResult = %#v", *pollResult)
+		log.Debugf("[updateEtcdAboutTransfers] pollResult = %#v", pollResult)
 
-		serialized, err := json.Marshal(*pollResult)
+		serialized, err := json.Marshal(&pollResult)
 		if err != nil {
 			return err
 		}
@@ -649,10 +639,84 @@ func (f *FsMachine) transitionedTo(state string, status string) {
 	f.stateMachineMetadataMu.Unlock()
 }
 
+func (f *FsMachine) fork(e *types.Event) (responseEvent *types.Event, nextState StateFn) {
+	forkNamespace, ok := (*e.Args)["ForkNamespace"]
+	if !ok {
+		return &types.Event{Name: "cannot-fork:namespace-needed"}, activeState
+	}
+	forkName, ok := (*e.Args)["ForkName"]
+	if !ok {
+		return &types.Event{Name: "cannot-fork:name-needed"}, activeState
+	}
+
+	// Mint a new UUID
+	id, err := uuid.NewV4()
+	if err != nil {
+		return types.NewErrorEvent("cannot-fork:error-creating-fork-id", err), activeState
+	}
+	forkId := id.String()
+
+	// Find our latest snapshot ID
+	latestSnap := f.latestSnapshot()
+	if latestSnap == "" {
+		return &types.Event{Name: "cannot-fork:filesystem-without-snapshots"}, activeState
+	}
+
+	// Register in registry
+	err := f.state.RegisterNewFilesystem(forkNamespace, forkName, forkId)
+	if err != nil {
+		return types.NewErrorEvent("cannot-fork:error-registering-fork", err), activeState
+	}
+
+	// FIXME: zfs send -R pool/dmfs/<fs-id@snapshot-id> | zfs receive pool/dmfs/<new-fs-id>
+	sendCommand, err := exec.Command(f.zfsPath, "send", "-R", fq(f.poolName, f.filesystemId)+"@"+latestSnap)
+	if err != nil {
+		return types.NewErrorEvent("cannot-fork:error-creating-send-command", err), activeState
+	}
+	recvCommand, err := exec.Command(f.zfsPath, "recv", fq(f.poolName, forkId))
+	if err != nil {
+		return types.NewErrorEvent("cannot-fork:error-creating-receive-command", err), activeState
+	}
+	in, out, err := os.Pipe()
+	if err != nil {
+		return types.NewErrorEvent("cannot-fork:error-creating-pipe", err), activeState
+	}
+	recvCommand.Stdin = in
+	sendCommand.Stdout = out
+	go func() {
+		err := sendCommand.Run()
+		if err != nil {
+			log.Errorf("Error running zfs send command %#v: %#v", sendCommand, err)
+		}
+	}()
+	result, err := recvCommand.CombinedOutput()
+	if err != nil {
+		log.Errorf("Error running zfs receive command %#v: %#v", sendCommand, err)
+		return types.NewErrorEvent("cannot-fork:error-transferring-data", err), activeState
+	}
+
+	// go ahead and create the filesystem machine
+	_, err := s.InitFilesystemMachine(forkId)
+	if err != nil {
+		return types.NewErrorEvent("cannot-fork:error-activating-statemachine", err), activeState
+	}
+
+	return &types.Event{Name: "forked", Args: &types.EventArgs{"ForkId": forkId}}, activeState
+}
+
 func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextState StateFn) {
+	var err error
 	var meta types.Metadata
 	if val, ok := (*e.Args)["metadata"]; ok {
-		meta = castToMetadata(val)
+		meta, err = castToMetadata(val)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":          err,
+				"filesystem_id":  f.ID(),
+				"metadata_value": val,
+			}).Error("[snapshot] failed to get metadata from event")
+			return types.NewErrorEvent("unknown-metadata-format", err), backoffState
+		}
 	} else {
 		meta = types.Metadata{}
 	}

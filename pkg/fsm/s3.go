@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"strings"
 
@@ -16,6 +15,10 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/utils"
 	"golang.org/x/net/context"
+
+	log "github.com/sirupsen/logrus"
+
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 )
 
 // ReadFile - reads a file from the volume into the supplied Contents io.Writer,
@@ -133,20 +136,20 @@ func getS3Client(transferRequest types.S3TransferRequest) (*s3.S3, error) {
 }
 
 func downloadS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, transferRequestId string, prefixes []string, currentKeyVersions map[string]string) (bool, map[string]string, error) {
-	log.Printf("Prefixes: %#v, len: %d", prefixes, len(prefixes))
+	log.Debugf("[downloadS3Bucket] Prefixes: %#v, len: %d", prefixes, len(prefixes))
 	if len(prefixes) == 0 {
 		return downloadPartialS3Bucket(f, svc, bucketName, destPath, transferRequestId, "", currentKeyVersions)
 	}
 	var changed bool
 	var err error
 	for _, prefix := range prefixes {
-		log.Printf("[downloadS3Bucket] Pulling down objects prefixed %s", prefix)
+		log.Debugf("[downloadS3Bucket] Pulling down objects prefixed %s", prefix)
 		changed, currentKeyVersions, err = downloadPartialS3Bucket(f, svc, bucketName, destPath, transferRequestId, prefix, currentKeyVersions)
 		if err != nil {
 			return false, nil, err
 		}
 	}
-	fmt.Printf("[downloadS3Bucket] currentVersions: %#v", currentKeyVersions)
+	log.Debugf("[downloadS3Bucket] currentVersions: %#v", currentKeyVersions)
 	return changed, currentKeyVersions, nil
 }
 
@@ -162,7 +165,7 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 	if prefix != "" {
 		params.SetPrefix(prefix)
 	}
-	log.Printf("Params: %#v", *params)
+	log.Debugf("[downloadPartialS3Bucket] params: %#v", *params)
 	downloader := s3manager.NewDownloaderWithClient(svc)
 	var innerError error
 	err := svc.ListObjectVersionsPages(params,
@@ -171,7 +174,7 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 				latestMeta := currentKeyVersions[*item.Key]
 				if *item.IsLatest && latestMeta != *item.VersionId {
 					deletePath := fmt.Sprintf("%s/%s", destPath, *item.Key)
-					log.Printf("Got object for deletion: %#v, key: %s", item, *item.Key)
+					log.Debugf("Got object for deletion: %#v, key: %s", item, *item.Key)
 					err := os.RemoveAll(deletePath)
 					if err != nil && !os.IsNotExist(err) {
 						innerError = err
@@ -185,7 +188,7 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 			for _, item := range page.Versions {
 				latestMeta := currentKeyVersions[*item.Key]
 				if *item.IsLatest && latestMeta != *item.VersionId {
-					log.Printf("Got object: %#v, key: %s", item, *item.Key)
+					log.Debugf("Got object: %#v, key: %s", item, *item.Key)
 
 					f.transferUpdates <- types.TransferUpdate{
 						Kind: types.TransferNextS3File,
@@ -219,7 +222,7 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 	} else if innerError != nil {
 		return bucketChanged, nil, innerError
 	}
-	fmt.Printf("[downloadPartialS3Bucket] New key versions: %#v", currentKeyVersions)
+	log.Debugf("[downloadPartialS3Bucket] New key versions: %#v", currentKeyVersions)
 	return bucketChanged, currentKeyVersions, nil
 }
 
@@ -228,7 +231,7 @@ func downloadS3Object(downloader *s3manager.Downloader, key, versionId, bucket, 
 	directoryPath := fpath[:strings.LastIndex(fpath, "/")]
 	err := os.MkdirAll(directoryPath, 0666)
 	if err != nil {
-		log.Printf("Hit an error making all dirs")
+		log.WithError(err).Warn("[downloadS3Object] got an error while making all dirs")
 		return err
 	}
 	file, err := os.Create(fpath)
@@ -297,7 +300,7 @@ func updateS3Files(f *FsMachine, keyToVersionIds map[string]string, paths map[st
 	filtered := make(map[string]os.FileInfo)
 	if len(prefixes) == 0 {
 		filtered = paths
-		log.Printf("[updateS3Files] files: %#v", filtered)
+		log.Debugf("[updateS3Files] files: %#v", filtered)
 	}
 	for _, elem := range prefixes {
 		for key, size := range paths {

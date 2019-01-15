@@ -1,13 +1,35 @@
 package types
 
 import (
+	"encoding/gob"
 	"fmt"
 	"strings"
+
+	"github.com/dotmesh-io/dotmesh/pkg/container"
+)
+
+func init() {
+	gob.Register(&Metadata{})
+	gob.Register(&container.DockerContainer{})
+	gob.Register(&Event{})
+	gob.Register(&S3TransferRequest{})
+	gob.Register(&TransferRequest{})
+	gob.Register(&TransferPollResult{})
+}
+
+type EventType int
+
+const (
+	EventTypeRequest EventType = iota
+	EventTypeResponse
 )
 
 type Event struct {
-	Name string
-	Args *EventArgs
+	ID           string
+	Name         string
+	FilesystemID string
+	Type         EventType
+	Args         *EventArgs
 }
 
 func (e Event) String() string {
@@ -44,6 +66,9 @@ func NewErrorEvent(name string, err error) *Event {
 	}
 }
 
+// EventArgs is used to pass any dynamic structs through the event system.
+// Please not that if you send any events, they have to be registered with encoding/gob
+// Existing registration can be found in this file at the top
 type EventArgs map[string]interface{}
 
 func (ea EventArgs) String() string {

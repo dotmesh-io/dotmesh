@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/dotmesh-io/dotmesh/pkg/container"
+	"github.com/dotmesh-io/dotmesh/pkg/messaging/nats"
 
 	"github.com/coreos/etcd/client"
 
@@ -84,45 +85,7 @@ type TransferUpdateKind int
 type EventArgs = types.EventArgs
 type Event = types.Event
 
-type TransferPollResult struct {
-	TransferRequestId string
-	Peer              string // hostname
-	User              string
-	ApiKey            string
-	Direction         string // "push" or "pull"
-
-	// Hold onto this information, it might become useful for e.g. recursive
-	// receives of clone filesystems.
-	LocalNamespace   string
-	LocalName        string
-	LocalBranchName  string
-	RemoteNamespace  string
-	RemoteName       string
-	RemoteBranchName string
-
-	// Same across both clusters
-	FilesystemId string
-
-	// TODO add clusterIds? probably comes from etcd. in fact, could be the
-	// discovery id (although that is only for bootstrap... hmmm).
-	InitiatorNodeId string
-	PeerNodeId      string
-
-	// XXX a Transfer that spans multiple filesystem ids won't have a unique
-	// starting/target snapshot, so this is in the wrong place right now.
-	// although maybe it makes sense to talk about a target *final* snapshot,
-	// with interim snapshots being an implementation detail.
-	StartingCommit string
-	TargetCommit   string
-
-	Index              int    // i.e. transfer 1/4 (Index=1)
-	Total              int    //                   (Total=4)
-	Status             string // one of "starting", "running", "finished", "error"
-	NanosecondsElapsed int64
-	Size               int64 // size of current segment in bytes
-	Sent               int64 // number of bytes of current segment sent so far
-	Message            string
-}
+type TransferPollResult = types.TransferPollResult
 
 type Config struct {
 	FilesystemMetadataTimeout int64
@@ -133,27 +96,8 @@ type Config struct {
 	ZFSExecPath string
 	ZPoolPath   string
 	PoolName    string
-}
 
-// refers to a clone's "pointer" to a filesystem id and its snapshot.
-//
-// note that a clone's Origin's FilesystemId may differ from the "top level"
-// filesystemId in the Registry's Clones map if the clone is attributed to a
-// top-level filesystem which is *transitively* its parent but not its direct
-// parent. In this case the Origin FilesystemId will always point to its direct
-// parent.
-
-func castToMetadata(val interface{}) Metadata {
-	meta, ok := val.(Metadata)
-	if !ok {
-		meta = Metadata{}
-		// massage the data into the right type
-		cast := val.(map[string]interface{})
-		for k, v := range cast {
-			meta[k] = v.(string)
-		}
-	}
-	return meta
+	NatsConfig *nats.Config
 }
 
 type Prelude struct {

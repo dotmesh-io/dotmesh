@@ -159,6 +159,10 @@ func activeState(f *FsMachine) StateFn {
 			}
 			f.handoffRequest = e
 			return handoffState
+		} else if e.Name == "fork" {
+			response, state := f.fork(e)
+			f.innerResponses <- response
+			return state
 		} else if e.Name == "snapshot" {
 			response, state := f.snapshot(e)
 			f.innerResponses <- response

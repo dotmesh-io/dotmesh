@@ -4,13 +4,11 @@ import (
 	"fmt"
 
 	"github.com/dotmesh-io/dotmesh/pkg/types"
-	log "github.com/sirupsen/logrus"
 )
 
 // anything to do with passing events and states back from the current state, or telling the user stuff happened
 
 func (f *FsMachine) sendEvent(params *types.EventArgs, eventName, loggerString string) {
-	log.Printf(loggerString)
 	f.innerResponses <- &types.Event{
 		Name: eventName,
 		Args: params,

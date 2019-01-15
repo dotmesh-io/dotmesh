@@ -1,6 +1,7 @@
 package fsm
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/coreos/etcd/client"
@@ -34,6 +35,8 @@ type StateManager interface {
 	SnapshotsForCurrentMaster(filesystemId string) ([]types.Snapshot, error)
 
 	AddressesForServer(server string) []string
+
+	RegisterNewFilesystem(namespace, name, filesystemId string) error
 
 	// TODO: move under a separate interface for Etcd related things
 	MarkFilesystemAsLiveInEtcd(topLevelFilesystemId string) error
@@ -123,17 +126,24 @@ type dirtyInfo struct {
 	SizeBytes  int64
 }
 
-func castToMetadata(val interface{}) types.Metadata {
-	meta, ok := val.(types.Metadata)
-	if !ok {
-		meta = types.Metadata{}
+func castToMetadata(val interface{}) (types.Metadata, error) {
+
+	switch v := val.(type) {
+	case types.Metadata:
+		return v, nil
+	case *types.Metadata:
+		return *v, nil
+	case map[string]interface{}:
+		meta := types.Metadata{}
 		// massage the data into the right type
 		cast := val.(map[string]interface{})
 		for k, v := range cast {
 			meta[k] = v.(string)
 		}
+		return meta, nil
+	default:
+		return nil, fmt.Errorf("unknown type: %v", val)
 	}
-	return meta
 }
 
 type transferFn func(

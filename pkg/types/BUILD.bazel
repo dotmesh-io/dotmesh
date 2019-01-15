@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "event.go",
         "fsm_types.go",
+        "messenger.go",
         "notification.go",
         "tlf.go",
         "types.go",
@@ -14,6 +15,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/auth:go_default_library",
+        "//pkg/container:go_default_library",
         "//pkg/user:go_default_library",
     ],
 )
