@@ -17,8 +17,6 @@ import (
 	"golang.org/x/net/context"
 
 	log "github.com/sirupsen/logrus"
-
-	"github.com/dotmesh-io/dotmesh/pkg/types"
 )
 
 // ReadFile - reads a file from the volume into the supplied Contents io.Writer,

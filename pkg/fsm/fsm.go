@@ -3,6 +3,8 @@ package fsm
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -640,11 +642,11 @@ func (f *FsMachine) transitionedTo(state string, status string) {
 }
 
 func (f *FsMachine) fork(e *types.Event) (responseEvent *types.Event, nextState StateFn) {
-	forkNamespace, ok := (*e.Args)["ForkNamespace"]
+	forkNamespace, ok := (*e.Args)["ForkNamespace"].(string)
 	if !ok {
 		return &types.Event{Name: "cannot-fork:namespace-needed"}, activeState
 	}
-	forkName, ok := (*e.Args)["ForkName"]
+	forkName, ok := (*e.Args)["ForkName"].(string)
 	if !ok {
 		return &types.Event{Name: "cannot-fork:name-needed"}, activeState
 	}
@@ -663,20 +665,14 @@ func (f *FsMachine) fork(e *types.Event) (responseEvent *types.Event, nextState 
 	}
 
 	// Register in registry
-	err := f.state.RegisterNewFilesystem(forkNamespace, forkName, forkId)
+	err = f.state.RegisterNewFilesystem(forkNamespace, forkName, forkId)
 	if err != nil {
 		return types.NewErrorEvent("cannot-fork:error-registering-fork", err), activeState
 	}
 
 	// FIXME: zfs send -R pool/dmfs/<fs-id@snapshot-id> | zfs receive pool/dmfs/<new-fs-id>
-	sendCommand, err := exec.Command(f.zfsPath, "send", "-R", fq(f.poolName, f.filesystemId)+"@"+latestSnap)
-	if err != nil {
-		return types.NewErrorEvent("cannot-fork:error-creating-send-command", err), activeState
-	}
-	recvCommand, err := exec.Command(f.zfsPath, "recv", fq(f.poolName, forkId))
-	if err != nil {
-		return types.NewErrorEvent("cannot-fork:error-creating-receive-command", err), activeState
-	}
+	sendCommand := exec.Command(f.zfsPath, "send", "-R", fq(f.poolName, f.filesystemId)+"@"+latestSnap)
+	recvCommand := exec.Command(f.zfsPath, "recv", fq(f.poolName, forkId))
 	in, out, err := os.Pipe()
 	if err != nil {
 		return types.NewErrorEvent("cannot-fork:error-creating-pipe", err), activeState
@@ -696,7 +692,7 @@ func (f *FsMachine) fork(e *types.Event) (responseEvent *types.Event, nextState 
 	}
 
 	// go ahead and create the filesystem machine
-	_, err := s.InitFilesystemMachine(forkId)
+	_, err = f.state.InitFilesystemMachine(forkId)
 	if err != nil {
 		return types.NewErrorEvent("cannot-fork:error-activating-statemachine", err), activeState
 	}
