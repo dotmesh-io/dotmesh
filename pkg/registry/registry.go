@@ -41,6 +41,7 @@ type Registry interface {
 
 	UpdateCollaborators(ctx context.Context, tlf types.TopLevelFilesystem, newCollaborators []user.SafeUser) error
 	RegisterClone(name string, topLevelFilesystemId string, clone types.Clone) error
+	RegisterFork(originFilesystemId string, originSnapshotId string, forkName types.VolumeName, forkFilesystemId string) error
 
 	// TODO: why ..FromEtcd?
 	UpdateFilesystemFromEtcd(name types.VolumeName, rf types.RegistryFilesystem) error
@@ -293,6 +294,36 @@ type registryFilesystem struct {
 	Id              string
 	OwnerId         string
 	CollaboratorIds []string
+}
+
+func (r *DefaultRegistry) RegisterFork(originFilesystemId string, originSnapshotId string, forkName types.VolumeName, forkFilesystemId string) error {
+	rf := types.RegistryFilesystem{
+		Id: forkFilesystemId,
+		// Owner is, for now, always the authenticated user at the time of
+		// creation
+		OwnerId:              forkName.Namespace,
+		ForkParentId:         originFilesystemId,
+		ForkParentSnapshotId: originSnapshotId,
+	}
+	serialized, err := json.Marshal(rf)
+	if err != nil {
+		return err
+	}
+	_, err = r.etcdClient.Set(
+		context.Background(),
+		// (0)/(1)dotmesh.io/(2)registry/(3)filesystems/(4)<namespace>/(5)<name> =>
+		//     {"Uuid": "<fs-uuid>"}
+		fmt.Sprintf("%s/registry/filesystems/%s/%s", r.prefix, forkName.Namespace, forkName.Name),
+		string(serialized),
+		// we support updates in UpdateCollaborators, below.
+		&client.SetOptions{PrevExist: client.PrevNoExist},
+	)
+	if err != nil {
+		return err
+	}
+	// Only update our local belief system once the write to etcd has been
+	// successful!
+	return r.UpdateFilesystemFromEtcd(forkName, rf)
 }
 
 // update a filesystem, including updating etcd and our local state

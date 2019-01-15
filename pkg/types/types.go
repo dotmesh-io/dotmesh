@@ -174,9 +174,11 @@ type PathToTopLevelFilesystem struct {
 // the type as stored in the json in etcd (intermediate representation wrt
 // DotmeshVolume)
 type RegistryFilesystem struct {
-	Id              string
-	OwnerId         string
-	CollaboratorIds []string
+	Id                   string
+	OwnerId              string
+	ForkParentId         string `json:",omitempty"`
+	ForkParentSnapshotId string `json:",omitempty"`
+	CollaboratorIds      []string
 }
 
 const EtcdPrefix = "/dotmesh.io"

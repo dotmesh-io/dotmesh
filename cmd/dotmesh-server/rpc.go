@@ -1923,7 +1923,7 @@ func (d *DotmeshRPC) Fork(
 		ForkNamespace  string
 		ForkName       string
 	},
-	result *bool,
+	result *string,
 ) error {
 
 	// TODO #611: strip this out and replace it with a check to make sure they're in the collaborators list
@@ -1949,12 +1949,15 @@ func (d *DotmeshRPC) Fork(
 	if err != nil {
 		return err
 	}
-	go func() {
-		// asynchronously throw away the response, transfers can be polled via
-		// their own entries in etcd
-		e := <-responseChan
-		log.Printf("finished transfer of %+v, %+v", args, e)
-	}()
+
+	e := <-responseChan
+	if e.Name == "forked" {
+		log.Printf("Forked %s", args.MasterBranchID)
+		*result = (*e.Args)["ForkId"].(string)
+	} else {
+		return maybeError(e, "forked")
+	}
+
 	return nil
 }
 

@@ -293,9 +293,8 @@ func (s *InMemoryState) AddressesForServer(server string) []string {
 	return strings.Split(addresses, ",")
 }
 
-func (s *InMemoryState) RegisterNewFilesystem(namespace, name, filesystemId string) error {
-
-	re, err := s.etcdClient.Get(
+func (s *InMemoryState) RegisterNewFork(originFilesystemId, originSnapshotId, forkNamespace, forkName, forkFilesystemId string) error {
+	_, err := s.etcdClient.Get(
 		context.Background(),
 		fmt.Sprintf("%s/registry/filesystems/%s/%s", ETCD_PREFIX, forkNamespace, forkName),
 		&client.GetOptions{},
@@ -306,18 +305,18 @@ func (s *InMemoryState) RegisterNewFilesystem(namespace, name, filesystemId stri
 	case err != nil && client.IsKeyNotFound(err):
 		// Doesn't already exist, we can proceed as usual
 	default:
-		return err
+		return fmt.Errorf("The name %s/%s is already in use", forkNamespace, forkName)
 	}
 
-	err = s.registry.RegisterFilesystem(ctx, VolumeName{Namespace: forkNamespace, Name: forkName}, forkId)
+	err = s.registry.RegisterFork(originFilesystemId, originSnapshotId, VolumeName{Namespace: forkNamespace, Name: forkName}, forkFilesystemId)
 	if err != nil {
 		return err
 	}
 
 	_, err = s.etcdClient.Set(
 		context.Background(),
-		fmt.Sprintf("%s/filesystems/masters/%s", ETCD_PREFIX, forkId),
-		f.state.myNodeId,
+		fmt.Sprintf("%s/filesystems/masters/%s", ETCD_PREFIX, forkFilesystemId),
+		s.myNodeId,
 		&client.SetOptions{PrevExist: client.PrevNoExist},
 	)
 	if err != nil {
@@ -325,7 +324,7 @@ func (s *InMemoryState) RegisterNewFilesystem(namespace, name, filesystemId stri
 	}
 
 	// update mastersCache with what we know
-	s.registry.SetMasterNode(forkId, f.state.myNodeId)
+	s.registry.SetMasterNode(forkFilesystemId, s.myNodeId)
 
 	return nil
 }

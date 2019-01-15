@@ -460,3 +460,44 @@ func discoverSystem(zfsExec, poolName, fs string) (*types.Filesystem, error) {
 		Snapshots: snapshots,
 	}, nil
 }
+
+func zfsFork(zfsPath, poolName, originId, originSnapshotId, forkId string) error {
+	// zfs send -R pool/dmfs/<fs-id@snapshot-id> | zfs receive pool/dmfs/<new-fs-id>
+	sendCommand := exec.Command(zfsPath, "send", "-R", fq(poolName, originId)+"@"+originSnapshotId)
+	recvCommand := exec.Command(zfsPath, "recv", fq(poolName, forkId))
+
+	in, out, err := os.Pipe()
+	if err != nil {
+		return err
+	}
+	recvCommand.Stdin = in
+	sendCommand.Stdout = out
+
+	sendResultChan := make(chan error)
+
+	go func() {
+		err := sendCommand.Run()
+
+		if err != nil {
+			log.WithError(err).WithField("command", sendCommand).Error("Error running zfs send command")
+		}
+
+		sendResultChan <- err
+	}()
+
+	result, err := recvCommand.CombinedOutput()
+	if err != nil {
+		log.WithError(err).WithFields(log.Fields{
+			"command": sendCommand,
+			"output":  result,
+		}).Error("Error running zfs receive command")
+		return err
+	}
+
+	err = <-sendResultChan
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
