@@ -85,7 +85,7 @@ func (z *zfs) GetPoolID() string {
 
 func (z *zfs) FQ(filesystemId string) string {
 	// todo this is probably too much indirection, shift FQ into here when it's no longer used anywhere
-	return FQ(z.poolName, filesystemId)
+	return fmt.Sprintf("%s/%s/%s", z.poolName, types.RootFS, filesystemId)
 }
 
 func (z *zfs) fullZFSFilesystemPath(filesystemId, snapshotId string) string {
@@ -137,23 +137,11 @@ func (z *zfs) runOnFilesystem(filesystemId, snapshotId string, args []string) ([
 func (z *zfs) Snapshot(filesystemId string, snapshotId string, metadataEncoded []string) ([]byte, error) {
 	args := []string{"snapshot"}
 	args = append(args, metadataEncoded...)
-	args = append(args, z.fullZFSFilesystemPath(filesystemId, snapshotId))
-	LogZFSCommand(filesystemId, fmt.Sprintf("%s %s", z.zfsPath, strings.Join(args, " ")))
-	log.Printf("[zfs.Snapshot] Attempting: zfs %s", args)
-	output, err := exec.Command(z.zfsPath, args...).CombinedOutput()
-	if err != nil {
-		log.Printf("[snapshot] %v while trying to snapshot %s (%s)", err, z.FQ(filesystemId), args)
-	}
-	return output, err
+	return z.runOnFilesystem(filesystemId, snapshotId, args)
 }
 
 func (z *zfs) List(filesystemId, snapshotId string) ([]byte, error) {
-	entry := z.fullZFSFilesystemPath(filesystemId, snapshotId)
-	output, err := exec.Command(z.zfsPath, "list", entry).CombinedOutput()
-	if err != nil {
-		log.Printf("[list] %v while trying to list snapshot for filesystem %s", err, z.FQ(filesystemId))
-	}
-	return output, err
+	return z.runOnFilesystem(filesystemId, snapshotId, []string{"list"})
 }
 
 func (z *zfs) Clone(filesystemId, originSnapshotId, newCloneFilesystemId string) ([]byte, error) {
@@ -353,6 +341,7 @@ func (z *zfs) FindFilesystemIdsOnSystem() []string {
 func (z *zfs) DeleteFilesystemInZFS(fs string) error {
 	LogZFSCommand(fs, fmt.Sprintf("%s destroy -r %s", z.zfsPath, FQ(z.poolName, fs)))
 	cmd := exec.Command(z.zfsPath, "destroy", "-r", FQ(z.poolName, fs))
+	// is there much difference between this and how runOnFilesystem works?
 	err := doSimpleZFSCommand(cmd, fmt.Sprintf("delete filesystem %s (full name: %s)", fs, FQ(z.poolName, fs)))
 	return err
 }
