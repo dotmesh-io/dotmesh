@@ -29,7 +29,6 @@ go_library(
         "transfers.go",
         "types.go",
         "units.go",
-        "utils.go",
     ],
     importpath = "github.com/dotmesh-io/dotmesh/pkg/fsm",
     visibility = ["//visibility:public"],
