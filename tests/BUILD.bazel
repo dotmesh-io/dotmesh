@@ -4,11 +4,13 @@ go_test(
     name = "go_default_test",
     srcs = [
         "acceptance_test.go",
+        "fork_test.go",
         "s3api_multinode_test.go",
         "s3api_test.go",
         "s3remote_test.go",
     ],
     deps = [
+        "//pkg/types:go_default_library",
         "//tests/vendor/github.com/dotmesh-io/citools:go_default_library",
         "//tests/vendor/github.com/nats-io/gnatsd/server:go_default_library",
         "//tests/vendor/github.com/nats-io/gnatsd/test:go_default_library",
