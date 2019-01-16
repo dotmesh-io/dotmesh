@@ -81,11 +81,6 @@ func NewInMemoryState(config Config) *InMemoryState {
 		os.Exit(1)
 	}
 
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		panic(err)
-	}
-
 	zfsInterface, err := zfs.NewZFS(config.ZFSExecPath, config.ZPoolPath, POOL, config.PoolName)
 	if err != nil {
 		// CG added this one but not a fan of panicing rather than returning
@@ -258,14 +253,16 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 		// s.globalSnapshotCacheLock.RUnlock()
 
 		d := DotmeshVolume{
-			Name:           tlf.MasterBranch.Name,
-			Branch:         clone,
-			Master:         master,
-			DirtyBytes:     dirtyBytes,
-			SizeBytes:      sizeBytes,
-			Id:             fs,
-			CommitCount:    commitCount,
-			ServerStatuses: map[string]string{},
+			Name:                 tlf.MasterBranch.Name,
+			Branch:               clone,
+			Master:               master,
+			DirtyBytes:           dirtyBytes,
+			SizeBytes:            sizeBytes,
+			Id:                   fs,
+			CommitCount:          commitCount,
+			ServerStatuses:       map[string]string{},
+			ForkParentId:         tlf.ForkParentId,
+			ForkParentSnapshotId: tlf.ForkParentSnapshotId,
 		}
 		s.serverAddressesCacheLock.Lock()
 		defer s.serverAddressesCacheLock.Unlock()

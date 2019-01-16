@@ -3,14 +3,16 @@ package types
 import "fmt"
 
 type DotmeshVolume struct {
-	Id             string
-	Name           VolumeName
-	Branch         string
-	Master         string
-	SizeBytes      int64
-	DirtyBytes     int64
-	CommitCount    int64
-	ServerStatuses map[string]string // serverId => status
+	Id                   string
+	Name                 VolumeName
+	Branch               string
+	Master               string
+	SizeBytes            int64
+	DirtyBytes           int64
+	CommitCount          int64
+	ServerStatuses       map[string]string // serverId => status
+	ForkParentId         string
+	ForkParentSnapshotId string
 }
 
 type VolumeName struct {

@@ -13,10 +13,12 @@ const ADMIN_USER_UUID = "00000000-0000-0000-0000-000000000000"
 const ANONYMOUS_USER_UUID = "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF"
 
 type TopLevelFilesystem struct {
-	MasterBranch  DotmeshVolume
-	OtherBranches []DotmeshVolume
-	Owner         user.SafeUser
-	Collaborators []user.SafeUser
+	MasterBranch         DotmeshVolume
+	OtherBranches        []DotmeshVolume
+	Owner                user.SafeUser
+	Collaborators        []user.SafeUser
+	ForkParentId         string
+	ForkParentSnapshotId string
 }
 
 func (t TopLevelFilesystem) AuthorizeOwner(ctx context.Context) (bool, error) {

@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	"encoding/base64"
 	"github.com/dotmesh-io/dotmesh/pkg/metrics"
@@ -41,7 +42,7 @@ type ZFS interface {
 	Send(fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string, preludeEncoded []byte) (*io.PipeReader, chan error)
 	SetCanmount(filesystemId, snapshotId string) ([]byte, error)
 	Mount(filesystemId, snapshotId string, options string, mountPath string) ([]byte, error)
-	Fork(filesystemId, latestSnapshot, forkFilesystemId string) ([]byte, error)
+	Fork(filesystemId, latestSnapshot, forkFilesystemId string) error
 }
 
 type zfs struct {
@@ -677,20 +678,48 @@ func (z *zfs) Send(fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotI
 	return pipeReader, errch
 }
 
-func (z *zfs) Fork(filesystemId, latestSnapshot, forkFilesystemId string) ([]byte, error) {
+func (z *zfs) Fork(filesystemId, latestSnapshot, forkFilesystemId string) error {
 	sendCommand := exec.Command(z.zfsPath, "send", "-R", z.fullZFSFilesystemPath(filesystemId, latestSnapshot))
 	recvCommand := exec.Command(z.zfsPath, "recv", z.fullZFSFilesystemPath(forkFilesystemId, ""))
 	in, out, err := os.Pipe()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	recvCommand.Stdin = in
 	sendCommand.Stdout = out
+
+	sendResultChan := make(chan error)
+
+	start := time.Now()
+
 	go func() {
 		err := sendCommand.Run()
+
 		if err != nil {
-			log.Errorf("Error running zfs send command %#v: %#v", sendCommand, err)
+			log.WithError(err).WithField("command", sendCommand).Error("Error running zfs send command")
 		}
+
+		sendResultChan <- err
 	}()
-	return recvCommand.CombinedOutput()
+
+	result, err := recvCommand.CombinedOutput()
+	if err != nil {
+		log.WithError(err).WithFields(log.Fields{
+			"command": sendCommand,
+			"output":  result,
+		}).Error("Error running zfs receive command")
+		return err
+	}
+
+	err = <-sendResultChan
+	if err != nil {
+		return err
+	}
+
+	t := time.Now()
+	elapsed := t.Sub(start)
+
+	log.WithField("duration", fmt.Sprintf("%v", elapsed)).Info("ZFS fork completed")
+
+	return nil
 }

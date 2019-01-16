@@ -41,6 +41,7 @@ type Registry interface {
 
 	UpdateCollaborators(ctx context.Context, tlf types.TopLevelFilesystem, newCollaborators []user.SafeUser) error
 	RegisterClone(name string, topLevelFilesystemId string, clone types.Clone) error
+	RegisterFork(originFilesystemId string, originSnapshotId string, forkName types.VolumeName, forkFilesystemId string) error
 
 	// TODO: why ..FromEtcd?
 	UpdateFilesystemFromEtcd(name types.VolumeName, rf types.RegistryFilesystem) error
@@ -295,6 +296,36 @@ type registryFilesystem struct {
 	CollaboratorIds []string
 }
 
+func (r *DefaultRegistry) RegisterFork(originFilesystemId string, originSnapshotId string, forkName types.VolumeName, forkFilesystemId string) error {
+	rf := types.RegistryFilesystem{
+		Id: forkFilesystemId,
+		// Owner is, for now, always the authenticated user at the time of
+		// creation
+		OwnerId:              forkName.Namespace,
+		ForkParentId:         originFilesystemId,
+		ForkParentSnapshotId: originSnapshotId,
+	}
+	serialized, err := json.Marshal(rf)
+	if err != nil {
+		return err
+	}
+	_, err = r.etcdClient.Set(
+		context.Background(),
+		// (0)/(1)dotmesh.io/(2)registry/(3)filesystems/(4)<namespace>/(5)<name> =>
+		//     {"Uuid": "<fs-uuid>"}
+		fmt.Sprintf("%s/registry/filesystems/%s/%s", r.prefix, forkName.Namespace, forkName.Name),
+		string(serialized),
+		// we support updates in UpdateCollaborators, below.
+		&client.SetOptions{PrevExist: client.PrevNoExist},
+	)
+	if err != nil {
+		return err
+	}
+	// Only update our local belief system once the write to etcd has been
+	// successful!
+	return r.UpdateFilesystemFromEtcd(forkName, rf)
+}
+
 // update a filesystem, including updating etcd and our local state
 func (r *DefaultRegistry) RegisterFilesystem(ctx context.Context, name types.VolumeName, filesystemId string) error {
 	authenticatedUserId := auth.GetUserIDFromCtx(ctx)
@@ -461,9 +492,11 @@ func (r *DefaultRegistry) UpdateFilesystemFromEtcd(name types.VolumeName, rf typ
 			// if that's even the right level of abstraction. At time of writing,
 			// the only thing that seems to reasonably construct a
 			// TopLevelFilesystem is rpc's AllVolumesAndClones.
-			MasterBranch:  types.DotmeshVolume{Id: rf.Id, Name: name},
-			Owner:         owner.SafeUser(),
-			Collaborators: collaborators,
+			MasterBranch:         types.DotmeshVolume{Id: rf.Id, Name: name},
+			Owner:                owner.SafeUser(),
+			Collaborators:        collaborators,
+			ForkParentId:         rf.ForkParentId,
+			ForkParentSnapshotId: rf.ForkParentSnapshotId,
 		}
 	}
 	return nil

@@ -147,7 +147,7 @@ func NewFilesystemMachine(cfg *FsConfig) *FsMachine {
 		transferUpdates: make(chan types.TransferUpdate),
 
 		filesystemMetadataTimeout: cfg.FilesystemMetadataTimeout,
-		zfs:                       zfsInter,
+		zfs: zfsInter,
 	}
 }
 
@@ -640,13 +640,22 @@ func (f *FsMachine) transitionedTo(state string, status string) {
 }
 
 func (f *FsMachine) fork(e *types.Event) (responseEvent *types.Event, nextState StateFn) {
-	forkNamespace, ok := (*e.Args)["ForkNamespace"].(string)
+	forkNamespaceIf, ok := (*e.Args)["ForkNamespace"]
 	if !ok {
 		return &types.Event{Name: "cannot-fork:namespace-needed"}, activeState
 	}
-	forkName, ok := (*e.Args)["ForkName"].(string)
+	forkNamespace, ok := forkNamespaceIf.(string)
+	if !ok {
+		return &types.Event{Name: "cannot-fork:namespace-not-string"}, activeState
+	}
+
+	forkNameIf, ok := (*e.Args)["ForkName"]
 	if !ok {
 		return &types.Event{Name: "cannot-fork:name-needed"}, activeState
+	}
+	forkName, ok := forkNameIf.(string)
+	if !ok {
+		return &types.Event{Name: "cannot-fork:name-not-string"}, activeState
 	}
 
 	// Mint a new UUID
@@ -662,15 +671,25 @@ func (f *FsMachine) fork(e *types.Event) (responseEvent *types.Event, nextState 
 		return &types.Event{Name: "cannot-fork:filesystem-without-snapshots"}, activeState
 	}
 
+	log.WithFields(log.Fields{
+		"originFilesystemId": f.filesystemId,
+		"originSnapshotId":   latestSnap,
+		"forkNamespace":      forkNamespace,
+		"forkName":           forkName,
+		"forkId":             forkId,
+	}).Debug("[fork] about to fork...")
+
 	// Register in registry
-	err = f.state.RegisterNewFilesystem(forkNamespace, forkName, forkId)
+	err = f.state.RegisterNewFork(f.filesystemId, latestSnap, forkNamespace, forkName, forkId)
 	if err != nil {
+		log.WithError(err).Error("Error registering fork")
 		return types.NewErrorEvent("cannot-fork:error-registering-fork", err), activeState
 	}
 
-	_, err = f.zfs.Fork(f.filesystemId, latestSnap, forkId)
+	err = f.zfs.Fork(f.filesystemId, latestSnap, forkId)
 	if err != nil {
-		return types.NewErrorEvent("cannot-fork:error-running-zfs-send-then-recv", err), activeState
+		log.WithError(err).Error("Error generating fork")
+		return types.NewErrorEvent("cannot-fork:error-generating-fork", err), activeState
 	}
 
 	// go ahead and create the filesystem machine
