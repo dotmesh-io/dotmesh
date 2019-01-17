@@ -1,18 +1,8 @@
 package store
 
 import (
-	"time"
-
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 )
-
-// type Store interface {
-// 	FilesystemSetMaster(fm *types.FilesystemMaster, ) error
-// 	FilesystemGetMaster(id string) (*types.FilesystemMaster, err error)
-// 	FilesystemDeleteMaster(id string) (err error)
-
-// 	FilesystemWatchMasters()
-// }
 
 type FilesystemStore interface {
 	SetMaster(fm *types.FilesystemMaster, opts *SetOptions) error
@@ -34,7 +24,7 @@ type FilesystemStore interface {
 	// /filesystems/live/<id>
 	SetLive(fl *types.FilesystemLive, opts *SetOptions) error
 	GetLive(id string) (*types.FilesystemLive, error)
-	WatchLive(cb WatchLiveCB) error
+	// WatchLive(cb WatchLiveCB) error
 
 	// filesystems/containers/<id>
 	SetContainers(fc *types.FilesystemContainers, opts *SetOptions) error
@@ -61,5 +51,6 @@ type (
 )
 
 type SetOptions struct {
-	TTL time.Duration
+	// TTL seconds
+	TTL uint64
 }
