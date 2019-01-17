@@ -50,6 +50,14 @@ var serverVersion string = "<uninitialized>"
 var containerMountDirLock sync.Mutex
 
 func main() {
+	logLevel := os.Getenv("LOG_LEVEL")
+	levelEnum, err := log.ParseLevel(logLevel)
+	if err != nil {
+		// TODO put this back to info once we're done debugging, and make it so we can configure this in agent/operator/yaml/etc without a code change
+		log.SetLevel(log.DebugLevel)
+	} else {
+		log.SetLevel(levelEnum)
+	}
 
 	// TODO proper flag parsing
 	if len(os.Args) > 1 && os.Args[1] == "--guess-ipv4-addresses" {
