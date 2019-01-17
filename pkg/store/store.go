@@ -23,7 +23,7 @@ type FilesystemStore interface {
 	SetDeleted(audit *types.FilesystemDeletionAudit, opts *SetOptions) error
 	GetDeleted(id string) (*types.FilesystemDeletionAudit, error)
 	DeleteDeleted(id string) error
-	WatchDeleted(WatchDeletedCB) error
+	// WatchDeleted(WatchDeletedCB) error
 
 	// /filesystems/cleanupPending/<id>
 	SetCleanupPending(audit *types.FilesystemDeletionAudit, opts *SetOptions) error
