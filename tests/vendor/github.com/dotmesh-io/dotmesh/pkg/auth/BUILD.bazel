@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["auth_ctx.go"],
+    importpath = "github.com/dotmesh-io/dotmesh/pkg/auth",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/user:go_default_library"],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["auth_ctx_test.go"],
+    embed = [":go_default_library"],
+    deps = ["//pkg/user:go_default_library"],
+)

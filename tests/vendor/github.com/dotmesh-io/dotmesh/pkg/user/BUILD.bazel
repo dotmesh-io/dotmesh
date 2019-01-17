@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "user.go",
+        "utils.go",
+    ],
+    importpath = "github.com/dotmesh-io/dotmesh/pkg/user",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/crypto:go_default_library",
+        "//pkg/kv:go_default_library",
+        "//pkg/validator:go_default_library",
+        "//vendor/github.com/nu7hatch/gouuid:go_default_library",
+        "//vendor/github.com/sirupsen/logrus:go_default_library",
+        "//vendor/k8s.io/apimachinery/pkg/labels:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["user_test.go"],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/kv:go_default_library",
+        "//pkg/testutil:go_default_library",
+        "//vendor/github.com/nu7hatch/gouuid:go_default_library",
+    ],
+)
