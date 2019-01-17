@@ -1,4 +1,4 @@
-// Copyright 2014 go-dockerclient authors. All rights reserved.
+// Copyright 2015 go-dockerclient authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -53,12 +53,10 @@ type APIActor struct {
 }
 
 type eventMonitoringState struct {
-	// `sync/atomic` expects the first word in an allocated struct to be 64-bit
-	// aligned on both ARM and x86-32. See https://goo.gl/zW7dgq for more details.
-	lastSeen int64
 	sync.RWMutex
 	sync.WaitGroup
 	enabled   bool
+	lastSeen  *int64
 	C         chan *APIEvents
 	errC      chan error
 	listeners []chan<- *APIEvents
@@ -78,10 +76,6 @@ var (
 	// exists.
 	ErrListenerAlreadyExists = errors.New("listener already exists for docker events")
 
-	// ErrTLSNotSupported is the error returned when the client does not support
-	// TLS (this applies to the Windows named pipe client).
-	ErrTLSNotSupported = errors.New("tls not supported by this client")
-
 	// EOFEvent is sent when the event listener receives an EOF error.
 	EOFEvent = &APIEvents{
 		Type:   "EOF",
@@ -100,7 +94,11 @@ func (c *Client) AddEventListener(listener chan<- *APIEvents) error {
 			return err
 		}
 	}
-	return c.eventMonitor.addListener(listener)
+	err = c.eventMonitor.addListener(listener)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // RemoveEventListener removes a listener from the monitor.
@@ -109,7 +107,7 @@ func (c *Client) RemoveEventListener(listener chan *APIEvents) error {
 	if err != nil {
 		return err
 	}
-	if c.eventMonitor.listernersCount() == 0 {
+	if len(c.eventMonitor.listeners) == 0 {
 		c.eventMonitor.disableEventMonitoring()
 	}
 	return nil
@@ -150,12 +148,6 @@ func (eventState *eventMonitoringState) closeListeners() {
 	eventState.listeners = nil
 }
 
-func (eventState *eventMonitoringState) listernersCount() int {
-	eventState.RLock()
-	defer eventState.RUnlock()
-	return len(eventState.listeners)
-}
-
 func listenerExists(a chan<- *APIEvents, list *[]chan<- *APIEvents) bool {
 	for _, b := range *list {
 		if b == a {
@@ -170,7 +162,8 @@ func (eventState *eventMonitoringState) enableEventMonitoring(c *Client) error {
 	defer eventState.Unlock()
 	if !eventState.enabled {
 		eventState.enabled = true
-		atomic.StoreInt64(&eventState.lastSeen, 0)
+		var lastSeenDefault = int64(0)
+		eventState.lastSeen = &lastSeenDefault
 		eventState.C = make(chan *APIEvents, 100)
 		eventState.errC = make(chan error, 1)
 		go eventState.monitorEvents(c)
@@ -195,25 +188,10 @@ func (eventState *eventMonitoringState) disableEventMonitoring() error {
 }
 
 func (eventState *eventMonitoringState) monitorEvents(c *Client) {
-	const (
-		noListenersTimeout  = 5 * time.Second
-		noListenersInterval = 10 * time.Millisecond
-		noListenersMaxTries = noListenersTimeout / noListenersInterval
-	)
-
 	var err error
-	for i := time.Duration(0); i < noListenersMaxTries && eventState.noListeners(); i++ {
+	for eventState.noListeners() {
 		time.Sleep(10 * time.Millisecond)
 	}
-
-	if eventState.noListeners() {
-		// terminate if no listener is available after 5 seconds.
-		// Prevents goroutine leak when RemoveEventListener is called
-		// right after AddEventListener.
-		eventState.disableEventMonitoring()
-		return
-	}
-
 	if err = eventState.connectWithRetry(c); err != nil {
 		// terminate if connect failed
 		eventState.disableEventMonitoring()
@@ -231,7 +209,7 @@ func (eventState *eventMonitoringState) monitorEvents(c *Client) {
 				return
 			}
 			eventState.updateLastSeen(ev)
-			eventState.sendEvent(ev)
+			go eventState.sendEvent(ev)
 		case err = <-eventState.errC:
 			if err == ErrNoListeners {
 				eventState.disableEventMonitoring()
@@ -248,19 +226,11 @@ func (eventState *eventMonitoringState) monitorEvents(c *Client) {
 
 func (eventState *eventMonitoringState) connectWithRetry(c *Client) error {
 	var retries int
-	eventState.RLock()
-	eventChan := eventState.C
-	errChan := eventState.errC
-	eventState.RUnlock()
-	err := c.eventHijack(atomic.LoadInt64(&eventState.lastSeen), eventChan, errChan)
-	for ; err != nil && retries < maxMonitorConnRetries; retries++ {
+	var err error
+	for err = c.eventHijack(atomic.LoadInt64(eventState.lastSeen), eventState.C, eventState.errC); err != nil && retries < maxMonitorConnRetries; retries++ {
 		waitTime := int64(retryInitialWaitTime * math.Pow(2, float64(retries)))
 		time.Sleep(time.Duration(waitTime) * time.Millisecond)
-		eventState.RLock()
-		eventChan = eventState.C
-		errChan = eventState.errC
-		eventState.RUnlock()
-		err = c.eventHijack(atomic.LoadInt64(&eventState.lastSeen), eventChan, errChan)
+		err = c.eventHijack(atomic.LoadInt64(eventState.lastSeen), eventState.C, eventState.errC)
 	}
 	return err
 }
@@ -289,10 +259,7 @@ func (eventState *eventMonitoringState) sendEvent(event *APIEvents) {
 		}
 
 		for _, listener := range eventState.listeners {
-			select {
-			case listener <- event:
-			default:
-			}
+			listener <- event
 		}
 	}
 }
@@ -300,8 +267,8 @@ func (eventState *eventMonitoringState) sendEvent(event *APIEvents) {
 func (eventState *eventMonitoringState) updateLastSeen(e *APIEvents) {
 	eventState.Lock()
 	defer eventState.Unlock()
-	if atomic.LoadInt64(&eventState.lastSeen) < e.Time {
-		atomic.StoreInt64(&eventState.lastSeen, e.Time)
+	if atomic.LoadInt64(eventState.lastSeen) < e.Time {
+		atomic.StoreInt64(eventState.lastSeen, e.Time)
 	}
 }
 
@@ -312,7 +279,7 @@ func (c *Client) eventHijack(startTime int64, eventChan chan *APIEvents, errChan
 	}
 	protocol := c.endpointURL.Scheme
 	address := c.endpointURL.Path
-	if protocol != "unix" && protocol != "npipe" {
+	if protocol != "unix" {
 		protocol = "tcp"
 		address = c.endpointURL.Host
 	}
@@ -321,16 +288,11 @@ func (c *Client) eventHijack(startTime int64, eventChan chan *APIEvents, errChan
 	if c.TLSConfig == nil {
 		dial, err = c.Dialer.Dial(protocol, address)
 	} else {
-		netDialer, ok := c.Dialer.(*net.Dialer)
-		if !ok {
-			return ErrTLSNotSupported
-		}
-		dial, err = tlsDialWithDialer(netDialer, protocol, address, c.TLSConfig)
+		dial, err = tlsDialWithDialer(c.Dialer, protocol, address, c.TLSConfig)
 	}
 	if err != nil {
 		return err
 	}
-	//lint:ignore SA1019 this is needed here
 	conn := httputil.NewClientConn(dial, nil)
 	req, err := http.NewRequest("GET", uri, nil)
 	if err != nil {
@@ -340,7 +302,6 @@ func (c *Client) eventHijack(startTime int64, eventChan chan *APIEvents, errChan
 	if err != nil {
 		return err
 	}
-	//lint:ignore SA1019 ClientConn is needed here
 	go func(res *http.Response, conn *httputil.ClientConn) {
 		defer conn.Close()
 		defer res.Body.Close()
@@ -349,13 +310,9 @@ func (c *Client) eventHijack(startTime int64, eventChan chan *APIEvents, errChan
 			var event APIEvents
 			if err = decoder.Decode(&event); err != nil {
 				if err == io.EOF || err == io.ErrUnexpectedEOF {
-					c.eventMonitor.RLock()
-					if c.eventMonitor.enabled && c.eventMonitor.C == eventChan {
+					if c.eventMonitor.isEnabled() {
 						// Signal that we're exiting.
-						c.eventMonitor.RUnlock()
 						eventChan <- EOFEvent
-					} else {
-						c.eventMonitor.RUnlock()
 					}
 					break
 				}
@@ -364,12 +321,11 @@ func (c *Client) eventHijack(startTime int64, eventChan chan *APIEvents, errChan
 			if event.Time == 0 {
 				continue
 			}
-			transformEvent(&event)
-			c.eventMonitor.RLock()
-			if c.eventMonitor.enabled && c.eventMonitor.C == eventChan {
-				eventChan <- &event
+			if !c.eventMonitor.isEnabled() {
+				return
 			}
-			c.eventMonitor.RUnlock()
+			transformEvent(&event)
+			eventChan <- &event
 		}
 	}(res, conn)
 	return nil
@@ -378,8 +334,8 @@ func (c *Client) eventHijack(startTime int64, eventChan chan *APIEvents, errChan
 // transformEvent takes an event and determines what version it is from
 // then populates both versions of the event
 func transformEvent(event *APIEvents) {
-	// if event version is <= 1.21 there will be no Action and no Type
-	if event.Action == "" && event.Type == "" {
+	// if <= 1.21, `status` and `ID` will be populated
+	if event.Status != "" && event.ID != "" {
 		event.Action = event.Status
 		event.Actor.ID = event.ID
 		event.Actor.Attributes = map[string]string{}
@@ -393,22 +349,16 @@ func transformEvent(event *APIEvents) {
 			}
 		}
 	} else {
-		if event.Status == "" {
-			if event.Type == "image" || event.Type == "container" {
-				event.Status = event.Action
-			} else {
-				// Because just the Status has been overloaded with different Types
-				// if an event is not for an image or a container, we prepend the type
-				// to avoid problems for people relying on actions being only for
-				// images and containers
-				event.Status = event.Type + ":" + event.Action
-			}
+		if event.Type == "image" || event.Type == "container" {
+			event.Status = event.Action
+		} else {
+			// Because just the Status has been overloaded with different Types
+			// if an event is not for an image or a container, we prepend the type
+			// to avoid problems for people relying on actions being only for
+			// images and containers
+			event.Status = event.Type + ":" + event.Action
 		}
-		if event.ID == "" {
-			event.ID = event.Actor.ID
-		}
-		if event.From == "" {
-			event.From = event.Actor.Attributes["image"]
-		}
+		event.ID = event.Actor.ID
+		event.From = event.Actor.Attributes["image"]
 	}
 }

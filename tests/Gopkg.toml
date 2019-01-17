@@ -29,6 +29,12 @@
   branch = "master"
   name = "github.com/dotmesh-io/citools"
 
+# The latest version of this was refusing to compile for some reason, so I baked in the version that
+# current dotmesh master uses at the time of writing.
+[[override]]
+  name = "github.com/fsouza/go-dockerclient"
+  revision = "b87634a9d98e8671b847597fb264953a3e0d02b5"
+
 [prune]
   go-tests = true
   unused-packages = true
