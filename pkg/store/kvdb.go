@@ -3,10 +3,14 @@ package store
 // import "github.com/portworx/kvdb"
 
 import (
+	"fmt"
+
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 
 	"github.com/portworx/kvdb"
+	"github.com/portworx/kvdb/bolt"
 	etcdv3 "github.com/portworx/kvdb/etcd/v3"
+	"github.com/portworx/kvdb/mem"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -16,12 +20,13 @@ type KVDBFilesystemStore struct {
 }
 
 type KVDBConfig struct {
+	Type     KVType // etcd/bolt/mem
 	Machines []string
 }
 
 func NewKVDBFilesystemStore(cfg *KVDBConfig) (*KVDBFilesystemStore, error) {
 
-	client, err := etcdv3.New("dotmesh/", cfg.Machines, map[string]string{}, nil)
+	client, err := getKVDBClient(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -29,6 +34,19 @@ func NewKVDBFilesystemStore(cfg *KVDBConfig) (*KVDBFilesystemStore, error) {
 	return &KVDBFilesystemStore{
 		client: client,
 	}, nil
+}
+
+func getKVDBClient(cfg *KVDBConfig) (kvdb.Kvdb, error) {
+	switch cfg.Type {
+	case KVTypeEtcdV3:
+		return etcdv3.New("dotmesh/", cfg.Machines, map[string]string{}, nil)
+	case KVTypeMem:
+		return mem.New("dotmesh/", []string{}, map[string]string{}, nil)
+	case KVTypeBolt:
+		return bolt.New("dotmesh/", []string{}, map[string]string{}, nil)
+	}
+
+	return nil, fmt.Errorf("unknown KV store type: '%s'", cfg.Type)
 }
 
 // Master
@@ -156,4 +174,42 @@ func (s *KVDBFilesystemStore) GetLive(id string) (*types.FilesystemLive, error) 
 	f.Meta = getMeta(node)
 
 	return &f, err
+}
+
+func (s *KVDBFilesystemStore) SetContainers(f *types.FilesystemContainers, opts *SetOptions) error {
+	bts, err := s.encode(f)
+	if err != nil {
+		return err
+	}
+	_, err = s.client.Put(FilesystemContainersPrefix+f.FilesystemID, bts, 0)
+	return err
+}
+
+func (s *KVDBFilesystemStore) DeleteContainers(id string) error {
+	_, err := s.client.Delete(FilesystemContainersPrefix + id)
+	return err
+}
+
+func (s *KVDBFilesystemStore) WatchContainers(cb WatchContainersCB) error {
+
+	// type WatchCB func(prefix string, opaque interface{}, kvp *KVPair, err error) error
+
+	watchFunc := func(prefix string, opaque interface{}, kvp *kvdb.KVPair, err error) error {
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":  err,
+				"prefix": prefix,
+			}).Error("[WatchContainers] error while watching KV store tree")
+		}
+
+		var f types.FilesystemContainers
+		err = s.decode(kvp.Value, &f)
+		if err != nil {
+			return fmt.Errorf("failed to decode value from key '%s', error: %s", prefix, err)
+		}
+
+		return cb(&f)
+	}
+
+	return s.client.WatchTree(FilesystemContainersPrefix, 0, nil, watchFunc)
 }
