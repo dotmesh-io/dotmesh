@@ -43,7 +43,7 @@ func ConsumePrelude(r io.Reader) (types.Prelude, error) {
 	for !finished {
 		_, err := r.Read(b)
 		if err == io.EOF {
-			return types.Prelude{}, fmt.Errorf("Stream ended before prelude completed")
+			return types.Prelude{}, fmt.Errorf("Stream ended before prelude completed, got '%s' so far", string(buf))
 		}
 		if err != nil {
 			return types.Prelude{}, err

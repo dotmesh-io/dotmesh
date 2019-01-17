@@ -624,6 +624,13 @@ func (z *zfs) ApplyPrelude(prelude types.Prelude, fs string) error {
 }
 
 func (z *zfs) Send(fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId string, preludeEncoded []byte) (*io.PipeReader, chan error) {
+	log.WithFields(log.Fields{
+		"fromFilesystemId": fromFilesystemId,
+		"fromSnapshotId":   fromSnapshotId,
+		"toFilesystemId":   toFilesystemId,
+		"toSnapshotId":     toSnapshotId,
+		"prelude":          string(preludeEncoded),
+	}).Debug("zfs.Send() starting")
 	sendArgs := z.calculateSendArgs(
 		fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
 	)
@@ -632,8 +639,6 @@ func (z *zfs) Send(fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotI
 	LogZFSCommand(fromFilesystemId, fmt.Sprintf("%s %s", z.zfsPath, strings.Join(realArgs, " ")))
 	cmd := exec.Command(z.zfsPath, realArgs...)
 	pipeReader, pipeWriter := io.Pipe()
-	defer pipeWriter.Close()
-	defer pipeReader.Close()
 	cmd.Stdout = pipeWriter
 	cmd.Stderr = utils.GetLogfile("zfs-send-errors")
 	errch := make(chan error)
@@ -644,9 +649,9 @@ func (z *zfs) Send(fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotI
 		// 	filesystemId,
 		// 	len(preludeEncoded), preludeEncoded,
 		// )
-		_, err := pipeWriter.Write(preludeEncoded)
+		bytes, err := pipeWriter.Write(preludeEncoded)
 		if err != nil {
-			log.Errorf("[actualPush:%s] Error writing prelude: %+v (sent to errch)", fromFilesystemId, err)
+			log.Errorf("[actualPush:%s] Error writing prelude: %+v, %d bytes sent (sent to errch)", fromFilesystemId, err, bytes)
 			errch <- err
 			log.Errorf("[actualPush:%s] errch accepted prelude error, woohoo", fromFilesystemId)
 		}
@@ -674,6 +679,7 @@ func (z *zfs) Send(fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotI
 		)
 		errch <- runErr
 		log.Infof("[actualPush:%s] errch accepted it, woohoo", fromFilesystemId)
+		pipeWriter.Close()
 	}()
 	return pipeReader, errch
 }

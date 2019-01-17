@@ -380,7 +380,7 @@ func (z *ZFSReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(fmt.Sprintf("Unable to parse prelude for %s: %s\n", z.filesystem, err)))
-		log.Printf("[ZFSReceiver:%s] Unable to parse prelude: %s\n", z.filesystem, err)
+		log.Errorf("[ZFSReceiver:%s] Unable to parse prelude: %s", z.filesystem, err)
 
 		go z.state.notifyPushCompleted(z.filesystem, false)
 
