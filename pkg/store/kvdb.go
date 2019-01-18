@@ -192,8 +192,6 @@ func (s *KVDBFilesystemStore) DeleteContainers(id string) error {
 
 func (s *KVDBFilesystemStore) WatchContainers(cb WatchContainersCB) error {
 
-	// type WatchCB func(prefix string, opaque interface{}, kvp *KVPair, err error) error
-
 	watchFunc := func(prefix string, opaque interface{}, kvp *kvdb.KVPair, err error) error {
 		if err != nil {
 			log.WithFields(log.Fields{
@@ -212,4 +210,70 @@ func (s *KVDBFilesystemStore) WatchContainers(cb WatchContainersCB) error {
 	}
 
 	return s.client.WatchTree(FilesystemContainersPrefix, 0, nil, watchFunc)
+}
+
+func (s *KVDBFilesystemStore) SetDirty(f *types.FilesystemDirty, opts *SetOptions) error {
+	bts, err := s.encode(f)
+	if err != nil {
+		return err
+	}
+	_, err = s.client.Put(FilesystemDirtyPrefix+f.FilesystemID, bts, 0)
+	return err
+}
+
+func (s *KVDBFilesystemStore) DeleteDirty(id string) error {
+	_, err := s.client.Delete(FilesystemDirtyPrefix + id)
+	return err
+}
+
+func (s *KVDBFilesystemStore) WatchDirty(cb WatchDirtyCB) error {
+	watchFunc := func(prefix string, opaque interface{}, kvp *kvdb.KVPair, err error) error {
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":  err,
+				"prefix": prefix,
+			}).Error("[WatchDirty] error while watching KV store tree")
+		}
+
+		var f types.FilesystemDirty
+		err = s.decode(kvp.Value, &f)
+		if err != nil {
+			return fmt.Errorf("failed to decode value from key '%s', error: %s", prefix, err)
+		}
+
+		return cb(&f)
+	}
+
+	return s.client.WatchTree(FilesystemDirtyPrefix, 0, nil, watchFunc)
+}
+
+func (s *KVDBFilesystemStore) SetTransfer(t *types.TransferPollResult, opts *SetOptions) error {
+	bts, err := s.encode(t)
+	if err != nil {
+		return err
+	}
+	_, err = s.client.Put(FilesystemTransfersPrefix+t.TransferRequestId, bts, 0)
+	return err
+}
+
+func (s *KVDBFilesystemStore) WatchTransfers(cb WatchTransfersCB) error {
+
+	watchFunc := func(prefix string, opaque interface{}, kvp *kvdb.KVPair, err error) error {
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":  err,
+				"prefix": prefix,
+			}).Error("[WatchTransfers] error while watching KV store tree")
+		}
+
+		var t types.TransferPollResult
+		err = s.decode(kvp.Value, &t)
+		if err != nil {
+			return fmt.Errorf("failed to decode value from key '%s', error: %s", prefix, err)
+		}
+
+		return cb(&t)
+	}
+
+	return s.client.WatchTree(FilesystemTransfersPrefix, 0, nil, watchFunc)
 }
