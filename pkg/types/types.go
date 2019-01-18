@@ -178,6 +178,9 @@ type PathToTopLevelFilesystem struct {
 // the type as stored in the json in etcd (intermediate representation wrt
 // DotmeshVolume)
 type RegistryFilesystem struct {
+	// Meta is populated by the KV store implementer
+	Meta *KVMeta `json:"-"`
+
 	Id                   string
 	OwnerId              string
 	ForkParentId         string `json:",omitempty"`
