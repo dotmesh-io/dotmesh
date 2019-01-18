@@ -4,6 +4,7 @@ go_library(
     name = "go_default_library",
     srcs = [
         "event.go",
+        "filesystem.go",
         "fsm_types.go",
         "messenger.go",
         "notification.go",
