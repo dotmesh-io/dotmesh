@@ -1,6 +1,8 @@
 package store
 
 import (
+	"errors"
+
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 )
 
@@ -13,7 +15,7 @@ type FilesystemStore interface {
 	SetDeleted(audit *types.FilesystemDeletionAudit, opts *SetOptions) error
 	GetDeleted(id string) (*types.FilesystemDeletionAudit, error)
 	DeleteDeleted(id string) error
-	// WatchDeleted(WatchDeletedCB) error
+	WatchDeleted(cb WatchDeletedCB) error
 
 	// /filesystems/cleanupPending/<id>
 	SetCleanupPending(audit *types.FilesystemDeletionAudit, opts *SetOptions) error
@@ -24,7 +26,6 @@ type FilesystemStore interface {
 	// /filesystems/live/<id>
 	SetLive(fl *types.FilesystemLive, opts *SetOptions) error
 	GetLive(id string) (*types.FilesystemLive, error)
-	// WatchLive(cb WatchLiveCB) error
 
 	// filesystems/containers/<id>
 	SetContainers(fc *types.FilesystemContainers, opts *SetOptions) error
@@ -42,15 +43,39 @@ type FilesystemStore interface {
 
 // Callbacks for filesystem events
 type (
-	WatchMasterCB     func(fs *types.FilesystemMaster) error
-	WatchLiveCB       func(fs *types.FilesystemLive) error
+	WatchMasterCB func(fs *types.FilesystemMaster) error
+	// WatchLiveCB       func(fs *types.FilesystemLive) error
 	WatchContainersCB func(fs *types.FilesystemContainers) error
 	WatchDeletedCB    func(fs *types.FilesystemDeletionAudit) error
 	WatchDirtyCB      func(fs *types.FilesystemDirty) error
 	WatchTransfersCB  func(fs *types.TransferPollResult) error
 )
 
+type RegistryStore interface {
+	SetClone(c *types.Clone, opts *SetOptions) error
+	DeleteClone(filesystemID, cloneName string) error
+	WatchClones(cb WatchRegistryClonesCB) error
+
+	SetFilesystem(f *types.RegistryFilesystem, opts *SetOptions) error
+	GetFilesystem(filesystemID, filesystemName string) (*types.RegistryFilesystem, error)
+	DeleteFilesystem(filesystemID, filesystemName string) error
+	WatchFilesystems(cb WatchRegistryFilesystemsCB) error
+}
+
+type (
+	WatchRegistryClonesCB      func(c *types.Clone) error
+	WatchRegistryFilesystemsCB func(f *types.RegistryFilesystem) error
+)
+
 type SetOptions struct {
 	// TTL seconds
 	TTL uint64
 }
+
+type DeleteOptions struct {
+	PrevValue []byte
+}
+
+var (
+	ErrIDNotSet = errors.New("ID not set")
+)
