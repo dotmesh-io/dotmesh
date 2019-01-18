@@ -53,6 +53,11 @@ func getKVDBClient(cfg *KVDBConfig) (kvdb.Kvdb, error) {
 
 // SetMaster - creates master entry only if the key didn't previously exist (using Create method)
 func (s *KVDBFilesystemStore) SetMaster(fm *types.FilesystemMaster, opts *SetOptions) error {
+
+	if fm.FilesystemID == "" {
+		return ErrIDNotSet
+	}
+
 	bts, err := s.encode(fm)
 	if err != nil {
 		return err
@@ -83,6 +88,11 @@ func (s *KVDBFilesystemStore) DeleteMaster(id string) error {
 // Deleted
 
 func (s *KVDBFilesystemStore) SetDeleted(f *types.FilesystemDeletionAudit, opts *SetOptions) error {
+
+	if f.FilesystemID == "" {
+		return ErrIDNotSet
+	}
+
 	bts, err := s.encode(f)
 	if err != nil {
 		return err
@@ -110,9 +120,37 @@ func (s *KVDBFilesystemStore) DeleteDeleted(id string) error {
 	return err
 }
 
+func (s *KVDBFilesystemStore) WatchDeleted(cb WatchDeletedCB) error {
+	watchFunc := func(prefix string, opaque interface{}, kvp *kvdb.KVPair, err error) error {
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":  err,
+				"prefix": prefix,
+			}).Error("[WatchDeleted] error while watching KV store tree")
+		}
+
+		var f types.FilesystemDeletionAudit
+		err = s.decode(kvp.Value, &f)
+		if err != nil {
+			return fmt.Errorf("failed to decode value from key '%s', error: %s", prefix, err)
+		}
+
+		f.Meta = getMeta(kvp)
+
+		return cb(&f)
+	}
+
+	return s.client.WatchTree(FilesystemDeletedPrefix, 0, nil, watchFunc)
+}
+
 // CleanupPending
 
 func (s *KVDBFilesystemStore) SetCleanupPending(f *types.FilesystemDeletionAudit, opts *SetOptions) error {
+
+	if f.FilesystemID == "" {
+		return ErrIDNotSet
+	}
+
 	bts, err := s.encode(f)
 	if err != nil {
 		return err
@@ -123,6 +161,9 @@ func (s *KVDBFilesystemStore) SetCleanupPending(f *types.FilesystemDeletionAudit
 }
 
 func (s *KVDBFilesystemStore) DeleteCleanupPending(id string) error {
+	if id == "" {
+		return ErrIDNotSet
+	}
 	_, err := s.client.Delete(FilesystemCleanupPendingPrefix + id)
 	return err
 }
@@ -155,6 +196,10 @@ func (s *KVDBFilesystemStore) ListCleanupPending() ([]*types.FilesystemDeletionA
 // Live filesystems
 
 func (s *KVDBFilesystemStore) SetLive(f *types.FilesystemLive, opts *SetOptions) error {
+	if f.FilesystemID == "" {
+		return ErrIDNotSet
+	}
+
 	bts, err := s.encode(f)
 	if err != nil {
 		return err
@@ -164,6 +209,10 @@ func (s *KVDBFilesystemStore) SetLive(f *types.FilesystemLive, opts *SetOptions)
 }
 
 func (s *KVDBFilesystemStore) GetLive(id string) (*types.FilesystemLive, error) {
+	if id == "" {
+		return nil, ErrIDNotSet
+	}
+
 	node, err := s.client.Get(FilesystemLivePrefix + id)
 	if err != nil {
 		return nil, err
@@ -177,6 +226,10 @@ func (s *KVDBFilesystemStore) GetLive(id string) (*types.FilesystemLive, error) 
 }
 
 func (s *KVDBFilesystemStore) SetContainers(f *types.FilesystemContainers, opts *SetOptions) error {
+	if f.FilesystemID == "" {
+		return ErrIDNotSet
+	}
+
 	bts, err := s.encode(f)
 	if err != nil {
 		return err
@@ -186,6 +239,10 @@ func (s *KVDBFilesystemStore) SetContainers(f *types.FilesystemContainers, opts 
 }
 
 func (s *KVDBFilesystemStore) DeleteContainers(id string) error {
+	if id == "" {
+		return ErrIDNotSet
+	}
+
 	_, err := s.client.Delete(FilesystemContainersPrefix + id)
 	return err
 }
@@ -206,6 +263,8 @@ func (s *KVDBFilesystemStore) WatchContainers(cb WatchContainersCB) error {
 			return fmt.Errorf("failed to decode value from key '%s', error: %s", prefix, err)
 		}
 
+		f.Meta = getMeta(kvp)
+
 		return cb(&f)
 	}
 
@@ -213,6 +272,10 @@ func (s *KVDBFilesystemStore) WatchContainers(cb WatchContainersCB) error {
 }
 
 func (s *KVDBFilesystemStore) SetDirty(f *types.FilesystemDirty, opts *SetOptions) error {
+	if f.FilesystemID == "" {
+		return ErrIDNotSet
+	}
+
 	bts, err := s.encode(f)
 	if err != nil {
 		return err
@@ -241,6 +304,8 @@ func (s *KVDBFilesystemStore) WatchDirty(cb WatchDirtyCB) error {
 			return fmt.Errorf("failed to decode value from key '%s', error: %s", prefix, err)
 		}
 
+		f.Meta = getMeta(kvp)
+
 		return cb(&f)
 	}
 
@@ -248,6 +313,10 @@ func (s *KVDBFilesystemStore) WatchDirty(cb WatchDirtyCB) error {
 }
 
 func (s *KVDBFilesystemStore) SetTransfer(t *types.TransferPollResult, opts *SetOptions) error {
+	if t.TransferRequestId == "" {
+		return ErrIDNotSet
+	}
+
 	bts, err := s.encode(t)
 	if err != nil {
 		return err
@@ -271,6 +340,8 @@ func (s *KVDBFilesystemStore) WatchTransfers(cb WatchTransfersCB) error {
 		if err != nil {
 			return fmt.Errorf("failed to decode value from key '%s', error: %s", prefix, err)
 		}
+
+		t.Meta = getMeta(kvp)
 
 		return cb(&t)
 	}
