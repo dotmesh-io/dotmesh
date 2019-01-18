@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/dotmesh-io/dotmesh/pkg/types"
+	"github.com/portworx/kvdb"
 )
 
 type FilesystemStore interface {
@@ -57,8 +58,10 @@ type RegistryStore interface {
 	WatchClones(cb WatchRegistryClonesCB) error
 
 	SetFilesystem(f *types.RegistryFilesystem, opts *SetOptions) error
+	CompareAndSetFilesystem(f *types.RegistryFilesystem, opts *SetOptions) error
 	GetFilesystem(filesystemID, filesystemName string) (*types.RegistryFilesystem, error)
 	DeleteFilesystem(filesystemID, filesystemName string) error
+	CompareAndDelete(filesystemID, filesystemName string, opts *DeleteOptions) error
 	WatchFilesystems(cb WatchRegistryFilesystemsCB) error
 }
 
@@ -69,11 +72,14 @@ type (
 
 type SetOptions struct {
 	// TTL seconds
-	TTL uint64
+	TTL       uint64
+	PrevValue []byte
+	KVFlags   kvdb.KVFlags
 }
 
 type DeleteOptions struct {
 	PrevValue []byte
+	KVFlags   kvdb.KVFlags
 }
 
 var (
