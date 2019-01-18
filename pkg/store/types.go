@@ -6,6 +6,12 @@ const (
 	FilesystemCleanupPendingPrefix = "/filesystems/cleanupPending/"
 	FilesystemLivePrefix           = "/filesystems/live/"
 	FilesystemContainersPrefix     = "/filesystems/containers/"
+	FilesystemDirtyPrefix          = "/filesystems/dirty/"
+	FilesystemTransfersPrefix      = "/filesystems/transfers/"
+)
+
+const (
+	RegistryFilesystemsPrefix = "/registry/clones/"
 )
 
 type KVType string
