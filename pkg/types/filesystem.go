@@ -22,9 +22,10 @@ type FilesystemDirty struct {
 	// Meta is populated by the KV store implementer
 	Meta *KVMeta `json:"-"`
 
-	NodeID     string `json:"node_id"`
-	DirtyBytes int64  `json:"dirty_bytes"`
-	SizeBytes  int64  `json:"size_bytes"`
+	FilesystemID string `json:"filesystem_id"`
+	NodeID       string `json:"node_id"`
+	DirtyBytes   int64  `json:"dirty_bytes"`
+	SizeBytes    int64  `json:"size_bytes"`
 }
 
 type FilesystemMaster struct {
