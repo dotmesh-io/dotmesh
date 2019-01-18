@@ -94,7 +94,11 @@ type Filesystem struct {
 }
 
 type Clone struct {
+	// Meta is populated by the KV store implementer
+	Meta *KVMeta `json:"-"`
+
 	FilesystemId string
+	Name         string
 	Origin       Origin
 }
 
