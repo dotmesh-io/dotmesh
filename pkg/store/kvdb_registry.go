@@ -10,6 +10,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// static RegistryStore check
+var _ RegistryStore = &KVDBFilesystemStore{}
+
 // Clones
 
 func (s *KVDBFilesystemStore) SetClone(c *types.Clone, opts *SetOptions) error {
@@ -59,7 +62,21 @@ func (s *KVDBFilesystemStore) WatchClones(cb WatchRegistryClonesCB) error {
 }
 
 // Registry Filesystems
+// from RegisterFork:
 
+// rf := types.RegistryFilesystem{
+// 	Id: forkFilesystemId,
+// 	// Owner is, for now, always the authenticated user at the time of
+// 	// creation
+// 	OwnerId:              forkName.Namespace,
+// 	ForkParentId:         originFilesystemId,
+// 	ForkParentSnapshotId: originSnapshotId,
+// }
+// _, err = r.etcdClient.Set(
+// 	context.Background(),
+// 	// (0)/(1)dotmesh.io/(2)registry/(3)filesystems/(4)<namespace>/(5)<name> =>
+// 	//     {"Uuid": "<fs-uuid>"}
+// 	fmt.Sprintf("%s/registry/filesystems/%s/%s", r.prefix, forkName.Namespace, forkName.Name),
 func (s *KVDBFilesystemStore) SetFilesystem(f *types.RegistryFilesystem, opts *SetOptions) error {
 
 	if f.Id == "" {
@@ -75,17 +92,18 @@ func (s *KVDBFilesystemStore) SetFilesystem(f *types.RegistryFilesystem, opts *S
 		return err
 	}
 
-	_, err = s.client.Create(RegistryFilesystemsPrefix+f.Id+"/"+f.OwnerId, bts, 0)
+	_, err = s.client.Create(RegistryFilesystemsPrefix+f.OwnerId+"/"+f.Name, bts, 0)
 	return err
 }
 
 func (s *KVDBFilesystemStore) CompareAndSetFilesystem(f *types.RegistryFilesystem, opts *SetOptions) error {
 
-	if f.Id == "" {
-		return ErrIDNotSet
+	// OwnerId == namespace
+	if f.OwnerId == "" {
+		return fmt.Errorf("owner ID not set")
 	}
 
-	if f.OwnerId == "" {
+	if f.Name == "" {
 		return fmt.Errorf("name not set")
 	}
 
@@ -95,16 +113,19 @@ func (s *KVDBFilesystemStore) CompareAndSetFilesystem(f *types.RegistryFilesyste
 	}
 
 	kvp := &kvdb.KVPair{
-		Key:   RegistryFilesystemsPrefix + f.Id + "/" + f.OwnerId,
+		Key:   RegistryFilesystemsPrefix + f.OwnerId + "/" + f.Name,
 		Value: bts,
 	}
 
 	_, err = s.client.CompareAndSet(kvp, opts.KVFlags, opts.PrevValue)
-	return err
+	if err != nil {
+		return fmt.Errorf("CompareAndSetFilesystem failed, error: %s", err)
+	}
+	return nil
 }
 
-func (s *KVDBFilesystemStore) GetFilesystem(filesystemID, filesystemName string) (*types.RegistryFilesystem, error) {
-	node, err := s.client.Get(RegistryFilesystemsPrefix + filesystemID + "/" + filesystemName)
+func (s *KVDBFilesystemStore) GetFilesystem(namespace, filesystemName string) (*types.RegistryFilesystem, error) {
+	node, err := s.client.Get(RegistryFilesystemsPrefix + namespace + "/" + filesystemName)
 	if err != nil {
 		return nil, err
 	}
@@ -116,14 +137,14 @@ func (s *KVDBFilesystemStore) GetFilesystem(filesystemID, filesystemName string)
 	return &f, err
 }
 
-func (s *KVDBFilesystemStore) DeleteFilesystem(filesystemID, filesystemName string) error {
-	_, err := s.client.Delete(RegistryFilesystemsPrefix + filesystemID + "/" + filesystemName)
+func (s *KVDBFilesystemStore) DeleteFilesystem(namespace, filesystemName string) error {
+	_, err := s.client.Delete(RegistryFilesystemsPrefix + namespace + "/" + filesystemName)
 	return err
 }
 
-func (s *KVDBFilesystemStore) CompareAndDelete(filesystemID, filesystemName string, opts *DeleteOptions) error {
+func (s *KVDBFilesystemStore) CompareAndDelete(namespace, filesystemName string, opts *DeleteOptions) error {
 	kvp := &kvdb.KVPair{
-		Key:   RegistryFilesystemsPrefix + filesystemID + "/" + filesystemName,
+		Key:   RegistryFilesystemsPrefix + namespace + "/" + filesystemName,
 		Value: opts.PrevValue,
 	}
 	_, err := s.client.CompareAndDelete(kvp, opts.KVFlags)
