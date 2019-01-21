@@ -2,16 +2,16 @@ package registry
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+
+	"github.com/portworx/kvdb"
 
 	// "log"
 	"sort"
 	"sync"
 
-	"github.com/coreos/etcd/client"
-
 	"github.com/dotmesh-io/dotmesh/pkg/auth"
+	"github.com/dotmesh-io/dotmesh/pkg/store"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 
@@ -90,11 +90,14 @@ type DefaultRegistry struct {
 	serverAddressesCache     map[string]string
 	serverAddressesCacheLock *sync.RWMutex
 
-	etcdClient client.KeysAPI
-	prefix     string
+	// etcdClient client.KeysAPI
+
+	registryStore store.RegistryStore
+
+	// prefix     string
 }
 
-func NewRegistry(um user.UserManager, etcdClient client.KeysAPI, prefix string) *DefaultRegistry {
+func NewRegistry(um user.UserManager, registryStore store.RegistryStore) *DefaultRegistry {
 	return &DefaultRegistry{
 		topLevelFilesystems:     map[types.VolumeName]types.TopLevelFilesystem{},
 		clones:                  map[string]map[string]types.Clone{},
@@ -108,8 +111,7 @@ func NewRegistry(um user.UserManager, etcdClient client.KeysAPI, prefix string) 
 		serverAddressesCache:     make(map[string]string),
 		serverAddressesCacheLock: &sync.RWMutex{},
 
-		etcdClient: etcdClient,
-		prefix:     prefix,
+		registryStore: registryStore,
 	}
 }
 
@@ -301,23 +303,25 @@ func (r *DefaultRegistry) RegisterFork(originFilesystemId string, originSnapshot
 		Id: forkFilesystemId,
 		// Owner is, for now, always the authenticated user at the time of
 		// creation
+		Name:                 forkName.Name,
 		OwnerId:              forkName.Namespace,
 		ForkParentId:         originFilesystemId,
 		ForkParentSnapshotId: originSnapshotId,
 	}
-	serialized, err := json.Marshal(rf)
-	if err != nil {
-		return err
-	}
-	_, err = r.etcdClient.Set(
-		context.Background(),
-		// (0)/(1)dotmesh.io/(2)registry/(3)filesystems/(4)<namespace>/(5)<name> =>
-		//     {"Uuid": "<fs-uuid>"}
-		fmt.Sprintf("%s/registry/filesystems/%s/%s", r.prefix, forkName.Namespace, forkName.Name),
-		string(serialized),
-		// we support updates in UpdateCollaborators, below.
-		&client.SetOptions{PrevExist: client.PrevNoExist},
-	)
+	// serialized, err := json.Marshal(rf)
+	// if err != nil {
+	// 	return err
+	// }
+	// _, err = r.etcdClient.Set(
+	// 	context.Background(),
+	// 	// (0)/(1)dotmesh.io/(2)registry/(3)filesystems/(4)<namespace>/(5)<name> =>
+	// 	//     {"Uuid": "<fs-uuid>"}
+	// 	fmt.Sprintf("%s/registry/filesystems/%s/%s", r.prefix, forkName.Namespace, forkName.Name),
+	// 	string(serialized),
+	// 	// we support updates in UpdateCollaborators, below.
+	// 	&client.SetOptions{PrevExist: client.PrevNoExist},
+	// )
+	err := r.registryStore.SetFilesystem(&rf, &store.SetOptions{})
 	if err != nil {
 		return err
 	}
@@ -337,20 +341,22 @@ func (r *DefaultRegistry) RegisterFilesystem(ctx context.Context, name types.Vol
 		// Owner is, for now, always the authenticated user at the time of
 		// creation
 		OwnerId: authenticatedUserId,
+		Name:    name.Name,
 	}
-	serialized, err := json.Marshal(rf)
-	if err != nil {
-		return err
-	}
-	_, err = r.etcdClient.Set(
-		context.Background(),
-		// (0)/(1)dotmesh.io/(2)registry/(3)filesystems/(4)<namespace>/(5)<name> =>
-		//     {"Uuid": "<fs-uuid>"}
-		fmt.Sprintf("%s/registry/filesystems/%s/%s", r.prefix, name.Namespace, name.Name),
-		string(serialized),
-		// we support updates in UpdateCollaborators, below.
-		&client.SetOptions{PrevExist: client.PrevNoExist},
-	)
+	// serialized, err := json.Marshal(rf)
+	// if err != nil {
+	// 	return err
+	// }
+	// _, err = r.etcdClient.Set(
+	// 	context.Background(),
+	// 	// (0)/(1)dotmesh.io/(2)registry/(3)filesystems/(4)<namespace>/(5)<name> =>
+	// 	//     {"Uuid": "<fs-uuid>"}
+	// 	fmt.Sprintf("%s/registry/filesystems/%s/%s", r.prefix, name.Namespace, name.Name),
+	// 	string(serialized),
+	// 	// we support updates in UpdateCollaborators, below.
+	// 	&client.SetOptions{PrevExist: client.PrevNoExist},
+	// )
+	err := r.registryStore.SetFilesystem(&rf, &store.SetOptions{})
 	if err != nil {
 		return err
 	}
@@ -361,14 +367,14 @@ func (r *DefaultRegistry) RegisterFilesystem(ctx context.Context, name types.Vol
 
 // Remove a filesystem from the registry
 func (r *DefaultRegistry) UnregisterFilesystem(name types.VolumeName) error {
-	_, err := r.etcdClient.Delete(
-		context.Background(),
-		// (0)/(1)dotmesh.io/(2)registry/(3)filesystems/(4)<namespace>/(5)<name> =>
-		//     {"Uuid": "<fs-uuid>"}
-		fmt.Sprintf("%s/registry/filesystems/%s/%s", r.prefix, name.Namespace, name.Name),
-		&client.DeleteOptions{},
-	)
-	return err
+	// _, err := r.etcdClient.Delete(
+	// 	context.Background(),
+	// 	// (0)/(1)dotmesh.io/(2)registry/(3)filesystems/(4)<namespace>/(5)<name> =>
+	// 	//     {"Uuid": "<fs-uuid>"}
+	// 	fmt.Sprintf("%s/registry/filesystems/%s/%s", r.prefix, name.Namespace, name.Name),
+	// 	&client.DeleteOptions{},
+	// )
+	return r.registryStore.DeleteFilesystem(name.Namespace, name.Name)
 }
 
 func (r *DefaultRegistry) UpdateCollaborators(ctx context.Context, tlf types.TopLevelFilesystem, newCollaborators []user.SafeUser) error {
@@ -381,27 +387,34 @@ func (r *DefaultRegistry) UpdateCollaborators(ctx context.Context, tlf types.Top
 		Id: tlf.MasterBranch.Id,
 		// Owner is, for now, always the authenticated user at the time of
 		// creation
+		Name:            tlf.MasterBranch.Name.Name,
 		OwnerId:         tlf.Owner.Id,
 		CollaboratorIds: collaboratorIds,
 	}
-	serialized, err := json.Marshal(rf)
-	if err != nil {
-		return err
-	}
+	// serialized, err := json.Marshal(rf)
+	// if err != nil {
+	// 	return err
+	// }
 
-	_, err = r.etcdClient.Set(
-		context.Background(),
-		// (0)/(1)dotmesh.io/(2)registry/(3)filesystems/(4)<namespace>/(5)<name> =>
-		//     {"Uuid": "<fs-uuid>"}
-		fmt.Sprintf("%s/registry/filesystems/%s/%s", r.prefix, tlf.MasterBranch.Name.Namespace, tlf.MasterBranch.Name.Name),
-		string(serialized),
-		// allow (and require) update over existing.
-		&client.SetOptions{PrevExist: client.PrevExist},
-	)
+	err := r.registryStore.CompareAndSetFilesystem(&rf, &store.SetOptions{
+		KVFlags: kvdb.KVPrevExists,
+	})
+	// _, err = r.etcdClient.Set(
+	// 	context.Background(),
+	// 	// (0)/(1)dotmesh.io/(2)registry/(3)filesystems/(4)<namespace>/(5)<name> =>
+	// 	//     {"Uuid": "<fs-uuid>"}
+	// 	fmt.Sprintf("%s/registry/filesystems/%s/%s", r.prefix, tlf.MasterBranch.Name.Namespace, tlf.MasterBranch.Name.Name),
+	// 	string(serialized),
+	// 	// allow (and require) update over existing.
+	// 	&client.SetOptions{PrevExist: client.PrevExist},
+	// )
 	if err != nil {
 		log.WithFields(log.Fields{
-			"path:": fmt.Sprintf("%s/registry/filesystems/%s/%s", r.prefix, tlf.MasterBranch.Name.Namespace, tlf.MasterBranch.Name.Name),
-			"error": err,
+			// "path:": fmt.Sprintf("/registry/filesystems/%s/%s", tlf.MasterBranch.Name.Namespace, tlf.MasterBranch.Name.Name),
+			"error":     err,
+			"namespace": rf.OwnerId,
+			"name":      rf.Name,
+			"id":        rf.Id,
 		}).Error("failed to update registry filesystems")
 		return err
 	}
@@ -419,18 +432,23 @@ func (r *DefaultRegistry) RegisterClone(name string, topLevelFilesystemId string
 	// if err != nil {
 	// 	return err
 	// }
-	serialized, err := json.Marshal(clone)
-	if err != nil {
-		return err
-	}
-	_, err = r.etcdClient.Set(
-		context.Background(),
-		// (0)/(1)dotmesh.io/(2)registry/(3)clones/(4)<fs-uuid-of-filesystem>/(5)<name> =>
-		//     {"Origin": {"FilesystemId": "<fs-uuid-of-actual-origin-snapshot>", "SnapshotId": "<snap-id>"}, "Uuid": "<fs-uuid>"}
-		fmt.Sprintf("%s/registry/clones/%s/%s", r.prefix, topLevelFilesystemId, name),
-		string(serialized),
-		&client.SetOptions{PrevExist: client.PrevNoExist},
-	)
+	// serialized, err := json.Marshal(clone)
+	// if err != nil {
+	// return err
+	// }
+
+	clone.Name = name
+	clone.FilesystemId = topLevelFilesystemId
+
+	err := r.registryStore.SetClone(&clone, &store.SetOptions{})
+	// _, err = r.etcdClient.Set(
+	// 	context.Background(),
+	// 	// (0)/(1)dotmesh.io/(2)registry/(3)clones/(4)<fs-uuid-of-filesystem>/(5)<name> =>
+	// 	//     {"Origin": {"FilesystemId": "<fs-uuid-of-actual-origin-snapshot>", "SnapshotId": "<snap-id>"}, "Uuid": "<fs-uuid>"}
+	// 	fmt.Sprintf("%s/registry/clones/%s/%s", r.prefix, topLevelFilesystemId, name),
+	// 	string(serialized),
+	// 	&client.SetOptions{PrevExist: client.PrevNoExist},
+	// )
 
 	return err
 }
