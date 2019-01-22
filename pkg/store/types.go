@@ -11,7 +11,8 @@ const (
 )
 
 const (
-	RegistryFilesystemsPrefix = "/registry/clones/"
+	RegistryClonesPrefix      = "/registry/clones/"
+	RegistryFilesystemsPrefix = "/registry/filesystems/"
 )
 
 type KVType string
