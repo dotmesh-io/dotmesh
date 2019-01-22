@@ -1,7 +1,6 @@
 package fsm
 
 import (
-	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strconv"
@@ -9,27 +8,28 @@ import (
 	"sync"
 	"time"
 
-	"github.com/coreos/etcd/client"
-
 	"github.com/dotmesh-io/dotmesh/pkg/container"
 	"github.com/dotmesh-io/dotmesh/pkg/metrics"
 	"github.com/dotmesh-io/dotmesh/pkg/observer"
 	"github.com/dotmesh-io/dotmesh/pkg/registry"
+	"github.com/dotmesh-io/dotmesh/pkg/store"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 
 	"github.com/nu7hatch/gouuid"
-	"golang.org/x/net/context"
 
 	log "github.com/sirupsen/logrus"
 )
 
 type FsConfig struct {
-	FilesystemID         string
-	StateManager         StateManager
-	Registry             registry.Registry
-	UserManager          user.UserManager
-	EtcdClient           client.KeysAPI
+	FilesystemID    string
+	StateManager    StateManager
+	Registry        registry.Registry
+	UserManager     user.UserManager
+	RegistryStore   store.RegistryStore
+	FilesystemStore store.FilesystemStore
+	ServerStore     store.ServerStore
+
 	ContainerClient      container.Client
 	LocalReceiveProgress observer.Observer
 	NewSnapsOnMaster     observer.Observer
@@ -111,7 +111,9 @@ func NewFilesystemMachine(cfg *FsConfig) *FsMachine {
 		responsesLock:           &sync.Mutex{},
 		snapshotsModified:       make(chan bool),
 		containerClient:         cfg.ContainerClient,
-		etcdClient:              cfg.EtcdClient,
+		registryStore:           cfg.RegistryStore,
+		serverStore:             cfg.ServerStore,
+		filesystemStore:         cfg.FilesystemStore,
 		state:                   cfg.StateManager,
 		userManager:             cfg.UserManager,
 		registry:                cfg.Registry,
@@ -404,16 +406,22 @@ func (f *FsMachine) pollDirty() error {
 			f.dirtyDelta = dirtyDelta
 			f.sizeBytes = sizeBytes
 
-			serialized, err := json.Marshal(dirtyInfo{
-				Server:     f.state.NodeID(),
+			// serialized, err := json.Marshal(dirtyInfo{
+			// 	Server:     f.state.NodeID(),
+			// 	DirtyBytes: dirtyDelta,
+			// 	SizeBytes:  sizeBytes,
+			// })
+			// if err != nil {
+			// 	return err
+			// }
+
+			fd := &types.FilesystemDirty{
+				NodeID:     f.state.NodeID(),
 				DirtyBytes: dirtyDelta,
 				SizeBytes:  sizeBytes,
-			})
-			if err != nil {
-				return err
 			}
-
-			_, err = f.etcdClient.Set(context.Background(), fmt.Sprintf("%s/filesystems/dirty/%s", types.EtcdPrefix, f.filesystemId), string(serialized), nil)
+			err = f.filesystemStore.SetDirty(fd, &store.SetOptions{})
+			// _, err = f.etcdClient.Set(context.Background(), fmt.Sprintf("%s/filesystems/dirty/%s", types.EtcdPrefix, f.filesystemId), string(serialized), nil)
 			if err != nil {
 				return err
 			}
@@ -516,11 +524,7 @@ func (f *FsMachine) updateEtcdAboutTransfers() error {
 		// Send the update
 		log.Debugf("[updateEtcdAboutTransfers] pollResult = %#v", pollResult)
 
-		serialized, err := json.Marshal(&pollResult)
-		if err != nil {
-			return err
-		}
-		_, err = f.etcdClient.Set(context.Background(), fmt.Sprintf("%s/filesystems/transfers/%s", types.EtcdPrefix, pollResult.TransferRequestId), string(serialized), nil)
+		err := f.filesystemStore.SetTransfer(&pollResult, &store.SetOptions{})
 		if err != nil {
 			return err
 		}
@@ -532,25 +536,28 @@ func (f *FsMachine) updateEtcdAboutTransfers() error {
 func (f *FsMachine) updateEtcdAboutSnapshots() error {
 	// as soon as we're connected, eagerly: if we know about some
 	// snapshots, **or the absence of them**, set this in etcd.
-	serialized, err := func() ([]byte, error) {
-		f.snapshotsLock.Lock()
-		defer f.snapshotsLock.Unlock()
-		return json.Marshal(f.filesystem.Snapshots)
-	}()
+	// serialized, err := func() ([]byte, error) {
+	// 	f.snapshotsLock.Lock()
+	// 	defer f.snapshotsLock.Unlock()
+	// 	return json.Marshal(f.filesystem.Snapshots)
+	// }()
+
+	snaps := []*types.Snapshot{}
+	f.snapshotsLock.Lock()
+	for _, s := range f.filesystem.Snapshots {
+		snaps = append(snaps, s.DeepCopy())
+	}
+	f.snapshotsLock.Unlock()
 
 	// since we want atomic rewrites, we can just save the entire
 	// snapshot data in a single key, as a json list. this is easier to
 	// begin with! although we'll bump into the 1MB request limit in
 	// etcd eventually.
-	_, err = f.etcdClient.Set(
-		context.Background(),
-		fmt.Sprintf(
-			"%s/servers/snapshots/%s/%s", types.EtcdPrefix,
-			f.state.NodeID(), f.filesystemId,
-		),
-		string(serialized),
-		nil,
-	)
+	err := f.serverStore.SetSnapshots(&types.ServerSnapshots{
+		ID:           f.state.NodeID(),
+		FilesystemID: f.filesystemId,
+		Snapshots:    snaps,
+	})
 	if err != nil {
 		return err
 	}
@@ -606,23 +613,14 @@ func (f *FsMachine) transitionedTo(state string, status string) {
 	update := map[string]string{
 		"state": state, "status": status,
 	}
-	serialized, err := json.Marshal(update)
+
+	err := f.serverStore.SetState(&types.ServerState{
+		ID:           f.state.NodeID(),
+		FilesystemID: f.filesystemId,
+		State:        update,
+	})
 	if err != nil {
-		log.Printf("cannot serialize %s: %s", update, err)
-		return
-	}
-	_, err = f.etcdClient.Set(
-		context.Background(),
-		// .../:server/:filesystem = {"state": "inactive", "status": "pulling..."}
-		fmt.Sprintf(
-			"%s/servers/states/%s/%s",
-			types.EtcdPrefix, f.state.NodeID(), f.filesystemId,
-		),
-		string(serialized),
-		nil,
-	)
-	if err != nil {
-		log.Printf("error updating etcd %+v: %+v", update, err)
+		log.Printf("error updating KV store %+v: %+v", update, err)
 		return
 	}
 	// fake an etcd version for anyone expecting a version field
