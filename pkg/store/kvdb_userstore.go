@@ -1,8 +1,10 @@
 package store
 
 import (
-	"github.com/dotmesh-io/dotmesh/pkg/validator"
 	"github.com/portworx/kvdb"
+
+	"github.com/dotmesh-io/dotmesh/pkg/validator"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -33,6 +35,18 @@ type NameIndex struct {
 type KVDBStoreWithIndex struct {
 	client    kvdb.Kvdb
 	namespace string
+}
+
+func NewKVDBStoreWithIndex(cfg *KVDBConfig, namespace string) (*KVDBStoreWithIndex, error) {
+	client, err := getKVDBClient(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	return &KVDBStoreWithIndex{
+		client:    client,
+		namespace: namespace,
+	}, nil
 }
 
 func (s *KVDBStoreWithIndex) List(prefix string) ([]*kvdb.KVPair, error) {
@@ -94,7 +108,7 @@ func (s *KVDBStoreWithIndex) get(prefix, id string) (*kvdb.KVPair, error) {
 
 }
 
-func (s *KVDBStoreWithIndex) Delete(prefix, id string, recursive bool) error {
+func (s *KVDBStoreWithIndex) Delete(prefix, id string) error {
 	_, err := s.client.Delete(s.namespace + "/" + prefix + "/" + id)
 	return err
 }
