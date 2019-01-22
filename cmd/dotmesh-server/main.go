@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dotmesh-io/dotmesh/pkg/kv"
 	"github.com/dotmesh-io/dotmesh/pkg/messaging/nats"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
@@ -156,18 +155,23 @@ func main() {
 	ips, _ := guessIPv4Addresses()
 	log.Printf("Detected my node ID as %s (%s)", localPoolId, ips)
 
-	etcdClient, err := getEtcdKeysApi()
-	if err != nil {
-		log.Fatalf("Unable to get Etcd client: '%s'", err)
-	}
-	config.EtcdClient = etcdClient
+	// etcdClient, err := getEtcdKeysApi()
+	// if err != nil {
+	// 	log.Fatalf("Unable to get Etcd client: '%s'", err)
+	// }
+	// config.EtcdClient = etcdClient
+
+	fsStore, regStore, serverStore, usersIdxStore := getKVDBStores()
+	config.FilesystemStore = fsStore
+	config.RegistryStore = regStore
+	config.ServerStore = serverStore
 
 	config.ZFSExecPath = ZFS
 	config.ZPoolPath = ZPOOL
 	config.PoolName = POOL
 
-	kvClient := kv.New(etcdClient, ETCD_PREFIX)
-	config.UserManager = user.New(kvClient)
+	// kvClient := kv.New(etcdClient, ETCD_PREFIX)
+	config.UserManager = user.New(usersIdxStore)
 
 	s := NewInMemoryState(localPoolId, config)
 
