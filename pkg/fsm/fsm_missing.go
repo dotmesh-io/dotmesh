@@ -6,33 +6,22 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/coreos/etcd/client"
+	"github.com/dotmesh-io/dotmesh/pkg/store"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
-
-	"golang.org/x/net/context"
 )
 
 func (f *FsMachine) isFilesystemDeletedInEtcd(fsId string) (bool, error) {
 
-	result, err := f.etcdClient.Get(
-		context.Background(),
-		fmt.Sprintf("%s/filesystems/deleted/%s", types.EtcdPrefix, fsId),
-		nil,
-	)
-
+	_, err := f.filesystemStore.GetDeleted(fsId)
 	if err != nil {
-		if client.IsKeyNotFound(err) {
+		if store.IsKeyNotFound(err) {
 			return false, nil
 		} else {
 			return false, err
 		}
 	}
 
-	if result != nil {
-		return true, nil
-	} else {
-		return false, nil
-	}
+	return true, nil
 }
 
 func missingState(f *FsMachine) StateFn {
