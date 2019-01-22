@@ -13,58 +13,71 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portworx/kvdb"
+
 	"github.com/coreos/etcd/client"
+	"github.com/dotmesh-io/dotmesh/pkg/store"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
+	"github.com/dotmesh-io/dotmesh/pkg/user"
 	"github.com/nu7hatch/gouuid"
 	"golang.org/x/net/context"
 
 	log "github.com/sirupsen/logrus"
 )
 
-// etcd related pieces, including the parts of InMemoryState which interact with etcd
+func getKVDBCfg() *store.KVDBConfig {
+	endpoint := os.Getenv("DOTMESH_ETCD_ENDPOINT")
+	if endpoint == "" {
+		endpoint = "https://dotmesh-etcd:42379"
+	}
+	options := make(map[string]string)
+	if strings.HasPrefix(endpoint, "https://") {
+		pkiPath := os.Getenv("DOTMESH_PKI_PATH")
+		if pkiPath == "" {
+			pkiPath = "/pki"
+		}
 
-var etcdKeysAPI client.KeysAPI
-var etcdConnectionOnce Once
+		options[kvdb.CAFileKey] = fmt.Sprintf("%s/ca.pem", pkiPath)
+		options[kvdb.CertKeyFileKey] = fmt.Sprintf("%s/apiserver-key.pem", pkiPath)
+		options[kvdb.CertFileKey] = fmt.Sprintf("%s/apiserver.pem", pkiPath)
+	}
+	cfg := &store.KVDBConfig{
+		Machines: []string{endpoint},
+		Type:     store.KVTypeEtcdV3,
+		Options:  options,
+		Prefix:   types.EtcdPrefix,
+	}
+	return cfg
+}
 
-func getEtcdKeysApi() (client.KeysAPI, error) {
-	etcdConnectionOnce.Do(func() {
-		var err error
-		endpoint := os.Getenv("DOTMESH_ETCD_ENDPOINT")
-		if endpoint == "" {
-			endpoint = "https://dotmesh-etcd:42379"
-		}
-		transport := &http.Transport{}
-		if endpoint[:5] == "https" {
-			// only try to fetch PKI gubbins if we're creating an encrypted
-			// connection.
-			pkiPath := os.Getenv("DOTMESH_PKI_PATH")
-			if pkiPath == "" {
-				pkiPath = "/pki"
-			}
-			transport, err = transportFromTLS(
-				fmt.Sprintf("%s/apiserver.pem", pkiPath),
-				fmt.Sprintf("%s/apiserver-key.pem", pkiPath),
-				fmt.Sprintf("%s/ca.pem", pkiPath),
-			)
-			if err != nil {
-				panic(err)
-			}
-		}
-		cfg := client.Config{
-			Endpoints: []string{endpoint},
-			Transport: transport,
-			// set timeout per request to fail fast when the target endpoint is
-			// unavailable
-			HeaderTimeoutPerRequest: time.Second * 10,
-		}
-		etcdClient, err := client.New(cfg)
-		if err != nil {
-			// maybe retry, instead of ending it all
-			panic(err)
-		}
-		etcdKeysAPI = client.NewKeysAPI(etcdClient)
-	})
-	return etcdKeysAPI, nil
+func getKVDBStores() (store.FilesystemStore, store.RegistryStore, store.ServerStore, store.KVStoreWithIndex) {
+
+	cfg := getKVDBCfg()
+	kvdbStore, err := store.NewKVDBFilesystemStore(cfg)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"options":  cfg.Options,
+			"endpoint": cfg.Machines,
+			"error":    err,
+		}).Fatalf("failed to setup KV store")
+	}
+	kvdbIndexStore, err := store.NewKVDBStoreWithIndex(cfg, user.UsersPrefix)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"options":  cfg.Options,
+			"endpoint": cfg.Machines,
+			"error":    err,
+		}).Fatalf("failed to setup KV index store")
+	}
+	serverStore, err := store.NewKVServerStore(cfg)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"options":  cfg.Options,
+			"endpoint": cfg.Machines,
+			"error":    err,
+		}).Fatalf("failed to setup server store")
+	}
+	return kvdbStore, kvdbStore, serverStore, kvdbIndexStore
 }
 
 var onceAgain Once
@@ -135,101 +148,45 @@ func (s *InMemoryState) updateAddressesInEtcd() error {
 		return err
 	}
 
-	_, err = s.etcdClient.Set(
-		context.Background(),
-		fmt.Sprintf("%s/servers/addresses/%s", ETCD_PREFIX, s.myNodeId),
-		strings.Join(addresses, ","),
-		&client.SetOptions{TTL: 60 * time.Second},
-	)
-	if err != nil {
-		return err
-	}
-	return nil
+	return s.serverStore.SetAddresses(&types.Server{
+		Addresses: addresses,
+		Id:        s.NodeID(),
+	}, &store.SetOptions{
+		TTL: 60,
+	})
 }
 
-func isFilesystemDeletedInEtcd(fsId string) (bool, error) {
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		return false, err
-	}
+func (s *InMemoryState) isFilesystemDeletedInEtcd(fsId string) (bool, error) {
 
-	result, err := kapi.Get(
-		context.Background(),
-		fmt.Sprintf("%s/filesystems/deleted/%s", ETCD_PREFIX, fsId),
-		nil,
-	)
-
+	_, err := s.filesystemStore.GetDeleted(fsId)
 	if err != nil {
-		if client.IsKeyNotFound(err) {
+		if store.IsKeyNotFound(err) {
 			return false, nil
 		} else {
 			return false, err
 		}
 	}
-
-	if result != nil {
-		return true, nil
-	} else {
-		return false, nil
-	}
+	return true, nil
 }
 
-func (s *InMemoryState) markFilesystemAsDeletedInEtcd(
-	fsId, username string,
-	name VolumeName,
-	tlFsId, branch string,
-) error {
+func (s *InMemoryState) markFilesystemAsDeletedInEtcd(fsId, username string, name VolumeName, tlFsId, branch string) error {
 
-	// Feel free to suggest additional useful things to put in the
-	// deletion audit trail.  The two that the system REQUIRES are
-	// "Name", "TopLevelFilesystemId" and "Clone", which are used to ensure that the registry
-	// entry is cleaned up later. (Name for a top level filesystem,
-	// Clone for a non-master branch). Please don't remove/rename that
-	// without updating cleanupDeletedFilesystems
-	auditTrail, err := json.Marshal(struct {
-		Server    string
-		Username  string
-		DeletedAt time.Time
+	at := &types.FilesystemDeletionAudit{
+		FilesystemID:         fsId,
+		Server:               s.NodeID(),
+		Username:             username,
+		DeletedAt:            time.Now(),
+		Name:                 name,
+		TopLevelFilesystemId: tlFsId,
+		Clone:                branch,
+	}
 
-		// These fields are mandatory
-		Name                 VolumeName
-		TopLevelFilesystemId string
-		Clone                string
-	}{
-		s.myNodeId,
-		username,
-		time.Now(),
-
-		// These fields are mandatory
-		name,
-		tlFsId,
-		branch})
+	err := s.filesystemStore.SetDeleted(at, &store.SetOptions{})
 	if err != nil {
 		return err
 	}
 
-	_, err = s.etcdClient.Set(
-		context.Background(),
-		fmt.Sprintf("%s/filesystems/deleted/%s", ETCD_PREFIX, fsId),
-		string(auditTrail),
-		&client.SetOptions{PrevExist: client.PrevNoExist},
-	)
-	if err != nil {
-		return err
-	}
-
-	// Now mark it for eventual cleanup (when the liveness key expires)
-	_, err = s.etcdClient.Set(
-		context.Background(),
-		fmt.Sprintf("%s/filesystems/cleanupPending/%s", ETCD_PREFIX, fsId),
-		string(auditTrail),
-		&client.SetOptions{PrevExist: client.PrevNoExist},
-	)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return s.filesystemStore.SetCleanupPending(at, &store.SetOptions{})
 }
 
 // This struct is a subset of the struct used as the audit trail in
@@ -245,29 +202,37 @@ type NameOrClone struct {
 
 func (s *InMemoryState) cleanupDeletedFilesystems() error {
 
-	pending, err := listFilesystemsPendingCleanup(s.etcdClient)
+	pending, err := s.listFilesystemsPendingCleanup()
 	if err != nil {
 		return err
 	}
 
-	for fsId, names := range pending {
-		errors := make([]error, 0)
-		del := func(key string) {
-			_, err = s.etcdClient.Delete(
-				context.Background(),
-				key,
-				&client.DeleteOptions{},
-			)
-			if err != nil && !client.IsKeyNotFound(err) {
-				errors = append(errors, err)
-			}
+	for fsId, deletionAudit := range pending {
+		var errors []error
+
+		err = s.filesystemStore.DeleteContainers(fsId)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":         err,
+				"filesystem_id": fsId,
+			}).Error("[cleanupDeletedFilesystems] failed to delete filesystem containers during cleanup")
+		}
+		err = s.filesystemStore.DeleteMaster(fsId)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":         err,
+				"filesystem_id": fsId,
+			}).Error("[cleanupDeletedFilesystems] failed to delete filesystem master info during cleanup")
+		}
+		err = s.filesystemStore.DeleteDirty(fsId)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":         err,
+				"filesystem_id": fsId,
+			}).Error("[cleanupDeletedFilesystems] failed to delete filesystem dirty info during cleanup")
 		}
 
-		del(fmt.Sprintf("%s/filesystems/containers/%s", ETCD_PREFIX, fsId))
-		del(fmt.Sprintf("%s/filesystems/dirty/%s", ETCD_PREFIX, fsId))
-		del(fmt.Sprintf("%s/filesystems/masters/%s", ETCD_PREFIX, fsId))
-
-		if names.Name.Namespace != "" && names.Name.Name != "" {
+		if deletionAudit.Name.Namespace != "" && deletionAudit.Name.Name != "" {
 			// The name might be blank in the audit trail - this is used
 			// to indicate that this was a clone, NOT the toplevel filesystem, so
 			// there's no need to remove the registry entry for the whole
@@ -276,19 +241,14 @@ func (s *InMemoryState) cleanupDeletedFilesystems() error {
 			// Normally, the registry entry is deleted as soon as the volume
 			// is deleted, but in the event of a failure it might not have
 			// been. So we try again.
-			key := fmt.Sprintf(
-				"%s/registry/filesystems/%s/%s",
-				ETCD_PREFIX,
-				names.Name.Namespace,
-				names.Name.Name)
 
-			oldNode, err := s.etcdClient.Get(
-				context.Background(),
-				key,
-				&client.GetOptions{},
+			registryFilesystem, err := s.registryStore.GetFilesystem(
+				deletionAudit.Name.Namespace,
+				deletionAudit.Name.Name,
 			)
+
 			if err != nil {
-				if client.IsKeyNotFound(err) {
+				if store.IsKeyNotFound(err) {
 					// we are good, it doesn't exist, nothing to delete
 				} else {
 					errors = append(errors, err)
@@ -297,38 +257,41 @@ func (s *InMemoryState) cleanupDeletedFilesystems() error {
 				// We have an existing registry entry, but is it the one
 				// we're supposed to delete, or a newly-created volume
 				// with the name of the deleted one?
-				currentData := struct {
-					Id string
-				}{}
-				err = json.Unmarshal([]byte(oldNode.Node.Value), &currentData)
-				if err != nil {
-					errors = append(errors, err)
-				}
-				if currentData.Id == fsId {
-					_, err = s.etcdClient.Delete(
-						context.Background(),
-						key,
-						&client.DeleteOptions{PrevValue: oldNode.Node.Value},
+
+				if registryFilesystem.Id == fsId {
+					err = s.registryStore.DeleteFilesystem(
+						deletionAudit.Name.Namespace,
+						deletionAudit.Name.Name,
 					)
-					if err != nil && !client.IsKeyNotFound(err) {
+					if err != nil && !store.IsKeyNotFound(err) {
 						errors = append(errors, err)
 					}
 				}
 			}
 		}
 
-		if names.Clone != "" {
+		if deletionAudit.Clone != "" {
 			// The clone name might be blank in the audit trail - this is
 			// used to indicate that this was the toplevel filesystem
 			// rather than a clone. But when a clone name is specified,
 			// we need to delete a clone record from etc.
-			del(fmt.Sprintf(
-				"%s/registry/clones/%s/%s", ETCD_PREFIX,
-				names.TopLevelFilesystemId, names.Clone))
+			err = s.registryStore.DeleteClone(
+				deletionAudit.TopLevelFilesystemId,
+				deletionAudit.Clone,
+			)
+			if err != nil && !store.IsKeyNotFound(err) {
+				errors = append(errors, err)
+			}
 		}
 
 		if len(errors) == 0 {
-			del(fmt.Sprintf("%s/filesystems/cleanupPending/%s", ETCD_PREFIX, fsId))
+			err = s.filesystemStore.DeleteCleanupPending(fsId)
+			if err != nil {
+				log.WithFields(log.Fields{
+					"error":         err,
+					"filesystem_id": fsId,
+				}).Error("[cleanupDeletedFilesystems] failed to remove 'cleanupPending' filesystem after the cleanup")
+			}
 		} else {
 			return fmt.Errorf("Errors found cleaning up after a deleted filesystem: %+v", errors)
 		}
@@ -338,53 +301,30 @@ func (s *InMemoryState) cleanupDeletedFilesystems() error {
 }
 
 // The result is a map from filesystem ID to the VolumeName or branch name it once had.
-func listFilesystemsPendingCleanup(kapi client.KeysAPI) (map[string]NameOrClone, error) {
-	// list ETCD_PREFIX/filesystems/cleanupPending/ID without corresponding
-	// ETCD_PREFIX/filesystems/live/ID
-
-	pending, err := kapi.Get(context.Background(),
-		fmt.Sprintf("%s/filesystems/cleanupPending", ETCD_PREFIX),
-		&client.GetOptions{Recursive: true, Sort: false},
-	)
+func (s *InMemoryState) listFilesystemsPendingCleanup() (map[string]*types.FilesystemDeletionAudit, error) {
+	result := make(map[string]*types.FilesystemDeletionAudit)
+	pending, err := s.filesystemStore.ListCleanupPending()
 	if err != nil {
-		if client.IsKeyNotFound(err) {
-			return map[string]NameOrClone{}, nil
+		if store.IsKeyNotFound(err) {
+			return result, nil
 		} else {
-			return map[string]NameOrClone{}, err
+			return result, err
 		}
 	}
 
-	result := make(map[string]NameOrClone)
-	for _, node := range pending.Node.Nodes {
-		// /dotmesh.io/filesystems/cleanupPending/3ed24670-8fd0-4cec-4191-d3d5bae15172
-		pieces := strings.Split(node.Key, "/")
-		if len(pieces) == 5 {
-			fsId := pieces[4]
-
-			_, err := kapi.Get(context.Background(),
-				fmt.Sprintf("%s/filesystems/live/%s", ETCD_PREFIX, fsId),
-				&client.GetOptions{},
-			)
-			if err == nil {
-				// Key was found
-			} else if client.IsKeyNotFound(err) {
-				// Key not found, it's no longer live
-				// So extract the name from the audit trail and add it to the result
-				var audit NameOrClone
-				err := json.Unmarshal([]byte(node.Value), &audit)
-				if err != nil {
-					// We don't want one corrupted key stopping us from finding the rest
-					// So log+ignore.
-					log.Printf(
-						"[listFilesystemsPendingCleanup] Error parsing audit trail: %s=%s",
-						node.Key, node.Value)
-				} else {
-					result[fsId] = audit
-				}
-			} else {
-				// Error!
-				return map[string]NameOrClone{}, err
-			}
+	for _, at := range pending {
+		_, err := s.filesystemStore.GetLive(at.FilesystemID)
+		if err == nil {
+			// key found, nothing to do
+			continue
+		}
+		if store.IsKeyNotFound(err) {
+			result[at.FilesystemID] = at
+		} else {
+			log.WithFields(log.Fields{
+				"error":         err,
+				"filesystem_id": at.FilesystemID,
+			}).Error("[listFilesystemsPendingCleanup] unexpected error while checking if filesystem is live")
 		}
 	}
 
@@ -392,20 +332,12 @@ func listFilesystemsPendingCleanup(kapi client.KeysAPI) (map[string]NameOrClone,
 }
 
 func (s *InMemoryState) MarkFilesystemAsLiveInEtcd(topLevelFilesystemId string) error {
-
-	key := fmt.Sprintf("%s/filesystems/live/%s", ETCD_PREFIX, topLevelFilesystemId)
-	ttl := time.Duration(s.config.FilesystemMetadataTimeout) * time.Second
-
-	_, err := s.etcdClient.Set(
-		context.Background(),
-		key,
-		s.myNodeId,
-		&client.SetOptions{TTL: ttl},
-	)
-	if err != nil {
-		return err
-	}
-	return nil
+	return s.filesystemStore.SetLive(&types.FilesystemLive{
+		FilesystemID: topLevelFilesystemId,
+		NodeID:       s.NodeID(),
+	}, &store.SetOptions{
+		TTL: uint64(s.config.FilesystemMetadataTimeout),
+	})
 }
 
 // shortcut for dispatching an event to a filesystem's fsMachine's event
@@ -430,7 +362,7 @@ func (s *InMemoryState) handleOneFilesystemMaster(node *client.Node) error {
 		var err error
 		var deleted bool
 
-		deleted, err = isFilesystemDeletedInEtcd(fs)
+		deleted, err = s.isFilesystemDeletedInEtcd(fs)
 		if err != nil {
 			log.Errorf("[handleOneFilesystemMaster] error determining if file system is deleted: fs: %s, etcd nodeValue: %s, error: %+v", fs, node.Value, err)
 			return err
@@ -514,27 +446,6 @@ func (s *InMemoryState) globalFsRequestId(fs string, event *types.Event) (chan *
 	event.ID = requestID
 	event.FilesystemID = fs
 
-	// serialized, err := s.serializeEvent(e)
-	// if err != nil {
-	// 	log.Printf("globalFsRequest - error serializing %#v: %#v", e, err)
-	// 	return nil, "", err
-	// }
-	// if serialized == "" {
-	// 	log.Printf("globalFsRequest - serialization produced an empty string %#v", e)
-	// 	return nil, "", fmt.Errorf("Serialization of %#v produced an empty string", e)
-	// }
-	// key := fmt.Sprintf("%s/filesystems/requests/%s/%s", ETCD_PREFIX, fs, requestId)
-	// log.Printf("globalFsRequest: setting '%s' to '%s'",
-	// 	key,
-	// 	serialized,
-	// )
-	// resp, err := s.etcdClient.Set(
-	// 	context.Background(),
-	// 	key,
-	// 	serialized,
-	// 	&client.SetOptions{PrevExist: client.PrevNoExist, TTL: 604800 * time.Second},
-	// )
-
 	responseChan := make(chan *types.Event)
 
 	go func() {
@@ -574,57 +485,6 @@ func (s *InMemoryState) globalFsRequestId(fs string, event *types.Event) (chan *
 		return nil, "", err
 	}
 
-	// responseChan := make(chan *Event)
-	// go func() {
-
-	// 	defer close(responseChan)
-
-	// 	// TODO become able to cope with becoming disconnected from etcd and
-	// 	// then reconnecting and pick up where we left off (process any new
-	// 	// responses)...
-	// 	watcher := s.etcdClient.Watcher(
-	// 		// TODO maybe responses should get their own IDs, so that there can be
-	// 		// multiple responses to a given event (at present we just assume one)
-	// 		fmt.Sprintf("%s/filesystems/responses/%s/%s", ETCD_PREFIX, fs, requestId),
-	// 		&client.WatcherOptions{AfterIndex: resp.Node.CreatedIndex, Recursive: true},
-	// 	)
-	// 	node, err := watcher.Next(context.Background())
-	// 	if err != nil {
-	// 		responseChan <- &Event{
-	// 			Name: "error-watcher-next", Args: &EventArgs{"err": err},
-	// 		}
-	// 		return
-	// 	}
-	// 	response, err := s.deserializeEvent(node.Node)
-	// 	if err != nil {
-	// 		responseChan <- &Event{
-	// 			Name: "error-deserialize", Args: &EventArgs{"err": err},
-	// 		}
-
-	// 		return
-	// 	}
-	// 	responseChan <- response
-
-	// 	// also clean up the request and response nodes in etcd. (TODO: /not/
-	// 	// doing this might actually be a good way to implement a log of all
-	// 	// actions performed on the system). TODO why are we not doing this at
-	// 	// all any more? Something to do with a race where events showed up
-	// 	// empty. (Actually, empty events correspond to a deletion, ie a TTL
-	// 	// timeout, I think.) Oh and we added a TTL.
-	// 	/*
-	// 		for _, cleanup := range []string{"requests", "responses"} {
-	// 			_, err = kapi.Delete(
-	// 				context.Background(),
-	// 				fmt.Sprintf("%s/filesystems/%s/%s/%s", ETCD_PREFIX, cleanup, fs, requestId),
-	// 				nil,
-	// 			)
-	// 			if err != nil {
-	// 				log.Printf("Error while trying to cleanup %s %s %s: %s", cleanup, fs, requestId, err)
-	// 			}
-	// 		}
-	// 	*/
-
-	// }()
 	return responseChan, requestID, nil
 }
 
@@ -661,90 +521,7 @@ func (s *InMemoryState) respondToEvent(fs, requestId string, response *Event) er
 	response.FilesystemID = fs
 
 	return s.messenger.Publish(response)
-
-	// serialized, err := s.serializeEvent(response)
-	// // TODO think more about handling error cases here, lest we cause deadlocks
-	// // when the network is imperfect
-	// // TODO can we make all etcd requests idempotent, e.g. by generating the id
-	// // for a new snapshot in the requester?
-	// if err != nil {
-	// 	log.Printf("Error while serializing an event response: %s", err)
-	// 	return err
-	// }
-	// _, err = s.etcdClient.Set(
-	// 	context.Background(),
-	// 	fmt.Sprintf("%s/filesystems/responses/%s/%s", ETCD_PREFIX, fs, requestId),
-	// 	serialized,
-	// 	&client.SetOptions{PrevExist: client.PrevNoExist, TTL: 604800 * time.Second},
-	// )
-	// if err != nil {
-	// 	log.Printf("Error while setting event response in etcd: %s", err)
-	// 	return err
-	// }
-
-	// return
 }
-
-// func (s *InMemoryState) deserializeDispatchAndRespond(fs string, node *client.Node) error {
-// 	// TODO 2-phase commit to avoid doubling up events after
-// 	// reading them, performing them, and then getting disconnected
-// 	// before cleaning them up?
-// 	pieces := strings.Split(node.Key, "/")
-// 	requestId := pieces[len(pieces)-1]
-
-// 	// check that there isn't a stale response already. if so, do nothing.
-// 	_, err := s.etcdClient.Get(
-// 		context.Background(),
-// 		fmt.Sprintf("%s/filesystems/responses/%s/%s", ETCD_PREFIX, fs, requestId),
-// 		nil,
-// 	)
-// 	if err == nil {
-// 		// OK, there's a stale response. Leave it alone and don't re-perform
-// 		// the action. But this is not an error (don't error out and reconnect
-// 		// to etcd, or you'll get stuck in a loop).
-// 		return nil
-// 	}
-// 	if !client.IsKeyNotFound(err) {
-// 		// Some error other than key not found. The key-not-found is the
-// 		// expected, happy path.
-// 		return err
-// 	}
-
-// 	e, err := s.deserializeEvent(node)
-// 	if err != nil || e == nil {
-// 		// Respond to invalid events
-// 		_ = s.respondToEvent(fs, requestId, &Event{Name: "invalid-request", Args: &EventArgs{"error": err, "request": e}})
-// 		return err
-// 	}
-
-// 	// channel is the internal channel from etcd => state machines.
-// 	// listen on that channel, and when a response comes back from the local
-// 	// state machine, send it back out as an etcd response
-
-// 	// don't block processing of further events on getting a response to this:
-// 	// in particular, the "move" command depends on sub-commands being
-// 	// processed (it requires this dispatch/response loop to work reentrantly),
-// 	// specifically so that a server performing a handoff can be notified that
-// 	// the server it is handing off to has received the snapshots that it made
-// 	// available to it as part of the handoff. so, run this in a goroutine;
-// 	// it's ok to return early because the response is just going back into
-// 	// etcd and anyone waiting for it will be waiting on the response key to
-// 	// show up, not on the return of this function.
-
-// 	log.Printf("About to dispatch %#v to %s", e, fs)
-// 	c, err := s.dispatchEvent(fs, e, requestId)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	log.Printf("Got response chan %v, %s for %v", c, err, fs)
-// 	go func() {
-// 		internalResponse := <-c
-// 		log.Printf("Done putting it into internalResponse (%v, %v)", fs, c)
-
-// 		_ = s.respondToEvent(fs, requestId, internalResponse)
-// 	}()
-// 	return nil
-// }
 
 // Update our local record of who has which snapshots, either based on learning
 // from etcd or learning about our own snapshots (the latter is necessary
@@ -1276,25 +1053,6 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 			case "filesystems/dirty":
 				dirtyFilesystems = child
 			}
-			// if getVariant(child) == "filesystems/masters" {
-			// 	masters = child
-			// } else if getVariant(child) == "filesystems/requests" {
-			// 	requests = child
-			// } else if getVariant(child) == "servers/addresses" {
-			// 	serverAddresses = child
-			// } else if getVariant(child) == "servers/snapshots" {
-			// 	serverSnapshots = child
-			// } else if getVariant(child) == "servers/states" {
-			// 	serverStates = child
-			// } else if getVariant(child) == "registry/filesystems" {
-			// 	registryFilesystems = child
-			// } else if getVariant(child) == "registry/clones" {
-			// 	registryClones = child
-			// } else if getVariant(child) == "filesystems/transfers" {
-			// 	interclusterTransfers = child
-			// } else if getVariant(child) == "filesystems/dirty" {
-			// 	dirtyFilesystems = child
-			// }
 		}
 	}
 
@@ -1502,6 +1260,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 				}
 			}
 		} else if variant == "filesystems/deleted" {
+			// [x] Done - store.WatchDeleted(cb WatchDeletedCB) error
 			if err = s.handleOneFilesystemDeletion(node.Node); err != nil {
 				return err
 			}
@@ -1526,14 +1285,17 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 				return err
 			}
 		} else if variant == "filesystems/containers" {
+			// [x] Done - store.WatchContainers
 			if err = updateFilesystemsContainers(node.Node); err != nil {
 				return err
 			}
 		} else if variant == "filesystems/dirty" {
+			// [x] Done - store.WatchDirty
 			if err = updateFilesystemsDirty(node.Node); err != nil {
 				return err
 			}
 		} else if variant == "filesystems/transfers" {
+			// [x] Done - store.WatchTransfers
 			if err = updateTransfers(node.Node); err != nil {
 				return err
 			}
