@@ -18,6 +18,8 @@ type KVDBFilesystemStore struct {
 type KVDBConfig struct {
 	Type     KVType // etcd/bolt/mem
 	Machines []string
+	Options  map[string]string
+	Prefix   string
 }
 
 func NewKVDBFilesystemStore(cfg *KVDBConfig) (*KVDBFilesystemStore, error) {
@@ -32,15 +34,35 @@ func NewKVDBFilesystemStore(cfg *KVDBConfig) (*KVDBFilesystemStore, error) {
 	}, nil
 }
 
+// NewKVDBClient - returns kvdb.KVDB interface based on provided configuration
+// to access KV store directly
+func NewKVDBClient(cfg *KVDBConfig) (kvdb.Kvdb, error) {
+	return getKVDBClient(cfg)
+}
+
 func getKVDBClient(cfg *KVDBConfig) (kvdb.Kvdb, error) {
+
+	if cfg.Options == nil {
+		cfg.Options = make(map[string]string)
+	}
+
 	switch cfg.Type {
 	case KVTypeEtcdV3:
-		return etcdv3.New("dotmesh/", cfg.Machines, map[string]string{}, nil)
+		return etcdv3.New(cfg.Prefix, cfg.Machines, cfg.Options, nil)
 	case KVTypeMem:
-		return mem.New("dotmesh/", []string{}, map[string]string{}, nil)
+		return mem.New(cfg.Prefix, []string{}, cfg.Options, nil)
 	case KVTypeBolt:
-		return bolt.New("dotmesh/", []string{}, map[string]string{}, nil)
+		return bolt.New(cfg.Prefix, []string{}, cfg.Options, nil)
 	}
 
 	return nil, fmt.Errorf("unknown KV store type: '%s'", cfg.Type)
+}
+
+var (
+	ErrNotFound = kvdb.ErrNotFound
+	ErrExist    = kvdb.ErrExist
+)
+
+func IsKeyNotFound(err error) bool {
+	return err == ErrNotFound
 }
