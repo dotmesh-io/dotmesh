@@ -9,6 +9,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// static FilesystemStore check
+var _ FilesystemStore = &KVDBFilesystemStore{}
+
 // Master
 
 // SetMaster - creates master entry only if the key didn't previously exist (using Create method)
@@ -23,7 +26,32 @@ func (s *KVDBFilesystemStore) SetMaster(fm *types.FilesystemMaster, opts *SetOpt
 		return err
 	}
 
+	if opts.Force {
+		_, err = s.client.Put(FilesystemMastersPrefix+fm.FilesystemID, bts, 0)
+		return err
+	}
+
 	_, err = s.client.Create(FilesystemMastersPrefix+fm.FilesystemID, bts, 0)
+	return err
+}
+
+func (s *KVDBFilesystemStore) CompareAndSetMaster(fm *types.FilesystemMaster, opts *SetOptions) error {
+	if fm.FilesystemID == "" {
+		return ErrIDNotSet
+	}
+
+	bts, err := s.encode(fm)
+	if err != nil {
+		return err
+	}
+
+	kvp := &kvdb.KVPair{
+		Key:           FilesystemMastersPrefix + fm.FilesystemID,
+		Value:         bts,
+		ModifiedIndex: fm.Meta.ModifiedIndex,
+	}
+
+	_, err = s.client.CompareAndSet(kvp, opts.KVFlags, opts.PrevValue)
 	return err
 }
 
