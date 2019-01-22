@@ -2,8 +2,9 @@ package main
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
+
+	"github.com/dotmesh-io/dotmesh/pkg/auth"
 
 	"os"
 	"sort"
@@ -11,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/coreos/etcd/client"
 	"github.com/nu7hatch/gouuid"
 	"golang.org/x/net/context"
 
@@ -21,6 +21,7 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/notification"
 	"github.com/dotmesh-io/dotmesh/pkg/observer"
 	"github.com/dotmesh-io/dotmesh/pkg/registry"
+	"github.com/dotmesh-io/dotmesh/pkg/store"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 
@@ -43,7 +44,11 @@ type InMemoryState struct {
 	messenger       messaging.Messenger
 	messagingServer messaging.MessagingServer
 
-	etcdClient                 client.KeysAPI
+	// etcdClient                 client.KeysAPI
+	registryStore   store.RegistryStore
+	filesystemStore store.FilesystemStore
+	serverStore     store.ServerStore
+
 	etcdWaitTimestamp          int64
 	etcdWaitState              string
 	etcdWaitTimestampLock      *sync.Mutex
@@ -90,8 +95,11 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 		// global container state (what containers are running where), filesystemId -> containerInfo
 		globalContainerCache:     make(map[string]containerInfo),
 		globalContainerCacheLock: &sync.RWMutex{},
-		// When did we start waiting for etcd?
-		etcdClient:            config.EtcdClient,
+
+		filesystemStore: config.FilesystemStore,
+		registryStore:   config.RegistryStore,
+		serverStore:     config.ServerStore,
+
 		etcdWaitTimestamp:     0,
 		etcdWaitState:         "",
 		etcdWaitTimestampLock: &sync.Mutex{},
@@ -128,7 +136,7 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 	s.publisher = publisher
 	// a registry of names of filesystems and branches (clones) mapping to
 	// their ids
-	s.registry = registry.NewRegistry(config.UserManager, config.EtcdClient, ETCD_PREFIX)
+	s.registry = registry.NewRegistry(config.UserManager, config.RegistryStore)
 
 	err = s.initializeMessaging()
 	if err != nil {
@@ -142,7 +150,7 @@ func NewInMemoryState(localPoolId string, config Config) *InMemoryState {
 }
 
 func (s *InMemoryState) resetRegistry() {
-	s.registry = registry.NewRegistry(s.userManager, s.config.EtcdClient, ETCD_PREFIX)
+	s.registry = registry.NewRegistry(s.userManager, s.config.RegistryStore)
 }
 
 func calculatePrelude(snaps []Snapshot, toSnapshotId string) (Prelude, error) {
@@ -198,7 +206,7 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 	// log.Debugf("[getOne] starting for %v", fs)
 
 	if tlf, clone, err := s.registry.LookupFilesystemById(fs); err == nil {
-		authorized, err := tlf.Authorize(ctx)
+		authorized, err := tlf.Authorize(auth.GetUserFromCtx(ctx))
 		if err != nil {
 			return DotmeshVolume{}, err
 		}
@@ -465,40 +473,33 @@ func (s *InMemoryState) findRelatedContainers() error {
 		// (0)/(1)dotmesh.io/(2)filesystems/(3)containers/(4):filesystem_id =>
 		// {"server": "server", "containers": [{Name: "name", ID: "id"}]}
 		theContainers, ok := containerMap[filesystemId]
-		var value containerInfo
+		var value types.FilesystemContainers
 		if ok {
-			value = containerInfo{
-				Server:     s.myNodeId,
-				Containers: theContainers,
+			value = types.FilesystemContainers{
+				NodeID:       s.myNodeId,
+				FilesystemID: filesystemId,
+				Containers:   theContainers,
 			}
 		} else {
-			value = containerInfo{
-				Server:     s.myNodeId,
-				Containers: []container.DockerContainer{},
+			value = types.FilesystemContainers{
+				NodeID:       s.myNodeId,
+				FilesystemID: filesystemId,
+				Containers:   []container.DockerContainer{},
 			}
-		}
-		result, err := json.Marshal(value)
-		if err != nil {
-			return err
 		}
 
 		// update our local globalContainerCache immediately, so that we reduce
 		// the window for races against setting this cache value.
 		s.globalContainerCacheLock.Lock()
-		s.globalContainerCache[filesystemId] = value
+		// TODO: replace globalContainerCache containerInfo type with types.FilesystemContainers
+		s.globalContainerCache[filesystemId] = containerInfo{
+			Server:     value.NodeID,
+			Containers: value.Containers,
+		}
 		s.globalContainerCacheLock.Unlock()
 
-		log.Debugf(
-			"findRelatedContainers setting %s to %s",
-			fmt.Sprintf("%s/filesystems/containers/%s", ETCD_PREFIX, filesystemId),
-			string(result),
-		)
-		_, err = s.etcdClient.Set(
-			context.Background(),
-			fmt.Sprintf("%s/filesystems/containers/%s", ETCD_PREFIX, filesystemId),
-			string(result),
-			nil,
-		)
+		err = s.filesystemStore.SetContainers(&value, &store.SetOptions{})
+
 		if err != nil {
 			log.WithFields(log.Fields{
 				"filesystem": filesystemId,
@@ -653,15 +654,12 @@ func (s *InMemoryState) CreateFilesystem(ctx context.Context, filesystemName *Vo
 	// Check to see if it already partially exists, eg. in the registry but without a master
 	var filesystemId string
 
-	re, err := s.etcdClient.Get(
-		context.Background(),
-		fmt.Sprintf("%s/registry/filesystems/%s/%s", ETCD_PREFIX, filesystemName.Namespace, filesystemName.Name),
-		&client.GetOptions{},
-	)
-	switch {
-	case err != nil && !client.IsKeyNotFound(err):
+	existingFS, err := s.registryStore.GetFilesystem(filesystemName.Namespace, filesystemName.Name)
+	if err != nil && !store.IsKeyNotFound(err) {
 		return nil, nil, err
-	case err != nil && client.IsKeyNotFound(err):
+	}
+
+	if err != nil && err == store.ErrNotFound {
 		// Doesn't already exist, we can proceed as usual
 		id, err := uuid.NewV4()
 		if err != nil {
@@ -678,33 +676,20 @@ func (s *InMemoryState) CreateFilesystem(ctx context.Context, filesystemName *Vo
 			)
 			return nil, nil, err
 		}
-	// Proceed to set up master mapping
-	default:
-		// Key already exists
-		var existingEntry RegistryFilesystem
+	}
 
-		err := json.Unmarshal([]byte(re.Node.Value), &existingEntry)
-		if err != nil {
-			return nil, nil, err
-		}
+	filesystemId = existingFS.Id
+	log.Printf("[CreateFilesystem] called with name=%+v, examining existing id %s", filesystemName, filesystemId)
 
-		filesystemId = existingEntry.Id
-		log.Printf("[CreateFilesystem] called with name=%+v, examining existing id %s", filesystemName, filesystemId)
-
-		// Check for an existing master mapping
-		_, err = s.etcdClient.Get(
-			context.Background(),
-			fmt.Sprintf("%s/filesystems/masters/%s", ETCD_PREFIX, filesystemId),
-			&client.GetOptions{},
-		)
-		if err != nil && !client.IsKeyNotFound(err) {
-			return nil, nil, err
-		} else if err != nil && client.IsKeyNotFound(err) {
-			// Key not found, proceed to set up new master mapping
-		} else {
-			// Existing master mapping, we're trying to create an already-existing volume! Abort!
-			return nil, nil, fmt.Errorf("A volume called %s already exists with id %s", filesystemName, filesystemId)
-		}
+	// Check for an existing master mapping
+	_, err = s.filesystemStore.GetMaster(filesystemId)
+	if err != nil && !store.IsKeyNotFound(err) {
+		return nil, nil, err
+	} else if err != nil && err == store.ErrNotFound {
+		// Key not found, proceed to set up new master mapping
+	} else {
+		// Existing master mapping, we're trying to create an already-existing volume! Abort!
+		return nil, nil, fmt.Errorf("A volume called %s already exists with id %s", filesystemName, filesystemId)
 	}
 
 	if s.debugPartialFailCreateFilesystem {
@@ -713,12 +698,10 @@ func (s *InMemoryState) CreateFilesystem(ctx context.Context, filesystemName *Vo
 
 	// synchronize with etcd first, setting master to us only if the key
 	// didn't previously exist, **before actually creating the filesystem**
-	_, err = s.etcdClient.Set(
-		context.Background(),
-		fmt.Sprintf("%s/filesystems/masters/%s", ETCD_PREFIX, filesystemId),
-		s.myNodeId,
-		&client.SetOptions{PrevExist: client.PrevNoExist},
-	)
+	err = s.filesystemStore.SetMaster(&types.FilesystemMaster{
+		FilesystemID: filesystemId,
+		NodeID:       s.NodeID(),
+	}, &store.SetOptions{})
 	if err != nil {
 		log.Printf(
 			"[CreateFilesystem] Error while trying to create key-that-does-not-exist in etcd prior to creating filesystem %s: %s",
