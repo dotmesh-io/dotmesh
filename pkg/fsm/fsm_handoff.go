@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/coreos/etcd/client"
+	"github.com/dotmesh-io/dotmesh/pkg/store"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
-	"golang.org/x/net/context"
+	"github.com/portworx/kvdb"
 )
 
 // state functions
@@ -161,16 +161,7 @@ waitingForSlaveSnapshot:
 		}
 	}
 	// cool, fs is quiesced and latest snap is on target. switch!
-
-	_, err := f.etcdClient.Set(
-		context.Background(),
-		fmt.Sprintf(
-			"%s/filesystems/masters/%s", types.EtcdPrefix, f.filesystemId,
-		),
-		target,
-		// only modify current master if I am indeed still the master
-		&client.SetOptions{PrevValue: f.state.NodeID()},
-	)
+	err := updateTargetMasterIfMatches(f.filesystemStore, f.filesystemId, target, f.state.NodeID())
 	if err != nil {
 		f.innerResponses <- &types.Event{
 			Name: "failed-to-set-master-in-etcd",
@@ -184,4 +175,20 @@ waitingForSlaveSnapshot:
 	}
 	f.innerResponses <- &types.Event{Name: "moved"}
 	return inactiveState
+}
+
+func updateTargetMasterIfMatches(fs store.FilesystemStore, fsID, targetNodeID, currentNodeID string) error {
+	filesystemMaster, err := fs.GetMaster(fsID)
+	if err != nil {
+		return err
+	}
+
+	if filesystemMaster.NodeID != currentNodeID {
+		return fmt.Errorf("node's current ID has changed, not updating")
+	}
+	filesystemMaster.NodeID = targetNodeID
+
+	return fs.CompareAndSetMaster(filesystemMaster, &store.SetOptions{
+		KVFlags: kvdb.KVModifiedIndex,
+	})
 }
