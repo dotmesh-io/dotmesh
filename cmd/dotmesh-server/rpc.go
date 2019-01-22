@@ -11,6 +11,7 @@ import (
 
 	"github.com/dotmesh-io/dotmesh/pkg/container"
 	"github.com/dotmesh-io/dotmesh/pkg/registry"
+	"github.com/dotmesh-io/dotmesh/pkg/store"
 	"github.com/dotmesh-io/dotmesh/pkg/validator"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -680,7 +681,7 @@ func (d *DotmeshRPC) Exists(
 	}
 
 	fsId := d.state.registry.Exists(VolumeName{args.Namespace, args.Name}, args.Branch)
-	deleted, err := isFilesystemDeletedInEtcd(fsId)
+	deleted, err := d.state.isFilesystemDeletedInEtcd(fsId)
 	if err != nil {
 		return err
 	}
@@ -714,7 +715,7 @@ func (d *DotmeshRPC) Lookup(
 	if err != nil {
 		return err
 	}
-	deleted, err := isFilesystemDeletedInEtcd(filesystemId)
+	deleted, err := d.state.isFilesystemDeletedInEtcd(filesystemId)
 	if err != nil {
 		return err
 	}
@@ -1141,10 +1142,6 @@ func (d *DotmeshRPC) registerFilesystemBecomeMaster(
 	log.Debugf("[registerFilesystemBecomeMaster] called: filesystemNamespace=%s, filesystemName=%s, cloneName=%s, filesystemId=%s path=%+v",
 		filesystemNamespace, filesystemName, cloneName, filesystemId, path)
 
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		return err
-	}
 	filesystemIds := []string{path.TopLevelFilesystemId}
 	for _, c := range path.Clones {
 		filesystemIds = append(filesystemIds, c.Clone.FilesystemId)
@@ -1153,56 +1150,35 @@ func (d *DotmeshRPC) registerFilesystemBecomeMaster(
 		// If any filesystemId in the transfer is marked as deleted or
 		// cleanupPending, remove that mark. We want to allow it to live again,
 		// and we don't want it to be asynchronously deleted!
-		deleted, err := isFilesystemDeletedInEtcd(f)
+		deleted, err := d.state.isFilesystemDeletedInEtcd(f)
 		if err != nil {
 			return err
 		}
 		if deleted {
-			_, err = kapi.Delete(
-				context.Background(),
-				fmt.Sprintf("%s/filesystems/deleted/%s", ETCD_PREFIX, f),
-				&client.DeleteOptions{},
-			)
+
+			err = d.state.filesystemStore.DeleteDeleted(f)
 			// Key not found means someone deleted it between us checking and
 			// us deleting it. Proceed.
-			if err != nil && !client.IsKeyNotFound(err) {
+			if err != nil && !store.IsKeyNotFound(err) {
 				return err
 			}
-			_, err = kapi.Delete(
-				context.Background(),
-				fmt.Sprintf("%s/filesystems/cleanupPending/%s", ETCD_PREFIX, f),
-				&client.DeleteOptions{},
-			)
-			if err != nil && !client.IsKeyNotFound(err) {
+			err = d.state.filesystemStore.DeleteCleanupPending(f)
+			if err != nil && !store.IsKeyNotFound(err) {
 				return err
 			}
 		}
 
-		_, err = kapi.Get(
-			context.Background(),
-			fmt.Sprintf(
-				"%s/filesystems/masters/%s", ETCD_PREFIX, f,
-			),
-			nil,
-		)
-		if err != nil && !client.IsKeyNotFound(err) {
+		_, err = d.state.filesystemStore.GetMaster(f)
+		if err != nil && !store.IsKeyNotFound(err) {
 			return err
 		}
 		if err != nil {
 			// TODO: maybe check value, and if it's != me, raise an error?
 			// key doesn't already exist
-			_, err = kapi.Set(
-				context.Background(),
-				fmt.Sprintf(
-					"%s/filesystems/masters/%s", ETCD_PREFIX, f,
-				),
-				// i pick -- me!
-				// TODO maybe one day pick the node with the most disk space or
-				// something
-				d.state.myNodeId,
-				// only pick myself as current master if no one else has it
-				&client.SetOptions{PrevExist: client.PrevNoExist},
-			)
+			err = d.state.filesystemStore.SetMaster(&types.FilesystemMaster{
+				FilesystemID: f,
+				NodeID:       d.state.NodeID(),
+			}, &store.SetOptions{})
 			if err != nil {
 				return err
 			}
@@ -1233,7 +1209,7 @@ func (d *DotmeshRPC) registerFilesystemBecomeMaster(
 
 	// set up top level filesystem first, if not exists
 	if d.state.registry.Exists(path.TopLevelFilesystemName, "") == "" {
-		err = d.state.registry.RegisterFilesystem(
+		err := d.state.registry.RegisterFilesystem(
 			ctx, path.TopLevelFilesystemName, path.TopLevelFilesystemId,
 		)
 		if err != nil {
@@ -1243,7 +1219,7 @@ func (d *DotmeshRPC) registerFilesystemBecomeMaster(
 
 	// for each clone, set up clone
 	for _, c := range path.Clones {
-		err = d.state.registry.RegisterClone(c.Name, path.TopLevelFilesystemId, c.Clone)
+		err := d.state.registry.RegisterClone(c.Name, path.TopLevelFilesystemId, c.Clone)
 		if err != nil {
 			return err
 		}
@@ -1470,23 +1446,11 @@ func (d *DotmeshRPC) RegisterTransfer(
 		return err
 	}
 
-	serialized, err := json.Marshal(args)
-	if err != nil {
-		return err
+	if args.TransferRequestId == "" {
+		return fmt.Errorf("TransferRequestId cannot be empty")
 	}
-	// kapi, err := getEtcdKeysApi()
-	// if err != nil {
-	// 	return err
-	// }
 
-	_, err = d.state.etcdClient.Set(
-		context.Background(),
-		fmt.Sprintf(
-			"%s/filesystems/transfers/%s", ETCD_PREFIX, args.TransferRequestId,
-		),
-		string(serialized),
-		nil,
-	)
+	err = d.state.filesystemStore.SetTransfer(args, &store.SetOptions{})
 	if err != nil {
 		return err
 	}
@@ -1979,7 +1943,10 @@ func (d *DotmeshRPC) AddCollaborator(
 			"Please add collaborators to the master branch of the dot",
 		)
 	}
-	authorized, err := crappyTlf.AuthorizeOwner(r.Context())
+
+	user := auth.GetUser(r)
+
+	authorized, err := crappyTlf.AuthorizeOwner(user)
 	if err != nil {
 		return err
 	}
@@ -1989,7 +1956,7 @@ func (d *DotmeshRPC) AddCollaborator(
 		)
 	}
 	// add collaborator in registry, re-save.
-	potentialCollaborator, err := d.usersManager.Get(&user.Query{Ref: args.Collaborator})
+	potentialCollaborator, err := d.usersManager.Get(&types.Query{Ref: args.Collaborator})
 	if err != nil {
 		return err
 	}
@@ -2020,7 +1987,8 @@ func (d *DotmeshRPC) RemoveCollaborator(
 			"Please remove collaborators from the master branch of the dot",
 		)
 	}
-	authorized, err := crappyTlf.AuthorizeOwner(r.Context())
+	user := auth.GetUser(r)
+	authorized, err := crappyTlf.AuthorizeOwner(user)
 	if err != nil {
 		return err
 	}
@@ -2196,7 +2164,7 @@ func (d *DotmeshRPC) Delete(r *http.Request, args *VolumeName, result *bool) err
 		return err
 	}
 
-	authorized, err := filesystem.AuthorizeOwner(r.Context())
+	authorized, err := filesystem.AuthorizeOwner(user)
 	if err != nil {
 		return err
 	}
@@ -2205,7 +2173,6 @@ func (d *DotmeshRPC) Delete(r *http.Request, args *VolumeName, result *bool) err
 			"You are not the owner of volume %s/%s. Only the owner can delete it.",
 			args.Namespace, args.Name,
 		)
-
 	}
 
 	// Find the list of all clones of the filesystem, as we need to delete each independently.
@@ -2662,20 +2629,23 @@ func (d *DotmeshRPC) DumpEtcd(
 		return err
 	}
 
-	kapi, err := getEtcdKeysApi()
+	cfg := getKVDBCfg()
+	kv, err := store.NewKVDBClient(cfg)
 	if err != nil {
 		return err
 	}
 
-	node, err := kapi.Get(context.Background(),
-		fmt.Sprintf("%s/%s", ETCD_PREFIX, args.Prefix),
-		&client.GetOptions{Recursive: true, Sort: false, Quorum: false},
-	)
+	snapshotDB, _, err := kv.Snapshot(cfg.Prefix + args.Prefix)
 	if err != nil {
 		return err
 	}
 
-	resultBytes, err := json.Marshal(node)
+	kvps, err := snapshotDB.Enumerate("/")
+	if err != nil {
+		return err
+	}
+
+	resultBytes, err := json.Marshal(kvps)
 	if err != nil {
 		return err
 	}
@@ -2701,147 +2671,155 @@ func find(node *client.Node, path []string) *client.Node {
 	return nil
 }
 
-func (d *DotmeshRPC) RestoreEtcd(
-	r *http.Request,
-	args *struct {
-		Prefix string
-		Dump   string
-	},
-	result *bool,
-) error {
-	// We dangerously, blindly trust the contents of the dump.
-	err := ensureAdminUser(r)
-	if err != nil {
-		return err
-	}
+// TODO: reimplement KV store restore
+// func (d *DotmeshRPC) RestoreEtcd(
+// 	r *http.Request,
+// 	args *struct {
+// 		Prefix string
+// 		Dump   string
+// 	},
+// 	result *bool,
+// ) error {
+// 	// We dangerously, blindly trust the contents of the dump.
+// 	err := ensureAdminUser(r)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	if !(args.Prefix == "" || args.Prefix == "/") {
-		return fmt.Errorf("Don't know how to restore a dump from a non-root key.")
-	}
+// 	if !(args.Prefix == "" || args.Prefix == "/") {
+// 		return fmt.Errorf("Don't know how to restore a dump from a non-root key.")
+// 	}
 
-	// What do we restore?
-	// * users (except admin user)
-	// * registry
+// 	// What do we restore?
+// 	// * users (except admin user)
+// 	// * registry
 
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		return err
-	}
-	response := client.Response{}
-	err = json.Unmarshal([]byte(args.Dump), &response)
-	if err != nil {
-		return err
-	}
+// 	cfg := getKVDBCfg()
+// 	kv, err := store.NewKVDBClient(cfg)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	// Before destroying the registry, back it up
-	node, err := kapi.Get(context.Background(),
-		fmt.Sprintf("%s/registry", ETCD_PREFIX),
-		&client.GetOptions{Recursive: true, Sort: false, Quorum: false},
-	)
-	if err != nil && !client.IsKeyNotFound(err) {
-		return err
-	}
+// 	// kapi, err := getEtcdKeysApi()
+// 	// if err != nil {
+// 	// 	return err
+// 	// }
 
-	// Don't try to back up a key that doesn't exist.
-	if err == nil {
-		resultBytes, err := json.Marshal(node)
-		if err != nil {
-			return err
-		}
+// 	var kvPairs kvdb.KVPairs
+// 	err = json.Unmarshal([]byte(args.Dump), &kvPairs)
+// 	if err != nil {
+// 		return err
+// 	}
 
-		// XXX: might run into size limits on keys one day.
-		_, err = kapi.Set(context.Background(),
-			fmt.Sprintf("%s/registry-backup-%d", ETCD_PREFIX, time.Now().Unix()),
-			string(resultBytes),
-			&client.SetOptions{},
-		)
-	}
+// 	// Before destroying the registry, back it up
+// 	node, err := kapi.Get(context.Background(),
+// 		fmt.Sprintf("%s/registry", ETCD_PREFIX),
+// 		&client.GetOptions{Recursive: true, Sort: false, Quorum: false},
+// 	)
+// 	if err != nil && !client.IsKeyNotFound(err) {
+// 		return err
+// 	}
 
-	_, err = kapi.Delete(context.Background(),
-		fmt.Sprintf("%s/registry", ETCD_PREFIX),
-		&client.DeleteOptions{Recursive: true, Dir: true},
-	)
+// 	// Don't try to back up a key that doesn't exist.
+// 	if err == nil {
+// 		resultBytes, err := json.Marshal(node)
+// 		if err != nil {
+// 			return err
+// 		}
 
-	if err != nil && !client.IsKeyNotFound(err) {
-		// It's OK if it didn't exist.
-		return err
-	}
+// 		// XXX: might run into size limits on keys one day.
+// 		_, err = kapi.Set(context.Background(),
+// 			fmt.Sprintf("%s/registry-backup-%d", ETCD_PREFIX, time.Now().Unix()),
+// 			string(resultBytes),
+// 			&client.SetOptions{},
+// 		)
+// 	}
 
-	oneLevelNodesToClobber := []*client.Node{
-		find(response.Node, []string{"users"}),
-		find(response.Node, []string{"filesystems", "masters"}),
-	}
+// 	_, err = kapi.Delete(context.Background(),
+// 		fmt.Sprintf("%s/registry", ETCD_PREFIX),
+// 		&client.DeleteOptions{Recursive: true, Dir: true},
+// 	)
 
-	twoLevelNodesToClobber := []*client.Node{
-		find(response.Node, []string{"registry", "filesystems"}),
-		find(response.Node, []string{"registry", "clones"}),
-	}
+// 	if err != nil && !client.IsKeyNotFound(err) {
+// 		// It's OK if it didn't exist.
+// 		return err
+// 	}
 
-	setEtcdKey := func(n client.Node) error {
-		if n.Key == fmt.Sprintf("%s/users/%s", ETCD_PREFIX, ADMIN_USER_UUID) {
-			// don't restore the admin user
-			return nil
-		}
-		_, err = kapi.Set(
-			context.Background(),
-			n.Key,
-			n.Value,
-			// Only set values that don't already exist. This is so that
-			// restoring from a backup of the same cluster will restore masters
-			// records while it won't clobber masters records for other
-			// clusters (which e.g. are being pushed to as a backup).  Note
-			// that because we delete the entire registry, registry entries
-			// _will_ get updated (e.g. adding collaborators to a dot).
-			&client.SetOptions{
-				PrevExist: client.PrevNoExist,
-			},
-		)
-		// Avoid clobbering existing keys, but don't fail.
-		if !strings.Contains(fmt.Sprintf("%s", err), "Key already exists") {
-			return err
-		}
-		return nil
-	}
+// 	oneLevelNodesToClobber := []*client.Node{
+// 		find(response.Node, []string{"users"}),
+// 		find(response.Node, []string{"filesystems", "masters"}),
+// 	}
 
-	for _, node := range oneLevelNodesToClobber {
-		if node == nil {
-			// no users!?
-			continue
-		}
-		for _, n := range node.Nodes {
-			err = setEtcdKey(*n)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	for _, node := range twoLevelNodesToClobber {
-		if node == nil {
-			// no filesystems or clones is valid case
-			continue
-		}
-		for _, n := range node.Nodes {
-			for _, nn := range n.Nodes {
-				err = setEtcdKey(*nn)
-				if err != nil {
-					return err
-				}
-			}
-		}
-	}
+// 	twoLevelNodesToClobber := []*client.Node{
+// 		find(response.Node, []string{"registry", "filesystems"}),
+// 		find(response.Node, []string{"registry", "clones"}),
+// 	}
 
-	// Don't restore:
-	// * masters
-	// * request/response data
-	// * admin user
-	// * anything else :)
+// 	setEtcdKey := func(n client.Node) error {
+// 		if n.Key == fmt.Sprintf("%s/users/%s", ETCD_PREFIX, ADMIN_USER_UUID) {
+// 			// don't restore the admin user
+// 			return nil
+// 		}
+// 		_, err = kapi.Set(
+// 			context.Background(),
+// 			n.Key,
+// 			n.Value,
+// 			// Only set values that don't already exist. This is so that
+// 			// restoring from a backup of the same cluster will restore masters
+// 			// records while it won't clobber masters records for other
+// 			// clusters (which e.g. are being pushed to as a backup).  Note
+// 			// that because we delete the entire registry, registry entries
+// 			// _will_ get updated (e.g. adding collaborators to a dot).
+// 			&client.SetOptions{
+// 				PrevExist: client.PrevNoExist,
+// 			},
+// 		)
+// 		// Avoid clobbering existing keys, but don't fail.
+// 		if !strings.Contains(fmt.Sprintf("%s", err), "Key already exists") {
+// 			return err
+// 		}
+// 		return nil
+// 	}
 
-	// In-memory state will be correctly updated by receiving from the etcd
-	// watch.
+// 	for _, node := range oneLevelNodesToClobber {
+// 		if node == nil {
+// 			// no users!?
+// 			continue
+// 		}
+// 		for _, n := range node.Nodes {
+// 			err = setEtcdKey(*n)
+// 			if err != nil {
+// 				return err
+// 			}
+// 		}
+// 	}
+// 	for _, node := range twoLevelNodesToClobber {
+// 		if node == nil {
+// 			// no filesystems or clones is valid case
+// 			continue
+// 		}
+// 		for _, n := range node.Nodes {
+// 			for _, nn := range n.Nodes {
+// 				err = setEtcdKey(*nn)
+// 				if err != nil {
+// 					return err
+// 				}
+// 			}
+// 		}
+// 	}
 
-	*result = true
-	return nil
-}
+// 	// Don't restore:
+// 	// * masters
+// 	// * request/response data
+// 	// * admin user
+// 	// * anything else :)
+
+// 	// In-memory state will be correctly updated by receiving from the etcd
+// 	// watch.
+
+// 	*result = true
+// 	return nil
+// }
 
 func (d *DotmeshRPC) GetReplicationLatencyForBranch(
 	r *http.Request,
@@ -2887,9 +2865,8 @@ func (d *DotmeshRPC) ForceBranchMasterById(
 ) error {
 	log.Printf("[ForceBranchMasterById] being called with: %+v", args)
 
-	kapi, err := getEtcdKeysApi()
-	if err != nil {
-		return err
+	if args.FilesystemId == "" {
+		return fmt.Errorf("FilesystemId not set")
 	}
 
 	newMaster := args.Master
@@ -2898,19 +2875,12 @@ func (d *DotmeshRPC) ForceBranchMasterById(
 		newMaster = d.state.myNodeId
 	}
 
-	key := fmt.Sprintf(
-		"%s/filesystems/masters/%s", ETCD_PREFIX, args.FilesystemId,
-	)
-
-	log.Printf("[ForceBranchMasterById] settings %s to %s", key, newMaster)
-
-	_, err = kapi.Set(
-		context.Background(),
-		key,
-		newMaster,
-		&client.SetOptions{},
-	)
-
+	err := d.state.filesystemStore.SetMaster(&types.FilesystemMaster{
+		FilesystemID: args.FilesystemId,
+		NodeID:       newMaster,
+	}, &store.SetOptions{
+		Force: true,
+	})
 	if err != nil {
 		return err
 	}
