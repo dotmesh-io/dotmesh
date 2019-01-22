@@ -1,14 +1,13 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/dotmesh-io/dotmesh/pkg/fsm"
-
-	"github.com/coreos/etcd/client"
+	"github.com/dotmesh-io/dotmesh/pkg/store"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -55,7 +54,7 @@ func (s *InMemoryState) InitFilesystemMachine(filesystemId string) (fsm.FSM, err
 		}
 
 		// Don't create a new fsMachine if we've been deleted
-		deleted, err := isFilesystemDeletedInEtcd(filesystemId)
+		deleted, err := s.isFilesystemDeletedInEtcd(filesystemId)
 		if err != nil {
 			log.Printf("%v while requesting deletion state from etcd", err)
 			return nil, false
@@ -72,7 +71,9 @@ func (s *InMemoryState) InitFilesystemMachine(filesystemId string) (fsm.FSM, err
 			StateManager:              s,
 			Registry:                  s.registry,
 			UserManager:               s.userManager,
-			EtcdClient:                s.etcdClient,
+			RegistryStore:             s.registryStore,
+			FilesystemStore:           s.filesystemStore,
+			ServerStore:               s.serverStore,
 			ContainerClient:           s.containers,
 			LocalReceiveProgress:      s.localReceiveProgress,
 			NewSnapsOnMaster:          s.newSnapsOnMaster,
@@ -242,15 +243,11 @@ func (s *InMemoryState) ActivateClone(topLevelFilesystemId, originFilesystemId, 
 	}
 
 	// claim the clone as mine, so that it can be mounted here
-	_, err = s.etcdClient.Set(
-		context.Background(),
-		fmt.Sprintf(
-			"%s/filesystems/masters/%s", ETCD_PREFIX, newCloneFilesystemId,
-		),
-		s.myNodeId,
-		// only modify current master if this is a new filesystem id
-		&client.SetOptions{PrevExist: client.PrevNoExist},
-	)
+	err = s.filesystemStore.SetMaster(&types.FilesystemMaster{
+		FilesystemID: newCloneFilesystemId,
+		NodeID:       s.NodeID(),
+	}, &store.SetOptions{})
+
 	if err != nil {
 		return "failed-make-cloner-master", err
 	}
@@ -294,15 +291,11 @@ func (s *InMemoryState) AddressesForServer(server string) []string {
 }
 
 func (s *InMemoryState) RegisterNewFork(originFilesystemId, originSnapshotId, forkNamespace, forkName, forkFilesystemId string) error {
-	_, err := s.etcdClient.Get(
-		context.Background(),
-		fmt.Sprintf("%s/registry/filesystems/%s/%s", ETCD_PREFIX, forkNamespace, forkName),
-		&client.GetOptions{},
-	)
+	_, err := s.registryStore.GetFilesystem(forkNamespace, forkName)
 	switch {
-	case err != nil && !client.IsKeyNotFound(err):
+	case err != nil && err != store.ErrNotFound:
 		return err
-	case err != nil && client.IsKeyNotFound(err):
+	case err != nil && err == store.ErrNotFound:
 		// Doesn't already exist, we can proceed as usual
 	default:
 		return fmt.Errorf("The name %s/%s is already in use", forkNamespace, forkName)
@@ -313,12 +306,10 @@ func (s *InMemoryState) RegisterNewFork(originFilesystemId, originSnapshotId, fo
 		return err
 	}
 
-	_, err = s.etcdClient.Set(
-		context.Background(),
-		fmt.Sprintf("%s/filesystems/masters/%s", ETCD_PREFIX, forkFilesystemId),
-		s.myNodeId,
-		&client.SetOptions{PrevExist: client.PrevNoExist},
-	)
+	err = s.filesystemStore.SetMaster(&types.FilesystemMaster{
+		FilesystemID: forkFilesystemId,
+		NodeID:       s.NodeID(),
+	}, &store.SetOptions{})
 	if err != nil {
 		return err
 	}
