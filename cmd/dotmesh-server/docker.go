@@ -570,7 +570,7 @@ func (state *InMemoryState) cleanupDockerFilesystemState() error {
 						return err
 					}
 
-					deleted, err := isFilesystemDeletedInEtcd(fsid)
+					deleted, err := state.isFilesystemDeletedInEtcd(fsid)
 					if err != nil {
 						return err
 					}
