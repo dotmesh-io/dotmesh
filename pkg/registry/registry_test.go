@@ -5,8 +5,7 @@ import (
 	"testing"
 
 	"github.com/dotmesh-io/dotmesh/pkg/auth"
-	"github.com/dotmesh-io/dotmesh/pkg/kv"
-	"github.com/dotmesh-io/dotmesh/pkg/testutil"
+	"github.com/dotmesh-io/dotmesh/pkg/store"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 )
@@ -14,15 +13,15 @@ import (
 const TestPrefix = "/registrytests"
 
 func TestUpdateFilesystemFromEtcdA(t *testing.T) {
-	etcdClient, teardown, err := testutil.GetEtcdClient()
-	if err != nil {
-		t.Fatalf("failed to get etcd client: %s", err)
-	}
-	defer teardown()
+	idxStore, _ := store.NewKVDBStoreWithIndex(&store.KVDBConfig{
+		Type: store.KVTypeMem,
+	}, "users")
 
-	kvClient := kv.New(etcdClient, TestPrefix)
-	um := user.New(kvClient)
-	registry := NewRegistry(um, etcdClient, TestPrefix)
+	um := user.New(idxStore)
+	kvClient, _ := store.NewKVDBFilesystemStore(&store.KVDBConfig{
+		Type: store.KVTypeMem,
+	})
+	registry := NewRegistry(um, kvClient)
 
 	// 1. Creating user
 	userA, err := um.New("foo", "foo@bar.pub", "verysecret")
@@ -58,14 +57,15 @@ func TestUpdateFilesystemFromEtcdA(t *testing.T) {
 }
 
 func TestUpdateCollaborators(t *testing.T) {
-	etcdClient, teardown, err := testutil.GetEtcdClient()
-	if err != nil {
-		t.Fatalf("failed to get etcd client: %s", err)
-	}
-	defer teardown()
-	kvClient := kv.New(etcdClient, TestPrefix)
-	um := user.New(kvClient)
-	registry := NewRegistry(um, etcdClient, TestPrefix)
+	idxStore, _ := store.NewKVDBStoreWithIndex(&store.KVDBConfig{
+		Type: store.KVTypeMem,
+	}, "users")
+
+	um := user.New(idxStore)
+	kvClient, _ := store.NewKVDBFilesystemStore(&store.KVDBConfig{
+		Type: store.KVTypeMem,
+	})
+	registry := NewRegistry(um, kvClient)
 
 	// Creating owner and collaborator
 	userA, err := um.New("foo", "foo@bar.pub", "verysecret")
@@ -131,15 +131,15 @@ func TestUpdateCollaborators(t *testing.T) {
 }
 
 func TestDumpInternalState(t *testing.T) {
-	etcdClient, teardown, err := testutil.GetEtcdClient()
-	if err != nil {
-		t.Fatalf("failed to get etcd client: %s", err)
-	}
-	defer teardown()
+	idxStore, _ := store.NewKVDBStoreWithIndex(&store.KVDBConfig{
+		Type: store.KVTypeMem,
+	}, "users")
 
-	kvClient := kv.New(etcdClient, TestPrefix)
-	um := user.New(kvClient)
-	registry := NewRegistry(um, etcdClient, TestPrefix)
+	um := user.New(idxStore)
+	kvClient, _ := store.NewKVDBFilesystemStore(&store.KVDBConfig{
+		Type: store.KVTypeMem,
+	})
+	registry := NewRegistry(um, kvClient)
 
 	// 1. Creating user
 	userA, err := um.New("foo", "foo@bar.pub", "verysecret")
@@ -170,15 +170,15 @@ func TestDumpInternalState(t *testing.T) {
 }
 
 func TestGetFilesystemByID(t *testing.T) {
-	etcdClient, teardown, err := testutil.GetEtcdClient()
-	if err != nil {
-		t.Fatalf("failed to get etcd client: %s", err)
-	}
-	defer teardown()
+	idxStore, _ := store.NewKVDBStoreWithIndex(&store.KVDBConfig{
+		Type: store.KVTypeMem,
+	}, "users")
 
-	kvClient := kv.New(etcdClient, TestPrefix)
-	um := user.New(kvClient)
-	registry := NewRegistry(um, etcdClient, TestPrefix)
+	um := user.New(idxStore)
+	kvClient, _ := store.NewKVDBFilesystemStore(&store.KVDBConfig{
+		Type: store.KVTypeMem,
+	})
+	registry := NewRegistry(um, kvClient)
 
 	// 1. Creating user
 	userA, err := um.New("foo", "foo@bar.pub", "verysecret")
