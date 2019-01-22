@@ -3,8 +3,6 @@ package types
 import (
 	"fmt"
 	"reflect"
-
-	"github.com/dotmesh-io/dotmesh/pkg/user"
 )
 
 type CloneWithName struct {
@@ -28,6 +26,18 @@ type VolumesAndBranches struct {
 type Server struct {
 	Id        string
 	Addresses []string
+}
+
+type ServerSnapshots struct {
+	ID           string      `json:"id"` // NodeID
+	FilesystemID string      `json:"filesystem_id"`
+	Snapshots    []*Snapshot `json:"snapshots"`
+}
+
+type ServerState struct {
+	ID           string            `json:"id"` // NodeID
+	FilesystemID string            `json:"filesystem_id"`
+	State        map[string]string `json:"state"`
 }
 
 type ByAddress []Server
@@ -164,10 +174,10 @@ type StashRequest struct {
 	SnapshotId   string
 }
 
-type Config struct {
-	FilesystemMetadataTimeout int64
-	UserManager               user.UserManager
-}
+// type Config struct {
+// 	FilesystemMetadataTimeout int64
+// 	UserManager               user.UserManager
+// }
 
 type PathToTopLevelFilesystem struct {
 	TopLevelFilesystemId   string
@@ -182,13 +192,14 @@ type RegistryFilesystem struct {
 	Meta *KVMeta `json:"-"`
 
 	Id                   string
-	OwnerId              string
+	OwnerId              string // also know as 'namespace'
+	Name                 string // volume name
 	ForkParentId         string `json:",omitempty"`
 	ForkParentSnapshotId string `json:",omitempty"`
 	CollaboratorIds      []string
 }
 
-const EtcdPrefix = "/dotmesh.io"
+const EtcdPrefix = "dotmesh.io/"
 
 const RootFS = "dmfs"
 
