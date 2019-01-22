@@ -9,6 +9,7 @@ import (
 
 type FilesystemStore interface {
 	SetMaster(fm *types.FilesystemMaster, opts *SetOptions) error
+	CompareAndSetMaster(fm *types.FilesystemMaster, opts *SetOptions) error
 	GetMaster(id string) (*types.FilesystemMaster, error)
 	DeleteMaster(id string) (err error)
 
@@ -59,9 +60,9 @@ type RegistryStore interface {
 
 	SetFilesystem(f *types.RegistryFilesystem, opts *SetOptions) error
 	CompareAndSetFilesystem(f *types.RegistryFilesystem, opts *SetOptions) error
-	GetFilesystem(filesystemID, filesystemName string) (*types.RegistryFilesystem, error)
-	DeleteFilesystem(filesystemID, filesystemName string) error
-	CompareAndDelete(filesystemID, filesystemName string, opts *DeleteOptions) error
+	GetFilesystem(namespace, filesystemName string) (*types.RegistryFilesystem, error)
+	DeleteFilesystem(namespace, filesystemName string) error
+	CompareAndDelete(namespace, filesystemName string, opts *DeleteOptions) error
 	WatchFilesystems(cb WatchRegistryFilesystemsCB) error
 }
 
@@ -70,11 +71,19 @@ type (
 	WatchRegistryFilesystemsCB func(f *types.RegistryFilesystem) error
 )
 
+type ServerStore interface {
+	SetAddresses(si *types.Server, opts *SetOptions) error
+	ListAddresses() ([]*types.Server, error)
+	SetSnapshots(ss *types.ServerSnapshots) error
+	SetState(ss *types.ServerState) error
+}
+
 type SetOptions struct {
 	// TTL seconds
 	TTL       uint64
 	PrevValue []byte
 	KVFlags   kvdb.KVFlags
+	Force     bool
 }
 
 type DeleteOptions struct {
