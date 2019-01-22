@@ -4,20 +4,15 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/dotmesh-io/dotmesh/pkg/kv"
-	"github.com/dotmesh-io/dotmesh/pkg/testutil"
+	"github.com/dotmesh-io/dotmesh/pkg/store"
 
 	"github.com/nu7hatch/gouuid"
 )
 
 func TestCreateUser(t *testing.T) {
-	etcdClient, teardown, err := testutil.GetEtcdClient()
-	if err != nil {
-		t.Fatalf("failed to get etcd client: %s", err)
-	}
-	defer teardown()
-
-	kvClient := kv.New(etcdClient, "usertests")
+	kvClient, _ := store.NewKVDBStoreWithIndex(&store.KVDBConfig{
+		Type: store.KVTypeMem,
+	}, UsersPrefix)
 
 	um := New(kvClient)
 
@@ -41,13 +36,9 @@ func TestCreateUser(t *testing.T) {
 }
 
 func TestImportUser(t *testing.T) {
-	etcdClient, teardown, err := testutil.GetEtcdClient()
-	if err != nil {
-		t.Fatalf("failed to get etcd client: %s", err)
-	}
-	defer teardown()
-
-	kvClient := kv.New(etcdClient, "usertests")
+	kvClient, _ := store.NewKVDBStoreWithIndex(&store.KVDBConfig{
+		Type: store.KVTypeMem,
+	}, UsersPrefix)
 
 	um := New(kvClient)
 
@@ -62,7 +53,7 @@ func TestImportUser(t *testing.T) {
 		Email:    "casual@email.com",
 	}
 
-	err = um.Import(immigrant)
+	err := um.Import(immigrant)
 	if err != nil {
 		t.Fatalf("didn't expect import to fail: %s", err)
 	}
@@ -93,17 +84,13 @@ func TestImportUser(t *testing.T) {
 }
 
 func TestGetWithIndex(t *testing.T) {
-	etcdClient, teardown, err := testutil.GetEtcdClient()
-	if err != nil {
-		t.Fatalf("failed to get etcd client: %s", err)
-	}
-	defer teardown()
-
-	kvClient := kv.New(etcdClient, "usertests")
+	kvClient, _ := store.NewKVDBStoreWithIndex(&store.KVDBConfig{
+		Type: store.KVTypeMem,
+	}, UsersPrefix)
 
 	um := New(kvClient)
 
-	_, err = um.New("foo", "foo@bar.works", "verysecret")
+	_, err := um.New("foo", "foo@bar.works", "verysecret")
 	if err != nil {
 		t.Fatalf("failed to create new user: %s", err)
 	}
@@ -119,17 +106,13 @@ func TestGetWithIndex(t *testing.T) {
 }
 
 func TestGetWithoutIndex(t *testing.T) {
-	etcdClient, teardown, err := testutil.GetEtcdClient()
-	if err != nil {
-		t.Fatalf("failed to get etcd client: %s", err)
-	}
-	defer teardown()
-
-	kvClient := kv.New(etcdClient, "usertests")
+	kvClient, _ := store.NewKVDBStoreWithIndex(&store.KVDBConfig{
+		Type: store.KVTypeMem,
+	}, UsersPrefix)
 
 	um := New(kvClient)
 
-	_, err = um.New("foo", "foo@bar.works", "verysecret")
+	_, err := um.New("foo", "foo@bar.works", "verysecret")
 	if err != nil {
 		t.Fatalf("failed to create new user: %s", err)
 	}
@@ -151,17 +134,13 @@ func TestGetWithoutIndex(t *testing.T) {
 }
 
 func TestAuthenticateWithoutIndex(t *testing.T) {
-	etcdClient, teardown, err := testutil.GetEtcdClient()
-	if err != nil {
-		t.Fatalf("failed to get etcd client: %s", err)
-	}
-	defer teardown()
-
-	kvClient := kv.New(etcdClient, "usertests")
+	kvClient, _ := store.NewKVDBStoreWithIndex(&store.KVDBConfig{
+		Type: store.KVTypeMem,
+	}, UsersPrefix)
 
 	um := New(kvClient)
 
-	_, err = um.New("foo", "foo@bar.works", "verysecret")
+	_, err := um.New("foo", "foo@bar.works", "verysecret")
 	if err != nil {
 		t.Fatalf("failed to create new user: %s", err)
 	}
@@ -182,17 +161,13 @@ func TestAuthenticateWithoutIndex(t *testing.T) {
 }
 
 func TestAuthenticateUserByPassword(t *testing.T) {
-	etcdClient, teardown, err := testutil.GetEtcdClient()
-	if err != nil {
-		t.Fatalf("failed to get etcd client: %s", err)
-	}
-	defer teardown()
-
-	kvClient := kv.New(etcdClient, "usertests")
+	kvClient, _ := store.NewKVDBStoreWithIndex(&store.KVDBConfig{
+		Type: store.KVTypeMem,
+	}, UsersPrefix)
 
 	um := New(kvClient)
 
-	_, err = um.New("joe", "joe@joe.com", "verysecret")
+	_, err := um.New("joe", "joe@joe.com", "verysecret")
 	if err != nil {
 		t.Fatalf("failed to create new user: %s", err)
 	}
@@ -208,13 +183,9 @@ func TestAuthenticateUserByPassword(t *testing.T) {
 }
 
 func TestAuthenticateUserByAPIKey(t *testing.T) {
-	etcdClient, teardown, err := testutil.GetEtcdClient()
-	if err != nil {
-		t.Fatalf("failed to get etcd client: %s", err)
-	}
-	defer teardown()
-
-	kvClient := kv.New(etcdClient, "usertests")
+	kvClient, _ := store.NewKVDBStoreWithIndex(&store.KVDBConfig{
+		Type: store.KVTypeMem,
+	}, UsersPrefix)
 
 	um := New(kvClient)
 
