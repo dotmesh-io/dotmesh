@@ -1178,6 +1178,7 @@ func (d *DotmeshRPC) registerFilesystemBecomeMaster(
 			err = d.state.filesystemStore.SetMaster(&types.FilesystemMaster{
 				FilesystemID: f,
 				NodeID:       d.state.NodeID(),
+				PoolID:       d.state.zfs.GetPoolID(),
 			}, &store.SetOptions{})
 			if err != nil {
 				return err
@@ -1186,7 +1187,7 @@ func (d *DotmeshRPC) registerFilesystemBecomeMaster(
 			// Immediately update the masters cache because we just wrote
 			// to etcd meaning we don't have to wait for a watch
 			// this is cconsistent with the code in createFilesystem
-			d.state.registry.SetMasterNode(filesystemId, d.state.myNodeId)
+			d.state.registry.SetMasterNode(filesystemId, d.state.zfs.GetPoolID())
 		}
 
 		// Only after we've made sure that the fsMachine won't immediately try
@@ -2559,7 +2560,7 @@ func (d *DotmeshRPC) DumpInternalState(
 		resultChan <- []string{"etcdWait.DONE", "yes"}
 	}()
 
-	resultChan <- []string{"myNodeId", s.myNodeId}
+	resultChan <- []string{"myNodeId", s.zfs.GetPoolID()}
 	resultChan <- []string{"versionInfo", toJsonString(s.versionInfo)}
 
 	go func() {
@@ -2872,7 +2873,7 @@ func (d *DotmeshRPC) ForceBranchMasterById(
 	newMaster := args.Master
 	if newMaster == "" {
 		// Default is THIS node
-		newMaster = d.state.myNodeId
+		newMaster = d.state.zfs.GetPoolID()
 	}
 
 	err := d.state.filesystemStore.SetMaster(&types.FilesystemMaster{

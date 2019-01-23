@@ -97,8 +97,8 @@ func canApply(fromSnaps []*types.Snapshot, toSnaps []*types.Snapshot) (*snapshot
 
 	if latestCommon == nil {
 		return nil, &NoCommonSnapshots{
-			fromSnaps: fromSnaps,
-			toSnaps:   toSnaps,
+			FromSnaps: fromSnaps,
+			ToSnaps:   toSnaps,
 		}
 	}
 
@@ -159,12 +159,12 @@ func (e *NoFromSnaps) Error() string {
 }
 
 type NoCommonSnapshots struct {
-	fromSnaps []*types.Snapshot
-	toSnaps   []*types.Snapshot
+	FromSnaps []*types.Snapshot
+	ToSnaps   []*types.Snapshot
 }
 
 func (e *NoCommonSnapshots) Error() string {
-	return fmt.Sprintf("no common snapshots from %+v to %+v", e.fromSnaps, e.toSnaps)
+	return fmt.Sprintf("no common snapshots from %+v to %+v", e.FromSnaps, e.ToSnaps)
 }
 
 type ToSnapsDiverged struct {

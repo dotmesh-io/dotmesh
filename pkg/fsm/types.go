@@ -11,6 +11,7 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/store"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
+	"github.com/dotmesh-io/dotmesh/pkg/zfs"
 )
 
 // state machinery
@@ -119,15 +120,7 @@ type FsMachine struct {
 
 	filesystemMetadataTimeout int64
 
-	// path to zfs executable (ZFS_USERLAND_ROOT + /sbin/zfs)
-	zfsPath string
-	// path to zpool exec
-	zpoolPath string
-
-	// poolName must be set through POOL environment variable
-	poolName string
-
-	mountZFS string
+	zfs zfs.ZFS
 }
 
 type dirtyInfo struct {

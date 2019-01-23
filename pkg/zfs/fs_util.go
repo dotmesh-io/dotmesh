@@ -15,3 +15,11 @@ func FQ(poolName, fs string) string {
 func UnFQ(poolName, fqfs string) string {
 	return fqfs[len(poolName+"/"+types.RootFS+"/"):]
 }
+
+// I'm bored of writing "if snapshotId is empty"
+func FullIdWithSnapshot(filesystemId, snapshotId string) string {
+	if snapshotId != "" {
+		return filesystemId + "@" + snapshotId
+	}
+	return filesystemId
+}

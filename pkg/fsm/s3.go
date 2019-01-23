@@ -12,11 +12,11 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
+	"github.com/dotmesh-io/dotmesh/pkg/utils"
 	"golang.org/x/net/context"
 
 	log "github.com/sirupsen/logrus"
-
-	"github.com/dotmesh-io/dotmesh/pkg/types"
 )
 
 // ReadFile - reads a file from the volume into the supplied Contents io.Writer,
@@ -52,7 +52,7 @@ func (f *FsMachine) getLastNonMetadataSnapshot() (*types.Snapshot, error) {
 // these are both kind of generic "take a map, read/write it as json" functions which could probably be used in non-s3 cases.
 func loadS3Meta(filesystemId, latestSnapId string, latestMeta *map[string]string) error {
 	// todo this is the only thing linking it to being s3 metadata, should we refactor this method to look more like the one below?
-	pathToCommitMeta := fmt.Sprintf("%s/dm.s3-versions/%s", mnt(filesystemId), latestSnapId)
+	pathToCommitMeta := fmt.Sprintf("%s/dm.s3-versions/%s", utils.Mnt(filesystemId), latestSnapId)
 	data, err := ioutil.ReadFile(pathToCommitMeta)
 	if err != nil {
 		return err

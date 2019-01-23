@@ -5,13 +5,13 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os/exec"
 	"time"
 
 	"golang.org/x/net/context"
 
 	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
+	"github.com/dotmesh-io/dotmesh/pkg/utils"
 )
 
 func pullInitiatorState(f *FsMachine) StateFn {
@@ -215,19 +215,13 @@ func (f *FsMachine) pull(
 	// 2) Pulling node is trying to mount the master fsid and failing.
 
 	// cmd := exec.Command(ZFS, "recv", fq(f.filesystemId))
-	cmd := exec.Command(f.zfsPath, "recv", fq(f.poolName, toFilesystemId))
-	pipeReader, pipeWriter := io.Pipe()
-	defer pipeReader.Close()
-	defer pipeWriter.Close()
-
-	cmd.Stdin = pipeReader
-	cmd.Stdout = getLogfile("zfs-recv-stdout")
-	cmd.Stderr = getLogfile("zfs-recv-stderr")
-
 	finished := make(chan bool)
 
 	// TODO: make this update the pollResult
-	go pipe(
+	pipeReader, pipeWriter := io.Pipe()
+	defer pipeReader.Close()
+	defer pipeWriter.Close()
+	go utils.Pipe(
 		resp.Body, fmt.Sprintf("http response body for %s", toFilesystemId),
 		pipeWriter, "stdin of zfs recv",
 		finished,
@@ -258,7 +252,7 @@ func (f *FsMachine) pull(
 	)
 
 	log.Printf("[pull] about to start consuming prelude on %v", pipeReader)
-	prelude, err := consumePrelude(pipeReader)
+	prelude, err := ConsumePrelude(pipeReader)
 	if err != nil {
 		_ = <-finished
 		return &types.Event{
@@ -267,11 +261,10 @@ func (f *FsMachine) pull(
 		}, backoffState
 	}
 	log.Printf("[pull] Got prelude %v", prelude)
-
-	err = cmd.Run()
-	f.transitionedTo("receiving", "finished zfs recv")
+	err = f.zfs.Recv(pipeReader, toFilesystemId, nil)
 	pipeReader.Close()
 	pipeWriter.Close()
+	f.transitionedTo("receiving", "finished zfs recv")
 	_ = <-finished
 	f.transitionedTo("receiving", "finished pipe")
 
@@ -286,7 +279,7 @@ func (f *FsMachine) pull(
 		}, backoffState
 	}
 	log.Printf("[pull] about to start applying prelude on %v", pipeReader)
-	err = applyPrelude(f.zfsPath, prelude, fq(f.poolName, toFilesystemId))
+	err = f.zfs.ApplyPrelude(prelude, toFilesystemId)
 	if err != nil {
 		return &types.Event{
 			Name: "failed-applying-prelude",

@@ -49,6 +49,14 @@ var serverVersion string = "<uninitialized>"
 var containerMountDirLock sync.Mutex
 
 func main() {
+	logLevel := os.Getenv("LOG_LEVEL")
+	levelEnum, err := log.ParseLevel(logLevel)
+	if err != nil {
+		// TODO put this back to info once we're done debugging, and make it so we can configure this in agent/operator/yaml/etc without a code change
+		log.SetLevel(log.DebugLevel)
+	} else {
+		log.SetLevel(levelEnum)
+	}
 
 	// TODO proper flag parsing
 	if len(os.Args) > 1 && os.Args[1] == "--guess-ipv4-addresses" {
@@ -113,7 +121,7 @@ func main() {
 		opentracing.InitGlobalTracer(tracer)
 	}
 	if len(os.Args) > 1 && os.Args[1] == "--temporary-error-plugin" {
-		s := NewInMemoryState("<unknown>", config)
+		s := NewInMemoryState(config)
 		s.runErrorPlugin()
 		return
 	}
@@ -138,22 +146,8 @@ func main() {
 	ZFS = zRoot + "/sbin/zfs"
 	MOUNT_ZFS = zRoot + "/sbin/mount.zfs"
 	ZPOOL = zRoot + "/sbin/zpool"
-
-	localPoolId, err := findLocalPoolId()
-	if err != nil {
-		out("Unable to determine pool ID. Make sure to run me as root.\n" +
-			"Please create a ZFS pool called '" + POOL + "'.\n" +
-			"The following commands will create a toy pool-in-a-file:\n\n" +
-			"    sudo truncate -s 10G /pool-datafile\n" +
-			"    sudo zpool create pool /pool-datafile\n\n" +
-			"Otherwise, see 'man zpool' for how to create a real pool.\n" +
-			"If you don't have the 'zpool' tool installed, on Ubuntu 16.04, run:\n\n" +
-			"    sudo apt-get install zfsutils-linux\n\n" +
-			"On other distributions, follow the instructions at http://zfsonlinux.org/\n")
-		log.Fatalf("Unable to find pool ID, I don't know who I am :( %s %s", err, localPoolId)
-	}
 	ips, _ := guessIPv4Addresses()
-	log.Printf("Detected my node ID as %s (%s)", localPoolId, ips)
+	log.Printf("Detected my node IPs as %s", ips)
 
 	// etcdClient, err := getEtcdKeysApi()
 	// if err != nil {
@@ -173,9 +167,9 @@ func main() {
 	// kvClient := kv.New(etcdClient, ETCD_PREFIX)
 	config.UserManager = user.New(usersIdxStore)
 
-	s := NewInMemoryState(localPoolId, config)
+	s := NewInMemoryState(config)
 
-	for _, filesystemId := range s.findFilesystemIdsOnSystem() {
+	for _, filesystemId := range s.zfs.FindFilesystemIdsOnSystem() {
 		log.Debugf("Initializing fsMachine for %s", filesystemId)
 		go func(fsID string) {
 			_, err := s.InitFilesystemMachine(fsID)
@@ -224,7 +218,7 @@ func main() {
 		1*time.Second, 1*time.Second,
 	)
 	// kick off reporting on zpool status
-	go runForever(s.reportZpoolCapacity, "reportZPoolUsageReporter",
+	go runForever(s.zfs.ReportZpoolCapacity, "reportZPoolUsageReporter",
 		10*time.Minute, 10*time.Minute,
 	)
 

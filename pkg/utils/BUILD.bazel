@@ -3,16 +3,15 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "go_default_library",
     srcs = [
-        "exec_util.go",
-        "fs_util.go",
-        "zfs.go",
+        "io.go",
+        "metadata.go",
+        "mount.go",
+        "returncode.go",
     ],
-    importpath = "github.com/dotmesh-io/dotmesh/pkg/zfs",
+    importpath = "github.com/dotmesh-io/dotmesh/pkg/utils",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/metrics:go_default_library",
         "//pkg/types:go_default_library",
-        "//pkg/utils:go_default_library",
         "//vendor/github.com/sirupsen/logrus:go_default_library",
     ],
 )

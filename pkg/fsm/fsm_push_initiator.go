@@ -7,14 +7,13 @@ import (
 
 	// "log"
 	"net/http"
-	"os/exec"
-	"strings"
 	"time"
 
 	"golang.org/x/net/context"
 
 	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
+	"github.com/dotmesh-io/dotmesh/pkg/utils"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -145,9 +144,6 @@ func (f *FsMachine) push(
 		}, backoffState
 	}
 
-	// TODO remove duplication (with replication.go)
-	// command writes into pipe
-	var cmd *exec.Cmd
 	// https://github.com/zfsonlinux/zfs/pull/5189
 	//
 	// Due to the above issues, -R doesn't send user properties on
@@ -172,17 +168,9 @@ func (f *FsMachine) push(
 		}, backoffState
 	}
 
-	// TODO test whether toFilesystemId and toSnapshotId are set correctly,
-	// and consistently with snapRange?
-	sendArgs := calculateSendArgs(
-		f.poolName, fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
-	)
-	realArgs := []string{"send"}
-	realArgs = append(realArgs, sendArgs...)
-
 	// XXX this doesn't need to happen every push(), just once above.
-	size, err := predictSize(
-		f.zfsPath, f.poolName, fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
+	size, err := f.zfs.PredictSize(
+		fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
 	)
 	if err != nil {
 		return &types.Event{
@@ -200,15 +188,6 @@ func (f *FsMachine) push(
 			Size:   size,
 		},
 	}
-
-	// proceed to do real send
-	logZFSCommand(filesystemId, fmt.Sprintf("%s %s", f.zfsPath, strings.Join(realArgs, " ")))
-	cmd = exec.Command(f.zfsPath, realArgs...)
-	pipeReader, pipeWriter := io.Pipe()
-
-	defer pipeWriter.Close()
-	defer pipeReader.Close()
-
 	// we will write this to the pipe first, in the goroutine which writes
 	preludeEncoded, err := encodePrelude(prelude)
 	if err != nil {
@@ -218,11 +197,10 @@ func (f *FsMachine) push(
 		}, backoffState
 	}
 
-	cmd.Stdout = pipeWriter
-	cmd.Stderr = getLogfile("zfs-send-errors")
+	pipeReader, errch := f.zfs.Send(fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId, preludeEncoded)
 
 	finished := make(chan bool)
-	go pipe(
+	go utils.Pipe(
 		pipeReader, fmt.Sprintf("stdout of zfs send for %s", filesystemId),
 		postWriter, "http request body",
 		finished,
@@ -264,45 +242,7 @@ func (f *FsMachine) push(
 	// something in a goroutine. In this case we need 'resp' in scope, so let's
 	// run the command in a goroutine.
 
-	errch := make(chan error)
-	go func() {
-		// This goroutine does all the writing to the HTTP POST
-		// log.Printf(
-		// 	"[actualPush:%s] Writing prelude of %d bytes (encoded): %s",
-		// 	filesystemId,
-		// 	len(preludeEncoded), preludeEncoded,
-		// )
-		_, err = pipeWriter.Write(preludeEncoded)
-		if err != nil {
-			log.Errorf("[actualPush:%s] Error writing prelude: %+v (sent to errch)", filesystemId, err)
-			errch <- err
-			log.Errorf("[actualPush:%s] errch accepted prelude error, woohoo", filesystemId)
-		}
-
-		log.Infof(
-			"[actualPush:%s] About to Run() for %s => %s",
-			filesystemId, fromSnapshotId, toSnapshotId,
-		)
-
-		runErr := cmd.Run()
-
-		log.Debugf(
-			"[actualPush:%s] Run() got result %s, about to put it into errch after closing pipeWriter",
-			filesystemId,
-			runErr,
-		)
-		err := pipeWriter.Close()
-		if err != nil {
-			log.Errorf("[actualPush:%s] error closing pipeWriter: %s", filesystemId, err)
-		}
-		log.Debugf(
-			"[actualPush:%s] Writing to errch: %+v",
-			filesystemId,
-			runErr,
-		)
-		errch <- runErr
-		log.Infof("[actualPush:%s] errch accepted it, woohoo", filesystemId)
-	}()
+	// proceed to do real send
 
 	resp, err := postClient.Do(req)
 	if err != nil {
@@ -377,11 +317,6 @@ func (f *FsMachine) push(
 		}, backoffState
 	}
 
-	// XXX Adding the log messages below seemed to stop a deadlock, not sure
-	// why. For now, let's just leave them in...
-	// XXX what about closing post{Writer,Reader}?
-	// log.Printf("[actualPush:%s] Closing pipes...", filesystemId)
-	pipeWriter.Close()
 	pipeReader.Close()
 
 	f.transferUpdates <- types.TransferUpdate{

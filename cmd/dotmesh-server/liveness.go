@@ -8,7 +8,6 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/dotmesh-io/dotmesh/pkg/client"
-	"github.com/dotmesh-io/dotmesh/pkg/zfs"
 )
 
 func (s *InMemoryState) runLivenessServer() {
@@ -40,7 +39,7 @@ func (s *InMemoryState) runLivenessServer() {
 		}
 
 		// Check the zpool exists
-		_, err = zfs.GetZPoolCapacity(s.config.ZPoolPath, s.config.PoolName)
+		_, err = s.zfs.GetZPoolCapacity()
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Zpool error: %v\n", err), http.StatusInternalServerError)
 			return

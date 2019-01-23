@@ -21,6 +21,7 @@ import (
 
 	"github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/dotmesh-io/dotmesh/pkg/metrics"
+	"github.com/dotmesh-io/dotmesh/pkg/utils"
 )
 
 const REQUEST_ID = "X-Request-Id"
@@ -82,7 +83,7 @@ func (state *InMemoryState) runServer() {
 		// list files in a specific snapshot
 		router.Handle("/s3/{namespace}:{name}/snapshot/{snapshotId}", middleware.FromHTTPRequest(tracer, "s3")(Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager)))).Methods("GET")
 		// download a file from a specific snapshot
-		router.Handle("/s3/{namespace}:{name}/snapshot/{snapshotId}/{:.*}", middleware.FromHTTPRequest(tracer, "s3")(Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager)))).Methods("GET")
+		router.Handle("/s3/{namespace}:{name}/snapshot/{snapshotId}/{key:.*}", middleware.FromHTTPRequest(tracer, "s3")(Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager)))).Methods("GET")
 
 		// put file into master
 		router.Handle("/s3/{namespace}:{name}/{key:.*}", middleware.FromHTTPRequest(tracer, "s3")(Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager)))).Methods("PUT")
@@ -130,7 +131,7 @@ func (state *InMemoryState) runServer() {
 	}
 
 	if err != nil {
-		out(fmt.Sprintf("Unable to listen on port %s: '%s'\n", client.SERVER_PORT, err))
+		utils.Out(fmt.Sprintf("Unable to listen on port %s: '%s'\n", client.SERVER_PORT, err))
 		log.Fatalf("Unable to listen on port %s: '%s'", client.SERVER_PORT, err)
 	}
 }

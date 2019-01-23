@@ -47,3 +47,7 @@ ignored = ["github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg*", "github.com/
 [[constraint]]
   name = "github.com/aws/aws-sdk-go"
   version = "1.14.11"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/portworx/kvdb"

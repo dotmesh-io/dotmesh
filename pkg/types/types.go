@@ -25,6 +25,7 @@ type VolumesAndBranches struct {
 
 type Server struct {
 	Id        string
+	PoolID    string
 	Addresses []string
 }
 

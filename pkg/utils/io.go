@@ -1,31 +1,27 @@
-package fsm
+package utils
 
 import (
 	"compress/gzip"
 	"fmt"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
+	log "github.com/sirupsen/logrus"
 	"io"
 	"net/http"
 	"os"
 	"strings"
 	"time"
-
-	"github.com/dotmesh-io/dotmesh/pkg/types"
-	"github.com/dotmesh-io/dotmesh/pkg/zfs"
-
-	log "github.com/sirupsen/logrus"
 )
 
-// from filesystem id to a fully qualified ZFS filesystem
-func fq(poolName, fs string) string {
-	return zfs.FQ(poolName, fs)
+func Out(s ...interface{}) {
+	stringified := []string{}
+	for _, item := range s {
+		stringified = append(stringified, fmt.Sprintf("%v", item))
+	}
+	ss := strings.Join(stringified, " ")
+	os.Stdout.Write([]byte(ss))
 }
 
-// from fully qualified ZFS name to filesystem id, strip off prefix
-func unfq(poolName, fqfs string) string {
-	return zfs.UnFQ(poolName, fqfs)
-}
-
-func getLogfile(logfile string) *os.File {
+func GetLogfile(logfile string) *os.File {
 	// if LOG_TO_STDOUT {
 	// TODO: make configurable
 	if true {
@@ -58,8 +54,7 @@ func getLogfile(logfile string) *os.File {
 // if the writer implements http.Flusher, Flush() is called after each write.
 
 // TODO: pipe would be better named Copy
-
-func pipe(
+func Pipe(
 	r io.Reader, rDesc string, w io.Writer, wDesc string,
 	finished chan bool, canceller chan *types.Event,
 	cancelFunc func(*types.Event, chan *types.Event),
@@ -208,14 +203,4 @@ func pipe(
 			return
 		}
 	}
-}
-
-// utility functions
-func out(s ...interface{}) {
-	stringified := []string{}
-	for _, item := range s {
-		stringified = append(stringified, fmt.Sprintf("%v", item))
-	}
-	ss := strings.Join(stringified, " ")
-	os.Stdout.Write([]byte(ss))
 }

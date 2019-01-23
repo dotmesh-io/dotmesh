@@ -6,7 +6,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os/exec"
 	"strings"
 
 	"golang.org/x/net/context"
@@ -15,6 +14,7 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/registry"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
+	"github.com/dotmesh-io/dotmesh/pkg/utils"
 )
 
 // attempt to pull some snapshots from the master, based on some hint that it
@@ -132,24 +132,14 @@ func receivingState(f *FsMachine) StateFn {
 		url,
 		f.filesystemId, fromSnap, snapRange.toSnap.Id,
 	)
-
-	f.transitionedTo("receiving", "starting")
-	logZFSCommand(f.filesystemId, fmt.Sprintf("%s recv %s", f.zfsPath, fq(f.poolName, f.filesystemId)))
-	cmd := exec.Command(f.zfsPath, "recv", fq(f.poolName, f.filesystemId))
 	pipeReader, pipeWriter := io.Pipe()
 	defer pipeReader.Close()
 	defer pipeWriter.Close()
 
-	stdErrBuffer := &bytes.Buffer{}
-
-	cmd.Stdin = pipeReader
-	cmd.Stdout = getLogfile("zfs-recv-stdout")
-	cmd.Stderr = stdErrBuffer
-	//getLogfile("zfs-recv-stderr")
-
+	f.transitionedTo("receiving", "starting")
 	finished := make(chan bool)
 
-	go pipe(
+	go utils.Pipe(
 		resp.Body, fmt.Sprintf("http response body for %s", f.filesystemId),
 		pipeWriter, "stdin of zfs recv",
 		finished,
@@ -171,14 +161,15 @@ func receivingState(f *FsMachine) StateFn {
 	)
 
 	log.Printf("[pull] about to start consuming prelude on %v", pipeReader)
-	prelude, err := consumePrelude(pipeReader)
+	prelude, err := ConsumePrelude(pipeReader)
 	if err != nil {
 		_ = <-finished
 		return backoffStateWithReason(fmt.Sprintf("receivingState: error consuming prelude: %+v", err))
 	}
 	log.Printf("[pull] Got prelude %v", prelude)
 
-	err = cmd.Run()
+	stdErrBuffer := &bytes.Buffer{}
+	err = f.zfs.Recv(pipeReader, f.filesystemId, stdErrBuffer)
 	f.transitionedTo("receiving", "finished zfs recv")
 	pipeReader.Close()
 	pipeWriter.Close()
@@ -222,7 +213,7 @@ func receivingState(f *FsMachine) StateFn {
 		log.Printf("Successfully received %s => %s for %s", fromSnap, snapRange.toSnap.Id, f.filesystemId)
 	}
 	log.Printf("[pull] about to start applying prelude on %v", pipeReader)
-	err = applyPrelude(f.zfsPath, prelude, fq(f.poolName, f.filesystemId))
+	err = f.zfs.ApplyPrelude(prelude, f.filesystemId)
 	if err != nil {
 		return backoffStateWithReason(fmt.Sprintf("receivingState: Error applying prelude: %+v", err))
 	}

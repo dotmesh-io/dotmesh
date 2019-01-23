@@ -6,16 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os/exec"
 
 	"github.com/dotmesh-io/dotmesh/pkg/types"
-
-	log "github.com/sirupsen/logrus"
 )
 
 func calculatePrelude(snaps []types.Snapshot, toSnapshotId string) (types.Prelude, error) {
 	var prelude types.Prelude
-	// snaps, err := s.SnapshotsFor(s.myNodeId, toFilesystemId)
+	// snaps, err := s.SnapshotsFor(s.zfs.GetPoolID(), toFilesystemId)
 	// if err != nil {
 	// 	return prelude, err
 	// }
@@ -34,7 +31,7 @@ func calculatePrelude(snaps []types.Snapshot, toSnapshotId string) (types.Prelud
 	return prelude, nil
 }
 
-func consumePrelude(r io.Reader) (types.Prelude, error) {
+func ConsumePrelude(r io.Reader) (types.Prelude, error) {
 	// called when we know that there's a prelude to read from r.
 
 	// read a byte at a time, so that we leave the reader ready for someone
@@ -46,7 +43,7 @@ func consumePrelude(r io.Reader) (types.Prelude, error) {
 	for !finished {
 		_, err := r.Read(b)
 		if err == io.EOF {
-			return types.Prelude{}, fmt.Errorf("Stream ended before prelude completed")
+			return types.Prelude{}, fmt.Errorf("Stream ended before prelude completed, got '%s' so far", string(buf))
 		}
 		if err != nil {
 			return types.Prelude{}, err
@@ -68,35 +65,6 @@ func consumePrelude(r io.Reader) (types.Prelude, error) {
 		}
 	}
 	return types.Prelude{}, nil
-}
-
-// apply the instructions encoded in the prelude to the system
-func applyPrelude(zfsExecPath string, prelude types.Prelude, fqfs string) error {
-	// iterate over it setting zfs user properties accordingly.
-	log.Printf("[applyPrelude] Got prelude: %+v", prelude)
-	for _, j := range prelude.SnapshotProperties {
-		metadataEncoded, err := encodeMetadata(j.Metadata)
-		if err != nil {
-			return err
-		}
-		for _, k := range metadataEncoded {
-			// eh, would be better to refactor encodeMetadata
-			if k != "-o" {
-				args := []string{"set"}
-				args = append(args, k)
-				args = append(args, fqfs+"@"+j.Id)
-				out, err := exec.Command(zfsExecPath, args...).CombinedOutput()
-				if err != nil {
-					log.Errorf(
-						"[applyPrelude] Error applying prelude: %s, %s, %s", args, err, out,
-					)
-					return fmt.Errorf("Error applying prelude: %s -> %v: %s", args, err, out)
-				}
-				log.Debugf("[applyPrelude] Applied snapshot props for: %s", j.Id)
-			}
-		}
-	}
-	return nil
 }
 
 func encodePrelude(prelude types.Prelude) ([]byte, error) {

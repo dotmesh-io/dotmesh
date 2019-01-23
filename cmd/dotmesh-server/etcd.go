@@ -150,6 +150,7 @@ func (s *InMemoryState) updateAddressesInEtcd() error {
 
 	return s.serverStore.SetAddresses(&types.Server{
 		Addresses: addresses,
+		PoolID:    s.zfs.GetPoolID(),
 		Id:        s.NodeID(),
 	}, &store.SetOptions{
 		TTL: 60,
@@ -157,7 +158,6 @@ func (s *InMemoryState) updateAddressesInEtcd() error {
 }
 
 func (s *InMemoryState) isFilesystemDeletedInEtcd(fsId string) (bool, error) {
-
 	_, err := s.filesystemStore.GetDeleted(fsId)
 	if err != nil {
 		if store.IsKeyNotFound(err) {
@@ -170,7 +170,6 @@ func (s *InMemoryState) isFilesystemDeletedInEtcd(fsId string) (bool, error) {
 }
 
 func (s *InMemoryState) markFilesystemAsDeletedInEtcd(fsId, username string, name VolumeName, tlFsId, branch string) error {
-
 	at := &types.FilesystemDeletionAudit{
 		FilesystemID:         fsId,
 		Server:               s.NodeID(),
@@ -382,7 +381,7 @@ func (s *InMemoryState) handleOneFilesystemMaster(node *client.Node) error {
 		}
 		var responseChan chan *types.Event
 		requestId := pieces[len(pieces)-1]
-		if node.Value == s.myNodeId {
+		if node.Value == s.zfs.GetPoolID() {
 			log.Debugf("MOUNTING: %s=%s", fs, node.Value)
 			responseChan, err = s.dispatchEvent(fs, &types.Event{Name: "mount"}, requestId)
 			if err != nil {
@@ -704,7 +703,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 			// }
 			// s.mastersCache[fs] = node.Value
 
-			if node.Value == s.myNodeId {
+			if node.Value == s.zfs.GetPoolID() {
 				filesystemBelongsToMe[filesystemID] = true
 			} else {
 				filesystemBelongsToMe[filesystemID] = false
@@ -803,7 +802,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		server := pieces[4]
 		filesystem := pieces[5]
 
-		if server == s.myNodeId {
+		if server == s.zfs.GetPoolID() {
 			// Don't listen to updates from etcd about ourselves -
 			// because we update that by calling
 			// updateSnapshotsFromKnownState from the discovery code, and

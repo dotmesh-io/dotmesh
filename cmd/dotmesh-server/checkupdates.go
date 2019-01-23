@@ -62,7 +62,7 @@ func (state *InMemoryState) checkForUpdates() error {
 		Product: "dotmesh-server",
 		Version: state.versionInfo.InstalledVersion,
 		Flags: map[string]string{
-			"ServerID":                 state.myNodeId,
+			"ServerID":                 state.zfs.GetPoolID(),
 			"NumberOfDots":             numberOfDots,
 			"TotalCurrentDotSizeBytes": totalBytes,
 			"ServersInCluster":         otherServerIDs,
