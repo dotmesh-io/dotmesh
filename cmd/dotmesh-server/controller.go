@@ -34,7 +34,7 @@ type InMemoryState struct {
 	filesystems     map[string]fsm.FSM
 	filesystemsLock *sync.RWMutex
 
-	serverAddressesCache     map[string]string
+	serverAddressesCache     map[string][]string
 	serverAddressesCacheLock *sync.RWMutex
 
 	globalContainerCache     map[string]containerInfo
@@ -96,7 +96,7 @@ func NewInMemoryState(config Config) *InMemoryState {
 		config:                   config,
 		filesystems:              make(map[string]fsm.FSM),
 		filesystemsLock:          &sync.RWMutex{},
-		serverAddressesCache:     make(map[string]string),
+		serverAddressesCache:     make(map[string][]string),
 		serverAddressesCacheLock: &sync.RWMutex{},
 		// global container state (what containers are running where), filesystemId -> containerInfo
 		globalContainerCache:     make(map[string]containerInfo),
@@ -278,7 +278,7 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 		servers := []Server{}
 		for server, addresses := range s.serverAddressesCache {
 			servers = append(servers, Server{
-				Id: server, Addresses: strings.Split(addresses, ","),
+				Id: server, Addresses: addresses,
 			})
 		}
 		sort.Sort(ByAddress(servers))
