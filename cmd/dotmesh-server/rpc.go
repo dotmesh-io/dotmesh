@@ -1788,7 +1788,7 @@ func (d *DotmeshRPC) AllDotsAndBranches(
 	d.state.serverAddressesCacheLock.Lock()
 	for server, addresses := range d.state.serverAddressesCache {
 		vac.Servers = append(vac.Servers, Server{
-			Id: server, Addresses: strings.Split(addresses, ","),
+			Id: server, Addresses: addresses,
 		})
 	}
 	d.state.serverAddressesCacheLock.Unlock()
@@ -2432,7 +2432,7 @@ func (d *DotmeshRPC) DumpInternalState(
 		s.serverAddressesCacheLock.Lock()
 		defer s.serverAddressesCacheLock.Unlock()
 		for serverId, addr := range s.serverAddressesCache {
-			resultChan <- []string{fmt.Sprintf("serverAddressesCache.%s", serverId), addr}
+			resultChan <- []string{fmt.Sprintf("serverAddressesCache.%s", serverId), strings.Join(addr, ",")}
 		}
 		resultChan <- []string{"serverAddressesCache.DONE", "yes"}
 	}()
