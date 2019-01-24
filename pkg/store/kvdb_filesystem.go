@@ -74,7 +74,7 @@ func (s *KVDBFilesystemStore) DeleteMaster(id string) error {
 	return err
 }
 
-func (s *KVDBFilesystemStore) WatchMasters(cb WatchMasterCB) error {
+func (s *KVDBFilesystemStore) WatchMasters(idx uint64, cb WatchMasterCB) error {
 	watchFunc := func(prefix string, opaque interface{}, kvp *kvdb.KVPair, err error) error {
 		if err != nil {
 			log.WithFields(log.Fields{
@@ -94,7 +94,7 @@ func (s *KVDBFilesystemStore) WatchMasters(cb WatchMasterCB) error {
 		return cb(&f)
 	}
 
-	return s.client.WatchTree(FilesystemMastersPrefix, 0, nil, watchFunc)
+	return s.client.WatchTree(FilesystemMastersPrefix, idx, nil, watchFunc)
 }
 
 func (s *KVDBFilesystemStore) ListMaster() ([]*types.FilesystemMaster, error) {
@@ -160,7 +160,7 @@ func (s *KVDBFilesystemStore) DeleteDeleted(id string) error {
 	return err
 }
 
-func (s *KVDBFilesystemStore) WatchDeleted(cb WatchDeletedCB) error {
+func (s *KVDBFilesystemStore) WatchDeleted(idx uint64, cb WatchDeletedCB) error {
 	watchFunc := func(prefix string, opaque interface{}, kvp *kvdb.KVPair, err error) error {
 		if err != nil {
 			log.WithFields(log.Fields{
@@ -180,7 +180,35 @@ func (s *KVDBFilesystemStore) WatchDeleted(cb WatchDeletedCB) error {
 		return cb(&f)
 	}
 
-	return s.client.WatchTree(FilesystemDeletedPrefix, 0, nil, watchFunc)
+	return s.client.WatchTree(FilesystemDeletedPrefix, idx, nil, watchFunc)
+}
+
+func (s *KVDBFilesystemStore) ListDeleted() ([]*types.FilesystemDeletionAudit, error) {
+	pairs, err := s.client.Enumerate(FilesystemDeletedPrefix)
+	if err != nil {
+		return nil, err
+	}
+	var result []*types.FilesystemDeletionAudit
+
+	for _, kvp := range pairs {
+		var val types.FilesystemDeletionAudit
+
+		err = json.Unmarshal(kvp.Value, &val)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error": err,
+				"key":   kvp.Key,
+				"value": string(kvp.Value),
+			}).Error("failed to unmarshal value")
+			continue
+		}
+
+		val.Meta = getMeta(kvp)
+
+		result = append(result, &val)
+	}
+
+	return result, nil
 }
 
 // CleanupPending
@@ -287,7 +315,7 @@ func (s *KVDBFilesystemStore) DeleteContainers(id string) error {
 	return err
 }
 
-func (s *KVDBFilesystemStore) WatchContainers(cb WatchContainersCB) error {
+func (s *KVDBFilesystemStore) WatchContainers(idx uint64, cb WatchContainersCB) error {
 
 	watchFunc := func(prefix string, opaque interface{}, kvp *kvdb.KVPair, err error) error {
 		if err != nil {
@@ -308,7 +336,35 @@ func (s *KVDBFilesystemStore) WatchContainers(cb WatchContainersCB) error {
 		return cb(&f)
 	}
 
-	return s.client.WatchTree(FilesystemContainersPrefix, 0, nil, watchFunc)
+	return s.client.WatchTree(FilesystemContainersPrefix, idx, nil, watchFunc)
+}
+
+func (s *KVDBFilesystemStore) ListContainers() ([]*types.FilesystemContainers, error) {
+	pairs, err := s.client.Enumerate(FilesystemContainersPrefix)
+	if err != nil {
+		return nil, err
+	}
+	var result []*types.FilesystemContainers
+
+	for _, kvp := range pairs {
+		var val types.FilesystemContainers
+
+		err = json.Unmarshal(kvp.Value, &val)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error": err,
+				"key":   kvp.Key,
+				"value": string(kvp.Value),
+			}).Error("failed to unmarshal value")
+			continue
+		}
+
+		val.Meta = getMeta(kvp)
+
+		result = append(result, &val)
+	}
+
+	return result, nil
 }
 
 func (s *KVDBFilesystemStore) SetDirty(f *types.FilesystemDirty, opts *SetOptions) error {
@@ -329,7 +385,7 @@ func (s *KVDBFilesystemStore) DeleteDirty(id string) error {
 	return err
 }
 
-func (s *KVDBFilesystemStore) WatchDirty(cb WatchDirtyCB) error {
+func (s *KVDBFilesystemStore) WatchDirty(idx uint64, cb WatchDirtyCB) error {
 	watchFunc := func(prefix string, opaque interface{}, kvp *kvdb.KVPair, err error) error {
 		if err != nil {
 			log.WithFields(log.Fields{
@@ -349,7 +405,35 @@ func (s *KVDBFilesystemStore) WatchDirty(cb WatchDirtyCB) error {
 		return cb(&f)
 	}
 
-	return s.client.WatchTree(FilesystemDirtyPrefix, 0, nil, watchFunc)
+	return s.client.WatchTree(FilesystemDirtyPrefix, idx, nil, watchFunc)
+}
+
+func (s *KVDBFilesystemStore) ListDirty() ([]*types.FilesystemDirty, error) {
+	pairs, err := s.client.Enumerate(FilesystemDirtyPrefix)
+	if err != nil {
+		return nil, err
+	}
+	var result []*types.FilesystemDirty
+
+	for _, kvp := range pairs {
+		var val types.FilesystemDirty
+
+		err = json.Unmarshal(kvp.Value, &val)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error": err,
+				"key":   kvp.Key,
+				"value": string(kvp.Value),
+			}).Error("failed to unmarshal value")
+			continue
+		}
+
+		val.Meta = getMeta(kvp)
+
+		result = append(result, &val)
+	}
+
+	return result, nil
 }
 
 func (s *KVDBFilesystemStore) SetTransfer(t *types.TransferPollResult, opts *SetOptions) error {
@@ -365,7 +449,7 @@ func (s *KVDBFilesystemStore) SetTransfer(t *types.TransferPollResult, opts *Set
 	return err
 }
 
-func (s *KVDBFilesystemStore) WatchTransfers(cb WatchTransfersCB) error {
+func (s *KVDBFilesystemStore) WatchTransfers(idx uint64, cb WatchTransfersCB) error {
 
 	watchFunc := func(prefix string, opaque interface{}, kvp *kvdb.KVPair, err error) error {
 		if err != nil {
@@ -386,5 +470,33 @@ func (s *KVDBFilesystemStore) WatchTransfers(cb WatchTransfersCB) error {
 		return cb(&t)
 	}
 
-	return s.client.WatchTree(FilesystemTransfersPrefix, 0, nil, watchFunc)
+	return s.client.WatchTree(FilesystemTransfersPrefix, idx, nil, watchFunc)
+}
+
+func (s *KVDBFilesystemStore) ListTransfers() ([]*types.TransferPollResult, error) {
+	pairs, err := s.client.Enumerate(FilesystemTransfersPrefix)
+	if err != nil {
+		return nil, err
+	}
+	var result []*types.TransferPollResult
+
+	for _, kvp := range pairs {
+		var val types.TransferPollResult
+
+		err = json.Unmarshal(kvp.Value, &val)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error": err,
+				"key":   kvp.Key,
+				"value": string(kvp.Value),
+			}).Error("failed to unmarshal value")
+			continue
+		}
+
+		val.Meta = getMeta(kvp)
+
+		result = append(result, &val)
+	}
+
+	return result, nil
 }

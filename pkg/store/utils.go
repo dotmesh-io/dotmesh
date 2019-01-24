@@ -15,6 +15,14 @@ func (s *KVDBFilesystemStore) decode(data []byte, v interface{}) error {
 	return json.Unmarshal(data, v)
 }
 
+func (s *KVServerStore) encode(object interface{}) ([]byte, error) {
+	return json.Marshal(object)
+}
+
+func (s *KVServerStore) decode(data []byte, v interface{}) error {
+	return json.Unmarshal(data, v)
+}
+
 func getMeta(kvp *kvdb.KVPair) *types.KVMeta {
 
 	var action types.KVAction
