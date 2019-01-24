@@ -87,14 +87,7 @@ type DefaultRegistry struct {
 	mastersCache     map[string]string
 	mastersCacheLock *sync.RWMutex
 
-	serverAddressesCache     map[string]string
-	serverAddressesCacheLock *sync.RWMutex
-
-	// etcdClient client.KeysAPI
-
 	registryStore store.RegistryStore
-
-	// prefix     string
 }
 
 func NewRegistry(um user.UserManager, registryStore store.RegistryStore) *DefaultRegistry {
@@ -107,9 +100,6 @@ func NewRegistry(um user.UserManager, registryStore store.RegistryStore) *Defaul
 		// filesystem => node id
 		mastersCache:     make(map[string]string),
 		mastersCacheLock: &sync.RWMutex{},
-		// server id => comma-separated IPv[46] addresses
-		serverAddressesCache:     make(map[string]string),
-		serverAddressesCacheLock: &sync.RWMutex{},
 
 		registryStore: registryStore,
 	}
