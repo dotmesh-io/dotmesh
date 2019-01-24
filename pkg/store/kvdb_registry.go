@@ -30,8 +30,35 @@ func (s *KVDBFilesystemStore) SetClone(c *types.Clone, opts *SetOptions) error {
 		return err
 	}
 
+	if opts.Force {
+		_, err = s.client.Put(RegistryClonesPrefix+c.FilesystemId+"/"+c.Name, bts, 0)
+		return err
+	}
+
 	_, err = s.client.Create(RegistryClonesPrefix+c.FilesystemId+"/"+c.Name, bts, 0)
 	return err
+}
+
+func (s *KVDBFilesystemStore) ImportClones(clones []*types.Clone, opts *ImportOptions) error {
+	if opts.DeleteExisting {
+		err := s.client.DeleteTree(RegistryClonesPrefix)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error": err,
+			}).Warn("[ImportClones] failed to delete existing registry tree before importing")
+		}
+	}
+	for _, c := range clones {
+		err := s.SetClone(c, &SetOptions{Force: false})
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":         err,
+				"clone":         c.Name,
+				"filesystem_id": c.FilesystemId,
+			}).Warn("[ImportClones] failed to import clone")
+		}
+	}
+	return nil
 }
 
 func (s *KVDBFilesystemStore) DeleteClone(filesystemID, cloneName string) error {
@@ -102,6 +129,11 @@ func (s *KVDBFilesystemStore) SetFilesystem(f *types.RegistryFilesystem, opts *S
 
 	bts, err := s.encode(f)
 	if err != nil {
+		return err
+	}
+
+	if opts.Force {
+		_, err = s.client.Put(RegistryFilesystemsPrefix+f.OwnerId+"/"+f.Name, bts, 0)
 		return err
 	}
 
@@ -214,4 +246,26 @@ func (s *KVDBFilesystemStore) ListFilesystems() ([]*types.RegistryFilesystem, er
 	}
 
 	return result, nil
+}
+
+func (s *KVDBFilesystemStore) ImportFilesystems(fs []*types.RegistryFilesystem, opts *ImportOptions) error {
+	if opts.DeleteExisting {
+		err := s.client.DeleteTree(RegistryFilesystemsPrefix)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error": err,
+			}).Warn("[ImportFilesystems] failed to delete existing registry tree before importing")
+		}
+	}
+	for _, f := range fs {
+		err := s.SetFilesystem(f, &SetOptions{Force: false})
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":         err,
+				"name":          f.Name,
+				"filesystem_id": f.Id,
+			}).Warn("[ImportFilesystems] failed to import registry filesystem")
+		}
+	}
+	return nil
 }
