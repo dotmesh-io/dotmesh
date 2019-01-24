@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/dotmesh-io/dotmesh/pkg/types"
@@ -38,7 +39,7 @@ func (s *KVDBFilesystemStore) DeleteClone(filesystemID, cloneName string) error 
 	return err
 }
 
-func (s *KVDBFilesystemStore) WatchClones(cb WatchRegistryClonesCB) error {
+func (s *KVDBFilesystemStore) WatchClones(idx uint64, cb WatchRegistryClonesCB) error {
 	watchFunc := func(prefix string, opaque interface{}, kvp *kvdb.KVPair, err error) error {
 		if err != nil {
 			log.WithFields(log.Fields{
@@ -58,25 +59,37 @@ func (s *KVDBFilesystemStore) WatchClones(cb WatchRegistryClonesCB) error {
 		return cb(&c)
 	}
 
-	return s.client.WatchTree(RegistryClonesPrefix, 0, nil, watchFunc)
+	return s.client.WatchTree(RegistryClonesPrefix, idx, nil, watchFunc)
 }
 
-// Registry Filesystems
-// from RegisterFork:
+func (s *KVDBFilesystemStore) ListClones() ([]*types.Clone, error) {
+	pairs, err := s.client.Enumerate(RegistryClonesPrefix)
+	if err != nil {
+		return nil, err
+	}
+	var result []*types.Clone
 
-// rf := types.RegistryFilesystem{
-// 	Id: forkFilesystemId,
-// 	// Owner is, for now, always the authenticated user at the time of
-// 	// creation
-// 	OwnerId:              forkName.Namespace,
-// 	ForkParentId:         originFilesystemId,
-// 	ForkParentSnapshotId: originSnapshotId,
-// }
-// _, err = r.etcdClient.Set(
-// 	context.Background(),
-// 	// (0)/(1)dotmesh.io/(2)registry/(3)filesystems/(4)<namespace>/(5)<name> =>
-// 	//     {"Uuid": "<fs-uuid>"}
-// 	fmt.Sprintf("%s/registry/filesystems/%s/%s", r.prefix, forkName.Namespace, forkName.Name),
+	for _, kvp := range pairs {
+		var val types.Clone
+
+		err = json.Unmarshal(kvp.Value, &val)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error": err,
+				"key":   kvp.Key,
+				"value": string(kvp.Value),
+			}).Error("failed to unmarshal value")
+			continue
+		}
+
+		val.Meta = getMeta(kvp)
+
+		result = append(result, &val)
+	}
+
+	return result, nil
+}
+
 func (s *KVDBFilesystemStore) SetFilesystem(f *types.RegistryFilesystem, opts *SetOptions) error {
 
 	if f.Id == "" {
@@ -151,7 +164,7 @@ func (s *KVDBFilesystemStore) CompareAndDelete(namespace, filesystemName string,
 	return err
 }
 
-func (s *KVDBFilesystemStore) WatchFilesystems(cb WatchRegistryFilesystemsCB) error {
+func (s *KVDBFilesystemStore) WatchFilesystems(idx uint64, cb WatchRegistryFilesystemsCB) error {
 
 	watchFunc := func(prefix string, opaque interface{}, kvp *kvdb.KVPair, err error) error {
 		if err != nil {
@@ -172,5 +185,33 @@ func (s *KVDBFilesystemStore) WatchFilesystems(cb WatchRegistryFilesystemsCB) er
 		return cb(&f)
 	}
 
-	return s.client.WatchTree(RegistryFilesystemsPrefix, 0, nil, watchFunc)
+	return s.client.WatchTree(RegistryFilesystemsPrefix, idx, nil, watchFunc)
+}
+
+func (s *KVDBFilesystemStore) ListFilesystems() ([]*types.RegistryFilesystem, error) {
+	pairs, err := s.client.Enumerate(RegistryFilesystemsPrefix)
+	if err != nil {
+		return nil, err
+	}
+	var result []*types.RegistryFilesystem
+
+	for _, kvp := range pairs {
+		var val types.RegistryFilesystem
+
+		err = json.Unmarshal(kvp.Value, &val)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error": err,
+				"key":   kvp.Key,
+				"value": string(kvp.Value),
+			}).Error("failed to unmarshal value")
+			continue
+		}
+
+		val.Meta = getMeta(kvp)
+
+		result = append(result, &val)
+	}
+
+	return result, nil
 }
