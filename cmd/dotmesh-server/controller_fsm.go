@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/dotmesh-io/dotmesh/pkg/fsm"
 	"github.com/dotmesh-io/dotmesh/pkg/store"
@@ -288,7 +287,7 @@ func (s *InMemoryState) AddressesForServer(server string) []string {
 		// TODO maybe this should be an error
 		return []string{}
 	}
-	return strings.Split(addresses, ",")
+	return addresses
 }
 
 func (s *InMemoryState) RegisterNewFork(originFilesystemId, originSnapshotId, forkNamespace, forkName, forkFilesystemId string) error {
