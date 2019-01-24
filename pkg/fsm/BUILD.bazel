@@ -38,6 +38,7 @@ go_library(
         "//pkg/metrics:go_default_library",
         "//pkg/observer:go_default_library",
         "//pkg/registry:go_default_library",
+        "//pkg/store:go_default_library",
         "//pkg/types:go_default_library",
         "//pkg/user:go_default_library",
         "//pkg/utils:go_default_library",
@@ -47,8 +48,8 @@ go_library(
         "//vendor/github.com/aws/aws-sdk-go/aws/session:go_default_library",
         "//vendor/github.com/aws/aws-sdk-go/service/s3:go_default_library",
         "//vendor/github.com/aws/aws-sdk-go/service/s3/s3manager:go_default_library",
-        "//vendor/github.com/coreos/etcd/client:go_default_library",
         "//vendor/github.com/nu7hatch/gouuid:go_default_library",
+        "//vendor/github.com/portworx/kvdb:go_default_library",
         "//vendor/github.com/sirupsen/logrus:go_default_library",
         "//vendor/golang.org/x/net/context:go_default_library",
     ],
@@ -56,7 +57,13 @@ go_library(
 
 go_test(
     name = "go_default_test",
-    srcs = ["fsm_metadata_test.go"],
+    srcs = [
+        "fsm_handoff_test.go",
+        "fsm_metadata_test.go",
+    ],
     embed = [":go_default_library"],
-    deps = ["//pkg/types:go_default_library"],
+    deps = [
+        "//pkg/store:go_default_library",
+        "//pkg/types:go_default_library",
+    ],
 )

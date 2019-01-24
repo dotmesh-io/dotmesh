@@ -10,15 +10,12 @@ go_library(
         "notification.go",
         "tlf.go",
         "types.go",
+        "user.go",
         "volumes.go",
     ],
     importpath = "github.com/dotmesh-io/dotmesh/pkg/types",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/auth:go_default_library",
-        "//pkg/container:go_default_library",
-        "//pkg/user:go_default_library",
-    ],
+    deps = ["//pkg/container:go_default_library"],
 )
 
 go_test(

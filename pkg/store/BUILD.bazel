@@ -4,6 +4,10 @@ go_library(
     name = "go_default_library",
     srcs = [
         "kvdb.go",
+        "kvdb_filesystem.go",
+        "kvdb_registry.go",
+        "kvdb_server.go",
+        "kvdb_userstore.go",
         "store.go",
         "types.go",
         "utils.go",
@@ -12,6 +16,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/types:go_default_library",
+        "//pkg/validator:go_default_library",
         "//vendor/github.com/portworx/kvdb:go_default_library",
         "//vendor/github.com/portworx/kvdb/bolt:go_default_library",
         "//vendor/github.com/portworx/kvdb/etcd/v3:go_default_library",
@@ -22,7 +27,10 @@ go_library(
 
 go_test(
     name = "go_default_test",
-    srcs = ["kvdb_test.go"],
+    srcs = [
+        "kvdb_filesystem_test.go",
+        "kvdb_test.go",
+    ],
     embed = [":go_default_library"],
     deps = ["//pkg/types:go_default_library"],
 )
