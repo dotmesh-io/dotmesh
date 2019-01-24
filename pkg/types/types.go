@@ -24,18 +24,27 @@ type VolumesAndBranches struct {
 }
 
 type Server struct {
+	// Meta is populated by the KV store implementer
+	Meta *KVMeta `json:"-"`
+
 	Id        string
 	PoolID    string
 	Addresses []string
 }
 
 type ServerSnapshots struct {
+	// Meta is populated by the KV store implementer
+	Meta *KVMeta `json:"-"`
+
 	ID           string      `json:"id"` // NodeID
 	FilesystemID string      `json:"filesystem_id"`
 	Snapshots    []*Snapshot `json:"snapshots"`
 }
 
 type ServerState struct {
+	// Meta is populated by the KV store implementer
+	Meta *KVMeta `json:"-"`
+
 	ID           string            `json:"id"` // NodeID
 	FilesystemID string            `json:"filesystem_id"`
 	State        map[string]string `json:"state"`
