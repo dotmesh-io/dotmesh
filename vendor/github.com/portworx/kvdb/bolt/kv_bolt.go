@@ -48,7 +48,7 @@ var (
 )
 
 func init() {
-	logrus.Infof("Registering internal KVDB provider")
+	logrus.Debug("Registering internal KVDB provider")
 	if err := kvdb.Register(Name, New, Version); err != nil {
 		panic(err.Error())
 	}
