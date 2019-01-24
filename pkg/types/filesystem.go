@@ -11,7 +11,8 @@ type KVMeta struct {
 	KVDBIndex uint64
 	// CreatedIndex for this kv pair
 	CreatedIndex uint64
-	// ModifiedIndex for this kv pair
+	// ModifiedIndex for this kv pair. It's getting increased
+	// for all KV pairs when any modifications are made
 	ModifiedIndex uint64
 
 	// Action the last action on this KVPair.
