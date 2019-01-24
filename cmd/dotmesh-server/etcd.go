@@ -813,12 +813,13 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		go s.runPlugin()
 	})
 
-	func() {
-		s.etcdWaitTimestampLock.Lock()
-		defer s.etcdWaitTimestampLock.Unlock()
-		s.etcdWaitTimestamp = time.Now().UnixNano()
-		s.etcdWaitState = "watch"
-	}()
+	s.etcdWaitTimestampLock.Lock()
+	s.etcdWaitTimestamp = time.Now().UnixNano()
+	s.etcdWaitState = "watch"
+	s.etcdWaitTimestampLock.Unlock()
+
+	// block forever
+	select {}
 
 	return nil
 }
