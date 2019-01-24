@@ -36,6 +36,27 @@ func (s *KVDBFilesystemStore) SetMaster(fm *types.FilesystemMaster, opts *SetOpt
 	return err
 }
 
+func (s *KVDBFilesystemStore) ImportMasters(fs []*types.FilesystemMaster, opts *ImportOptions) error {
+	if opts.DeleteExisting {
+		err := s.client.DeleteTree(FilesystemMastersPrefix)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error": err,
+			}).Warn("[ImportMasters] failed to delete existing registry tree before importing")
+		}
+	}
+	for _, f := range fs {
+		err := s.SetMaster(f, &SetOptions{Force: false})
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":         err,
+				"filesystem_id": f.FilesystemID,
+			}).Warn("[ImportMasters] failed to import")
+		}
+	}
+	return nil
+}
+
 func (s *KVDBFilesystemStore) CompareAndSetMaster(fm *types.FilesystemMaster, opts *SetOptions) error {
 	if fm.FilesystemID == "" {
 		return ErrIDNotSet
