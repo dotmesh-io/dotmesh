@@ -12,12 +12,15 @@ type FilesystemStore interface {
 	CompareAndSetMaster(fm *types.FilesystemMaster, opts *SetOptions) error
 	GetMaster(id string) (*types.FilesystemMaster, error)
 	DeleteMaster(id string) (err error)
+	WatchMasters(idx uint64, cb WatchMasterCB) error
+	ListMaster() ([]*types.FilesystemMaster, error)
 
 	// /filesystems/deleted/<id>
 	SetDeleted(audit *types.FilesystemDeletionAudit, opts *SetOptions) error
 	GetDeleted(id string) (*types.FilesystemDeletionAudit, error)
 	DeleteDeleted(id string) error
-	WatchDeleted(cb WatchDeletedCB) error
+	WatchDeleted(idx uint64, cb WatchDeletedCB) error
+	ListDeleted() ([]*types.FilesystemDeletionAudit, error)
 
 	// /filesystems/cleanupPending/<id>
 	SetCleanupPending(audit *types.FilesystemDeletionAudit, opts *SetOptions) error
@@ -32,15 +35,18 @@ type FilesystemStore interface {
 	// filesystems/containers/<id>
 	SetContainers(fc *types.FilesystemContainers, opts *SetOptions) error
 	DeleteContainers(id string) error
-	WatchContainers(cb WatchContainersCB) error
+	WatchContainers(idx uint64, cb WatchContainersCB) error
+	ListContainers() ([]*types.FilesystemContainers, error)
 
 	// filesystems/dirty/<id>
 	SetDirty(fd *types.FilesystemDirty, opts *SetOptions) error
 	DeleteDirty(id string) error
-	WatchDirty(cb WatchDirtyCB) error
+	WatchDirty(idx uint64, cb WatchDirtyCB) error
+	ListDirty() ([]*types.FilesystemDirty, error)
 
 	SetTransfer(t *types.TransferPollResult, opts *SetOptions) error
-	WatchTransfers(cb WatchTransfersCB) error
+	WatchTransfers(idx uint64, cb WatchTransfersCB) error
+	ListTransfers() ([]*types.TransferPollResult, error)
 }
 
 // Callbacks for filesystem events
@@ -56,14 +62,16 @@ type (
 type RegistryStore interface {
 	SetClone(c *types.Clone, opts *SetOptions) error
 	DeleteClone(filesystemID, cloneName string) error
-	WatchClones(cb WatchRegistryClonesCB) error
+	WatchClones(idx uint64, cb WatchRegistryClonesCB) error
+	ListClones() ([]*types.Clone, error)
 
 	SetFilesystem(f *types.RegistryFilesystem, opts *SetOptions) error
 	CompareAndSetFilesystem(f *types.RegistryFilesystem, opts *SetOptions) error
 	GetFilesystem(namespace, filesystemName string) (*types.RegistryFilesystem, error)
 	DeleteFilesystem(namespace, filesystemName string) error
 	CompareAndDelete(namespace, filesystemName string, opts *DeleteOptions) error
-	WatchFilesystems(cb WatchRegistryFilesystemsCB) error
+	WatchFilesystems(idx uint64, cb WatchRegistryFilesystemsCB) error
+	ListFilesystems() ([]*types.RegistryFilesystem, error)
 }
 
 type (
@@ -73,10 +81,23 @@ type (
 
 type ServerStore interface {
 	SetAddresses(si *types.Server, opts *SetOptions) error
+	WatchAddresses(idx uint64, cb WatchServerAddressesClonesCB) error
 	ListAddresses() ([]*types.Server, error)
+
 	SetSnapshots(ss *types.ServerSnapshots) error
+	WatchSnapshots(idx uint64, cb WatchServerSnapshotsClonesCB) error
+	ListSnapshots() ([]*types.ServerSnapshots, error)
+
 	SetState(ss *types.ServerState) error
+	WatchStates(idx uint64, cb WatchServerStatesClonesCB) error
+	ListStates() ([]*types.ServerState, error)
 }
+
+type (
+	WatchServerAddressesClonesCB func(server *types.Server) error
+	WatchServerStatesClonesCB    func(server *types.ServerState) error
+	WatchServerSnapshotsClonesCB func(server *types.ServerSnapshots) error
+)
 
 type SetOptions struct {
 	// TTL seconds
