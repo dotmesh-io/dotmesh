@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/dotmesh-io/dotmesh/pkg/types"
@@ -71,6 +72,57 @@ func (s *KVDBFilesystemStore) GetMaster(id string) (*types.FilesystemMaster, err
 func (s *KVDBFilesystemStore) DeleteMaster(id string) error {
 	_, err := s.client.Delete(FilesystemMastersPrefix + id)
 	return err
+}
+
+func (s *KVDBFilesystemStore) WatchMasters(cb WatchMasterCB) error {
+	watchFunc := func(prefix string, opaque interface{}, kvp *kvdb.KVPair, err error) error {
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":  err,
+				"prefix": prefix,
+			}).Error("[WatchMasters] error while watching KV store tree")
+		}
+
+		var f types.FilesystemMaster
+		err = s.decode(kvp.Value, &f)
+		if err != nil {
+			return fmt.Errorf("failed to decode value from key '%s', error: %s", prefix, err)
+		}
+
+		f.Meta = getMeta(kvp)
+
+		return cb(&f)
+	}
+
+	return s.client.WatchTree(FilesystemMastersPrefix, 0, nil, watchFunc)
+}
+
+func (s *KVDBFilesystemStore) ListMaster() ([]*types.FilesystemMaster, error) {
+	pairs, err := s.client.Enumerate(FilesystemMastersPrefix)
+	if err != nil {
+		return nil, err
+	}
+	var result []*types.FilesystemMaster
+
+	for _, kvp := range pairs {
+		var val types.FilesystemMaster
+
+		err = json.Unmarshal(kvp.Value, &val)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error": err,
+				"key":   kvp.Key,
+				"value": string(kvp.Value),
+			}).Error("failed to unmarshal value")
+			continue
+		}
+
+		val.Meta = getMeta(kvp)
+
+		result = append(result, &val)
+	}
+
+	return result, nil
 }
 
 // Deleted
