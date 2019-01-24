@@ -118,12 +118,11 @@ func (s *InMemoryState) updateMessagingClusterConns() error {
 	mu := &sync.Mutex{}
 	// httpClient := http.DefaultClient
 
-	for nodeID, v := range s.serverAddressesCache {
+	for nodeID, addresses := range s.serverAddressesCache {
 		if nodeID == s.NodeID() {
 			// nothing to do
 			continue
 		}
-		addresses := strings.Split(v, ",")
 
 		wg := &sync.WaitGroup{}
 		wg.Add(len(addresses))
