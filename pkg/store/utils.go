@@ -2,6 +2,8 @@ package store
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/portworx/kvdb"
@@ -47,4 +49,42 @@ func getMeta(kvp *kvdb.KVPair) *types.KVMeta {
 		ModifiedIndex: kvp.ModifiedIndex,
 		Action:        action,
 	}
+}
+
+func ActionString(a kvdb.KVAction) string {
+	switch a {
+	case kvdb.KVSet:
+		return "KVSet"
+	case kvdb.KVCreate:
+		return "KVCreate"
+	case kvdb.KVGet:
+		return "KVGet"
+	case kvdb.KVDelete:
+		return "KVDelete"
+	case kvdb.KVExpire:
+		return "KVExpire"
+	case kvdb.KVUknown:
+		return "KVUknown"
+	}
+	return fmt.Sprintf("unknown: %d", a)
+}
+
+func extractID(key string) (string, error) {
+	pieces := strings.Split(key, "/")
+
+	if len(pieces) < 1 {
+		return "", fmt.Errorf("failed to extract ID, check your key: %s", key)
+	}
+
+	return pieces[len(pieces)-1], nil
+}
+
+func extractIDs(key string) (string, string, error) {
+	pieces := strings.Split(key, "/")
+
+	if len(pieces) < 1 {
+		return "", "", fmt.Errorf("failed to extract ID, check your key: %s", key)
+	}
+
+	return pieces[len(pieces)-2], pieces[len(pieces)-1], nil
 }
