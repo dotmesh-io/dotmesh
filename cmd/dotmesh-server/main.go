@@ -214,9 +214,10 @@ func main() {
 		1*time.Second, 1*time.Second,
 	)
 	// kick off cleanup of deleted filesystems
-	go runForever(s.cleanupDeletedFilesystems, "cleanupDeletedFilesystems",
-		1*time.Second, 1*time.Second,
-	)
+	// TODO: remove, replaced with watcher
+	// go runForever(s.cleanupDeletedFilesystems, "cleanupDeletedFilesystems",
+	// 	1*time.Second, 1*time.Second,
+	// )
 	// kick off reporting on zpool status
 	go runForever(s.zfs.ReportZpoolCapacity, "reportZPoolUsageReporter",
 		10*time.Minute, 10*time.Minute,
