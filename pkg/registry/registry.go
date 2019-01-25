@@ -279,10 +279,18 @@ func (r *DefaultRegistry) RegisterFork(originFilesystemId string, originSnapshot
 
 // update a filesystem, including updating etcd and our local state
 func (r *DefaultRegistry) RegisterFilesystem(ctx context.Context, name types.VolumeName, filesystemId string) error {
-	authenticatedUserId := auth.GetUserIDFromCtx(ctx)
-	if authenticatedUserId == "" {
+	user := auth.GetUserFromCtx(ctx)
+	if user == nil {
 		return fmt.Errorf("No user found in request context.")
 	}
+	if name.Namespace == "" {
+		name.Namespace = user.Name
+	} else {
+		if user.Name != name.Namespace {
+			return fmt.Errorf("username and namespace doesn't match: '%s' != '%s'", user.Name, name.Namespace)
+		}
+	}
+
 	rf := types.RegistryFilesystem{
 		Id: filesystemId,
 		// Owner is, for now, always the authenticated user at the time of
@@ -323,7 +331,7 @@ func (r *DefaultRegistry) UpdateCollaborators(ctx context.Context, tlf types.Top
 		// Owner is, for now, always the authenticated user at the time of
 		// creation
 		Name:            tlf.MasterBranch.Name.Name,
-		OwnerId:         tlf.Owner.Id,
+		OwnerId:         tlf.Owner.Name,
 		CollaboratorIds: collaboratorIds,
 	}
 

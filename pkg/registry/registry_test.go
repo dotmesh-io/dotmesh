@@ -82,7 +82,7 @@ func TestUpdateCollaborators(t *testing.T) {
 
 	// Creating/updating filesystem
 	err = registry.RegisterFilesystem(ctx, types.VolumeName{
-		Namespace: "def",
+		Namespace: userA.Name,
 		Name:      "n",
 	}, "id-1")
 	if err != nil {
@@ -92,7 +92,7 @@ func TestUpdateCollaborators(t *testing.T) {
 	// Getting initial TLF
 
 	tlfInitial, err := registry.GetByName(types.VolumeName{
-		Namespace: "def",
+		Namespace: userA.Name,
 		Name:      "n",
 	})
 	if err != nil {
@@ -110,7 +110,7 @@ func TestUpdateCollaborators(t *testing.T) {
 
 	// 3. Getting it by name
 	tlfUpdated, err := registry.GetByName(types.VolumeName{
-		Namespace: "def",
+		Namespace: userA.Name,
 		Name:      "n",
 	})
 	if err != nil {
