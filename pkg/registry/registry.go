@@ -45,6 +45,7 @@ type Registry interface {
 
 	// TODO: why ..FromEtcd?
 	UpdateFilesystemFromEtcd(name types.VolumeName, rf types.RegistryFilesystem) error
+	DeleteFilesystemFromEtcd(name types.VolumeName)
 	UpdateCloneFromEtcd(name string, topLevelFilesystemId string, clone types.Clone)
 	DeleteCloneFromEtcd(name string, topLevelFilesystemId string)
 
@@ -286,9 +287,15 @@ func (r *DefaultRegistry) RegisterFilesystem(ctx context.Context, name types.Vol
 		Id: filesystemId,
 		// Owner is, for now, always the authenticated user at the time of
 		// creation
-		OwnerId: authenticatedUserId,
+		OwnerId: name.Namespace,
 		Name:    name.Name,
 	}
+
+	// log.WithFields(log.Fields{
+	// 	"owder_id":  rf.OwnerId,
+	// 	"name":      name.Name,
+	// 	"namespace": name.Namespace,
+	// }).Info("[RegisterFilesystem]: registering new filesystem")
 
 	err := r.registryStore.SetFilesystem(&rf, &store.SetOptions{})
 	if err != nil {
@@ -350,45 +357,46 @@ func (r *DefaultRegistry) RegisterClone(name string, topLevelFilesystemId string
 	return r.registryStore.SetClone(&clone, &store.SetOptions{})
 }
 
+func (r *DefaultRegistry) DeleteFilesystemFromEtcd(name types.VolumeName) {
+	r.topLevelFilesystemsLock.Lock()
+	delete(r.topLevelFilesystems, name)
+	r.topLevelFilesystemsLock.Unlock()
+}
+
 func (r *DefaultRegistry) UpdateFilesystemFromEtcd(name types.VolumeName, rf types.RegistryFilesystem) error {
 	r.topLevelFilesystemsLock.Lock()
 	defer r.topLevelFilesystemsLock.Unlock()
 
-	if rf.Id == "" {
-		// Deletion
-		log.Printf("[UpdateFilesystemFromEtcd] %s => GONE", name)
-		delete(r.topLevelFilesystems, name)
-	} else {
-		owner, err := r.userManager.Get(&user.Query{
-			Ref: rf.OwnerId,
-		})
-		if err != nil {
-			return fmt.Errorf("Unable to locate owner %v.", rf.OwnerId)
-		}
-
-		collaborators := []user.SafeUser{}
-		for _, c := range rf.CollaboratorIds {
-			cUser, err := r.userManager.Get(&user.Query{Ref: c})
-			if err != nil {
-				return fmt.Errorf("Unable to locate collaborator: %s", err)
-			}
-			collaborators = append(collaborators, cUser.SafeUser())
-		}
-
-		log.Printf("[UpdateFilesystemFromEtcd] %s => %s", name, rf.Id)
-		r.topLevelFilesystems[name] = types.TopLevelFilesystem{
-			// XXX: Hmm, I wonder if it's OK to just put minimal information here.
-			// Probably not! We should construct a real TopLevelFilesystem object
-			// if that's even the right level of abstraction. At time of writing,
-			// the only thing that seems to reasonably construct a
-			// TopLevelFilesystem is rpc's AllVolumesAndClones.
-			MasterBranch:         types.DotmeshVolume{Id: rf.Id, Name: name},
-			Owner:                owner.SafeUser(),
-			Collaborators:        collaborators,
-			ForkParentId:         rf.ForkParentId,
-			ForkParentSnapshotId: rf.ForkParentSnapshotId,
-		}
+	owner, err := r.userManager.Get(&user.Query{
+		Ref: rf.OwnerId,
+	})
+	if err != nil {
+		return fmt.Errorf("Unable to locate owner %v.", rf.OwnerId)
 	}
+
+	collaborators := []user.SafeUser{}
+	for _, c := range rf.CollaboratorIds {
+		cUser, err := r.userManager.Get(&user.Query{Ref: c})
+		if err != nil {
+			return fmt.Errorf("Unable to locate collaborator: %s", err)
+		}
+		collaborators = append(collaborators, cUser.SafeUser())
+	}
+
+	log.Printf("[UpdateFilesystemFromEtcd] %s => %s", name, rf.Id)
+	r.topLevelFilesystems[name] = types.TopLevelFilesystem{
+		// XXX: Hmm, I wonder if it's OK to just put minimal information here.
+		// Probably not! We should construct a real TopLevelFilesystem object
+		// if that's even the right level of abstraction. At time of writing,
+		// the only thing that seems to reasonably construct a
+		// TopLevelFilesystem is rpc's AllVolumesAndClones.
+		MasterBranch:         types.DotmeshVolume{Id: rf.Id, Name: name},
+		Owner:                owner.SafeUser(),
+		Collaborators:        collaborators,
+		ForkParentId:         rf.ForkParentId,
+		ForkParentSnapshotId: rf.ForkParentSnapshotId,
+	}
+
 	return nil
 }
 
