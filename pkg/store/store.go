@@ -14,6 +14,7 @@ type FilesystemStore interface {
 	DeleteMaster(id string) (err error)
 	WatchMasters(idx uint64, cb WatchMasterCB) error
 	ListMaster() ([]*types.FilesystemMaster, error)
+	ImportMasters(fs []*types.FilesystemMaster, opts *ImportOptions) error
 
 	// /filesystems/deleted/<id>
 	SetDeleted(audit *types.FilesystemDeletionAudit, opts *SetOptions) error
@@ -72,6 +73,10 @@ type RegistryStore interface {
 	CompareAndDelete(namespace, filesystemName string, opts *DeleteOptions) error
 	WatchFilesystems(idx uint64, cb WatchRegistryFilesystemsCB) error
 	ListFilesystems() ([]*types.RegistryFilesystem, error)
+
+	// Misc
+	ImportClones(clones []*types.Clone, opts *ImportOptions) error
+	ImportFilesystems(fs []*types.RegistryFilesystem, opts *ImportOptions) error
 }
 
 type (
@@ -98,6 +103,10 @@ type (
 	WatchServerStatesClonesCB    func(server *types.ServerState) error
 	WatchServerSnapshotsClonesCB func(server *types.ServerSnapshots) error
 )
+
+type ImportOptions struct {
+	DeleteExisting bool
+}
 
 type SetOptions struct {
 	// TTL seconds
