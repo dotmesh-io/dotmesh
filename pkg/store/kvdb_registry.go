@@ -18,6 +18,10 @@ var _ RegistryStore = &KVDBFilesystemStore{}
 
 func (s *KVDBFilesystemStore) SetClone(c *types.Clone, opts *SetOptions) error {
 	if c.FilesystemId == "" {
+		log.WithFields(log.Fields{
+			"error":  ErrIDNotSet,
+			"object": c,
+		}).Error("[SetClone] called without FilesystemId")
 		return ErrIDNotSet
 	}
 
@@ -73,12 +77,30 @@ func (s *KVDBFilesystemStore) WatchClones(idx uint64, cb WatchRegistryClonesCB) 
 				"error":  err,
 				"prefix": prefix,
 			}).Error("[WatchClones] error while watching KV store tree")
+			return err
 		}
 
 		var c types.Clone
+		if kvp.Action == kvdb.KVDelete {
+			filesystemID, cloneName, err := extractIDs(kvp.Key)
+			if err != nil {
+				return nil
+			}
+			c.FilesystemId = filesystemID
+			c.Name = cloneName
+			c.Meta = getMeta(kvp)
+			cb(&c)
+			return nil
+		}
+
 		err = s.decode(kvp.Value, &c)
 		if err != nil {
-			return fmt.Errorf("failed to decode value from key '%s', error: %s", prefix, err)
+			log.WithFields(log.Fields{
+				"prefix": prefix,
+				"action": ActionString(kvp.Action),
+				"error":  err,
+			}).Error("[WatchClones] failed to decode JSON")
+			return nil
 		}
 
 		c.Meta = getMeta(kvp)
@@ -130,11 +152,15 @@ func (s *KVDBFilesystemStore) ListClones() ([]*types.Clone, error) {
 func (s *KVDBFilesystemStore) SetFilesystem(f *types.RegistryFilesystem, opts *SetOptions) error {
 
 	if f.Id == "" {
+		log.WithFields(log.Fields{
+			"error":  ErrIDNotSet,
+			"object": f,
+		}).Error("[SetFilesystem] called without FilesystemId")
 		return ErrIDNotSet
 	}
 
 	if f.OwnerId == "" {
-		return fmt.Errorf("name not set")
+		return fmt.Errorf("owner ID (namespace) not set")
 	}
 
 	bts, err := s.encode(f)
@@ -155,10 +181,18 @@ func (s *KVDBFilesystemStore) CompareAndSetFilesystem(f *types.RegistryFilesyste
 
 	// OwnerId == namespace
 	if f.OwnerId == "" {
+		log.WithFields(log.Fields{
+			"error":  ErrIDNotSet,
+			"object": f,
+		}).Error("[CompareAndSetFilesystem] called without OwnerId")
 		return fmt.Errorf("owner ID not set")
 	}
 
 	if f.Name == "" {
+		log.WithFields(log.Fields{
+			"error":  ErrIDNotSet,
+			"object": f,
+		}).Error("[CompareAndSetFilesystem] called without Name")
 		return fmt.Errorf("name not set")
 	}
 
@@ -214,12 +248,38 @@ func (s *KVDBFilesystemStore) WatchFilesystems(idx uint64, cb WatchRegistryFiles
 				"error":  err,
 				"prefix": prefix,
 			}).Error("[WatchRegistryFilesystems] error while watching KV store tree")
+			return err
 		}
 
+		log.WithFields(log.Fields{
+			"prefix": prefix,
+			"action": ActionString(kvp.Action),
+			"key":    kvp.Key,
+			"value":  string(kvp.Value),
+		}).Info("[WatchFilesystems] EVENT RECEIVED")
+
 		var f types.RegistryFilesystem
+		if kvp.Action == kvdb.KVDelete {
+			namespace, name, err := extractIDs(kvp.Key)
+			if err != nil {
+				log.Fatalf("failed to extract IDs from '%s': %s", kvp.Key, err)
+				return nil
+			}
+			f.OwnerId = namespace
+			f.Name = name
+			f.Meta = getMeta(kvp)
+			cb(&f)
+			return nil
+		}
+
 		err = s.decode(kvp.Value, &f)
 		if err != nil {
-			return fmt.Errorf("failed to decode value from key '%s', error: %s", prefix, err)
+			log.WithFields(log.Fields{
+				"prefix": prefix,
+				"action": ActionString(kvp.Action),
+				"error":  err,
+			}).Error("[WatchRegistryFilesystems] failed to decode JSON")
+			return nil
 		}
 
 		f.Meta = getMeta(kvp)
