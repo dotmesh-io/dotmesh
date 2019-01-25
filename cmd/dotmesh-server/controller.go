@@ -162,10 +162,7 @@ func (s *InMemoryState) resetRegistry() {
 
 func calculatePrelude(snaps []Snapshot, toSnapshotId string) (Prelude, error) {
 	var prelude Prelude
-	// snaps, err := s.SnapshotsFor(s.zfs.GetPoolID(), toFilesystemId)
-	// if err != nil {
-	// 	return prelude, err
-	// }
+
 	pointerSnaps := []*Snapshot{}
 	for _, s := range snaps {
 		// Take a copy of s to take a pointer of, rather than getting
@@ -180,27 +177,6 @@ func calculatePrelude(snaps []Snapshot, toSnapshotId string) (Prelude, error) {
 	}
 	return prelude, nil
 }
-
-// func (s *InMemoryState) calculatePrelude(toFilesystemId, toSnapshotId string) (Prelude, error) {
-// 	var prelude Prelude
-// 	snaps, err := s.SnapshotsFor(s.zfs.GetPoolID(), toFilesystemId)
-// 	if err != nil {
-// 		return prelude, err
-// 	}
-// 	pointerSnaps := []*snapshot{}
-// 	for _, s := range snaps {
-// 		// Take a copy of s to take a pointer of, rather than getting
-// 		// lots of pointers to so in the pointerSnaps slice...
-// 		snapshots := s
-// 		pointerSnaps = append(pointerSnaps, &snapshots)
-// 	}
-
-// 	prelude.SnapshotProperties, err = restrictSnapshots(pointerSnaps, toSnapshotId)
-// 	if err != nil {
-// 		return prelude, err
-// 	}
-// 	return prelude, nil
-// }
 
 func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, error) {
 	// TODO simplify this by refactoring it into multiple functions,
@@ -467,7 +443,7 @@ func (s *InMemoryState) findRelatedContainers() error {
 
 	myFilesystems := []string{}
 
-	filesystems := s.registry.ListMasterNodes(&registry.ListMasterNodesQuery{NodeID: s.zfs.GetPoolID()})
+	filesystems := s.registry.ListMasterNodes(&registry.ListMasterNodesQuery{NodeID: s.NodeID()})
 	for fs := range filesystems {
 		myFilesystems = append(myFilesystems, fs)
 	}
@@ -485,14 +461,12 @@ func (s *InMemoryState) findRelatedContainers() error {
 			value = types.FilesystemContainers{
 				NodeID:       s.NodeID(),
 				FilesystemID: filesystemId,
-				PoolID:       s.zfs.GetPoolID(),
 				Containers:   theContainers,
 			}
 		} else {
 			value = types.FilesystemContainers{
 				NodeID:       s.NodeID(),
 				FilesystemID: filesystemId,
-				PoolID:       s.zfs.GetPoolID(),
 				Containers:   []container.DockerContainer{},
 			}
 		}
@@ -664,11 +638,11 @@ func (s *InMemoryState) CreateFilesystem(ctx context.Context, filesystemName *Vo
 	var filesystemId string
 
 	existingFS, err := s.registryStore.GetFilesystem(filesystemName.Namespace, filesystemName.Name)
-	if err != nil && !store.IsKeyNotFound(err) {
-		return nil, nil, err
-	}
 
-	if err != nil && err == store.ErrNotFound {
+	switch {
+	case err != nil && !store.IsKeyNotFound(err):
+		return nil, nil, err
+	case err != nil && store.IsKeyNotFound(err):
 		// Doesn't already exist, we can proceed as usual
 		id, err := uuid.NewV4()
 		if err != nil {
@@ -685,20 +659,20 @@ func (s *InMemoryState) CreateFilesystem(ctx context.Context, filesystemName *Vo
 			)
 			return nil, nil, err
 		}
-	}
+	default:
+		filesystemId = existingFS.Id
+		log.Printf("[CreateFilesystem] called with name=%+v, examining existing id %s", filesystemName, filesystemId)
 
-	filesystemId = existingFS.Id
-	log.Printf("[CreateFilesystem] called with name=%+v, examining existing id %s", filesystemName, filesystemId)
-
-	// Check for an existing master mapping
-	_, err = s.filesystemStore.GetMaster(filesystemId)
-	if err != nil && !store.IsKeyNotFound(err) {
-		return nil, nil, err
-	} else if err != nil && err == store.ErrNotFound {
-		// Key not found, proceed to set up new master mapping
-	} else {
-		// Existing master mapping, we're trying to create an already-existing volume! Abort!
-		return nil, nil, fmt.Errorf("A volume called %s already exists with id %s", filesystemName, filesystemId)
+		// Check for an existing master mapping
+		_, err = s.filesystemStore.GetMaster(filesystemId)
+		if err != nil && !store.IsKeyNotFound(err) {
+			return nil, nil, err
+		} else if err != nil && err == store.ErrNotFound {
+			// Key not found, proceed to set up new master mapping
+		} else {
+			// Existing master mapping, we're trying to create an already-existing volume! Abort!
+			return nil, nil, fmt.Errorf("A volume called %s already exists with id %s", filesystemName, filesystemId)
+		}
 	}
 
 	if s.debugPartialFailCreateFilesystem {
@@ -710,7 +684,6 @@ func (s *InMemoryState) CreateFilesystem(ctx context.Context, filesystemName *Vo
 	err = s.filesystemStore.SetMaster(&types.FilesystemMaster{
 		FilesystemID: filesystemId,
 		NodeID:       s.NodeID(),
-		PoolID:       s.zfs.GetPoolID(),
 	}, &store.SetOptions{})
 	if err != nil {
 		log.Printf(
@@ -721,7 +694,7 @@ func (s *InMemoryState) CreateFilesystem(ctx context.Context, filesystemName *Vo
 	}
 
 	// update mastersCache with what we know
-	s.registry.SetMasterNode(filesystemId, s.zfs.GetPoolID())
+	s.registry.SetMasterNode(filesystemId, s.NodeID())
 
 	// go ahead and create the filesystem
 	fs, err := s.InitFilesystemMachine(filesystemId)
