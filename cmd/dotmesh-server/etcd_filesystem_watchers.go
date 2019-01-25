@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/dotmesh-io/dotmesh/pkg/store"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	log "github.com/sirupsen/logrus"
 )
@@ -194,11 +195,12 @@ func (s *InMemoryState) watchTransfers() error {
 	}
 
 	return s.filesystemStore.WatchTransfers(idxMax, func(val *types.TransferPollResult) error {
-		return s.processTransferPollResults(val)
+		s.processTransferPollResults(val)
+		return nil
 	})
 }
 
-func (s *InMemoryState) processTransferPollResults(t *types.TransferPollResult) error {
+func (s *InMemoryState) processTransferPollResults(t *types.TransferPollResult) {
 	s.interclusterTransfersLock.Lock()
 	defer s.interclusterTransfersLock.Unlock()
 
@@ -208,7 +210,7 @@ func (s *InMemoryState) processTransferPollResults(t *types.TransferPollResult) 
 	case types.KVCreate, types.KVSet:
 		s.interclusterTransfers[t.TransferRequestId] = *t
 	}
-	return nil
+	return
 }
 
 func (s *InMemoryState) watchFilesystemDeleted() error {
@@ -229,4 +231,158 @@ func (s *InMemoryState) watchFilesystemDeleted() error {
 	return s.filesystemStore.WatchDeleted(idxMax, func(val *types.FilesystemDeletionAudit) error {
 		return s.handleFilesystemDeletion(val)
 	})
+}
+
+func (s *InMemoryState) watchCleanupPending() error {
+	vals, err := s.filesystemStore.ListCleanupPending()
+	if err != nil {
+		return fmt.Errorf("failed to list filesystem deleted: %s", err)
+	}
+
+	var idxMax uint64
+	for _, val := range vals {
+		if val.Meta.ModifiedIndex > idxMax {
+			idxMax = val.Meta.ModifiedIndex
+		}
+		err = s.processFilesystemCleanup(val)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":         err,
+				"filesystem_id": val.FilesystemID,
+			}).Error("[watchCleanupPending] got error while processing initial cleanupPending list")
+		}
+	}
+
+	return s.filesystemStore.WatchCleanupPending(idxMax, func(val *types.FilesystemDeletionAudit) error {
+		switch val.Meta.Action {
+		case types.KVDelete:
+			// nothing to do:
+			return nil
+		case types.KVCreate, types.KVSet:
+			return s.processFilesystemCleanup(val)
+		default:
+			log.WithFields(log.Fields{
+				"action":        val.Meta.Action,
+				"filesystem_id": val.FilesystemID,
+			}).Warn("[watchCleanupPending] unhandled event")
+			return nil
+		}
+
+	})
+}
+
+func (s *InMemoryState) processFilesystemCleanup(fda *types.FilesystemDeletionAudit) error {
+	var errors []error
+
+	log.WithFields(log.Fields{
+		"filesystem_id": fda.FilesystemID,
+		"namespace":     fda.Name.Namespace,
+		"name":          fda.Name.Name,
+	}).Info("[processFilesystemCleanup] deleting filesystem")
+
+	err := s.filesystemStore.DeleteContainers(fda.FilesystemID)
+	if err != nil && !store.IsKeyNotFound(err) {
+		log.WithFields(log.Fields{
+			"error":         err,
+			"filesystem_id": fda.FilesystemID,
+		}).Error("[processFilesystemCleanup] failed to delete filesystem containers during cleanup")
+	}
+	err = s.filesystemStore.DeleteMaster(fda.FilesystemID)
+	if err != nil && !store.IsKeyNotFound(err) {
+		log.WithFields(log.Fields{
+			"error":         err,
+			"filesystem_id": fda.FilesystemID,
+		}).Error("[processFilesystemCleanup] failed to delete filesystem master info during cleanup")
+	}
+	err = s.filesystemStore.DeleteDirty(fda.FilesystemID)
+	if err != nil && !store.IsKeyNotFound(err) {
+		log.WithFields(log.Fields{
+			"error":         err,
+			"filesystem_id": fda.FilesystemID,
+		}).Error("[processFilesystemCleanup] failed to delete filesystem dirty info during cleanup")
+	}
+
+	if fda.Name.Namespace != "" && fda.Name.Name != "" {
+		// The name might be blank in the audit trail - this is used
+		// to indicate that this was a clone, NOT the toplevel filesystem, so
+		// there's no need to remove the registry entry for the whole
+		// volume. We only do that when deleting the toplevel filesystem.
+
+		// Normally, the registry entry is deleted as soon as the volume
+		// is deleted, but in the event of a failure it might not have
+		// been. So we try again.
+
+		registryFilesystem, err := s.registryStore.GetFilesystem(
+			fda.Name.Namespace,
+			fda.Name.Name,
+		)
+
+		if err != nil {
+			if store.IsKeyNotFound(err) {
+				// we are good, it doesn't exist, nothing to delete
+				log.WithFields(log.Fields{
+					"namespace": fda.Name.Namespace,
+					"name":      fda.Name.Name,
+				}).Info("[processFilesystemCleanup] filesystem not found in registry, nothing to delete")
+			} else {
+				errors = append(errors, err)
+			}
+		} else {
+			// We have an existing registry entry, but is it the one
+			// we're supposed to delete, or a newly-created volume
+			// with the name of the deleted one?
+
+			if registryFilesystem.Id == fda.FilesystemID {
+				log.WithFields(log.Fields{
+					"filesystem_id": fda.FilesystemID,
+					"namespace":     fda.Name.Namespace,
+					"name":          fda.Name.Name,
+				}).Error("[processFilesystemCleanup] deleting filesystem from registry store")
+				err = s.registryStore.DeleteFilesystem(fda.Name.Namespace, fda.Name.Name)
+				if err != nil && !store.IsKeyNotFound(err) {
+					errors = append(errors, err)
+				}
+			} else {
+				log.WithFields(log.Fields{
+					"registry_entry_id":   registryFilesystem.Id,
+					"audit_filesystem_id": fda.FilesystemID,
+					"namespace":           fda.Name.Namespace,
+					"name":                fda.Name.Name,
+				}).Info("[processFilesystemCleanup] can't delete registry entry, IDs do not match")
+			}
+		}
+	}
+
+	if fda.Clone != "" {
+		// The clone name might be blank in the audit trail - this is
+		// used to indicate that this was the toplevel filesystem
+		// rather than a clone. But when a clone name is specified,
+		// we need to delete a clone record from etc.
+		err = s.registryStore.DeleteClone(
+			fda.TopLevelFilesystemId,
+			fda.Clone,
+		)
+		if err != nil && !store.IsKeyNotFound(err) {
+			errors = append(errors, err)
+		}
+	}
+
+	if len(errors) == 0 {
+		err = s.filesystemStore.DeleteCleanupPending(fda.FilesystemID)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":         err,
+				"filesystem_id": fda.FilesystemID,
+			}).Error("[processFilesystemCleanup] failed to remove 'cleanupPending' filesystem after the cleanup")
+			return fmt.Errorf("failed to remove 'cleanupPending' after the cleanup for filesystem '%s', error: %s", fda.FilesystemID, err)
+		}
+		log.WithFields(log.Fields{
+			"filesystem_id": fda.FilesystemID,
+			"namespace":     fda.Name.Namespace,
+			"name":          fda.Name.Name,
+		}).Info("[processFilesystemCleanup] successfuly deleted filesystem")
+		return nil
+	}
+	return fmt.Errorf("Errors found cleaning up after a deleted filesystem: %+v", errors)
+
 }
