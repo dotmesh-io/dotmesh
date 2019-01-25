@@ -28,6 +28,7 @@ type FilesystemStore interface {
 	DeleteCleanupPending(id string) error
 	// /filesystems/cleanupPending
 	ListCleanupPending() ([]*types.FilesystemDeletionAudit, error)
+	WatchCleanupPending(idx uint64, cb WatchCleanupPendingCB) error
 
 	// /filesystems/live/<id>
 	SetLive(fl *types.FilesystemLive, opts *SetOptions) error
@@ -54,10 +55,11 @@ type FilesystemStore interface {
 type (
 	WatchMasterCB func(fs *types.FilesystemMaster) error
 	// WatchLiveCB       func(fs *types.FilesystemLive) error
-	WatchContainersCB func(fs *types.FilesystemContainers) error
-	WatchDeletedCB    func(fs *types.FilesystemDeletionAudit) error
-	WatchDirtyCB      func(fs *types.FilesystemDirty) error
-	WatchTransfersCB  func(fs *types.TransferPollResult) error
+	WatchContainersCB     func(fs *types.FilesystemContainers) error
+	WatchDeletedCB        func(fs *types.FilesystemDeletionAudit) error
+	WatchCleanupPendingCB func(fs *types.FilesystemDeletionAudit) error
+	WatchDirtyCB          func(fs *types.FilesystemDirty) error
+	WatchTransfersCB      func(fs *types.TransferPollResult) error
 )
 
 type RegistryStore interface {
