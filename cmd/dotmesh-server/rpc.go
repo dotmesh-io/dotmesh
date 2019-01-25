@@ -2618,7 +2618,7 @@ func (d *DotmeshRPC) DumpInternalState(
 	return nil
 }
 
-func (d *DotmeshRPC) DumpEtcd(
+func (d *DotmeshRPC) DumpEtcdOld(
 	r *http.Request,
 	args *struct {
 		Prefix string
@@ -2673,7 +2673,7 @@ func find(node *client.Node, path []string) *client.Node {
 }
 
 // TODO: reimplement KV store restore
-// func (d *DotmeshRPC) RestoreEtcd(
+// func (d *DotmeshRPC) RestoreEtcdOld(
 // 	r *http.Request,
 // 	args *struct {
 // 		Prefix string
@@ -2700,11 +2700,6 @@ func find(node *client.Node, path []string) *client.Node {
 // 	if err != nil {
 // 		return err
 // 	}
-
-// 	// kapi, err := getEtcdKeysApi()
-// 	// if err != nil {
-// 	// 	return err
-// 	// }
 
 // 	var kvPairs kvdb.KVPairs
 // 	err = json.Unmarshal([]byte(args.Dump), &kvPairs)
@@ -2811,7 +2806,6 @@ func find(node *client.Node, path []string) *client.Node {
 
 // 	// Don't restore:
 // 	// * masters
-// 	// * request/response data
 // 	// * admin user
 // 	// * anything else :)
 
