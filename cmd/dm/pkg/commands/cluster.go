@@ -2,7 +2,6 @@ package commands
 
 import (
 	"bytes"
-	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -18,15 +17,10 @@ import (
 	"syscall"
 	"time"
 
-	"golang.org/x/net/context"
-	"golang.org/x/sys/unix"
-
 	"github.com/blang/semver"
-	etcd "github.com/coreos/etcd/client"
 	"github.com/dotmesh-io/dotmesh/cmd/dm/pkg/pki"
 	"github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/spf13/cobra"
-	"golang.org/x/crypto/scrypt"
 )
 
 const DOTMESH_DOCKER_IMAGE = "quay.io/dotmesh/dotmesh-server"
@@ -52,6 +46,9 @@ const HASH_BYTES = 32
 const SCRYPT_N = 32768
 const SCRYPT_R = 8
 const SCRYPT_P = 1
+
+const DISCOVERY_API_KEY = "...ADMIN_API_KEY"
+const DISCOVERY_PASSWORD = "...ADMIN_PASSWORD"
 
 var (
 	serverCount        int
@@ -374,7 +371,7 @@ func clusterUpgrade(cmd *cobra.Command, args []string, out io.Writer) error {
 
 	pkiPath := getPkiPath()
 	fmt.Printf("Starting dotmesh server... ")
-	err = startDotmeshContainer(pkiPath)
+	err = startDotmeshContainer(pkiPath, "", "")
 	if err != nil {
 		return err
 	}
@@ -527,87 +524,6 @@ func transportFromTLS(certFile, keyFile, caFile string) (*http.Transport, error)
 	return transport, nil
 }
 
-func getEtcd() (etcd.KeysAPI, error) {
-	// attempt to connect to etcd and set the admin password for the first time
-	transport, err := transportFromTLS(
-		getPkiPath()+"/apiserver.pem",
-		getPkiPath()+"/apiserver-key.pem",
-		getPkiPath()+"/ca.pem",
-	)
-	if err != nil {
-		return nil, err
-	}
-	cfg := etcd.Config{
-		Endpoints: []string{fmt.Sprintf("https://%s:42379", getHostFromEnv())},
-		Transport: transport,
-		// set timeout per request to fail fast when the target endpoint is
-		// unavailable
-		HeaderTimeoutPerRequest: time.Second * 30,
-	}
-	c, err := etcd.New(cfg)
-	if err != nil {
-		return nil, err
-	}
-	return etcd.NewKeysAPI(c), nil
-}
-
-func getToken() (string, error) {
-	kapi, err := getEtcd()
-	if err != nil {
-		return "", err
-	}
-	encoded, err := kapi.Get(
-		context.Background(),
-		fmt.Sprintf("/dotmesh.io/users/%s", ADMIN_USER_UUID),
-		nil,
-	)
-	if err != nil {
-		return "", err
-	}
-	// just extract the field we need
-	var s struct{ ApiKey string } // This MUST be a subset of the type User defined in cmd/dotmesh-server/pkg/main/types.go
-	err = json.Unmarshal([]byte(encoded.Node.Value), &s)
-	if err != nil {
-		return "", err
-	}
-	return s.ApiKey, nil
-}
-
-func setAuthTokens(adminPassword, adminKey string) error {
-	salt := make([]byte, SALT_BYTES)
-	_, err := rand.Read(salt)
-
-	if err != nil {
-		return err
-	}
-
-	hashedPassword, err := scrypt.Key([]byte(adminPassword), salt, SCRYPT_N, SCRYPT_R, SCRYPT_P, HASH_BYTES)
-
-	kapi, err := getEtcd()
-	if err != nil {
-		return err
-	}
-	// This MUST be a subset of the type User defined in cmd/dotmesh-server/pkg/main/types.go
-	user := struct {
-		Id       string
-		Name     string
-		Salt     []byte
-		Password []byte
-		ApiKey   string
-	}{Id: ADMIN_USER_UUID, Name: "admin", Salt: salt, Password: hashedPassword, ApiKey: adminKey}
-	encoded, err := json.Marshal(user)
-	if err != nil {
-		return err
-	}
-	_, err = kapi.Set(
-		context.Background(),
-		fmt.Sprintf("/dotmesh.io/users/%s", ADMIN_USER_UUID),
-		string(encoded),
-		&etcd.SetOptions{},
-	)
-	return err
-}
-
 func guessHostIPv4Addresses() ([]string, error) {
 	// XXX this will break if the node's IP address changes
 	ip, err := exec.Command(
@@ -648,7 +564,7 @@ func pathExists(path string) (bool, error) {
 	return true, err
 }
 
-func startDotmeshContainer(pkiPath string) error {
+func startDotmeshContainer(pkiPath, adminKey, adminPassword string) error {
 	if traceAddr != "" {
 		fmt.Printf("Trace address: %s\n", traceAddr)
 	}
@@ -689,6 +605,12 @@ func startDotmeshContainer(pkiPath string) error {
 		"-e", fmt.Sprintf("DOTMESH_DOCKER_IMAGE=%s", dotmeshDockerImage),
 		"-e", fmt.Sprintf("DOTMESH_UPGRADES_URL=%s", checkpointUrl),
 		"-e", fmt.Sprintf("DOTMESH_UPGRADES_INTERVAL_SECONDS=%d", checkpointInterval),
+	}
+	if adminKey != "" {
+		args = append(args, "-e", fmt.Sprintf("INITIAL_ADMIN_API_KEY=%s", adminKey))
+	}
+	if adminPassword != "" {
+		args = append(args, "-e", fmt.Sprintf("INITIAL_ADMIN_PASSWORD=%s", adminKey))
 	}
 	if port != 0 {
 		args = append(args, "-e")
@@ -828,93 +750,44 @@ func clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath string) err
 	}
 	fmt.Printf("done.\n")
 
+	config, err := client.NewConfiguration(configPath)
+
 	if adminPassword != "" && adminKey != "" {
-		// we are to try and initialize the first admin passwords
-		// try 10 times with exponentially increasing delay in between.
-		// panic if the adminPassword already exists
-		delay := 1
-		var err error
-		for i := 1; i <= 10; i++ {
-			time.Sleep(time.Duration(delay) * 5 * time.Second)
-			err = setAuthTokens(adminPassword, adminKey)
-			if err == nil {
-				path, _ := filepath.Split(configPath)
-				passwordPath := filepath.Join(path, "admin-password.txt")
-				fmt.Printf(
-					"Succeeded setting initial admin password to '%s' - writing it to %s\n",
-					adminPassword,
-					passwordPath,
-				)
-
-				// Delete any previous admin password; ignore errors as we
-				// don't care if it wasn't there, and if there's something
-				// more exotic wrong with the filesystem (eg, permissions,
-				// IO error) the attempt to write will report it:
-				os.Remove(passwordPath)
-
-				// Mode 0600 to make it owner-only
-				err = ioutil.WriteFile(passwordPath, []byte(adminPassword), 0600)
-
-				if err == nil {
-					// Try to limit that to 0400 (read-only) now we've written it
-					err2 := unix.Chmod(passwordPath, 0400)
-					if err2 != nil {
-						// Non-fatal error
-						fmt.Printf("WARNING: Could not make admin password file %s read-only: %v\n", passwordPath, err2)
-					}
-				}
-				break
-			}
-			delay *= 2
-			fmt.Printf(
-				"Can't set initial admin password yet (%s), retrying in %ds...\n",
-				err, delay,
-			)
+		// set the admin password in our Configuration
+		fmt.Printf("Configuring dm CLI to authenticate to dotmesh server %s... ", configPath)
+		if err != nil {
+			return err
 		}
+		if config.RemoteExists("local") {
+			fmt.Printf("Removing old 'local' remote... ")
+			err = config.RemoveRemote("local")
+			if err != nil {
+				return err
+			}
+		}
+		err = config.AddRemote("local", "admin", getHostFromEnv(), port, adminKey)
 		if err != nil {
 			return err
 		}
 	} else {
-		// GET adminKey from our local etcd
-		// TODO refactor tryUntil
-		delay := 1
-		var err error
-		for i := 1; i <= 10; i++ {
-			time.Sleep(time.Duration(delay) * 5 * time.Second)
-			adminKey, err = getToken()
-			if err == nil {
-				fmt.Printf(
-					"Succeeded getting initial admin API key '%s'\n",
-					adminKey,
-				)
-				break
+		// GET adminKey from existing configuration
+		if config.RemoteExists("local") {
+			r, err := config.GetRemote("local")
+			if err != nil {
+				return err
 			}
-			delay *= 2
-			fmt.Printf(
-				"Can't get initial admin API key yet (%s), retrying in %ds...\n",
-				err, delay,
-			)
+			dr, ok := r.(*client.DMRemote)
+			if !ok {
+				return fmt.Errorf("The 'local' remote wasn't a Dotmesh remote")
+			}
+
+			adminKey = dr.ApiKey
+		} else {
+			return fmt.Errorf("You don't have a `local` remote in your Dotmesh configuration, so I cannot reconfigure your local cluster!")
 		}
 		if err != nil {
 			return err
 		}
-	}
-	// set the admin password in our Configuration
-	fmt.Printf("Configuring dm CLI to authenticate to dotmesh server %s... ", configPath)
-	config, err := client.NewConfiguration(configPath)
-	if err != nil {
-		return err
-	}
-	if config.RemoteExists("local") {
-		fmt.Printf("Removing old 'local' remote... ")
-		err = config.RemoveRemote("local")
-		if err != nil {
-			return err
-		}
-	}
-	err = config.AddRemote("local", "admin", getHostFromEnv(), port, adminKey)
-	if err != nil {
-		return err
 	}
 	err = config.SetCurrentRemote("local")
 	if err != nil {
@@ -924,7 +797,7 @@ func clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath string) err
 
 	// - Start dotmesh-server.
 	fmt.Printf("Starting dotmesh server... ")
-	err = startDotmeshContainer(pkiPath)
+	err = startDotmeshContainer(pkiPath, adminKey, adminPassword)
 	if err != nil {
 		return err
 	}
@@ -1041,7 +914,7 @@ func clusterReset(cmd *cobra.Command, args []string, out io.Writer) error {
 	return nil
 }
 
-func generatePkiJsonEncoded(pkiPath string) (string, error) {
+func generatePkiJsonEncoded(pkiPath, adminPassword, adminApiKey string) (string, error) {
 	v := url.Values{}
 	resultMap := map[string]string{}
 	files, err := ioutil.ReadDir(pkiPath)
@@ -1056,6 +929,8 @@ func generatePkiJsonEncoded(pkiPath string) (string, error) {
 		}
 		resultMap[name] = string(c)
 	}
+	resultMap[DISCOVERY_API_KEY] = adminApiKey
+	resultMap[DISCOVERY_PASSWORD] = adminPassword
 	j, err := json.Marshal(resultMap)
 	if err != nil {
 		return "", err
@@ -1149,6 +1024,17 @@ func clusterInit(cmd *cobra.Command, args []string, out io.Writer) error {
 		return err
 	}
 
+	// - Generate admin creds, and insert them into etcd
+	adminPassword, err := RandToken(32)
+	if err != nil {
+		return err
+	}
+
+	adminKey, err := RandToken(32)
+	if err != nil {
+		return err
+	}
+
 	clusterUrl := string(body)
 
 	// The discovery service doesn't necessarily knows its own name, especially in gnarly dind test environments
@@ -1194,7 +1080,7 @@ func clusterInit(cmd *cobra.Command, args []string, out io.Writer) error {
 		fmt.Printf("done.\n")
 
 		// - Upload all PKI assets to discovery.dotmesh.io under "secure" path
-		pkiJsonEncoded, err := generatePkiJsonEncoded(pkiPath)
+		pkiJsonEncoded, err := generatePkiJsonEncoded(pkiPath, adminPassword, adminKey)
 		if err != nil {
 			return err
 		}
@@ -1240,17 +1126,6 @@ func clusterInit(cmd *cobra.Command, args []string, out io.Writer) error {
 		return err
 	}
 
-	// - Generate admin creds, and insert them into etcd
-	adminPassword, err := RandToken(32)
-	if err != nil {
-		return err
-	}
-
-	adminKey, err := RandToken(32)
-	if err != nil {
-		return err
-	}
-
 	// - Run clusterCommonSetup.
 	err = clusterCommonSetup(
 		strings.TrimSpace(clusterUrl), adminPassword, adminKey, pkiPath,
@@ -1283,8 +1158,6 @@ func clusterJoin(cmd *cobra.Command, args []string, out io.Writer) error {
 	clusterUrl := strings.Join(clusterUrlPieces, ":")
 	clusterSecret := shrapnel[len(shrapnel)-1]
 
-	adminPassword := "" // aka "don't attempt to set it in etcd"
-	adminKey := ""      // aka "don't attempt to set it in etcd"
 	pkiPath := getPkiPath()
 	// Now get PKI assets from discovery service.
 	// TODO: discovery service should mint new credentials just for us, rather
@@ -1327,14 +1200,24 @@ func clusterJoin(cmd *cobra.Command, args []string, out io.Writer) error {
 		)
 	}
 
+	adminPassword := ""
+	adminApiKey := ""
+
 	err = os.MkdirAll(pkiPath+".tmp", 0700)
 	if err != nil {
 		return err
 	}
 	for filename, contents := range filesContents {
-		err = ioutil.WriteFile(pkiPath+".tmp/"+filename, []byte(contents), 0600)
-		if err != nil {
-			return err
+		switch filename {
+		case DISCOVERY_API_KEY:
+			adminApiKey = contents
+		case DISCOVERY_PASSWORD:
+			adminPassword = contents
+		default:
+			err = ioutil.WriteFile(pkiPath+".tmp/"+filename, []byte(contents), 0600)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	err = os.Rename(pkiPath+".tmp", pkiPath)
@@ -1347,7 +1230,7 @@ func clusterJoin(cmd *cobra.Command, args []string, out io.Writer) error {
 	}
 	fmt.Printf("done!\n")
 	// - Run clusterCommonSetup.
-	err = clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath)
+	err = clusterCommonSetup(clusterUrl, adminPassword, adminApiKey, pkiPath)
 	if err != nil {
 		return err
 	}
