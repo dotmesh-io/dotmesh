@@ -28,7 +28,6 @@ type Server struct {
 	Meta *KVMeta `json:"-"`
 
 	Id        string
-	PoolID    string
 	Addresses []string
 }
 

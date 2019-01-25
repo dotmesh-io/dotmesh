@@ -149,7 +149,7 @@ func NewFilesystemMachine(cfg *FsConfig) *FsMachine {
 		transferUpdates: make(chan types.TransferUpdate),
 
 		filesystemMetadataTimeout: cfg.FilesystemMetadataTimeout,
-		zfs: zfsInter,
+		zfs:                       zfsInter,
 	}
 }
 
@@ -407,19 +407,11 @@ func (f *FsMachine) pollDirty() error {
 			f.dirtyDelta = dirtyDelta
 			f.sizeBytes = sizeBytes
 
-			// serialized, err := json.Marshal(dirtyInfo{
-			// 	Server:     f.state.NodeID(),
-			// 	DirtyBytes: dirtyDelta,
-			// 	SizeBytes:  sizeBytes,
-			// })
-			// if err != nil {
-			// 	return err
-			// }
-
 			fd := &types.FilesystemDirty{
-				NodeID:     f.state.NodeID(),
-				DirtyBytes: dirtyDelta,
-				SizeBytes:  sizeBytes,
+				FilesystemID: f.filesystemId,
+				NodeID:       f.state.NodeID(),
+				DirtyBytes:   dirtyDelta,
+				SizeBytes:    sizeBytes,
 			}
 			err = f.filesystemStore.SetDirty(fd, &store.SetOptions{})
 			// _, err = f.etcdClient.Set(context.Background(), fmt.Sprintf("%s/filesystems/dirty/%s", types.EtcdPrefix, f.filesystemId), string(serialized), nil)

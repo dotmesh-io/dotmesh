@@ -35,8 +35,6 @@ type FilesystemMaster struct {
 
 	FilesystemID string `json:"filesystem_id"`
 	NodeID       string `json:"node_id"`
-	// TODO: deprecate either NodeID or ZPoolID
-	PoolID string `json:"pool_id"`
 }
 
 type FilesystemDeletionAudit struct {
@@ -66,11 +64,9 @@ type FilesystemContainers struct {
 	// Meta is populated by the KV store implementer
 	Meta *KVMeta `json:"-"`
 
-	FilesystemID string `json:"filesystem_id"`
-	NodeID       string `json:"node_id"`
-	// TODO: deprecate either NodeID or ZPoolID
-	PoolID     string                      `json:"pool_id"`
-	Containers []container.DockerContainer `json:"containers"`
+	FilesystemID string                      `json:"filesystem_id"`
+	NodeID       string                      `json:"node_id"`
+	Containers   []container.DockerContainer `json:"containers"`
 }
 
 // KVAction specifies the action on a KV pair. This is useful to make decisions

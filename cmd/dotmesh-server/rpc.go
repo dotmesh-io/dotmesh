@@ -1178,7 +1178,6 @@ func (d *DotmeshRPC) registerFilesystemBecomeMaster(
 			err = d.state.filesystemStore.SetMaster(&types.FilesystemMaster{
 				FilesystemID: f,
 				NodeID:       d.state.NodeID(),
-				PoolID:       d.state.zfs.GetPoolID(),
 			}, &store.SetOptions{})
 			if err != nil {
 				return err

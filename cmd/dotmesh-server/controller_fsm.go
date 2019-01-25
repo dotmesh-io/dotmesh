@@ -187,7 +187,7 @@ func (s *InMemoryState) AlignMountStateWithMasters(filesystemId string) error {
 				"[AlignMountStateWithMasters] called for %v; masterFor=%v, myNodeId=%v; mounted=%t",
 				filesystemId,
 				masterNode,
-				s.zfs.GetPoolID(),
+				s.NodeID(),
 				fs.Mounted(),
 			)
 			return fs, fs.Mounted(), nil
@@ -202,14 +202,14 @@ func (s *InMemoryState) AlignMountStateWithMasters(filesystemId string) error {
 		}
 
 		// not mounted but should be (we are the master)
-		if masterNode == s.zfs.GetPoolID() && !mounted {
+		if masterNode == s.NodeID() && !mounted {
 			responseEvent := fs.Mount()
 			if responseEvent.Name != "mounted" {
 				return fmt.Errorf("Couldn't mount filesystem: %v", responseEvent)
 			}
 		}
 		// mounted but shouldn't be (we are not the master)
-		if masterNode != s.zfs.GetPoolID() && mounted {
+		if masterNode != s.NodeID() && mounted {
 			responseEvent := fs.Unmount()
 			if responseEvent.Name != "unmounted" {
 				return fmt.Errorf("Couldn't unmount filesystem: %v", responseEvent)
@@ -245,7 +245,6 @@ func (s *InMemoryState) ActivateClone(topLevelFilesystemId, originFilesystemId, 
 	err = s.filesystemStore.SetMaster(&types.FilesystemMaster{
 		FilesystemID: newCloneFilesystemId,
 		NodeID:       s.NodeID(),
-		PoolID:       s.zfs.GetPoolID(),
 	}, &store.SetOptions{})
 
 	if err != nil {
@@ -309,7 +308,6 @@ func (s *InMemoryState) RegisterNewFork(originFilesystemId, originSnapshotId, fo
 	err = s.filesystemStore.SetMaster(&types.FilesystemMaster{
 		FilesystemID: forkFilesystemId,
 		NodeID:       s.NodeID(),
-		PoolID:       s.zfs.GetPoolID(),
 	}, &store.SetOptions{})
 	if err != nil {
 		return err
