@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"golang.org/x/sys/unix"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -610,7 +611,7 @@ func startDotmeshContainer(pkiPath, adminKey, adminPassword string) error {
 		args = append(args, "-e", fmt.Sprintf("INITIAL_ADMIN_API_KEY=%s", adminKey))
 	}
 	if adminPassword != "" {
-		args = append(args, "-e", fmt.Sprintf("INITIAL_ADMIN_PASSWORD=%s", adminKey))
+		args = append(args, "-e", fmt.Sprintf("INITIAL_ADMIN_PASSWORD=%s", adminPassword))
 	}
 	if port != 0 {
 		args = append(args, "-e")
@@ -655,6 +656,56 @@ func exists(path string) (bool, error) {
 		return false, nil
 	}
 	return true, err
+}
+
+func saveLocalAuthDetails(configPath, adminPassword, adminKey string) error {
+	config, err := client.NewConfiguration(configPath)
+
+	// set the admin API key in our Configuration
+	fmt.Printf("Configuring dm CLI to authenticate to dotmesh server %s...\n", configPath)
+	if err != nil {
+		return err
+	}
+	if config.RemoteExists("local") {
+		fmt.Printf("Removing old 'local' remote... ")
+		err = config.RemoveRemote("local")
+		if err != nil {
+			return err
+		}
+	}
+	err = config.AddRemote("local", "admin", getHostFromEnv(), port, adminKey)
+	if err != nil {
+		return err
+	}
+
+	// Write admin password to the text file
+	path, _ := filepath.Split(configPath)
+	passwordPath := filepath.Join(path, "admin-password.txt")
+	fmt.Printf(
+		"Admin password is '%s' - writing it to %s\n",
+		adminPassword,
+		passwordPath,
+	)
+
+	// Delete any previous admin password; ignore errors as we
+	// don't care if it wasn't there, and if there's something
+	// more exotic wrong with the filesystem (eg, permissions,
+	// IO error) the attempt to write will report it:
+	os.Remove(passwordPath)
+
+	// Mode 0600 to make it owner-only
+	err = ioutil.WriteFile(passwordPath, []byte(adminPassword), 0600)
+
+	if err == nil {
+		// Try to limit that to 0400 (read-only) now we've written it
+		err2 := unix.Chmod(passwordPath, 0400)
+		if err2 != nil {
+			// Non-fatal error
+			fmt.Printf("WARNING: Could not make admin password file %s read-only: %v\n", passwordPath, err2)
+		}
+	}
+
+	return nil
 }
 
 func clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath string) error {
@@ -750,27 +801,19 @@ func clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath string) err
 	}
 	fmt.Printf("done.\n")
 
-	config, err := client.NewConfiguration(configPath)
-
 	if adminPassword != "" && adminKey != "" {
-		// set the admin password in our Configuration
-		fmt.Printf("Configuring dm CLI to authenticate to dotmesh server %s... ", configPath)
-		if err != nil {
-			return err
-		}
-		if config.RemoteExists("local") {
-			fmt.Printf("Removing old 'local' remote... ")
-			err = config.RemoveRemote("local")
-			if err != nil {
-				return err
-			}
-		}
-		err = config.AddRemote("local", "admin", getHostFromEnv(), port, adminKey)
+		err = saveLocalAuthDetails(configPath, adminPassword, adminKey)
 		if err != nil {
 			return err
 		}
 	} else {
 		// GET adminKey from existing configuration
+
+		config, err := client.NewConfiguration(configPath)
+		if err != nil {
+			return err
+		}
+
 		if config.RemoteExists("local") {
 			r, err := config.GetRemote("local")
 			if err != nil {
@@ -785,15 +828,16 @@ func clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath string) err
 		} else {
 			return fmt.Errorf("You don't have a `local` remote in your Dotmesh configuration, so I cannot reconfigure your local cluster!")
 		}
-		if err != nil {
-			return err
-		}
+	}
+
+	config, err := client.NewConfiguration(configPath)
+	if err != nil {
+		return err
 	}
 	err = config.SetCurrentRemote("local")
 	if err != nil {
 		return err
 	}
-	fmt.Printf("done.\n")
 
 	// - Start dotmesh-server.
 	fmt.Printf("Starting dotmesh server... ")
@@ -1234,6 +1278,12 @@ func clusterJoin(cmd *cobra.Command, args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+
+	err = saveLocalAuthDetails(configPath, adminPassword, adminApiKey)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
