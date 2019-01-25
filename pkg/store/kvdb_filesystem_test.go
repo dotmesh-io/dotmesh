@@ -142,3 +142,59 @@ func TestWatchMasterAfterDeletion(t *testing.T) {
 		}
 	}
 }
+
+func TestWatchMasterDeleteEvent(t *testing.T) {
+
+	kvdb, err := NewKVDBFilesystemStore(&KVDBConfig{
+		Type: KVTypeMem,
+	})
+	if err != nil {
+		t.Fatalf("failed to init kv store: %s", err)
+	}
+
+	fsID := "123456789"
+	found := false
+
+	fs := &types.FilesystemMaster{
+		FilesystemID: fsID,
+		NodeID:       "node-1",
+	}
+
+	err = kvdb.SetMaster(fs, &SetOptions{})
+	if err != nil {
+		t.Errorf("failed to set container: %s", err)
+	}
+
+	err = kvdb.WatchMasters(0, func(fs *types.FilesystemMaster) error {
+		if fs.Meta.Action == types.KVDelete {
+			t.Log("log event received")
+			if fs.FilesystemID != fsID {
+				t.Errorf("on delete event expected '%s', got: '%s'", fsID, fs.FilesystemID)
+			}
+			found = true
+		}
+		return nil
+	})
+	if err != nil {
+		t.Errorf("watch failed: %s", err)
+	}
+
+	kvdb.DeleteMaster(fsID)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	for {
+		select {
+		case <-ctx.Done():
+			t.Fatalf("deadline exceeded, watcher not triggered")
+		default:
+			if !found {
+				time.Sleep(300 * time.Millisecond)
+				continue
+			}
+			// success
+			return
+		}
+	}
+}

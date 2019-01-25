@@ -84,7 +84,17 @@ func (s *KVServerStore) WatchAddresses(idx uint64, cb WatchServerAddressesClones
 
 		srv.Meta = getMeta(kvp)
 
-		return cb(&srv)
+		err = cb(&srv)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":        err,
+				"key":          kvp.Key,
+				"action":       kvp.Action,
+				"modified_idx": kvp.ModifiedIndex,
+			}).Error("[WatchAddresses] callback returned an error")
+		}
+		// don't propagate the error, it will stop the watcher
+		return nil
 	}
 
 	return s.client.WatchTree(ServerAddressesPrefix, idx, nil, watchFunc)
@@ -168,7 +178,17 @@ func (s *KVServerStore) WatchStates(idx uint64, cb WatchServerStatesClonesCB) er
 
 		ss.Meta = getMeta(kvp)
 
-		return cb(&ss)
+		err = cb(&ss)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":        err,
+				"key":          kvp.Key,
+				"action":       kvp.Action,
+				"modified_idx": kvp.ModifiedIndex,
+			}).Error("[WatchStates] callback returned an error")
+		}
+		// don't propagate the error, it will stop the watcher
+		return nil
 	}
 
 	return s.client.WatchTree(ServerStatesPrefix, idx, nil, watchFunc)

@@ -112,7 +112,17 @@ func (s *KVDBFilesystemStore) WatchMasters(idx uint64, cb WatchMasterCB) error {
 
 		f.Meta = getMeta(kvp)
 
-		return cb(&f)
+		err = cb(&f)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":        err,
+				"key":          kvp.Key,
+				"action":       kvp.Action,
+				"modified_idx": kvp.ModifiedIndex,
+			}).Error("[WatchMasters] callback returned an error")
+		}
+		// don't return an error, it will stop the watcher
+		return nil
 	}
 
 	return s.client.WatchTree(FilesystemMastersPrefix, idx, nil, watchFunc)
@@ -198,7 +208,17 @@ func (s *KVDBFilesystemStore) WatchDeleted(idx uint64, cb WatchDeletedCB) error 
 
 		f.Meta = getMeta(kvp)
 
-		return cb(&f)
+		err = cb(&f)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":        err,
+				"key":          kvp.Key,
+				"action":       kvp.Action,
+				"modified_idx": kvp.ModifiedIndex,
+			}).Error("[WatchDeleted] callback returned an error")
+		}
+		// don't propagate the error, it will stop the watcher
+		return nil
 	}
 
 	return s.client.WatchTree(FilesystemDeletedPrefix, idx, nil, watchFunc)
@@ -354,7 +374,17 @@ func (s *KVDBFilesystemStore) WatchContainers(idx uint64, cb WatchContainersCB) 
 
 		f.Meta = getMeta(kvp)
 
-		return cb(&f)
+		err = cb(&f)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":        err,
+				"key":          kvp.Key,
+				"action":       kvp.Action,
+				"modified_idx": kvp.ModifiedIndex,
+			}).Error("[WatchContainers] callback returned an error")
+		}
+		// don't propagate the error, it will stop the watcher
+		return nil
 	}
 
 	return s.client.WatchTree(FilesystemContainersPrefix, idx, nil, watchFunc)
@@ -423,7 +453,17 @@ func (s *KVDBFilesystemStore) WatchDirty(idx uint64, cb WatchDirtyCB) error {
 
 		f.Meta = getMeta(kvp)
 
-		return cb(&f)
+		err = cb(&f)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":        err,
+				"key":          kvp.Key,
+				"action":       kvp.Action,
+				"modified_idx": kvp.ModifiedIndex,
+			}).Error("[WatchDirty] callback returned an error")
+		}
+		// don't propagate the error, it will stop the watcher
+		return nil
 	}
 
 	return s.client.WatchTree(FilesystemDirtyPrefix, idx, nil, watchFunc)
@@ -488,7 +528,17 @@ func (s *KVDBFilesystemStore) WatchTransfers(idx uint64, cb WatchTransfersCB) er
 
 		t.Meta = getMeta(kvp)
 
-		return cb(&t)
+		err = cb(&t)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":        err,
+				"key":          kvp.Key,
+				"action":       kvp.Action,
+				"modified_idx": kvp.ModifiedIndex,
+			}).Error("[WatchTransfers] callback returned an error")
+		}
+		// don't propagate the error, it will stop the watcher
+		return nil
 	}
 
 	return s.client.WatchTree(FilesystemTransfersPrefix, idx, nil, watchFunc)

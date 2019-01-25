@@ -83,7 +83,17 @@ func (s *KVDBFilesystemStore) WatchClones(idx uint64, cb WatchRegistryClonesCB) 
 
 		c.Meta = getMeta(kvp)
 
-		return cb(&c)
+		err = cb(&c)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":        err,
+				"key":          kvp.Key,
+				"action":       kvp.Action,
+				"modified_idx": kvp.ModifiedIndex,
+			}).Error("[WatchClones] callback returned an error")
+		}
+		// don't propagate the error, it will stop the watcher
+		return nil
 	}
 
 	return s.client.WatchTree(RegistryClonesPrefix, idx, nil, watchFunc)
@@ -203,7 +213,7 @@ func (s *KVDBFilesystemStore) WatchFilesystems(idx uint64, cb WatchRegistryFiles
 			log.WithFields(log.Fields{
 				"error":  err,
 				"prefix": prefix,
-			}).Error("[WatchFilesystems] error while watching KV store tree")
+			}).Error("[WatchRegistryFilesystems] error while watching KV store tree")
 		}
 
 		var f types.RegistryFilesystem
@@ -214,7 +224,17 @@ func (s *KVDBFilesystemStore) WatchFilesystems(idx uint64, cb WatchRegistryFiles
 
 		f.Meta = getMeta(kvp)
 
-		return cb(&f)
+		err = cb(&f)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":        err,
+				"key":          kvp.Key,
+				"action":       kvp.Action,
+				"modified_idx": kvp.ModifiedIndex,
+			}).Error("[WatchRegistryFilesystems] callback returned an error")
+		}
+		// don't propagate the error, it will stop the watcher
+		return nil
 	}
 
 	return s.client.WatchTree(RegistryFilesystemsPrefix, idx, nil, watchFunc)
