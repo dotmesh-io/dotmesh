@@ -179,11 +179,25 @@ func (s *InMemoryState) markFilesystemAsDeletedInEtcd(fsId, username string, nam
 	}
 
 	err := s.filesystemStore.SetDeleted(at, &store.SetOptions{})
+	// if err != nil && !store.IsKeyNotFound(err) {
 	if err != nil {
+		log.WithFields(log.Fields{
+			"error":         err,
+			"filesystem_id": fsId,
+			"username":      username,
+		}).Error("[markFilesystemAsDeletedInEtcd] failed to set 'deleted' in filesystem store")
 		return err
 	}
 
-	return s.filesystemStore.SetCleanupPending(at, &store.SetOptions{})
+	err = s.filesystemStore.SetCleanupPending(at, &store.SetOptions{})
+	if err != nil {
+		log.WithFields(log.Fields{
+			"error":         err,
+			"filesystem_id": fsId,
+			"username":      username,
+		}).Error("[markFilesystemAsDeletedInEtcd] failed to set 'cleanupPending' in filesystem store")
+	}
+	return err
 }
 
 // This struct is a subset of the struct used as the audit trail in
@@ -207,22 +221,28 @@ func (s *InMemoryState) cleanupDeletedFilesystems() error {
 	for fsId, deletionAudit := range pending {
 		var errors []error
 
+		log.WithFields(log.Fields{
+			"filesystem_id": fsId,
+			"namespace":     deletionAudit.Name.Namespace,
+			"name":          deletionAudit.Name.Name,
+		}).Info("[cleanupDeletedFilesystems] deleting filesystem")
+
 		err = s.filesystemStore.DeleteContainers(fsId)
-		if err != nil {
+		if err != nil && !store.IsKeyNotFound(err) {
 			log.WithFields(log.Fields{
 				"error":         err,
 				"filesystem_id": fsId,
 			}).Error("[cleanupDeletedFilesystems] failed to delete filesystem containers during cleanup")
 		}
 		err = s.filesystemStore.DeleteMaster(fsId)
-		if err != nil {
+		if err != nil && !store.IsKeyNotFound(err) {
 			log.WithFields(log.Fields{
 				"error":         err,
 				"filesystem_id": fsId,
 			}).Error("[cleanupDeletedFilesystems] failed to delete filesystem master info during cleanup")
 		}
 		err = s.filesystemStore.DeleteDirty(fsId)
-		if err != nil {
+		if err != nil && !store.IsKeyNotFound(err) {
 			log.WithFields(log.Fields{
 				"error":         err,
 				"filesystem_id": fsId,
@@ -729,6 +749,13 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		log.WithFields(log.Fields{
 			"error": err,
 		}).Error("failed to start watching server snapshots")
+	}
+
+	err = s.watchCleanupPending()
+	if err != nil {
+		log.WithFields(log.Fields{
+			"error": err,
+		}).Error("failed to start watching cleanup pending entries")
 	}
 
 	err = s.watchRegistryFilesystems()
