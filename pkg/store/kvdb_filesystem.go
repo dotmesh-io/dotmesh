@@ -2,7 +2,6 @@ package store
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/portworx/kvdb"
@@ -19,6 +18,10 @@ var _ FilesystemStore = &KVDBFilesystemStore{}
 func (s *KVDBFilesystemStore) SetMaster(fm *types.FilesystemMaster, opts *SetOptions) error {
 
 	if fm.FilesystemID == "" {
+		log.WithFields(log.Fields{
+			"error":  ErrIDNotSet,
+			"object": fm,
+		}).Error("[SetMaster] called without FilesystemID")
 		return ErrIDNotSet
 	}
 
@@ -59,6 +62,10 @@ func (s *KVDBFilesystemStore) ImportMasters(fs []*types.FilesystemMaster, opts *
 
 func (s *KVDBFilesystemStore) CompareAndSetMaster(fm *types.FilesystemMaster, opts *SetOptions) error {
 	if fm.FilesystemID == "" {
+		log.WithFields(log.Fields{
+			"error":  ErrIDNotSet,
+			"object": fm,
+		}).Error("[CompareAndSetMaster] called without FilesystemID")
 		return ErrIDNotSet
 	}
 
@@ -102,14 +109,33 @@ func (s *KVDBFilesystemStore) WatchMasters(idx uint64, cb WatchMasterCB) error {
 				"error":  err,
 				"prefix": prefix,
 			}).Error("[WatchMasters] error while watching KV store tree")
+			return err
 		}
 
 		var f types.FilesystemMaster
-		err = s.decode(kvp.Value, &f)
-		if err != nil {
-			return fmt.Errorf("failed to decode value from key '%s', error: %s", prefix, err)
+
+		if kvp.Action == kvdb.KVDelete {
+			id, err := extractID(kvp.Key)
+			if err != nil {
+				return nil
+			}
+			f.FilesystemID = id
+			f.Meta = getMeta(kvp)
+			cb(&f)
+			return nil
 		}
 
+		err = s.decode(kvp.Value, &f)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"prefix": prefix,
+				"action": ActionString(kvp.Action),
+				"error":  err,
+				"value":  string(kvp.Value),
+				"key":    kvp.Key,
+			}).Error("[WatchMasters] failed to decode JSON")
+			return nil
+		}
 		f.Meta = getMeta(kvp)
 
 		err = cb(&f)
@@ -161,6 +187,10 @@ func (s *KVDBFilesystemStore) ListMaster() ([]*types.FilesystemMaster, error) {
 func (s *KVDBFilesystemStore) SetDeleted(f *types.FilesystemDeletionAudit, opts *SetOptions) error {
 
 	if f.FilesystemID == "" {
+		log.WithFields(log.Fields{
+			"error":  ErrIDNotSet,
+			"object": f,
+		}).Error("[SetDeleted] called without FilesystemID")
 		return ErrIDNotSet
 	}
 
@@ -198,12 +228,30 @@ func (s *KVDBFilesystemStore) WatchDeleted(idx uint64, cb WatchDeletedCB) error 
 				"error":  err,
 				"prefix": prefix,
 			}).Error("[WatchDeleted] error while watching KV store tree")
+			return err
 		}
 
 		var f types.FilesystemDeletionAudit
+		if kvp.Action == kvdb.KVDelete {
+			id, err := extractID(kvp.Key)
+			if err != nil {
+				return nil
+			}
+			f.FilesystemID = id
+			f.Meta = getMeta(kvp)
+			cb(&f)
+			return nil
+		}
 		err = s.decode(kvp.Value, &f)
 		if err != nil {
-			return fmt.Errorf("failed to decode value from key '%s', error: %s", prefix, err)
+			log.WithFields(log.Fields{
+				"prefix": prefix,
+				"action": ActionString(kvp.Action),
+				"error":  err,
+				"value":  string(kvp.Value),
+				"key":    kvp.Key,
+			}).Error("[WatchDeleted] failed to decode JSON")
+			return nil
 		}
 
 		f.Meta = getMeta(kvp)
@@ -257,6 +305,10 @@ func (s *KVDBFilesystemStore) ListDeleted() ([]*types.FilesystemDeletionAudit, e
 func (s *KVDBFilesystemStore) SetCleanupPending(f *types.FilesystemDeletionAudit, opts *SetOptions) error {
 
 	if f.FilesystemID == "" {
+		log.WithFields(log.Fields{
+			"error":  ErrIDNotSet,
+			"object": f,
+		}).Error("[SetCleanupPending] called without FilesystemID")
 		return ErrIDNotSet
 	}
 
@@ -302,10 +354,67 @@ func (s *KVDBFilesystemStore) ListCleanupPending() ([]*types.FilesystemDeletionA
 	return audits, nil
 }
 
+func (s *KVDBFilesystemStore) WatchCleanupPending(idx uint64, cb WatchCleanupPendingCB) error {
+
+	watchFunc := func(prefix string, opaque interface{}, kvp *kvdb.KVPair, err error) error {
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":  err,
+				"prefix": prefix,
+			}).Error("[WatchCleanupPending] error while watching KV store tree")
+			return err
+		}
+
+		var f types.FilesystemDeletionAudit
+		if kvp.Action == kvdb.KVDelete {
+			id, err := extractID(kvp.Key)
+			if err != nil {
+				return nil
+			}
+			f.FilesystemID = id
+			f.Meta = getMeta(kvp)
+			cb(&f)
+			return nil
+		}
+
+		err = s.decode(kvp.Value, &f)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"prefix": prefix,
+				"action": ActionString(kvp.Action),
+				"value":  string(kvp.Value),
+				"key":    kvp.Key,
+				"error":  err,
+			}).Error("[WatchCleanupPending] failed to decode JSON")
+			return nil
+		}
+
+		f.Meta = getMeta(kvp)
+
+		err = cb(&f)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":        err,
+				"key":          kvp.Key,
+				"action":       kvp.Action,
+				"modified_idx": kvp.ModifiedIndex,
+			}).Error("[WatchCleanupPending] callback returned an error")
+		}
+		// don't propagate the error, it will stop the watcher
+		return nil
+	}
+
+	return s.client.WatchTree(FilesystemCleanupPendingPrefix, idx, nil, watchFunc)
+}
+
 // Live filesystems
 
 func (s *KVDBFilesystemStore) SetLive(f *types.FilesystemLive, opts *SetOptions) error {
 	if f.FilesystemID == "" {
+		log.WithFields(log.Fields{
+			"error":  ErrIDNotSet,
+			"object": f,
+		}).Error("[SetLive] called without FilesystemID")
 		return ErrIDNotSet
 	}
 
@@ -364,12 +473,29 @@ func (s *KVDBFilesystemStore) WatchContainers(idx uint64, cb WatchContainersCB) 
 				"error":  err,
 				"prefix": prefix,
 			}).Error("[WatchContainers] error while watching KV store tree")
+			return err
 		}
 
 		var f types.FilesystemContainers
+		if kvp.Action == kvdb.KVDelete {
+			id, err := extractID(kvp.Key)
+			if err != nil {
+				return nil
+			}
+			f.FilesystemID = id
+			f.Meta = getMeta(kvp)
+			cb(&f)
+			return nil
+		}
+
 		err = s.decode(kvp.Value, &f)
 		if err != nil {
-			return fmt.Errorf("failed to decode value from key '%s', error: %s", prefix, err)
+			log.WithFields(log.Fields{
+				"prefix": prefix,
+				"action": ActionString(kvp.Action),
+				"error":  err,
+			}).Error("[WatchContainers] failed to decode JSON")
+			return nil
 		}
 
 		f.Meta = getMeta(kvp)
@@ -420,6 +546,10 @@ func (s *KVDBFilesystemStore) ListContainers() ([]*types.FilesystemContainers, e
 
 func (s *KVDBFilesystemStore) SetDirty(f *types.FilesystemDirty, opts *SetOptions) error {
 	if f.FilesystemID == "" {
+		log.WithFields(log.Fields{
+			"error":  ErrIDNotSet,
+			"object": f,
+		}).Error("[SetDirty] called without FilesystemID")
 		return ErrIDNotSet
 	}
 
@@ -443,12 +573,30 @@ func (s *KVDBFilesystemStore) WatchDirty(idx uint64, cb WatchDirtyCB) error {
 				"error":  err,
 				"prefix": prefix,
 			}).Error("[WatchDirty] error while watching KV store tree")
+			return err
 		}
 
 		var f types.FilesystemDirty
+		if kvp.Action == kvdb.KVDelete {
+			id, err := extractID(kvp.Key)
+			if err != nil {
+				return nil
+			}
+			f.FilesystemID = id
+			f.Meta = getMeta(kvp)
+			cb(&f)
+			return nil
+		}
+
 		err = s.decode(kvp.Value, &f)
 		if err != nil {
-			return fmt.Errorf("failed to decode value from key '%s', error: %s", prefix, err)
+			log.WithFields(log.Fields{
+				"prefix": prefix,
+				"action": ActionString(kvp.Action),
+				"error":  err,
+				"val":    string(kvp.Value),
+			}).Error("[WatchDirty] failed to decode JSON")
+			return nil
 		}
 
 		f.Meta = getMeta(kvp)
@@ -499,6 +647,10 @@ func (s *KVDBFilesystemStore) ListDirty() ([]*types.FilesystemDirty, error) {
 
 func (s *KVDBFilesystemStore) SetTransfer(t *types.TransferPollResult, opts *SetOptions) error {
 	if t.TransferRequestId == "" {
+		log.WithFields(log.Fields{
+			"error":  ErrIDNotSet,
+			"object": t,
+		}).Error("[SetTransfer] called without TransferRequestId")
 		return ErrIDNotSet
 	}
 
@@ -518,12 +670,30 @@ func (s *KVDBFilesystemStore) WatchTransfers(idx uint64, cb WatchTransfersCB) er
 				"error":  err,
 				"prefix": prefix,
 			}).Error("[WatchTransfers] error while watching KV store tree")
+			return err
 		}
 
 		var t types.TransferPollResult
+		if kvp.Action == kvdb.KVDelete {
+			id, err := extractID(kvp.Key)
+			if err != nil {
+				return nil
+			}
+			t.TransferRequestId = id
+			t.Meta = getMeta(kvp)
+			cb(&t)
+			return nil
+		}
+
 		err = s.decode(kvp.Value, &t)
 		if err != nil {
-			return fmt.Errorf("failed to decode value from key '%s', error: %s", prefix, err)
+			log.WithFields(log.Fields{
+				"prefix": prefix,
+				"action": ActionString(kvp.Action),
+				"error":  err,
+				"val":    string(kvp.Value),
+			}).Error("[WatchTransfers] failed to decode JSON")
+			return nil
 		}
 
 		t.Meta = getMeta(kvp)
