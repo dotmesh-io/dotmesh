@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/dotmesh-io/dotmesh/pkg/types"
+	log "github.com/sirupsen/logrus"
 )
 
 func (s *InMemoryState) watchRegistryFilesystems() error {
@@ -32,9 +33,16 @@ func (s *InMemoryState) processRegistryFilesystem(rf *types.RegistryFilesystem) 
 		Namespace: rf.OwnerId,
 		Name:      rf.Name,
 	}
+
 	switch rf.Meta.Action {
 	case types.KVDelete:
-		return s.registry.UpdateFilesystemFromEtcd(vn, types.RegistryFilesystem{})
+		// deleting from the registry
+		log.WithFields(log.Fields{
+			"namespace": vn.Namespace,
+			"name":      vn.Name,
+		}).Info("[processRegistryFilesystem] deleting filesystem from registry")
+		s.registry.DeleteFilesystemFromEtcd(vn)
+		return nil
 	case types.KVCreate, types.KVSet:
 		return s.registry.UpdateFilesystemFromEtcd(vn, *rf)
 	default:
