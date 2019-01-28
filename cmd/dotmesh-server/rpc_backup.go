@@ -1,148 +1,135 @@
 package main
 
-import (
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"strings"
-	"time"
+// func (d *DotmeshRPC) DumpEtcd(
+// 	r *http.Request,
+// 	args *struct {
+// 		Prefix string
+// 	},
+// 	result *string,
+// ) error {
+// 	err := ensureAdminUser(r)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	"github.com/dotmesh-io/dotmesh/pkg/store"
-	"github.com/dotmesh-io/dotmesh/pkg/types"
+// 	var backup types.BackupV1
 
-	log "github.com/sirupsen/logrus"
-)
+// 	backup.Version = types.BackupVersion
+// 	backup.Created = time.Now()
 
-func (d *DotmeshRPC) DumpEtcd(
-	r *http.Request,
-	args *struct {
-		Prefix string
-	},
-	result *string,
-) error {
-	err := ensureAdminUser(r)
-	if err != nil {
-		return err
-	}
+// 	users, err := d.usersManager.List("")
+// 	if err != nil {
+// 		log.WithFields(log.Fields{
+// 			"error": err,
+// 		}).Error("failed to list users")
+// 	} else {
+// 		backup.Users = users
+// 	}
 
-	var backup types.BackupV1
+// 	filesystemMasters, err := d.state.filesystemStore.ListMaster()
+// 	if err != nil {
+// 		log.WithFields(log.Fields{
+// 			"error": err,
+// 		}).Error("failed to list filesystem masters")
+// 	} else {
+// 		backup.FilesystemMasters = filesystemMasters
+// 	}
 
-	backup.Version = types.BackupVersion
-	backup.Created = time.Now()
+// 	registryFilesystems, err := d.state.registryStore.ListFilesystems()
+// 	if err != nil {
+// 		log.WithFields(log.Fields{
+// 			"error": err,
+// 		}).Error("failed to list registry filesystems")
+// 	} else {
+// 		backup.RegistryFilesystems = registryFilesystems
+// 	}
 
-	users, err := d.usersManager.List("")
-	if err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("failed to list users")
-	} else {
-		backup.Users = users
-	}
+// 	registryClones, err := d.state.registryStore.ListClones()
+// 	if err != nil {
+// 		log.WithFields(log.Fields{
+// 			"error": err,
+// 		}).Error("failed to list registry clones")
+// 	} else {
+// 		backup.RegistryClones = registryClones
+// 	}
 
-	filesystemMasters, err := d.state.filesystemStore.ListMaster()
-	if err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("failed to list filesystem masters")
-	} else {
-		backup.FilesystemMasters = filesystemMasters
-	}
+// 	resultBytes, err := json.Marshal(&backup)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	registryFilesystems, err := d.state.registryStore.ListFilesystems()
-	if err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("failed to list registry filesystems")
-	} else {
-		backup.RegistryFilesystems = registryFilesystems
-	}
+// 	*result = string(resultBytes)
 
-	registryClones, err := d.state.registryStore.ListClones()
-	if err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("failed to list registry clones")
-	} else {
-		backup.RegistryClones = registryClones
-	}
+// 	return nil
+// }
 
-	resultBytes, err := json.Marshal(&backup)
-	if err != nil {
-		return err
-	}
+// type restoreRequest struct {
+// 	Prefix string
+// 	Dump   string
+// }
 
-	*result = string(resultBytes)
+// // RestoreEtcd - restores KV store from the backup file
+// func (d *DotmeshRPC) RestoreEtcd(r *http.Request, args *restoreRequest, result *bool) error {
 
-	return nil
-}
+// 	err := ensureAdminUser(r)
+// 	if err != nil {
+// 		return err
+// 	}
 
-type restoreRequest struct {
-	Prefix string
-	Dump   string
-}
+// 	var backup types.BackupV1
 
-// RestoreEtcd - restores KV store from the backup file
-func (d *DotmeshRPC) RestoreEtcd(r *http.Request, args *restoreRequest, result *bool) error {
+// 	err = json.Unmarshal([]byte(args.Dump), &backup)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to unmarshal into a backup structure: %s", err)
+// 	}
 
-	err := ensureAdminUser(r)
-	if err != nil {
-		return err
-	}
+// 	supported := false
+// 	for _, v := range types.BackupSupportedVersions {
+// 		if backup.Version == v {
+// 			supported = true
+// 		}
+// 	}
+// 	if !supported {
+// 		return fmt.Errorf("unsupported backup version '%s', supported version: %s", backup.Version, strings.Join(types.BackupSupportedVersions, ", "))
+// 	}
 
-	var backup types.BackupV1
+// 	var errs []error
 
-	err = json.Unmarshal([]byte(args.Dump), &backup)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal into a backup structure: %s", err)
-	}
+// 	for _, u := range backup.Users {
+// 		err = d.usersManager.Import(u)
+// 		if err != nil {
+// 			log.WithFields(log.Fields{
+// 				"error": err,
+// 				"user":  u.Name,
+// 			}).Error("failed to import user")
+// 			errs = append(errs, err)
+// 		}
+// 	}
 
-	supported := false
-	for _, v := range types.BackupSupportedVersions {
-		if backup.Version == v {
-			supported = true
-		}
-	}
-	if !supported {
-		return fmt.Errorf("unsupported backup version '%s', supported version: %s", backup.Version, strings.Join(types.BackupSupportedVersions, ", "))
-	}
+// 	err = d.state.filesystemStore.ImportMasters(backup.FilesystemMasters, &store.ImportOptions{
+// 		DeleteExisting: true,
+// 	})
+// 	if err != nil {
+// 		errs = append(errs, err)
+// 	}
 
-	var errs []error
+// 	err = d.state.registryStore.ImportFilesystems(backup.RegistryFilesystems, &store.ImportOptions{
+// 		DeleteExisting: true,
+// 	})
+// 	if err != nil {
+// 		errs = append(errs, err)
+// 	}
 
-	for _, u := range backup.Users {
-		err = d.usersManager.Import(u)
-		if err != nil {
-			log.WithFields(log.Fields{
-				"error": err,
-				"user":  u.Name,
-			}).Error("failed to import user")
-			errs = append(errs, err)
-		}
-	}
+// 	err = d.state.registryStore.ImportClones(backup.RegistryClones, &store.ImportOptions{
+// 		DeleteExisting: true,
+// 	})
+// 	if err != nil {
+// 		errs = append(errs, err)
+// 	}
 
-	err = d.state.filesystemStore.ImportMasters(backup.FilesystemMasters, &store.ImportOptions{
-		DeleteExisting: true,
-	})
-	if err != nil {
-		errs = append(errs, err)
-	}
+// 	if len(errs) > 0 {
+// 		return fmt.Errorf("got error while importing backup: %v", errs)
+// 	}
 
-	err = d.state.registryStore.ImportFilesystems(backup.RegistryFilesystems, &store.ImportOptions{
-		DeleteExisting: true,
-	})
-	if err != nil {
-		errs = append(errs, err)
-	}
-
-	err = d.state.registryStore.ImportClones(backup.RegistryClones, &store.ImportOptions{
-		DeleteExisting: true,
-	})
-	if err != nil {
-		errs = append(errs, err)
-	}
-
-	if len(errs) > 0 {
-		return fmt.Errorf("got error while importing backup: %v", errs)
-	}
-
-	return nil
-}
+// 	return nil
+// }
