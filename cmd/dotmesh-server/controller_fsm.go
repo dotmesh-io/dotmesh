@@ -151,7 +151,7 @@ func (s *InMemoryState) DeleteFilesystem(filesystemId string) error {
 		// failed, we'll try and clean it up again later.  Therefore,
 		// when we try again, various bits might already be deleted, so
 		// trying to delete them fails.  It's all good.
-		log.Errorf("[deleteFilesystem] Errors deleting filesystem %s, possibly because some operations were previously completed: %+v", filesystemId, errors)
+		log.Errorf("[deleteFilesystem] Errors deleting filesystem %s, possibly because some operations were previously completed: %s", filesystemId, errors)
 	}
 
 	// However, we reserve the right to return an error if we decide to in future.

@@ -102,10 +102,10 @@ func probeURL(url string) error {
 	req = req.WithContext(ctx)
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		log.WithFields(log.Fields{
-			"error":   err,
-			"address": url,
-		}).Debug("[NATS] ping failed")
+		// log.WithFields(log.Fields{
+		// 	"error":   err,
+		// 	"address": url,
+		// }).Debug("[NATS] ping failed")
 		return err
 	}
 	resp.Body.Close()

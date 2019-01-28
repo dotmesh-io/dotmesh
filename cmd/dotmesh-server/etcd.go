@@ -586,15 +586,6 @@ func (s *InMemoryState) respondToEvent(fs, requestId string, response *Event) er
 // Possible alternative: use different etcd clients for the Watch versus the
 // Set.
 func (s *InMemoryState) UpdateSnapshotsFromKnownState(server, filesystem string, snapshots []*Snapshot) error {
-	// deleted, err := isFilesystemDeletedInEtcd(filesystem)
-	// if err != nil {
-	// 	return err
-	// }
-	// if deleted {
-	// 	// Filesystem is being deleted, so ignore it.
-	// 	return nil
-	// }
-
 	fsm, err := s.InitFilesystemMachine(filesystem)
 	if err != nil {
 		if err == ErrFilesystemDeleted {
@@ -619,7 +610,7 @@ func (s *InMemoryState) UpdateSnapshotsFromKnownState(server, filesystem string,
 
 	masterNode, err := s.registry.CurrentMasterNode(filesystem)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get master node for a known filesystem '%s', error: %s", filesystem, err)
 	}
 	log.Printf(
 		"[updateSnapshots] checking %s master: %s == %s?",
@@ -731,42 +722,54 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error": err,
-		}).Error("failed to start watching filesystem masters")
+		}).Fatal("failed to start watching filesystem masters")
+	} else {
+		log.Info("[fetchAndWatchEtcd] filesystem masters watcher started")
 	}
 
 	err = s.watchServerAddresses()
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error": err,
-		}).Error("failed to start watching server addresses")
+		}).Fatal("failed to start watching server addresses")
+	} else {
+		log.Info("[fetchAndWatchEtcd] server addresses watcher started")
 	}
 
 	err = s.watchServerStates()
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error": err,
-		}).Error("failed to start watching server states")
+		}).Fatal("failed to start watching server states")
+	} else {
+		log.Info("[fetchAndWatchEtcd] server states watcher started")
 	}
 
 	err = s.watchServerSnapshots()
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error": err,
-		}).Error("failed to start watching server snapshots")
+		}).Fatal("failed to start watching server snapshots")
+	} else {
+		log.Info("[fetchAndWatchEtcd] server snapshots watcher started")
 	}
 
-	err = s.watchCleanupPending()
-	if err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("failed to start watching cleanup pending entries")
-	}
+	// err = s.watchCleanupPending()
+	// if err != nil {
+	// 	log.WithFields(log.Fields{
+	// 		"error": err,
+	// 	}).Fatal("failed to start watching cleanup pending entries")
+	// } else {
+	// 	log.Info("[fetchAndWatchEtcd] cleanup pending filesystem watcher started")
+	// }
 
 	err = s.watchRegistryFilesystems()
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error": err,
-		}).Error("failed to start watching registry filesystems")
+		}).Fatal("failed to start watching registry filesystems")
+	} else {
+		log.Info("[fetchAndWatchEtcd] registry filesystems watcher started")
 	}
 
 	/*
@@ -784,7 +787,9 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error": err,
-		}).Error("failed to start watching registry clones")
+		}).Fatal("failed to start watching registry clones")
+	} else {
+		log.Info("[fetchAndWatchEtcd] registry clones watcher started")
 	}
 
 	err = s.watchDirtyFilesystems()
@@ -792,27 +797,35 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		log.WithFields(log.Fields{
 			"error": err,
 		}).Error("failed to start watching dirty filesystems")
+	} else {
+		log.Info("[fetchAndWatchEtcd] dirty filesystems watcher started")
 	}
 
 	err = s.watchFilesystemContainers()
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error": err,
-		}).Error("failed to start watching filesystem containers")
+		}).Fatal("failed to start watching filesystem containers")
+	} else {
+		log.Info("[fetchAndWatchEtcd] filesystem containers watcher started")
 	}
 
 	err = s.watchTransfers()
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error": err,
-		}).Error("failed to start watching transfers")
+		}).Fatal("failed to start watching transfers")
+	} else {
+		log.Info("[fetchAndWatchEtcd] transfers watcher started")
 	}
 
 	err = s.watchFilesystemDeleted()
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error": err,
-		}).Error("failed to start watching deleted filesystems")
+		}).Fatal("failed to start watching deleted filesystems")
+	} else {
+		log.Info("[fetchAndWatchEtcd] deleted filesystem watcher started")
 	}
 
 	s.etcdWaitTimestampLock.Lock()

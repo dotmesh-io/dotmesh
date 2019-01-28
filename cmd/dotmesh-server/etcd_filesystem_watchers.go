@@ -42,6 +42,12 @@ func (s *InMemoryState) processFilesystemMaster(fm *types.FilesystemMaster) erro
 	case types.KVCreate, types.KVSet:
 		masterNode, ok := s.registry.GetMasterNode(fm.FilesystemID)
 		if !ok || masterNode != fm.NodeID {
+			log.WithFields(log.Fields{
+				"filesystem_id":  fm.FilesystemID,
+				"new_master":     fm.NodeID,
+				"current_master": masterNode,
+				"action":         fm.Meta.Action,
+			}).Info("[processFilesystemMaster] updating registry master record")
 			s.registry.SetMasterNode(fm.FilesystemID, fm.NodeID)
 
 			err := s.handleFilesystemMaster(fm)
@@ -233,6 +239,7 @@ func (s *InMemoryState) watchFilesystemDeleted() error {
 	})
 }
 
+// TODO: Probably remove, switched back to periodic cleanups on the node
 func (s *InMemoryState) watchCleanupPending() error {
 	vals, err := s.filesystemStore.ListCleanupPending()
 	if err != nil {

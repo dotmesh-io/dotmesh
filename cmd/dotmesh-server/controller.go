@@ -481,6 +481,7 @@ func (s *InMemoryState) findRelatedContainers() error {
 		}
 		s.globalContainerCacheLock.Unlock()
 
+		log.Infof("[findRelatedContainers] setting containers (%d) for global cache", len(value.Containers))
 		err = s.filesystemStore.SetContainers(&value, &store.SetOptions{})
 
 		if err != nil {
