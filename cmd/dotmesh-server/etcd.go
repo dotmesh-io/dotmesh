@@ -25,9 +25,12 @@ import (
 )
 
 func getKVDBCfg() *store.KVDBConfig {
-	endpoint := os.Getenv("DOTMESH_ETCD_ENDPOINT")
+	endpoint := os.Getenv(types.EnvEtcdEndpoint)
 	if endpoint == "" {
-		endpoint = "https://dotmesh-etcd:42379"
+		log.Infof("%s not set, using default Etcd URL: '%s'", types.EnvEtcdEndpoint, types.DefaultEtcdURL)
+		endpoint = types.DefaultEtcdURL
+	} else {
+		log.Infof("%s set, using it: '%s'", types.EnvEtcdEndpoint, endpoint)
 	}
 	options := make(map[string]string)
 	if strings.HasPrefix(endpoint, "https://") {
@@ -40,6 +43,7 @@ func getKVDBCfg() *store.KVDBConfig {
 		options[kvdb.CertKeyFileKey] = fmt.Sprintf("%s/apiserver-key.pem", pkiPath)
 		options[kvdb.CertFileKey] = fmt.Sprintf("%s/apiserver.pem", pkiPath)
 	}
+
 	cfg := &store.KVDBConfig{
 		Machines: []string{endpoint},
 		Type:     store.KVTypeEtcdV3,

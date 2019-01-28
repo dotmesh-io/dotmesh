@@ -9,6 +9,7 @@ import (
 	"github.com/portworx/kvdb/bolt"
 	etcdv3 "github.com/portworx/kvdb/etcd/v3"
 	"github.com/portworx/kvdb/mem"
+	log "github.com/sirupsen/logrus"
 )
 
 type KVDBFilesystemStore struct {
@@ -48,6 +49,11 @@ func getKVDBClient(cfg *KVDBConfig) (kvdb.Kvdb, error) {
 
 	switch cfg.Type {
 	case KVTypeEtcdV3:
+		log.WithFields(log.Fields{
+			"machines": cfg.Machines,
+			"options":  cfg.Options,
+			"prefix":   cfg.Prefix,
+		}).Info("[KVDB Client] preparing Etcd client connection...")
 		return etcdv3.New(cfg.Prefix, cfg.Machines, cfg.Options, nil)
 	case KVTypeMem:
 		return mem.New(cfg.Prefix, []string{}, cfg.Options, nil)

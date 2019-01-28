@@ -7,6 +7,7 @@ go_library(
         "event.go",
         "filesystem.go",
         "fsm_types.go",
+        "kv_store.go",
         "messenger.go",
         "notification.go",
         "tlf.go",
