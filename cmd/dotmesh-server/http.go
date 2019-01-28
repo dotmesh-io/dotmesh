@@ -172,21 +172,22 @@ func (state *InMemoryState) runUnixDomainServer() {
 	// pre-authenticated-as-admin rpc server for clever unix socket clients
 	// only. intended for use by the flexvolume driver, hence the location on
 	// disk.
-	http.Serve(listener, NewAdminHandler(unixSocketRouter))
+	http.Serve(listener, NewAdminHandler(unixSocketRouter, state))
 }
 
 // handler which makes all requests appear as the admin user!
 // DANGER - only use for unix domain sockets.
-func NewAdminHandler(handler http.Handler) http.Handler {
-	return AdminHandler{subHandler: handler}
+func NewAdminHandler(handler http.Handler, s *InMemoryState) http.Handler {
+	return &AdminHandler{subHandler: handler, state: s}
 }
 
 type AdminHandler struct {
 	subHandler http.Handler
+	state      *InMemoryState
 }
 
-func (a AdminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	r = r.WithContext(AdminContext(r.Context()))
+func (a *AdminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	r = r.WithContext(a.state.getAdminCtx(r.Context()))
 	a.subHandler.ServeHTTP(w, r)
 }
 

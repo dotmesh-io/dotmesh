@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/dotmesh-io/dotmesh/pkg/auth"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
+	"github.com/dotmesh-io/dotmesh/pkg/user"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -204,15 +206,17 @@ func newContainerMountSymlink(name VolumeName, filesystemId string, subvolume st
 }
 
 // Annotate a context with admin-level authorization.
-func AdminContext(ctx context.Context) context.Context {
-	return auth.SetUserIDCtx(ctx, ADMIN_USER_UUID)
+func (state *InMemoryState) getAdminCtx(ctx context.Context) context.Context {
+	adminUser, err := state.userManager.Get(&types.Query{Ref: "admin"})
+	if err != nil {
+		return context.Background()
+	}
+
+	return auth.SetAuthenticationDetailsCtx(ctx, adminUser, user.AuthenticationTypeAPIKey)
 }
 
 func (state *InMemoryState) runPlugin() {
 	log.Printf("[runPlugin] Starting dm plugin with socket: %s", DM_SOCKET)
-
-	// docker acts like the admin user, for now.
-	ctx := AdminContext(context.Background())
 
 	state.mustCleanupSocket()
 
@@ -248,7 +252,7 @@ func (state *InMemoryState) runPlugin() {
 		// for now, just name the volumes as requested by the user. later,
 		// adding ids and per-fs metadata may be useful.
 
-		if _, err := state.procureFilesystem(ctx, name); err != nil {
+		if _, err := state.procureFilesystem(state.getAdminCtx(context.Background()), name); err != nil {
 			writeResponseErr(err, w)
 			return
 		}
@@ -332,7 +336,7 @@ func (state *InMemoryState) runPlugin() {
 
 		name := VolumeName{Namespace: namespace, Name: localName}
 
-		filesystemId, err := state.procureFilesystem(ctx, name)
+		filesystemId, err := state.procureFilesystem(state.getAdminCtx(context.Background()), name)
 		if err != nil {
 			writeResponseErr(err, w)
 			return
