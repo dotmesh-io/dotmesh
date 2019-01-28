@@ -30,6 +30,7 @@ go_test(
     srcs = [
         "kvdb_filesystem_test.go",
         "kvdb_test.go",
+        "utils_test.go",
     ],
     embed = [":go_default_library"],
     deps = ["//pkg/types:go_default_library"],
