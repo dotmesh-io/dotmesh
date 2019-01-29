@@ -202,8 +202,9 @@ func (s *KVDBFilesystemStore) CompareAndSetFilesystem(f *types.RegistryFilesyste
 	}
 
 	kvp := &kvdb.KVPair{
-		Key:   RegistryFilesystemsPrefix + f.OwnerId + "/" + f.Name,
-		Value: bts,
+		Key:           RegistryFilesystemsPrefix + f.OwnerId + "/" + f.Name,
+		Value:         bts,
+		ModifiedIndex: f.Meta.ModifiedIndex,
 	}
 
 	_, err = s.client.CompareAndSet(kvp, opts.KVFlags, opts.PrevValue)

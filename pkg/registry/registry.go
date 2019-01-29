@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/portworx/kvdb"
-
 	// "log"
 	"sort"
 	"sync"
@@ -14,6 +12,7 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/store"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
+	"github.com/portworx/kvdb"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -328,17 +327,16 @@ func (r *DefaultRegistry) UpdateCollaborators(ctx context.Context, tlf types.Top
 	for _, u := range newCollaborators {
 		collaboratorIds = append(collaboratorIds, u.Id)
 	}
-	rf := types.RegistryFilesystem{
-		Id: tlf.MasterBranch.Id,
-		// Owner is, for now, always the authenticated user at the time of
-		// creation
-		Name:            tlf.MasterBranch.Name.Name,
-		OwnerId:         tlf.Owner.Name,
-		CollaboratorIds: collaboratorIds,
+
+	rf, err := r.registryStore.GetFilesystem(tlf.Owner.Name, tlf.MasterBranch.Name.Name)
+	if err != nil {
+		return fmt.Errorf("failed to get existing registry filesystem: %s", err)
 	}
 
-	err := r.registryStore.CompareAndSetFilesystem(&rf, &store.SetOptions{
-		KVFlags: kvdb.KVPrevExists,
+	rf.CollaboratorIds = collaboratorIds
+
+	err = r.registryStore.CompareAndSetFilesystem(rf, &store.SetOptions{
+		KVFlags: kvdb.KVModifiedIndex,
 	})
 	if err != nil {
 		log.WithFields(log.Fields{
@@ -354,7 +352,7 @@ func (r *DefaultRegistry) UpdateCollaborators(ctx context.Context, tlf types.Top
 	// successful!
 
 	log.Infof("updating after adding collab: %v", newCollaborators)
-	return r.UpdateFilesystemFromEtcd(tlf.MasterBranch.Name, rf)
+	return r.UpdateFilesystemFromEtcd(tlf.MasterBranch.Name, *rf)
 }
 
 // update a clone, including updating our local record and etcd
