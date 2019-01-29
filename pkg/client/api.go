@@ -1,6 +1,7 @@
 package client
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -101,7 +102,7 @@ func (dm *DotmeshAPI) PingLocal() (bool, error) {
 }
 
 func (dm *DotmeshAPI) BackupEtcd() (string, error) {
-	var response string
+	var response types.BackupV1
 	err := dm.CallRemote(context.Background(), "DotmeshRPC.DumpEtcd",
 		struct{ Prefix string }{Prefix: ""},
 		&response,
@@ -109,7 +110,13 @@ func (dm *DotmeshAPI) BackupEtcd() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return response, nil
+
+	bts, err := json.Marshal(&response)
+	if err != nil {
+		return "", err
+	}
+
+	return string(bts), nil
 }
 
 func (dm *DotmeshAPI) RestoreEtcd(dump string) error {

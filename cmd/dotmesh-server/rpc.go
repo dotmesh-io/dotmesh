@@ -2908,7 +2908,7 @@ func (d *DotmeshRPC) DumpEtcd(
 	args *struct {
 		Prefix string
 	},
-	result *string,
+	result *types.BackupV1,
 ) error {
 	err := ensureAdminUser(r)
 	if err != nil {
@@ -2956,12 +2956,7 @@ func (d *DotmeshRPC) DumpEtcd(
 		backup.RegistryClones = registryClones
 	}
 
-	resultBytes, err := json.Marshal(&backup)
-	if err != nil {
-		return err
-	}
-
-	*result = string(resultBytes)
+	*result = backup
 
 	return nil
 }
