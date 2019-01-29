@@ -285,11 +285,13 @@ func (r *DefaultRegistry) RegisterFilesystem(ctx context.Context, name types.Vol
 	}
 	if name.Namespace == "" {
 		name.Namespace = user.Name
-	} else {
-		if user.Name != name.Namespace {
-			return fmt.Errorf("username and namespace doesn't match: '%s' != '%s'", user.Name, name.Namespace)
-		}
 	}
+	// else {
+	// 	// TODO: check for admin?
+	// 	if user.Name != name.Namespace {
+	// 		return fmt.Errorf("username and namespace doesn't match: '%s' != '%s'", user.Name, name.Namespace)
+	// 	}
+	// }
 
 	rf := types.RegistryFilesystem{
 		Id: filesystemId,
