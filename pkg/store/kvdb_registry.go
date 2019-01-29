@@ -35,11 +35,11 @@ func (s *KVDBFilesystemStore) SetClone(c *types.Clone, opts *SetOptions) error {
 	}
 
 	if opts.Force {
-		_, err = s.client.Put(RegistryClonesPrefix+c.FilesystemId+"/"+c.Name, bts, 0)
+		_, err = s.client.Put(RegistryClonesPrefix+c.TopLevelFilesystemId+"/"+c.Name, bts, 0)
 		return err
 	}
 
-	_, err = s.client.Create(RegistryClonesPrefix+c.FilesystemId+"/"+c.Name, bts, 0)
+	_, err = s.client.Create(RegistryClonesPrefix+c.TopLevelFilesystemId+"/"+c.Name, bts, 0)
 	return err
 }
 

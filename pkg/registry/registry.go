@@ -360,7 +360,8 @@ func (r *DefaultRegistry) RegisterClone(name string, topLevelFilesystemId string
 	r.UpdateCloneFromEtcd(name, topLevelFilesystemId, clone)
 
 	clone.Name = name
-	clone.FilesystemId = topLevelFilesystemId
+	// clone.FilesystemId = topLevelFilesystemId
+	clone.TopLevelFilesystemId = topLevelFilesystemId
 
 	return r.registryStore.SetClone(&clone, &store.SetOptions{})
 }

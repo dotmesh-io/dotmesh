@@ -2199,7 +2199,6 @@ func (d *DotmeshRPC) Delete(r *http.Request, args *VolumeName, result *bool) err
 	// Check all clones are not in use. This is no guarantee one won't
 	// come into use while we're processing the deletion, but it's nice
 	// for the user to try and check first.
-
 	err = checkNotInUse(d, rootId, origins)
 	if err != nil {
 		return err
