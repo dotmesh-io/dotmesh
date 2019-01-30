@@ -772,7 +772,7 @@ func (s *InMemoryState) UpdateSnapshotsFromKnownState(server, filesystem string,
 			return nil
 		}
 
-		return err
+		return fmt.Errorf("[UpdateSnapshotsFromKnownState] Error initialising filesystem machine: %s", err)
 	}
 
 	oldSnapshots := fsm.GetSnapshots(server)
@@ -789,10 +789,10 @@ func (s *InMemoryState) UpdateSnapshotsFromKnownState(server, filesystem string,
 
 	masterNode, err := s.registry.CurrentMasterNode(filesystem)
 	if err != nil {
-		return err
+		return fmt.Errorf("[UpdateSnapshotsFromKnownState] Error finding master node: %s", err)
 	}
 	log.Printf(
-		"[updateSnapshots] checking %s master: %s == %s?",
+		"[UpdateSnapshotsFromKnownState] checking %s master: %s == %s?",
 		filesystem, masterNode, server,
 	)
 	if masterNode == server {
@@ -802,7 +802,7 @@ func (s *InMemoryState) UpdateSnapshotsFromKnownState(server, filesystem string,
 
 			latest := (snapshots)[len(snapshots)-1]
 			log.Printf(
-				"[updateSnapshots] publishing latest snapshot %v on %s",
+				"[UpdateSnapshotsFromKnownState] publishing latest snapshot %v on %s",
 				latest, filesystem,
 			)
 
@@ -810,7 +810,7 @@ func (s *InMemoryState) UpdateSnapshotsFromKnownState(server, filesystem string,
 			if len(snapshots) > len(oldSnapshots) {
 				tlf, branch, err := s.registry.LookupFilesystemById(filesystem)
 				if err != nil {
-					return err
+					return fmt.Errorf("[UpdateSnapshotsFromKnownState] Error looking up filesystem: %s", err)
 				}
 
 				namespace := tlf.MasterBranch.Name.Namespace
@@ -836,7 +836,7 @@ func (s *InMemoryState) UpdateSnapshotsFromKnownState(server, filesystem string,
 								"error":         err,
 								"filesystem_id": filesystem,
 								"commit_id":     ss.Id,
-							}).Error("[updateSnapshots] failed to publish ")
+							}).Error("[UpdateSnapshotsFromKnownState] failed to publish ")
 						}
 					}
 				}()
@@ -847,7 +847,7 @@ func (s *InMemoryState) UpdateSnapshotsFromKnownState(server, filesystem string,
 				err := s.newSnapsOnMaster.Publish(filesystem, latest)
 				if err != nil {
 					log.Errorf(
-						"[updateSnapshotsFromKnownState] "+
+						"[UpdateSnapshotsFromKnownState] "+
 							"error publishing to newSnapsOnMaster: %s",
 						err,
 					)
@@ -862,7 +862,7 @@ func (s *InMemoryState) UpdateSnapshotsFromKnownState(server, filesystem string,
 	s.filesystemsLock.Unlock()
 	if !ok {
 		log.Printf(
-			"state machine for %s not set up yet, can't notify newSnapsOnServers",
+			"[UpdateSnapshotsFromKnownState] state machine for %s not set up yet, can't notify newSnapsOnServers",
 			filesystem,
 		)
 	} else {
@@ -870,7 +870,7 @@ func (s *InMemoryState) UpdateSnapshotsFromKnownState(server, filesystem string,
 			err := fs.PublishNewSnaps(server, true) // TODO publish latest, as above
 			if err != nil {
 				log.Printf(
-					"[updateSnapshotsFromKnownState] "+
+					"[UpdateSnapshotsFromKnownState] "+
 						"error publishing to newSnapsOnServers: %s",
 					err,
 				)
@@ -916,6 +916,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 			masterNode, ok := s.registry.GetMasterNode(filesystemID)
 			if !ok || masterNode != node.Value {
 				modified = true
+				log.Info("Setting master node from etcd")
 				s.registry.SetMasterNode(filesystemID, node.Value)
 			}
 			// if ok && masterNode != node.Value {
@@ -1186,6 +1187,8 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 		return ""
 	}
 
+	log.Info("Synchronising state from etcd...")
+
 	// func() {
 	// 	s.etcdWaitTimestampLock.Lock()
 	// 	defer s.etcdWaitTimestampLock.Unlock()
@@ -1379,6 +1382,9 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 			}
 		}
 	}
+
+	log.Info("Initial state synchronisation from etcd is complete.")
+
 	// TODO: REMOVE
 	// if requests != nil {
 	// 	for _, requestsForFilesystem := range requests.Nodes {
@@ -1398,6 +1404,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 	// time as docker plugin to avoid 'dm cluster' health-check triggering
 	// before we're fully up.
 	onceAgain.Do(func() {
+		go s.initFilesystemMachines()
 		go s.runServer()
 		go s.runUnixDomainServer()
 		go s.runPlugin()
