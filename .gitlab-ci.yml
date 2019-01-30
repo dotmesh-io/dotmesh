@@ -452,7 +452,7 @@ linux_s3remote:
         - ubuntu-bionic
         - fast
     script:
-        - ./test.sh -run TestS3Remote
+        - ./test.sh -timeout 15m -run TestS3Remote
     artifacts:
         paths:
         - extracted_logs
