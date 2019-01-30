@@ -563,19 +563,19 @@ func (dm *DotmeshAPI) Commit(activeVolumeName, activeBranch, commitMessage strin
 	return result, nil
 }
 
-type metadata map[string]string
-type snapshot struct {
+type Metadata map[string]string
+type Snapshot struct {
 	// exported for json serialization
 	Id       string
-	Metadata *metadata
+	Metadata *Metadata
 }
 
-func (dm *DotmeshAPI) ListCommits(activeVolumeName, activeBranch string) ([]snapshot, error) {
-	var result []snapshot
+func (dm *DotmeshAPI) ListCommits(activeVolumeName, activeBranch string) ([]Snapshot, error) {
+	var result []Snapshot
 
 	activeNamespace, activeVolume, err := ParseNamespacedVolume(activeVolumeName)
 	if err != nil {
-		return []snapshot{}, err
+		return []Snapshot{}, err
 	}
 
 	err = dm.CallRemote(
@@ -592,7 +592,7 @@ func (dm *DotmeshAPI) ListCommits(activeVolumeName, activeBranch string) ([]snap
 		&result,
 	)
 	if err != nil {
-		return []snapshot{}, err
+		return []Snapshot{}, err
 	}
 	return result, nil
 }
