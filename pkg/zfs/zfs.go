@@ -81,7 +81,7 @@ func NewZFS(zfsPath, zpoolPath, poolName, mountZFS string) (ZFS, error) {
 	if err != nil {
 		log.Errorf("Error matching current to old pool id, quitting")
 		return nil, err
-	} else if !ok {
+	} else if !matched {
 		return nil, fmt.Errorf("The pool id for this dotmesh changed. If this is deliberate, delete the file `/dotmesh-pool-id`, otherwise investigate the issue.")
 	}
 	zfsInter.poolId = poolId
