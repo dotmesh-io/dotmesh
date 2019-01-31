@@ -444,6 +444,21 @@ func (dm *DotmeshAPI) AllBranches(volumeName string) ([]string, error) {
 	return branches, err
 }
 
+func (dm *DotmeshAPI) GetFsId(namespace, name, branch string) (string, error) {
+	var fsId string
+	err := dm.CallRemote(
+		context.Background(), "DotmeshRPC.Lookup", struct{ Namespace, Name, Branch string }{
+			Namespace: namespace,
+			Name:      name,
+			Branch:    branch},
+		&fsId,
+	)
+	if err != nil {
+		return "", err
+	}
+	return fsId, nil
+}
+
 func (dm *DotmeshAPI) BranchInfo(namespace, name, branch string) (DotmeshVolume, error) {
 	var fsId string
 	err := dm.CallRemote(
