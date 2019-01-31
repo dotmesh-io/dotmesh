@@ -861,3 +861,19 @@ func (state *InMemoryState) mustCleanupSocket() {
 		}
 	}
 }
+
+func (state *InMemoryState) initFilesystemMachines() {
+	log.Info("Initialising filesystem machines")
+	for _, filesystemId := range state.zfs.FindFilesystemIdsOnSystem() {
+		log.Debugf("Initializing fsMachine for %s", filesystemId)
+		go func(fsID string) {
+			_, err := state.InitFilesystemMachine(fsID)
+			if err != nil {
+				log.WithFields(log.Fields{
+					"error":         err,
+					"filesystem_id": fsID,
+				}).Warn("[main] failed to initialize filesystem machine during boot")
+			}
+		}(filesystemId)
+	}
+}

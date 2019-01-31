@@ -31,7 +31,7 @@ type VersionInfo struct {
 type DotmeshAPI struct {
 	Configuration *Configuration
 	configPath    string
-	client        *JsonRpcClient
+	Client        *JsonRpcClient
 	verbose       bool
 }
 
@@ -59,17 +59,17 @@ func NewDotmeshAPI(configPath string, verbose bool) (*DotmeshAPI, error) {
 
 	d := &DotmeshAPI{
 		Configuration: c,
-		client:        nil,
+		Client:        nil,
 		verbose:       verbose,
 	}
 	return d, nil
 }
 
 func (dm *DotmeshAPI) openClient() error {
-	if dm.client == nil {
+	if dm.Client == nil {
 		client, err := dm.Configuration.ClusterFromCurrentRemote(dm.verbose)
 		if err == nil {
-			dm.client = client
+			dm.Client = client
 			return nil
 		} else {
 			return err
@@ -85,7 +85,7 @@ func (dm *DotmeshAPI) CallRemote(
 ) error {
 	err := dm.openClient()
 	if err == nil {
-		return dm.client.CallRemote(ctx, method, args, response)
+		return dm.Client.CallRemote(ctx, method, args, response)
 	} else {
 		return err
 	}
@@ -94,7 +94,7 @@ func (dm *DotmeshAPI) CallRemote(
 func (dm *DotmeshAPI) PingLocal() (bool, error) {
 	err := dm.openClient()
 	if err == nil {
-		return dm.client.Ping()
+		return dm.Client.Ping()
 	} else {
 		return false, err
 	}
@@ -578,19 +578,19 @@ func (dm *DotmeshAPI) Commit(activeVolumeName, activeBranch, commitMessage strin
 	return result, nil
 }
 
-type metadata map[string]string
-type snapshot struct {
+type Metadata map[string]string
+type Snapshot struct {
 	// exported for json serialization
 	Id       string
-	Metadata *metadata
+	Metadata *Metadata
 }
 
-func (dm *DotmeshAPI) ListCommits(activeVolumeName, activeBranch string) ([]snapshot, error) {
-	var result []snapshot
+func (dm *DotmeshAPI) ListCommits(activeVolumeName, activeBranch string) ([]Snapshot, error) {
+	var result []Snapshot
 
 	activeNamespace, activeVolume, err := ParseNamespacedVolume(activeVolumeName)
 	if err != nil {
-		return []snapshot{}, err
+		return []Snapshot{}, err
 	}
 
 	err = dm.CallRemote(
@@ -607,7 +607,7 @@ func (dm *DotmeshAPI) ListCommits(activeVolumeName, activeBranch string) ([]snap
 		&result,
 	)
 	if err != nil {
-		return []snapshot{}, err
+		return []Snapshot{}, err
 	}
 	return result, nil
 }
@@ -1140,7 +1140,7 @@ func (dm *DotmeshAPI) IsUserPriveledged() bool {
 		return false
 	}
 
-	if dm.client.User == "admin" {
+	if dm.Client.User == "admin" {
 		return true
 	}
 	return false
