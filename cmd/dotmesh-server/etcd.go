@@ -843,7 +843,6 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 	// time as docker plugin to avoid 'dm cluster' health-check triggering
 	// before we're fully up.
 	onceAgain.Do(func() {
-		go s.initFilesystemMachines()
 		go s.runServer()
 		go s.runUnixDomainServer()
 		go s.runPlugin()

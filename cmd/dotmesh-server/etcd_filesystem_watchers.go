@@ -28,6 +28,9 @@ func (s *InMemoryState) watchFilesystemStoreMasters() error {
 		}
 	}
 
+	// initializing filesystems
+	s.initFilesystemMachines()
+
 	return s.filesystemStore.WatchMasters(idxMax, func(fm *types.FilesystemMaster) error {
 		return s.processFilesystemMaster(fm)
 	})
