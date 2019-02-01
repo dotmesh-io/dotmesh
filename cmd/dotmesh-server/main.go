@@ -169,19 +169,6 @@ func main() {
 
 	s := NewInMemoryState(config)
 
-	for _, filesystemId := range s.zfs.FindFilesystemIdsOnSystem() {
-		log.Debugf("Initializing fsMachine for %s", filesystemId)
-		go func(fsID string) {
-			_, err := s.InitFilesystemMachine(fsID)
-			if err != nil {
-				log.WithFields(log.Fields{
-					"error":         err,
-					"filesystem_id": fsID,
-				}).Warn("[main] failed to initialize filesystem machine during boot")
-			}
-		}(filesystemId)
-	}
-
 	// Set the URL to an empty string (or leave it unset) to disable checkpoints
 	checkpointUrl := os.Getenv("DOTMESH_UPGRADES_URL")
 	if checkpointUrl != "" {
@@ -222,17 +209,11 @@ func main() {
 	go runForever(s.zfs.ReportZpoolCapacity, "reportZPoolUsageReporter",
 		10*time.Minute, 10*time.Minute,
 	)
+	// kick off watching etcd
+	go runForever(s.fetchAndWatchEtcd, "fetchAndWatchEtcd",
+		1*time.Second, 1*time.Second,
+	)
 
-	go s.runLivenessServer()
-
-	// TODO proper flag parsing
-	if len(os.Args) > 1 && os.Args[1] == "--debug" {
-		go runForever(s.fetchAndWatchEtcd, "fetchAndWatchEtcd",
-			1*time.Second, 1*time.Second,
-		)
-	} else {
-		runForever(s.fetchAndWatchEtcd, "fetchAndWatchEtcd",
-			1*time.Second, 1*time.Second,
-		)
-	}
+	// tell k8s we're live
+	s.runLivenessServer()
 }

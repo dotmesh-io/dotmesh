@@ -593,27 +593,19 @@ func (s *InMemoryState) UpdateSnapshotsFromKnownState(server, filesystem string,
 			return nil
 		}
 
-		return err
+		return fmt.Errorf("[UpdateSnapshotsFromKnownState] Error initialising filesystem machine: %s", err)
 	}
 
 	oldSnapshots := fsm.GetSnapshots(server)
 
 	fsm.SetSnapshots(server, snapshots)
 
-	// s.globalSnapshotCacheLock.Lock()
-	// if _, ok := s.globalSnapshotCache[server]; !ok {
-	// 	s.globalSnapshotCache[server] = map[string][]snapshot{}
-	// }
-	// oldSnapshots := s.globalSnapshotCache[server][filesystem]
-	// s.globalSnapshotCache[server][filesystem] = *snapshots
-	// s.globalSnapshotCacheLock.Unlock()
-
 	masterNode, err := s.registry.CurrentMasterNode(filesystem)
 	if err != nil {
-		return fmt.Errorf("failed to get master node for a known filesystem '%s', error: %s", filesystem, err)
+		return fmt.Errorf("[UpdateSnapshotsFromKnownState] Error finding master node: %s", err)
 	}
 	log.Printf(
-		"[updateSnapshots] checking %s master: %s == %s?",
+		"[UpdateSnapshotsFromKnownState] checking %s master: %s == %s?",
 		filesystem, masterNode, server,
 	)
 	if masterNode == server {
@@ -623,7 +615,7 @@ func (s *InMemoryState) UpdateSnapshotsFromKnownState(server, filesystem string,
 
 			latest := (snapshots)[len(snapshots)-1]
 			log.Printf(
-				"[updateSnapshots] publishing latest snapshot %v on %s",
+				"[UpdateSnapshotsFromKnownState] publishing latest snapshot %v on %s",
 				latest, filesystem,
 			)
 
@@ -631,7 +623,7 @@ func (s *InMemoryState) UpdateSnapshotsFromKnownState(server, filesystem string,
 			if len(snapshots) > len(oldSnapshots) {
 				tlf, branch, err := s.registry.LookupFilesystemById(filesystem)
 				if err != nil {
-					return err
+					return fmt.Errorf("[UpdateSnapshotsFromKnownState] Error looking up filesystem: %s", err)
 				}
 
 				namespace := tlf.MasterBranch.Name.Namespace
@@ -657,7 +649,7 @@ func (s *InMemoryState) UpdateSnapshotsFromKnownState(server, filesystem string,
 								"error":         err,
 								"filesystem_id": filesystem,
 								"commit_id":     ss.Id,
-							}).Error("[updateSnapshots] failed to publish ")
+							}).Error("[UpdateSnapshotsFromKnownState] failed to publish ")
 						}
 					}
 				}()
@@ -668,7 +660,7 @@ func (s *InMemoryState) UpdateSnapshotsFromKnownState(server, filesystem string,
 				err := s.newSnapsOnMaster.Publish(filesystem, latest)
 				if err != nil {
 					log.Errorf(
-						"[updateSnapshotsFromKnownState] "+
+						"[UpdateSnapshotsFromKnownState] "+
 							"error publishing to newSnapsOnMaster: %s",
 						err,
 					)
@@ -683,7 +675,7 @@ func (s *InMemoryState) UpdateSnapshotsFromKnownState(server, filesystem string,
 	s.filesystemsLock.Unlock()
 	if !ok {
 		log.Printf(
-			"state machine for %s not set up yet, can't notify newSnapsOnServers",
+			"[UpdateSnapshotsFromKnownState] state machine for %s not set up yet, can't notify newSnapsOnServers",
 			filesystem,
 		)
 	} else {
@@ -691,7 +683,7 @@ func (s *InMemoryState) UpdateSnapshotsFromKnownState(server, filesystem string,
 			err := fs.PublishNewSnaps(server, true) // TODO publish latest, as above
 			if err != nil {
 				log.Printf(
-					"[updateSnapshotsFromKnownState] "+
+					"[UpdateSnapshotsFromKnownState] "+
 						"error publishing to newSnapsOnServers: %s",
 					err,
 				)
@@ -851,6 +843,7 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 	// time as docker plugin to avoid 'dm cluster' health-check triggering
 	// before we're fully up.
 	onceAgain.Do(func() {
+		go s.initFilesystemMachines()
 		go s.runServer()
 		go s.runUnixDomainServer()
 		go s.runPlugin()

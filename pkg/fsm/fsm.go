@@ -870,7 +870,12 @@ func (f *FsMachine) discover() error {
 	f.filesystem = filesystem
 	f.snapshotsLock.Unlock()
 
-	return f.snapshotsChanged()
+	err = f.snapshotsChanged()
+	if err != nil {
+		return fmt.Errorf("Error updating snapshots from discover(): %s", err)
+	} else {
+		return nil
+	}
 }
 
 func (f *FsMachine) snapshotsChanged() error {

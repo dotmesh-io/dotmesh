@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	"io/ioutil"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -76,8 +77,32 @@ func NewZFS(zfsPath, zpoolPath, poolName, mountZFS string) (ZFS, error) {
 		log.Fatalf("Unable to find pool ID, I don't know who I am :( %s %s", err, poolId)
 		return nil, err
 	}
+	matched, err := readAndMatchPoolId(poolId)
+	if err != nil {
+		log.Errorf("Error matching current to old pool id, quitting")
+		return nil, err
+	} else if !matched {
+		return nil, fmt.Errorf("The pool id for this dotmesh changed. If this is deliberate, delete the file `/dotmesh-pool-id`, otherwise investigate the issue.")
+	}
 	zfsInter.poolId = poolId
 	return zfsInter, nil
+}
+
+func readAndMatchPoolId(currentPoolId string) (bool, error) {
+	contents, err := ioutil.ReadFile("/dotmesh-pool-id")
+	if err != nil {
+		if os.IsNotExist(err) {
+			log.Infof("Did not find old /dotmesh-pool-id file, will create it and write node id %s to it", currentPoolId)
+			ioutil.WriteFile("/dotmesh-pool-id", []byte(currentPoolId), 0666)
+			return true, nil
+		} else {
+			return false, err
+		}
+	}
+	if string(contents) == currentPoolId {
+		return true, nil
+	}
+	return false, nil
 }
 
 func (z *zfs) GetPoolID() string {

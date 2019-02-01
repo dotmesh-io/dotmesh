@@ -184,7 +184,7 @@ func TestS3Remote(t *testing.T) {
 		citools.RunOnNode(t, node1, "dm switch "+fsname)
 		citools.RunOnNode(t, node1, "dm commit -m 'push this back to s3'")
 		citools.RunOnNode(t, node1, "dm push test-real-s3 "+fsname)
-		_, err := citools.RunOnNodeErr(node1, "dm dot delete "+fsname)
+		_, err := citools.RunOnNodeErr(node1, "dm dot delete -f "+fsname)
 		if err != nil {
 			t.Error("Failed deleting dot after push")
 		}
