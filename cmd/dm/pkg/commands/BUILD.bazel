@@ -33,6 +33,7 @@ go_library(
         "//cmd/dm/vendor/github.com/howeyc/gopass:go_default_library",
         "//cmd/dm/vendor/github.com/mitchellh/go-homedir:go_default_library",
         "//cmd/dm/vendor/github.com/spf13/cobra:go_default_library",
+        "//cmd/dm/vendor/golang.org/x/sys/unix:go_default_library",
         "//pkg/client:go_default_library",
         "//pkg/types:go_default_library",
         "//vendor/github.com/aws/aws-sdk-go/aws:go_default_library",
