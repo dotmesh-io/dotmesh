@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "backup.go",
         "event.go",
+        "event_names.go",
         "filesystem.go",
         "fsm_types.go",
         "kv_store.go",
