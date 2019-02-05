@@ -252,13 +252,6 @@ func (s *KVDBFilesystemStore) WatchFilesystems(idx uint64, cb WatchRegistryFiles
 			return err
 		}
 
-		log.WithFields(log.Fields{
-			"prefix": prefix,
-			"action": ActionString(kvp.Action),
-			"key":    kvp.Key,
-			"value":  string(kvp.Value),
-		}).Info("[WatchFilesystems] EVENT RECEIVED")
-
 		var f types.RegistryFilesystem
 		if kvp.Action == kvdb.KVDelete {
 			namespace, name, err := extractIDs(kvp.Key)
