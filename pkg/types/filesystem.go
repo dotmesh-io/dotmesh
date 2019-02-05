@@ -87,3 +87,22 @@ const (
 	// KVUknown operation on KV pair
 	KVUknown
 )
+
+func (kv KVAction) String() string {
+	switch kv {
+	case KVSet:
+		return "set"
+	case KVCreate:
+		return "create"
+	case KVGet:
+		return "get"
+	case KVDelete:
+		return "delete"
+	case KVExpire:
+		return "expire"
+	case KVUknown:
+		return "unknown"
+	default:
+		return "not set"
+	}
+}

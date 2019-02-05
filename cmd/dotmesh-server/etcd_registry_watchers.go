@@ -43,7 +43,7 @@ func (s *InMemoryState) processRegistryFilesystem(rf *types.RegistryFilesystem) 
 		}).Info("[processRegistryFilesystem] deleting filesystem from registry")
 		s.registry.DeleteFilesystemFromEtcd(vn)
 		return nil
-	case types.KVCreate, types.KVSet:
+	case types.KVGet, types.KVCreate, types.KVSet:
 		return s.registry.UpdateFilesystemFromEtcd(vn, *rf)
 	default:
 		return nil
@@ -74,7 +74,7 @@ func (s *InMemoryState) processRegistryClone(c *types.Clone) error {
 	switch c.Meta.Action {
 	case types.KVDelete:
 		s.registry.DeleteCloneFromEtcd(c.Name, c.FilesystemId)
-	case types.KVCreate, types.KVSet:
+	case types.KVGet, types.KVCreate, types.KVSet:
 		s.registry.UpdateCloneFromEtcd(c.Name, c.FilesystemId, *c)
 	}
 	return nil

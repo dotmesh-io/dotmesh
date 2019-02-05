@@ -9,6 +9,10 @@ import (
 )
 
 func (s *InMemoryState) watchFilesystemStoreMasters() error {
+
+	// initializing filesystems
+	go s.initFilesystemMachines()
+
 	fms, err := s.filesystemStore.ListMaster()
 	if err != nil {
 		return fmt.Errorf("failed to list filesystem masters: %s", err)
@@ -28,21 +32,24 @@ func (s *InMemoryState) watchFilesystemStoreMasters() error {
 		}
 	}
 
-	// initializing filesystems
-	s.initFilesystemMachines()
-
 	return s.filesystemStore.WatchMasters(idxMax, func(fm *types.FilesystemMaster) error {
 		return s.processFilesystemMaster(fm)
 	})
 }
 
 func (s *InMemoryState) processFilesystemMaster(fm *types.FilesystemMaster) error {
+	log.WithFields(log.Fields{
+		"index":         fm.Meta.ModifiedIndex,
+		"action":        fm.Meta.Action.String(),
+		"filesystem_id": fm.FilesystemID,
+		"node":          fm.NodeID,
+	}).Info("[processFilesystemMaster] PROCESSING FILESYSTEM MASTER")
 	switch fm.Meta.Action {
 	case types.KVDelete:
 		// delete
 		s.registry.DeleteMasterNode(fm.FilesystemID)
 		// delete(filesystemBelongsToMe, fm.FilesystemID)
-	case types.KVCreate, types.KVSet:
+	case types.KVGet, types.KVCreate, types.KVSet:
 		masterNode, ok := s.registry.GetMasterNode(fm.FilesystemID)
 		if !ok || masterNode != fm.NodeID {
 			log.WithFields(log.Fields{
@@ -142,7 +149,7 @@ func (s *InMemoryState) processDirtyFilesystems(fd *types.FilesystemDirty) error
 	switch fd.Meta.Action {
 	case types.KVDelete:
 		delete(s.globalDirtyCache, fd.FilesystemID)
-	case types.KVCreate, types.KVSet:
+	case types.KVGet, types.KVCreate, types.KVSet:
 		s.globalDirtyCache[fd.FilesystemID] = dirtyInfo{
 			Server:     fd.NodeID,
 			DirtyBytes: fd.DirtyBytes,
@@ -179,7 +186,7 @@ func (s *InMemoryState) processFilesystemContainers(fc *types.FilesystemContaine
 	switch fc.Meta.Action {
 	case types.KVDelete:
 		delete(s.globalContainerCache, fc.FilesystemID)
-	case types.KVCreate, types.KVSet:
+	case types.KVGet, types.KVCreate, types.KVSet:
 		s.globalContainerCache[fc.FilesystemID] = containerInfo{
 			Server:     fc.NodeID,
 			Containers: fc.Containers,
@@ -216,7 +223,7 @@ func (s *InMemoryState) processTransferPollResults(t *types.TransferPollResult) 
 	switch t.Meta.Action {
 	case types.KVDelete:
 		delete(s.interclusterTransfers, t.TransferRequestId)
-	case types.KVCreate, types.KVSet:
+	case types.KVGet, types.KVCreate, types.KVSet:
 		s.interclusterTransfers[t.TransferRequestId] = *t
 	}
 	return
@@ -268,7 +275,7 @@ func (s *InMemoryState) watchCleanupPending() error {
 		case types.KVDelete:
 			// nothing to do:
 			return nil
-		case types.KVCreate, types.KVSet:
+		case types.KVGet, types.KVCreate, types.KVSet:
 			return s.processFilesystemCleanup(val)
 		default:
 			log.WithFields(log.Fields{

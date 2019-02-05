@@ -59,7 +59,7 @@ func (s *InMemoryState) processServerState(ss *types.ServerState) error {
 	case types.KVDelete:
 		// nothing to do
 		return nil
-	case types.KVCreate, types.KVSet:
+	case types.KVGet, types.KVCreate, types.KVSet:
 		fsm, err := s.InitFilesystemMachine(ss.FilesystemID)
 		if err != nil {
 			return err
@@ -119,7 +119,7 @@ func (s *InMemoryState) processServerSnapshots(ss *types.ServerSnapshots) error 
 	switch ss.Meta.Action {
 	case types.KVDelete:
 		return s.UpdateSnapshotsFromKnownState(ss.ID, ss.FilesystemID, []*Snapshot{})
-	case types.KVCreate, types.KVSet:
+	case types.KVGet, types.KVCreate, types.KVSet:
 		return s.UpdateSnapshotsFromKnownState(ss.ID, ss.FilesystemID, ss.Snapshots)
 	default:
 		return nil
