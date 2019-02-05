@@ -38,7 +38,9 @@ var rpcTracker = rpcTracking{rpcDuration: make(map[uuid.UUID]time.Time), mutex: 
 
 func (state *InMemoryState) runServer() {
 
-	log.Info("[runServer] starting HTTP server")
+	log.WithFields(log.Fields{
+		"port": state.config.APIServerPort,
+	}).Info("[runServer] starting HTTP server")
 	defer log.Info("[runServer] stopping HTTP server")
 
 	go func() {
