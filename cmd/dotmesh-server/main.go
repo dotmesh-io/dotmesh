@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/dotmesh-io/dotmesh/pkg/messaging/nats"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
@@ -163,6 +164,12 @@ func main() {
 	config.ZFSExecPath = ZFS
 	config.ZPoolPath = ZPOOL
 	config.PoolName = POOL
+
+	if os.Getenv("DOTMESH_SERVER_PORT") != "" {
+		config.APIServerPort = os.Getenv("DOTMESH_SERVER_PORT")
+	} else {
+		config.APIServerPort = client.SERVER_PORT
+	}
 
 	// kvClient := kv.New(etcdClient, ETCD_PREFIX)
 	config.UserManager = user.New(usersIdxStore)

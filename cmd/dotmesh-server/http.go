@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"log"
+
 	"net"
 	"net/http"
 	_ "net/http/pprof"
@@ -18,8 +18,8 @@ import (
 	"github.com/openzipkin/zipkin-go-opentracing/examples/middleware"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/satori/go.uuid"
+	log "github.com/sirupsen/logrus"
 
-	"github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/dotmesh-io/dotmesh/pkg/metrics"
 	"github.com/dotmesh-io/dotmesh/pkg/utils"
 )
@@ -37,6 +37,10 @@ var rpcTracker = rpcTracking{rpcDuration: make(map[uuid.UUID]time.Time), mutex: 
 // rpc and replication live in rpc.go and replication.go respectively
 
 func (state *InMemoryState) runServer() {
+
+	log.Info("[runServer] starting HTTP server")
+	defer log.Info("[runServer] stopping HTTP server")
+
 	go func() {
 		// for debugging:
 		// http://stackoverflow.com/questions/19094099/how-to-dump-goroutine-stacktraces
@@ -125,14 +129,15 @@ func (state *InMemoryState) runServer() {
 
 	if os.Getenv("PRINT_HTTP_LOGS") != "" {
 		loggingRouter := handlers.LoggingHandler(getLogfile("requests"), router)
-		err = http.ListenAndServe(fmt.Sprintf(":%s", client.SERVER_PORT), loggingRouter)
+		// TODO: take server port from the config
+		err = http.ListenAndServe(fmt.Sprintf(":%s", state.config.APIServerPort), loggingRouter)
 	} else {
-		err = http.ListenAndServe(fmt.Sprintf(":%s", client.SERVER_PORT), router)
+		err = http.ListenAndServe(fmt.Sprintf(":%s", state.config.APIServerPort), router)
 	}
 
 	if err != nil {
-		utils.Out(fmt.Sprintf("Unable to listen on port %s: '%s'\n", client.SERVER_PORT, err))
-		log.Fatalf("Unable to listen on port %s: '%s'", client.SERVER_PORT, err)
+		utils.Out(fmt.Sprintf("Unable to listen on port %s: '%s'\n", state.config.APIServerPort, err))
+		log.Fatalf("Unable to listen on port %s: '%s'", state.config.APIServerPort, err)
 	}
 }
 
@@ -172,7 +177,13 @@ func (state *InMemoryState) runUnixDomainServer() {
 	// pre-authenticated-as-admin rpc server for clever unix socket clients
 	// only. intended for use by the flexvolume driver, hence the location on
 	// disk.
-	http.Serve(listener, NewAdminHandler(unixSocketRouter, state))
+	err = http.Serve(listener, NewAdminHandler(unixSocketRouter, state))
+	if err != nil {
+		log.WithFields(log.Fields{
+			"error":            err,
+			"unix_socket_addr": FV_SOCKET,
+		}).Error("[runUnixDomainServer] unix domain socket handler stopped")
+	}
 }
 
 // handler which makes all requests appear as the admin user!

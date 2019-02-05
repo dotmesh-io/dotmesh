@@ -842,11 +842,13 @@ func (s *InMemoryState) fetchAndWatchEtcd() error {
 	// to avoid startup deadlock when etcd is down. run api/rpc server at same
 	// time as docker plugin to avoid 'dm cluster' health-check triggering
 	// before we're fully up.
+	log.Info("starting RPC endpoints")
 	onceAgain.Do(func() {
 		go s.runServer()
 		go s.runUnixDomainServer()
 		go s.runPlugin()
 	})
+	log.Info("RPC endpoints started")
 
 	s.etcdWaitTimestampLock.Lock()
 	s.etcdWaitTimestamp = time.Now().UnixNano()
