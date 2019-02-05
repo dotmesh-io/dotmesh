@@ -100,6 +100,9 @@ type Config struct {
 	ZPoolPath   string
 	PoolName    string
 
+	// API/RPC server port
+	APIServerPort string
+
 	NatsConfig *nats.Config
 }
 
