@@ -16,6 +16,11 @@ import (
 var (
 	RequestsSubjectTemplate = "dotmesh.events.requests.%s.%s"
 	ResponseSubjectTemplate = "dotmesh.events.responses.%s.%s"
+
+	// Cluster requests (reset registry)
+	ClusterReqSubjectTemplate = "dotmesh.cluster.requests"
+	// Cluster responses (with request ID)
+	ClusterRespSubjectTemplate = "dotmesh.cluster.responses.%s"
 )
 
 var _ messaging.Messenger = (*NatsMessenger)(nil)
@@ -131,21 +136,43 @@ func (m *NatsMessenger) Subscribe(ctx context.Context, q *types.SubscribeQuery) 
 
 	respCh := make(chan *types.Event)
 
-	var template string
+	var err error
+	var sub *nats.Subscription
+
+	// var template string
 	switch q.Type {
 	case types.EventTypeRequest:
-		template = RequestsSubjectTemplate
+		sub, err = m.encodedClient.Subscribe(fmt.Sprintf(RequestsSubjectTemplate, q.GetFilesystemID(), q.GetRequestID()), func(event *types.Event) {
+			respCh <- event
+		})
+		if err != nil {
+			return nil, err
+		}
 	case types.EventTypeResponse:
-		template = ResponseSubjectTemplate
+		sub, err = m.encodedClient.Subscribe(fmt.Sprintf(ResponseSubjectTemplate, q.GetFilesystemID(), q.GetRequestID()), func(event *types.Event) {
+			respCh <- event
+		})
+		if err != nil {
+			return nil, err
+		}
+	case types.EventTypeClusterRequest, types.EventTypeClusterResponse:
+
+		var subject string
+		if q.Type == types.EventTypeClusterRequest {
+			subject = ClusterReqSubjectTemplate
+		} else {
+			subject = fmt.Sprintf(ClusterRespSubjectTemplate, q.RequestID)
+		}
+
+		sub, err = m.encodedClient.Subscribe(subject, func(event *types.Event) {
+			respCh <- event
+		})
+		if err != nil {
+			return nil, err
+		}
+
 	default:
 		return nil, fmt.Errorf("unknown event type: %v", q.Type)
-	}
-
-	sub, err := m.encodedClient.Subscribe(fmt.Sprintf(template, q.GetFilesystemID(), q.GetRequestID()), func(event *types.Event) {
-		respCh <- event
-	})
-	if err != nil {
-		return nil, err
 	}
 
 	go func() {
@@ -177,6 +204,10 @@ func getSubject(event *types.Event) (string, error) {
 		subject = fmt.Sprintf(RequestsSubjectTemplate, event.FilesystemID, event.ID)
 	case types.EventTypeResponse:
 		subject = fmt.Sprintf(ResponseSubjectTemplate, event.FilesystemID, event.ID)
+	case types.EventTypeClusterRequest:
+		subject = ClusterReqSubjectTemplate
+	case types.EventTypeClusterResponse:
+		subject = fmt.Sprintf(ClusterRespSubjectTemplate, event.ID)
 	default:
 		return "", fmt.Errorf("unknown event type: %d", event.Type)
 	}

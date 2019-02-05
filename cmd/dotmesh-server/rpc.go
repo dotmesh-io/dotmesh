@@ -2989,6 +2989,88 @@ func (d *DotmeshRPC) RestoreEtcd(r *http.Request, args *struct {
 		return fmt.Errorf("unsupported backup version '%s', supported version: %s", backup.Version, strings.Join(types.BackupSupportedVersions, ", "))
 	}
 
+	// resetting registry in the cluster
+
+	eventID, _ := uuid.NewV4()
+	resetEvent := types.NewEvent(types.EventNameResetRegistry)
+	resetEvent.ID = eventID.String()
+
+	clusterResetComplete := make(chan struct{})
+	counter := 0
+
+	// servers
+	servers, err := d.state.serverStore.ListAddresses()
+	if err != nil {
+		log.WithFields(log.Fields{
+			"error": err,
+		}).Error("[RestoreEtcd] failed to list server addresses")
+	}
+	if len(servers) == 1 {
+		// only us, don't bother with cluster reset
+		d.state.resetRegistry()
+	} else {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		ch, err := d.state.messenger.Subscribe(ctx, &types.SubscribeQuery{
+			Type:      types.EventTypeClusterResponse,
+			RequestID: resetEvent.ID,
+		})
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error": err,
+			}).Error("[RestoreEtcd] failed to subscribe to cluster events")
+		} else {
+			go func() {
+				defer close(clusterResetComplete)
+
+				// creating new ctx to wait for the acks
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				for {
+					select {
+					case <-ctx.Done():
+						// timeout
+						log.WithFields(log.Fields{
+							"servers":  len(servers),
+							"received": counter,
+						}).Info("[RestoreEtcd] some registry reset acks were missed, continuing with restore...")
+						return
+					case event, ok := <-ch:
+						if !ok {
+							log.WithFields(log.Fields{
+								"servers":  len(servers),
+								"received": counter,
+							}).Info("[RestoreEtcd] registry reset ack listener closed")
+							return
+						}
+						if event.ID == resetEvent.ID && event.Name == types.EventNameResetRegistryComplete {
+							counter++
+						}
+						if counter >= len(servers) {
+
+							log.WithFields(log.Fields{
+								"servers": len(servers),
+							}).Info("[RestoreEtcd] all registry reset acks received")
+							return
+						}
+					}
+				}
+			}()
+		}
+
+		err = d.state.messenger.Publish(resetEvent)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error": err,
+			}).Error("[RestoreEtcd] failed to dispatch reset registry event")
+		} else {
+			log.Info("[RestoreEtcd] cluster registry reset event dispatched, waiting for responses...")
+			<-clusterResetComplete
+		}
+	}
+
+	// importing objects
+
 	var errs []error
 
 	for _, u := range backup.Users {

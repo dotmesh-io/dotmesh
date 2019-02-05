@@ -12,14 +12,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portworx/kvdb"
-
 	"github.com/coreos/etcd/client"
+	"github.com/nu7hatch/gouuid"
+	"github.com/portworx/kvdb"
+	"golang.org/x/net/context"
+
 	"github.com/dotmesh-io/dotmesh/pkg/store"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
-	"github.com/nu7hatch/gouuid"
-	"golang.org/x/net/context"
 
 	log "github.com/sirupsen/logrus"
 )

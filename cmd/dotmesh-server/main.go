@@ -8,6 +8,7 @@ filesystems.
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -220,6 +221,17 @@ func main() {
 	go runForever(s.fetchAndWatchEtcd, "fetchAndWatchEtcd",
 		1*time.Second, 1*time.Second,
 	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		err := s.subscribeToClusterEvents(ctx)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error": err,
+			}).Fatal("failed to subscribe to cluster events")
+		}
+	}()
 
 	// tell k8s we're live
 	s.runLivenessServer()
