@@ -156,6 +156,45 @@ func NewInMemoryState(config Config) *InMemoryState {
 	return s
 }
 
+func (s *InMemoryState) subscribeToClusterEvents(ctx context.Context) error {
+	ch, err := s.messenger.Subscribe(ctx, &types.SubscribeQuery{
+		Type: types.EventTypeClusterRequest,
+	})
+	if err != nil {
+		return err
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case event := <-ch:
+
+			log.WithFields(log.Fields{
+				"id":   event.ID,
+				"type": event.Type,
+				"name": event.Name,
+			}).Info("[subscribeToClusterEvents] cluster event received")
+
+			switch event.Name {
+			case "reset-registry":
+				s.resetRegistry()
+				resp := types.NewEvent("reset-registry-complete")
+				resp.Type = types.EventTypeClusterResponse
+				resp.ID = event.ID
+				err = s.messenger.Publish(resp)
+				if err != nil {
+					log.WithFields(log.Fields{
+						"error":    err,
+						"type":     event.Type,
+						"event_id": event.ID,
+					}).Error("[subscribeToClusterEvents] failed to send event response")
+				}
+			}
+		}
+	}
+}
+
 func (s *InMemoryState) resetRegistry() {
 	s.registry = registry.NewRegistry(s.userManager, s.config.RegistryStore)
 }
