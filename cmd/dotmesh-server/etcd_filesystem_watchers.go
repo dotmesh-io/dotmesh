@@ -38,12 +38,7 @@ func (s *InMemoryState) watchFilesystemStoreMasters() error {
 }
 
 func (s *InMemoryState) processFilesystemMaster(fm *types.FilesystemMaster) error {
-	log.WithFields(log.Fields{
-		"index":         fm.Meta.ModifiedIndex,
-		"action":        fm.Meta.Action.String(),
-		"filesystem_id": fm.FilesystemID,
-		"node":          fm.NodeID,
-	}).Info("[processFilesystemMaster] PROCESSING FILESYSTEM MASTER")
+
 	switch fm.Meta.Action {
 	case types.KVDelete:
 		// delete
