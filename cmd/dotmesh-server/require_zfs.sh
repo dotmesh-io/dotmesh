@@ -296,7 +296,7 @@ if [ -z "$DOTMESH_MANUAL_NETWORKING" ]; then
         # by etcd operator on Kubernetes).
         link="--link dotmesh-etcd:dotmesh-etcd"
     fi
-    if [ "$DOTMESH_ETCD_ENDPOINT" == "" ]; then
+    if [ "$DOTMESH_JOIN_OUTER_NETWORK" == "true" ]; then
         # When running in a pod network, calculate the id of the current container
         # in scope, and pass that as --net=container:<id> so that dotmesh-server
         # itself runs in the same network namespace.
