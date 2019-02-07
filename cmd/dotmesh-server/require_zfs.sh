@@ -290,12 +290,12 @@ link=""
 # this setting means we have set DOTMESH_ETCD_ENDPOINT to a known working
 # endpoint and we don't want any links for --net flags passed to Docker
 if [ -z "$DOTMESH_MANUAL_NETWORKING" ]; then
-    if [ "$DOTMESH_ETCD_ENDPOINT" == "" ]; then
+    # if [ "$DOTMESH_ETCD_ENDPOINT" == "" ]; then
         # If etcd endpoint is overridden, then don't try to link to a local
         # dotmesh-etcd container (etcd probably is being provided externally, e.g.
         # by etcd operator on Kubernetes).
-        link="--link dotmesh-etcd:dotmesh-etcd"
-    fi
+    link="--link dotmesh-etcd:dotmesh-etcd"
+    # fi
     if [ "$DOTMESH_JOIN_OUTER_NETWORK" == "true" ]; then
         # When running in a pod network, calculate the id of the current container
         # in scope, and pass that as --net=container:<id> so that dotmesh-server

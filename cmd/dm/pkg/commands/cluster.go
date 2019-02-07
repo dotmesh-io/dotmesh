@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	"golang.org/x/sys/unix"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -17,6 +16,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/blang/semver"
 	"github.com/dotmesh-io/dotmesh/cmd/dm/pkg/pki"
@@ -726,8 +727,9 @@ func clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath string) err
 		if err != nil {
 			return fmt.Errorf("failed to start Etcd container, error: %s", err)
 		}
-		// ok
-		etcdURL = "https://127.0.0.1:42379"
+		// ok, connecting locally. An etcd server should be created
+		// and accessible
+		etcdURL = "https://dotmesh-etcd:42379"
 	} else {
 		etcdURL = fmt.Sprintf("https://%s:%s", address, types.DefaultEtcdClientPort)
 		fmt.Printf("Found external Etcd, configuring connection to '%s'...\n", etcdURL)
