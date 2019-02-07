@@ -281,7 +281,7 @@ if [ "$PKI_PATH" != "" ]; then
 fi
 
 PORT=${DOTMESH_SERVER_PORT:-32607}
-net="-p ${PORT}:32607 -p 32608:32608 -p 32609:32609 -p 32610:32610 -p 32611:32611"
+net="-p ${PORT}:${PORT} -p 32608:32608 -p 32609:32609 -p 32610:32610 -p 32611:32611"
 if [ ! -z ${DISABLE_EXPOSED_PORTS+x} ]; then
     net=""
 fi
