@@ -43,7 +43,6 @@ type InMemoryState struct {
 	messenger       messaging.Messenger
 	messagingServer messaging.MessagingServer
 
-	// etcdClient                 client.KeysAPI
 	registryStore   store.RegistryStore
 	filesystemStore store.FilesystemStore
 	serverStore     store.ServerStore
