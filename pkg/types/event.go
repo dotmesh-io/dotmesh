@@ -22,6 +22,8 @@ type EventType int
 const (
 	EventTypeRequest EventType = iota
 	EventTypeResponse
+	EventTypeClusterRequest
+	EventTypeClusterResponse
 )
 
 type Event struct {

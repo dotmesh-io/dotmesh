@@ -3,21 +3,22 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "go_default_library",
     srcs = [
+        "backup.go",
         "event.go",
+        "event_names.go",
+        "filesystem.go",
         "fsm_types.go",
+        "kv_store.go",
         "messenger.go",
         "notification.go",
         "tlf.go",
         "types.go",
+        "user.go",
         "volumes.go",
     ],
     importpath = "github.com/dotmesh-io/dotmesh/pkg/types",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/auth:go_default_library",
-        "//pkg/container:go_default_library",
-        "//pkg/user:go_default_library",
-    ],
+    deps = ["//pkg/container:go_default_library"],
 )
 
 go_test(

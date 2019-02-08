@@ -3,8 +3,7 @@ package main
 import (
 	"github.com/dotmesh-io/dotmesh/pkg/container"
 	"github.com/dotmesh-io/dotmesh/pkg/messaging/nats"
-
-	"github.com/coreos/etcd/client"
+	"github.com/dotmesh-io/dotmesh/pkg/store"
 
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
@@ -90,12 +89,19 @@ type TransferPollResult = types.TransferPollResult
 type Config struct {
 	FilesystemMetadataTimeout int64
 	UserManager               user.UserManager
-	EtcdClient                client.KeysAPI
+	// EtcdClient                client.KeysAPI
+
+	RegistryStore   store.RegistryStore
+	FilesystemStore store.FilesystemStore
+	ServerStore     store.ServerStore
 
 	// variables used to create fsm.FsMachine
 	ZFSExecPath string
 	ZPoolPath   string
 	PoolName    string
+
+	// API/RPC server port
+	APIServerPort string
 
 	NatsConfig *nats.Config
 }

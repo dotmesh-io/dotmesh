@@ -47,7 +47,7 @@ POOL=${USE_POOL_NAME:-pool}
 POOL=$(echo $POOL |sed s/\#HOSTNAME\#/$HOSTNAME/)
 DOTMESH_INNER_SERVER_NAME=${DOTMESH_INNER_SERVER_NAME:-dotmesh-server-inner}
 FLEXVOLUME_DRIVER_DIR=${FLEXVOLUME_DRIVER_DIR:-/usr/libexec/kubernetes/kubelet-plugins/volume/exec}
-INHERIT_ENVIRONMENT_NAMES=( "FILESYSTEM_METADATA_TIMEOUT" "DOTMESH_UPGRADES_URL" "DOTMESH_UPGRADES_INTERVAL_SECONDS" "NATS_URL" "NATS_USERNAME" "NATS_PASSWORD" "NATS_SUBJECT_PREFIX")
+INHERIT_ENVIRONMENT_NAMES=( "DOTMESH_SERVER_PORT" "FILESYSTEM_METADATA_TIMEOUT" "DOTMESH_UPGRADES_URL" "DOTMESH_UPGRADES_INTERVAL_SECONDS" "NATS_URL" "NATS_USERNAME" "NATS_PASSWORD" "NATS_SUBJECT_PREFIX")
 
 if [ $POOL_SIZE = AUTO ]
 then
@@ -281,7 +281,7 @@ if [ "$PKI_PATH" != "" ]; then
 fi
 
 PORT=${DOTMESH_SERVER_PORT:-32607}
-net="-p ${PORT}:32607 -p 32608:32608 -p 32609:32609 -p 32610:32610 -p 32611:32611"
+net="-p ${PORT}:${PORT} -p 32608:32608 -p 32609:32609 -p 32610:32610 -p 32611:32611"
 if [ ! -z ${DISABLE_EXPOSED_PORTS+x} ]; then
     net=""
 fi
@@ -290,13 +290,13 @@ link=""
 # this setting means we have set DOTMESH_ETCD_ENDPOINT to a known working
 # endpoint and we don't want any links for --net flags passed to Docker
 if [ -z "$DOTMESH_MANUAL_NETWORKING" ]; then
-    if [ "$DOTMESH_ETCD_ENDPOINT" == "" ]; then
+    if [ "$DOTMESH_ETCD_ENDPOINT" == "https://dotmesh-etcd:42379" ]; then
         # If etcd endpoint is overridden, then don't try to link to a local
         # dotmesh-etcd container (etcd probably is being provided externally, e.g.
         # by etcd operator on Kubernetes).
         link="--link dotmesh-etcd:dotmesh-etcd"
     fi
-    if [ "$DOTMESH_ETCD_ENDPOINT" != "" ]; then
+    if [ "$DOTMESH_JOIN_OUTER_NETWORK" == "true" ]; then
         # When running in a pod network, calculate the id of the current container
         # in scope, and pass that as --net=container:<id> so that dotmesh-server
         # itself runs in the same network namespace.

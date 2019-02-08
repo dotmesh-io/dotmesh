@@ -39,11 +39,15 @@ ignored = ["github.com/dotmesh-io/dotmesh/cmd/dotmesh-server/pkg*", "github.com/
   name = "github.com/gorilla/rpc"
   branch = "master"
 
-[[constraint]]
-  name = "github.com/coreos/etcd"
-  version = "3.3.8"
+# [[constraint]]
+#   name = "github.com/coreos/etcd"
+#   version = "3.3.8"
 
 
 [[constraint]]
   name = "github.com/aws/aws-sdk-go"
   version = "1.14.11"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/portworx/kvdb"

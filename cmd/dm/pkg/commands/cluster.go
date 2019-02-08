@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	"golang.org/x/sys/unix"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -18,9 +17,12 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/blang/semver"
 	"github.com/dotmesh-io/dotmesh/cmd/dm/pkg/pki"
 	"github.com/dotmesh-io/dotmesh/pkg/client"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/spf13/cobra"
 )
 
@@ -372,7 +374,7 @@ func clusterUpgrade(cmd *cobra.Command, args []string, out io.Writer) error {
 
 	pkiPath := getPkiPath()
 	fmt.Printf("Starting dotmesh server... ")
-	err = startDotmeshContainer(pkiPath, "", "")
+	err = startDotmeshContainer(pkiPath, "", "", types.DefaultEtcdURL)
 	if err != nil {
 		return err
 	}
@@ -565,7 +567,7 @@ func pathExists(path string) (bool, error) {
 	return true, err
 }
 
-func startDotmeshContainer(pkiPath, adminKey, adminPassword string) error {
+func startDotmeshContainer(pkiPath, adminKey, adminPassword, etcdClientURL string) error {
 	if traceAddr != "" {
 		fmt.Printf("Trace address: %s\n", traceAddr)
 	}
@@ -589,6 +591,8 @@ func startDotmeshContainer(pkiPath, adminKey, adminPassword string) error {
 		"-e", "PATH=/bundled-lib/sbin:/usr/local/sbin:/usr/local/bin:" +
 			"/usr/sbin:/usr/bin:/sbin:/bin",
 		"-e", "LD_LIBRARY_PATH=/bundled-lib/lib:/bundled-lib/usr/lib/",
+		// Setting up Etcd endpoint
+		"-e", fmt.Sprintf("%s=%s", types.EnvEtcdEndpoint, etcdClientURL),
 		// Allow tests to specify which pool to create and where.
 		"-e", fmt.Sprintf("USE_POOL_NAME=%s", usePoolName),
 		"-e", fmt.Sprintf("USE_POOL_DIR=%s", usePoolDir),
@@ -709,97 +713,27 @@ func saveLocalAuthDetails(configPath, adminPassword, adminKey string) error {
 }
 
 func clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath string) error {
-	// - Start etcd with discovery token on non-standard ports (to avoid
-	//   conflicting with an existing etcd).
-	fmt.Printf("Guessing docker host's IPv4 address (should be routable from other cluster nodes)... ")
-	ipAddrs, err := guessHostIPv4Addresses()
+
+	fmt.Printf("Checking  whether we should start Etcd on this node.. \n")
+	startEtcd, address, err := shouldStartEtcd(clusterUrl)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to check whether should start an Etcd, error: %s", err)
 	}
-	// TODO add an argument to override this
-	fmt.Printf("got: %s.\n", strings.Join(ipAddrs, ","))
-
-	fmt.Printf("Guessing unique name for docker host (using hostname, must be unique wrt other cluster nodes)... ")
-	hostnameString, err := guessHostname()
-	if err != nil {
-		return err
-	}
-	// TODO add an argument to override this
-	fmt.Printf("got: %s.\n", hostnameString)
-
-	peerURLs := []string{}
-	clientURLs := []string{}
-	for _, ipAddr := range ipAddrs {
-		peerURLs = append(peerURLs, fmt.Sprintf("https://%s:42380", ipAddr))
-		clientURLs = append(clientURLs, fmt.Sprintf("https://%s:42379", ipAddr))
-	}
-
-	fmt.Printf("Starting etcd... ")
-	args := []string{
-		"docker", "run", "--restart=always",
-		"-d", "--name=dotmesh-etcd",
-		"-p", "42379:42379", "-p", "42380:42380",
-		"-v", "dotmesh-etcd-data:/var/lib/etcd",
-		// XXX assuming you can bind-mount a path from the host is dubious,
-		// hopefully it works well enough on docker for mac and docker machine.
-		// An alternative approach could be to pass in the cluster secret as an
-		// env var and download it and cache it in a docker volume.
-		"-v", fmt.Sprintf("%s:/pki", maybeEscapeLinuxEmulatedPathOnWindows(pkiPath)),
-		etcdDockerImage,
-		"etcd", "--name", hostnameString,
-		"--data-dir", "/var/lib/etcd",
-
-		// Client-to-server communication:
-		// Certificate used for SSL/TLS connections to etcd. When this option
-		// is set, you can set advertise-client-urls using HTTPS schema.
-		"--cert-file=/pki/apiserver.pem",
-		// Key for the certificate. Must be unencrypted.
-		"--key-file=/pki/apiserver-key.pem",
-		// When this is set etcd will check all incoming HTTPS requests for a
-		// client certificate signed by the trusted CA, requests that don't
-		// supply a valid client certificate will fail.
-		"--client-cert-auth",
-		// Trusted certificate authority.
-		"--trusted-ca-file=/pki/ca.pem",
-
-		// Peer (server-to-server / cluster) communication:
-		// The peer options work the same way as the client-to-server options:
-		// Certificate used for SSL/TLS connections between peers. This will be
-		// used both for listening on the peer address as well as sending
-		// requests to other peers.
-		"--peer-cert-file=/pki/apiserver.pem",
-		// Key for the certificate. Must be unencrypted.
-		"--peer-key-file=/pki/apiserver-key.pem",
-		// When set, etcd will check all incoming peer requests from the
-		// cluster for valid client certificates signed by the supplied CA.
-		"--peer-client-cert-auth",
-		// Trusted certificate authority.
-		"--peer-trusted-ca-file=/pki/ca.pem",
-
-		// TODO stop using the same certificate for peer and client/server
-		// connection validation
-
-		// listen
-		"--listen-peer-urls", "https://0.0.0.0:42380",
-		"--listen-client-urls", "https://0.0.0.0:42379",
-		// advertise
-		"--initial-advertise-peer-urls", strings.Join(peerURLs, ","),
-		"--advertise-client-urls", strings.Join(clientURLs, ","),
-	}
-	if etcdInitialCluster == "" {
-		args = append(args, []string{"--discovery", clusterUrl}...)
+	// etcdURL := types.DefaultEtcdURL
+	var etcdURL string
+	if startEtcd {
+		fmt.Printf("Starting etcd, no existing Etcd addresses detected \n")
+		err = startEtcdContainer(clusterUrl, adminPassword, adminKey, pkiPath)
+		if err != nil {
+			return fmt.Errorf("failed to start Etcd container, error: %s", err)
+		}
+		// ok, connecting locally. An etcd server should be created
+		// and accessible
+		etcdURL = "https://dotmesh-etcd:42379"
 	} else {
-		args = append(args, []string{
-			"--initial-cluster-state", "existing",
-			"--initial-cluster", etcdInitialCluster,
-		}...)
+		etcdURL = fmt.Sprintf("https://%s:%s", address, types.DefaultEtcdClientPort)
+		fmt.Printf("Found external Etcd, configuring connection to '%s'...\n", etcdURL)
 	}
-	resp, err := exec.Command(args[0], args[1:]...).CombinedOutput()
-	if err != nil {
-		fmt.Printf("response: %s\n", resp)
-		return err
-	}
-	fmt.Printf("done.\n")
 
 	if adminPassword != "" && adminKey != "" {
 		err = saveLocalAuthDetails(configPath, adminPassword, adminKey)
@@ -840,8 +774,8 @@ func clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath string) err
 	}
 
 	// - Start dotmesh-server.
-	fmt.Printf("Starting dotmesh server... ")
-	err = startDotmeshContainer(pkiPath, adminKey, adminPassword)
+	fmt.Printf("Starting dotmesh server... \n")
+	err = startDotmeshContainer(pkiPath, adminKey, adminPassword, etcdURL)
 	if err != nil {
 		return err
 	}

@@ -2,18 +2,17 @@ package registry
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	// "log"
 	"sort"
 	"sync"
 
-	"github.com/coreos/etcd/client"
-
 	"github.com/dotmesh-io/dotmesh/pkg/auth"
+	"github.com/dotmesh-io/dotmesh/pkg/store"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
+	"github.com/portworx/kvdb"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -45,6 +44,7 @@ type Registry interface {
 
 	// TODO: why ..FromEtcd?
 	UpdateFilesystemFromEtcd(name types.VolumeName, rf types.RegistryFilesystem) error
+	DeleteFilesystemFromEtcd(name types.VolumeName)
 	UpdateCloneFromEtcd(name string, topLevelFilesystemId string, clone types.Clone)
 	DeleteCloneFromEtcd(name string, topLevelFilesystemId string)
 
@@ -87,14 +87,10 @@ type DefaultRegistry struct {
 	mastersCache     map[string]string
 	mastersCacheLock *sync.RWMutex
 
-	serverAddressesCache     map[string]string
-	serverAddressesCacheLock *sync.RWMutex
-
-	etcdClient client.KeysAPI
-	prefix     string
+	registryStore store.RegistryStore
 }
 
-func NewRegistry(um user.UserManager, etcdClient client.KeysAPI, prefix string) *DefaultRegistry {
+func NewRegistry(um user.UserManager, registryStore store.RegistryStore) *DefaultRegistry {
 	return &DefaultRegistry{
 		topLevelFilesystems:     map[types.VolumeName]types.TopLevelFilesystem{},
 		clones:                  map[string]map[string]types.Clone{},
@@ -104,12 +100,8 @@ func NewRegistry(um user.UserManager, etcdClient client.KeysAPI, prefix string) 
 		// filesystem => node id
 		mastersCache:     make(map[string]string),
 		mastersCacheLock: &sync.RWMutex{},
-		// server id => comma-separated IPv[46] addresses
-		serverAddressesCache:     make(map[string]string),
-		serverAddressesCacheLock: &sync.RWMutex{},
 
-		etcdClient: etcdClient,
-		prefix:     prefix,
+		registryStore: registryStore,
 	}
 }
 
@@ -224,18 +216,6 @@ func (r *DefaultRegistry) GetByName(name types.VolumeName) (types.TopLevelFilesy
 	return tlf, nil
 }
 
-// // list of top-level filesystem ids
-// func (r *DefaultRegistry) FilesystemIds() []string {
-// 	r.topLevelFilesystemsLock.RLock()
-// 	defer r.topLevelFilesystemsLock.RUnlock()
-// 	filesystemIds := []string{}
-// 	for _, tlf := range r.topLevelFilesystems {
-// 		filesystemIds = append(filesystemIds, tlf.MasterBranch.Id)
-// 	}
-// 	sort.Strings(filesystemIds)
-// 	return filesystemIds
-// }
-
 func (r *DefaultRegistry) FilesystemIdsIncludingClones() []string {
 	filesystemIds := []string{}
 
@@ -269,25 +249,6 @@ func (r *DefaultRegistry) ClonesFor(filesystemId string) map[string]types.Clone 
 	return r.clones[filesystemId]
 }
 
-// Check whether a given clone can be pulled onto this machine, based on
-// whether its origin snapshot exists here
-// func (r *DefaultRegistry) CanPullClone(c Clone) bool {
-// 	r.state.filesystemsLock.RLock()
-// 	fsMachine, ok := r.state.filesystems[c.Origin.FilesystemId]
-// 	r.state.filesystemsLock.RUnlock()
-// 	if !ok {
-// 		return false
-// 	}
-// 	fsMachine.snapshotsLock.Lock()
-// 	defer fsMachine.snapshotsLock.Lock()
-// 	for _, snap := range fsMachine.filesystem.snapshots {
-// 		if snap.Id == c.Origin.SnapshotId {
-// 			return true
-// 		}
-// 	}
-// 	return false
-// }
-
 // the type as stored in the json in etcd (intermediate representation wrt
 // DotmeshVolume)
 type registryFilesystem struct {
@@ -301,23 +262,12 @@ func (r *DefaultRegistry) RegisterFork(originFilesystemId string, originSnapshot
 		Id: forkFilesystemId,
 		// Owner is, for now, always the authenticated user at the time of
 		// creation
+		Name:                 forkName.Name,
 		OwnerId:              forkName.Namespace,
 		ForkParentId:         originFilesystemId,
 		ForkParentSnapshotId: originSnapshotId,
 	}
-	serialized, err := json.Marshal(rf)
-	if err != nil {
-		return err
-	}
-	_, err = r.etcdClient.Set(
-		context.Background(),
-		// (0)/(1)dotmesh.io/(2)registry/(3)filesystems/(4)<namespace>/(5)<name> =>
-		//     {"Uuid": "<fs-uuid>"}
-		fmt.Sprintf("%s/registry/filesystems/%s/%s", r.prefix, forkName.Namespace, forkName.Name),
-		string(serialized),
-		// we support updates in UpdateCollaborators, below.
-		&client.SetOptions{PrevExist: client.PrevNoExist},
-	)
+	err := r.registryStore.SetFilesystem(&rf, &store.SetOptions{})
 	if err != nil {
 		return err
 	}
@@ -328,29 +278,35 @@ func (r *DefaultRegistry) RegisterFork(originFilesystemId string, originSnapshot
 
 // update a filesystem, including updating etcd and our local state
 func (r *DefaultRegistry) RegisterFilesystem(ctx context.Context, name types.VolumeName, filesystemId string) error {
-	authenticatedUserId := auth.GetUserIDFromCtx(ctx)
-	if authenticatedUserId == "" {
+	user := auth.GetUserFromCtx(ctx)
+	if user == nil {
 		return fmt.Errorf("No user found in request context.")
 	}
+	if name.Namespace == "" {
+		name.Namespace = user.Name
+	}
+	// else {
+	// 	// TODO: check for admin?
+	// 	if user.Name != name.Namespace {
+	// 		return fmt.Errorf("username and namespace doesn't match: '%s' != '%s'", user.Name, name.Namespace)
+	// 	}
+	// }
+
 	rf := types.RegistryFilesystem{
 		Id: filesystemId,
 		// Owner is, for now, always the authenticated user at the time of
 		// creation
-		OwnerId: authenticatedUserId,
+		OwnerId: name.Namespace,
+		Name:    name.Name,
 	}
-	serialized, err := json.Marshal(rf)
-	if err != nil {
-		return err
-	}
-	_, err = r.etcdClient.Set(
-		context.Background(),
-		// (0)/(1)dotmesh.io/(2)registry/(3)filesystems/(4)<namespace>/(5)<name> =>
-		//     {"Uuid": "<fs-uuid>"}
-		fmt.Sprintf("%s/registry/filesystems/%s/%s", r.prefix, name.Namespace, name.Name),
-		string(serialized),
-		// we support updates in UpdateCollaborators, below.
-		&client.SetOptions{PrevExist: client.PrevNoExist},
-	)
+
+	// log.WithFields(log.Fields{
+	// 	"owder_id":  rf.OwnerId,
+	// 	"name":      name.Name,
+	// 	"namespace": name.Namespace,
+	// }).Info("[RegisterFilesystem]: registering new filesystem")
+
+	err := r.registryStore.SetFilesystem(&rf, &store.SetOptions{})
 	if err != nil {
 		return err
 	}
@@ -361,14 +317,8 @@ func (r *DefaultRegistry) RegisterFilesystem(ctx context.Context, name types.Vol
 
 // Remove a filesystem from the registry
 func (r *DefaultRegistry) UnregisterFilesystem(name types.VolumeName) error {
-	_, err := r.etcdClient.Delete(
-		context.Background(),
-		// (0)/(1)dotmesh.io/(2)registry/(3)filesystems/(4)<namespace>/(5)<name> =>
-		//     {"Uuid": "<fs-uuid>"}
-		fmt.Sprintf("%s/registry/filesystems/%s/%s", r.prefix, name.Namespace, name.Name),
-		&client.DeleteOptions{},
-	)
-	return err
+
+	return r.registryStore.DeleteFilesystem(name.Namespace, name.Name)
 }
 
 func (r *DefaultRegistry) UpdateCollaborators(ctx context.Context, tlf types.TopLevelFilesystem, newCollaborators []user.SafeUser) error {
@@ -377,31 +327,24 @@ func (r *DefaultRegistry) UpdateCollaborators(ctx context.Context, tlf types.Top
 	for _, u := range newCollaborators {
 		collaboratorIds = append(collaboratorIds, u.Id)
 	}
-	rf := types.RegistryFilesystem{
-		Id: tlf.MasterBranch.Id,
-		// Owner is, for now, always the authenticated user at the time of
-		// creation
-		OwnerId:         tlf.Owner.Id,
-		CollaboratorIds: collaboratorIds,
-	}
-	serialized, err := json.Marshal(rf)
+
+	rf, err := r.registryStore.GetFilesystem(tlf.Owner.Name, tlf.MasterBranch.Name.Name)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get existing registry filesystem: %s", err)
 	}
 
-	_, err = r.etcdClient.Set(
-		context.Background(),
-		// (0)/(1)dotmesh.io/(2)registry/(3)filesystems/(4)<namespace>/(5)<name> =>
-		//     {"Uuid": "<fs-uuid>"}
-		fmt.Sprintf("%s/registry/filesystems/%s/%s", r.prefix, tlf.MasterBranch.Name.Namespace, tlf.MasterBranch.Name.Name),
-		string(serialized),
-		// allow (and require) update over existing.
-		&client.SetOptions{PrevExist: client.PrevExist},
-	)
+	rf.CollaboratorIds = collaboratorIds
+
+	err = r.registryStore.CompareAndSetFilesystem(rf, &store.SetOptions{
+		KVFlags: kvdb.KVModifiedIndex,
+	})
 	if err != nil {
 		log.WithFields(log.Fields{
-			"path:": fmt.Sprintf("%s/registry/filesystems/%s/%s", r.prefix, tlf.MasterBranch.Name.Namespace, tlf.MasterBranch.Name.Name),
-			"error": err,
+
+			"error":     err,
+			"namespace": rf.OwnerId,
+			"name":      rf.Name,
+			"id":        rf.Id,
 		}).Error("failed to update registry filesystems")
 		return err
 	}
@@ -409,96 +352,60 @@ func (r *DefaultRegistry) UpdateCollaborators(ctx context.Context, tlf types.Top
 	// successful!
 
 	log.Infof("updating after adding collab: %v", newCollaborators)
-	return r.UpdateFilesystemFromEtcd(tlf.MasterBranch.Name, rf)
+	return r.UpdateFilesystemFromEtcd(tlf.MasterBranch.Name, *rf)
 }
 
 // update a clone, including updating our local record and etcd
 func (r *DefaultRegistry) RegisterClone(name string, topLevelFilesystemId string, clone types.Clone) error {
 	r.UpdateCloneFromEtcd(name, topLevelFilesystemId, clone)
-	// kapi, err := getEtcdKeysApi()
-	// if err != nil {
-	// 	return err
-	// }
-	serialized, err := json.Marshal(clone)
-	if err != nil {
-		return err
-	}
-	_, err = r.etcdClient.Set(
-		context.Background(),
-		// (0)/(1)dotmesh.io/(2)registry/(3)clones/(4)<fs-uuid-of-filesystem>/(5)<name> =>
-		//     {"Origin": {"FilesystemId": "<fs-uuid-of-actual-origin-snapshot>", "SnapshotId": "<snap-id>"}, "Uuid": "<fs-uuid>"}
-		fmt.Sprintf("%s/registry/clones/%s/%s", r.prefix, topLevelFilesystemId, name),
-		string(serialized),
-		&client.SetOptions{PrevExist: client.PrevNoExist},
-	)
 
-	return err
+	clone.Name = name
+	// clone.FilesystemId = topLevelFilesystemId
+	clone.TopLevelFilesystemId = topLevelFilesystemId
+
+	return r.registryStore.SetClone(&clone, &store.SetOptions{})
 }
 
-// func safeUser(u User) SafeUser {
-// 	h := md5.New()
-// 	io.WriteString(h, u.Email)
-// 	emailHash := fmt.Sprintf("%x", h.Sum(nil))
-// 	return SafeUser{
-// 		Id:        u.Id,
-// 		Name:      u.Name,
-// 		Email:     u.Email,
-// 		EmailHash: emailHash,
-// 		Metadata:  u.Metadata,
-// 	}
-// }
+func (r *DefaultRegistry) DeleteFilesystemFromEtcd(name types.VolumeName) {
+	r.topLevelFilesystemsLock.Lock()
+	delete(r.topLevelFilesystems, name)
+	r.topLevelFilesystemsLock.Unlock()
+}
 
 func (r *DefaultRegistry) UpdateFilesystemFromEtcd(name types.VolumeName, rf types.RegistryFilesystem) error {
 	r.topLevelFilesystemsLock.Lock()
 	defer r.topLevelFilesystemsLock.Unlock()
 
-	if rf.Id == "" {
-		// Deletion
-		log.Printf("[UpdateFilesystemFromEtcd] %s => GONE", name)
-		delete(r.topLevelFilesystems, name)
-	} else {
-
-		// Creation or Update
-		// us, err := AllUsers()
-		// if err != nil {
-		// 	return err
-		// }
-		// umap := map[string]User{}
-		// for _, u := range us {
-		// 	umap[u.Id] = u
-		// }
-
-		// owner, ok := umap[rf.OwnerId]
-		owner, err := r.userManager.Get(&user.Query{
-			Ref: rf.OwnerId,
-		})
-		if err != nil {
-			return fmt.Errorf("Unable to locate owner %v.", rf.OwnerId)
-		}
-
-		collaborators := []user.SafeUser{}
-		for _, c := range rf.CollaboratorIds {
-			cUser, err := r.userManager.Get(&user.Query{Ref: c})
-			if err != nil {
-				return fmt.Errorf("Unable to locate collaborator: %s", err)
-			}
-			collaborators = append(collaborators, cUser.SafeUser())
-		}
-
-		log.Printf("[UpdateFilesystemFromEtcd] %s => %s", name, rf.Id)
-		r.topLevelFilesystems[name] = types.TopLevelFilesystem{
-			// XXX: Hmm, I wonder if it's OK to just put minimal information here.
-			// Probably not! We should construct a real TopLevelFilesystem object
-			// if that's even the right level of abstraction. At time of writing,
-			// the only thing that seems to reasonably construct a
-			// TopLevelFilesystem is rpc's AllVolumesAndClones.
-			MasterBranch:         types.DotmeshVolume{Id: rf.Id, Name: name},
-			Owner:                owner.SafeUser(),
-			Collaborators:        collaborators,
-			ForkParentId:         rf.ForkParentId,
-			ForkParentSnapshotId: rf.ForkParentSnapshotId,
-		}
+	owner, err := r.userManager.Get(&user.Query{
+		Ref: rf.OwnerId,
+	})
+	if err != nil {
+		return fmt.Errorf("Unable to locate owner %v.", rf.OwnerId)
 	}
+
+	collaborators := []user.SafeUser{}
+	for _, c := range rf.CollaboratorIds {
+		cUser, err := r.userManager.Get(&user.Query{Ref: c})
+		if err != nil {
+			return fmt.Errorf("Unable to locate collaborator: %s", err)
+		}
+		collaborators = append(collaborators, cUser.SafeUser())
+	}
+
+	log.Printf("[UpdateFilesystemFromEtcd] %s => %s", name, rf.Id)
+	r.topLevelFilesystems[name] = types.TopLevelFilesystem{
+		// XXX: Hmm, I wonder if it's OK to just put minimal information here.
+		// Probably not! We should construct a real TopLevelFilesystem object
+		// if that's even the right level of abstraction. At time of writing,
+		// the only thing that seems to reasonably construct a
+		// TopLevelFilesystem is rpc's AllVolumesAndClones.
+		MasterBranch:         types.DotmeshVolume{Id: rf.Id, Name: name},
+		Owner:                owner.SafeUser(),
+		Collaborators:        collaborators,
+		ForkParentId:         rf.ForkParentId,
+		ForkParentSnapshotId: rf.ForkParentSnapshotId,
+	}
+
 	return nil
 }
 

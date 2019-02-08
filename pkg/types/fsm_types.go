@@ -49,6 +49,9 @@ type TransferUpdate struct {
 }
 
 type TransferPollResult struct {
+	// Meta is populated by the KV store implementer
+	Meta *KVMeta `json:"-"`
+
 	TransferRequestId string
 	Peer              string // hostname
 	User              string

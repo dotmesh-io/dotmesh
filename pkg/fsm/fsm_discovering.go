@@ -1,12 +1,7 @@
 package fsm
 
 import (
-	"fmt"
-
-	"github.com/coreos/etcd/client"
-	"github.com/dotmesh-io/dotmesh/pkg/types"
-
-	"golang.org/x/net/context"
+	"github.com/dotmesh-io/dotmesh/pkg/store"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -15,13 +10,8 @@ func discoveringState(f *FsMachine) StateFn {
 	f.transitionedTo("discovering", "loading")
 	log.Printf("entering discovering state for %s", f.filesystemId)
 
-	// checking whether filesystem exists in the kv store
-	_, err := f.etcdClient.Get(
-		context.Background(),
-		fmt.Sprintf("%s/filesystems/masters/%s", types.EtcdPrefix, f.filesystemId),
-		&client.GetOptions{},
-	)
-	if err != nil && client.IsKeyNotFound(err) {
+	_, err := f.filesystemStore.GetMaster(f.filesystemId)
+	if err != nil && store.IsKeyNotFound(err) {
 		log.WithFields(log.Fields{
 			"error":         err,
 			"filesystem_id": f.filesystemId,

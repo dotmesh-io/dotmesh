@@ -877,6 +877,7 @@ nodeLoop:
 		env := []v1.EnvVar{
 			{Name: "HOSTNAME", ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{APIVersion: "v1", FieldPath: "spec.nodeName"}}},
 			{Name: "DOTMESH_ETCD_ENDPOINT", Value: "http://dotmesh-etcd-cluster-client.dotmesh.svc.cluster.local:2379"},
+			{Name: "DOTMESH_JOIN_OUTER_NETWORK", Value: "true"},
 			{Name: "DOTMESH_DOCKER_IMAGE", Value: DOTMESH_IMAGE},
 			{Name: "PATH", Value: "/bundled-lib/sbin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
 			{Name: "LD_LIBRARY_PATH", Value: "/bundled-lib/lib:/bundled-lib/usr/lib/"},

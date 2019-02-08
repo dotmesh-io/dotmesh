@@ -3,8 +3,6 @@ package types
 import (
 	"fmt"
 	"reflect"
-
-	"github.com/dotmesh-io/dotmesh/pkg/user"
 )
 
 type CloneWithName struct {
@@ -26,8 +24,29 @@ type VolumesAndBranches struct {
 }
 
 type Server struct {
+	// Meta is populated by the KV store implementer
+	Meta *KVMeta `json:"-"`
+
 	Id        string
 	Addresses []string
+}
+
+type ServerSnapshots struct {
+	// Meta is populated by the KV store implementer
+	Meta *KVMeta `json:"-"`
+
+	ID           string      `json:"id"` // NodeID
+	FilesystemID string      `json:"filesystem_id"`
+	Snapshots    []*Snapshot `json:"snapshots"`
+}
+
+type ServerState struct {
+	// Meta is populated by the KV store implementer
+	Meta *KVMeta `json:"-"`
+
+	ID           string            `json:"id"` // NodeID
+	FilesystemID string            `json:"filesystem_id"`
+	State        map[string]string `json:"state"`
 }
 
 type ByAddress []Server
@@ -94,8 +113,13 @@ type Filesystem struct {
 }
 
 type Clone struct {
-	FilesystemId string
-	Origin       Origin
+	// Meta is populated by the KV store implementer
+	Meta *KVMeta `json:"-"`
+
+	TopLevelFilesystemId string
+	FilesystemId         string
+	Name                 string
+	Origin               Origin
 }
 
 type S3TransferRequest struct {
@@ -160,10 +184,10 @@ type StashRequest struct {
 	SnapshotId   string
 }
 
-type Config struct {
-	FilesystemMetadataTimeout int64
-	UserManager               user.UserManager
-}
+// type Config struct {
+// 	FilesystemMetadataTimeout int64
+// 	UserManager               user.UserManager
+// }
 
 type PathToTopLevelFilesystem struct {
 	TopLevelFilesystemId   string
@@ -174,14 +198,18 @@ type PathToTopLevelFilesystem struct {
 // the type as stored in the json in etcd (intermediate representation wrt
 // DotmeshVolume)
 type RegistryFilesystem struct {
+	// Meta is populated by the KV store implementer
+	Meta *KVMeta `json:"-"`
+
 	Id                   string
-	OwnerId              string
+	OwnerId              string // also know as 'namespace'
+	Name                 string // volume name
 	ForkParentId         string `json:",omitempty"`
 	ForkParentSnapshotId string `json:",omitempty"`
 	CollaboratorIds      []string
 }
 
-const EtcdPrefix = "/dotmesh.io"
+const EtcdPrefix = "dotmesh.io/"
 
 const RootFS = "dmfs"
 

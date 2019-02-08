@@ -102,10 +102,10 @@ func probeURL(url string) error {
 	req = req.WithContext(ctx)
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		log.WithFields(log.Fields{
-			"error":   err,
-			"address": url,
-		}).Debug("[NATS] ping failed")
+		// log.WithFields(log.Fields{
+		// 	"error":   err,
+		// 	"address": url,
+		// }).Debug("[NATS] ping failed")
 		return err
 	}
 	resp.Body.Close()
@@ -118,12 +118,11 @@ func (s *InMemoryState) updateMessagingClusterConns() error {
 	mu := &sync.Mutex{}
 	// httpClient := http.DefaultClient
 
-	for nodeID, v := range s.serverAddressesCache {
+	for nodeID, addresses := range s.serverAddressesCache {
 		if nodeID == s.NodeID() {
 			// nothing to do
 			continue
 		}
-		addresses := strings.Split(v, ",")
 
 		wg := &sync.WaitGroup{}
 		wg.Add(len(addresses))

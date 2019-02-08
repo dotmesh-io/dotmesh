@@ -6,12 +6,11 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"golang.org/x/net/context"
 
 	"github.com/dotmesh-io/dotmesh/pkg/client"
 )
 
-func (state *InMemoryState) runLivenessServer() {
+func (s *InMemoryState) runLivenessServer() {
 	router := mux.NewRouter()
 
 	/*
@@ -33,18 +32,14 @@ func (state *InMemoryState) runLivenessServer() {
 	router.HandleFunc("/check", func(w http.ResponseWriter, r *http.Request) {
 		// Check we can connect to etcd
 
-		_, err := state.etcdClient.Get(
-			context.Background(),
-			ETCD_PREFIX,
-			nil,
-		)
+		_, err := s.serverStore.ListAddresses()
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Error reading from etcd: %v\n", err), http.StatusInternalServerError)
 			return
 		}
 
 		// Check the zpool exists
-		_, err = state.zfs.GetZPoolCapacity()
+		_, err = s.zfs.GetZPoolCapacity()
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Zpool error: %v\n", err), http.StatusInternalServerError)
 			return

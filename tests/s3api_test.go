@@ -90,6 +90,11 @@ func TestS3Api(t *testing.T) {
 		commitIdsString := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("dm log | grep commit | awk '{print $2}'"))
 		commitIdsList := strings.Split(commitIdsString, "\n")
 
+		if len(commitIdsList) < 2 {
+			t.Errorf("expected to find at least 2 commits, got: %d", len(commitIdsList))
+			return
+		}
+
 		firstCommitId := commitIdsList[0]
 		secondCommitId := commitIdsList[1]
 

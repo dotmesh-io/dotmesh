@@ -547,7 +547,7 @@ func TestSingleNode(t *testing.T) {
 			masterReplicationStatus := matches[0][0]
 			branchReplicationStatus := matches[1][0]
 			if masterReplicationStatus == branchReplicationStatus {
-				t.Error("master and branch replication statusse are suspiciously similar")
+				t.Errorf("master (%s) and branch replication (%s) statuses are suspiciously similar", masterReplicationStatus, branchReplicationStatus)
 			}
 		}
 

@@ -1,17 +1,15 @@
 package user
 
 import (
-	"crypto/md5"
 	"encoding/json"
 	"fmt"
-	"io"
-	"reflect"
 
 	"github.com/nu7hatch/gouuid"
 	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/dotmesh-io/dotmesh/pkg/crypto"
-	"github.com/dotmesh-io/dotmesh/pkg/kv"
+	"github.com/dotmesh-io/dotmesh/pkg/store"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/validator"
 
 	log "github.com/sirupsen/logrus"
@@ -20,62 +18,13 @@ import (
 // special admin user with global privs
 const ADMIN_USER_UUID = "00000000-0000-0000-0000-000000000000"
 
-// How many bytes of entropy in an API key
-// const API_KEY_BYTES = 32
-
 // UsersPrefix - KV store prefix for users
 const UsersPrefix = "users"
 
-type User struct {
-	Id       string
-	Name     string
-	Email    string
-	Salt     []byte
-	Password []byte
-	ApiKey   string
-	Metadata map[string]string
-}
-
-type SafeUser struct {
-	Id        string
-	Name      string
-	Email     string
-	EmailHash string
-	Metadata  map[string]string
-}
-
-// SafeUser - returns safe user by hashing email, removing password and APIKey fields
-func (u User) SafeUser() SafeUser {
-	h := md5.New()
-	io.WriteString(h, u.Email)
-	emailHash := fmt.Sprintf("%x", h.Sum(nil))
-	return SafeUser{
-		Id:        u.Id,
-		Name:      u.Name,
-		Email:     u.Email,
-		EmailHash: emailHash,
-		Metadata:  u.Metadata,
-	}
-}
-
-func (user User) String() string {
-	v := reflect.ValueOf(user)
-	toString := ""
-	for i := 0; i < v.NumField(); i++ {
-		fieldName := v.Type().Field(i).Name
-		if fieldName == "ApiKey" {
-			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, "****")
-		} else {
-			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, v.Field(i).Interface())
-		}
-	}
-	return toString
-}
-
-type Query struct {
-	Ref      string // ID, name, email
-	Selector string // K8s style selector to filter based on user metadata fields
-}
+// Alias
+type User = types.User
+type SafeUser = types.SafeUser
+type Query = types.Query
 
 type AuthenticationType int
 
@@ -130,10 +79,10 @@ type UserManager interface {
 }
 
 type DefaultManager struct {
-	kv kv.KV
+	kv store.KVStoreWithIndex
 }
 
-func New(kv kv.KV) *DefaultManager {
+func New(kv store.KVStoreWithIndex) *DefaultManager {
 	return &DefaultManager{
 		kv: kv,
 	}
@@ -166,7 +115,7 @@ func (m *DefaultManager) NewAdmin(user *User) error {
 		return err
 	}
 
-	_, err = m.kv.CreateWithIndex(UsersPrefix, user.Id, user.Name, string(bts))
+	_, err = m.kv.CreateWithIndex(UsersPrefix, user.Id, user.Name, bts)
 	return err
 }
 
@@ -209,7 +158,7 @@ func (m *DefaultManager) New(username, email, password string) (*User, error) {
 		return nil, err
 	}
 
-	_, err = m.kv.CreateWithIndex(UsersPrefix, u.Id, u.Name, string(bts))
+	_, err = m.kv.CreateWithIndex(UsersPrefix, u.Id, u.Name, bts)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +171,7 @@ func (m *DefaultManager) Update(user *User) (*User, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, err = m.kv.Set(UsersPrefix, user.Id, string(bts))
+	_, err = m.kv.Set(UsersPrefix, user.Id, bts)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +201,7 @@ func (m *DefaultManager) Import(user *User) error {
 	if err != nil {
 		return err
 	}
-	_, err = m.kv.Set(UsersPrefix, user.Id, string(bts))
+	_, err = m.kv.Set(UsersPrefix, user.Id, bts)
 	if err != nil {
 		return err
 	}
@@ -381,7 +330,7 @@ func (m *DefaultManager) Delete(id string) error {
 		// TODO: maybe at least log it
 	}
 
-	return m.kv.Delete(UsersPrefix, user.Id, false)
+	return m.kv.Delete(UsersPrefix, user.Id)
 }
 
 func (m *DefaultManager) getByEmail(email string) (*User, error) {

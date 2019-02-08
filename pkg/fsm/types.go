@@ -4,12 +4,11 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/coreos/etcd/client"
-
 	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/dotmesh-io/dotmesh/pkg/container"
 	"github.com/dotmesh-io/dotmesh/pkg/observer"
 	"github.com/dotmesh-io/dotmesh/pkg/registry"
+	"github.com/dotmesh-io/dotmesh/pkg/store"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 	"github.com/dotmesh-io/dotmesh/pkg/zfs"
@@ -70,10 +69,14 @@ type FsMachine struct {
 	// state *InMemoryState
 
 	containerClient container.Client
-	etcdClient      client.KeysAPI
-	state           StateManager
-	userManager     user.UserManager
-	registry        registry.Registry
+
+	registryStore   store.RegistryStore
+	filesystemStore store.FilesystemStore
+	serverStore     store.ServerStore
+
+	state       StateManager
+	userManager user.UserManager
+	registry    registry.Registry
 
 	localReceiveProgress observer.Observer
 	newSnapsOnMaster     observer.Observer

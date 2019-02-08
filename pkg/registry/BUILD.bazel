@@ -11,9 +11,10 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/auth:go_default_library",
+        "//pkg/store:go_default_library",
         "//pkg/types:go_default_library",
         "//pkg/user:go_default_library",
-        "//vendor/github.com/coreos/etcd/client:go_default_library",
+        "//vendor/github.com/portworx/kvdb:go_default_library",
         "//vendor/github.com/sirupsen/logrus:go_default_library",
     ],
 )
@@ -24,8 +25,7 @@ go_test(
     embed = [":go_default_library"],
     deps = [
         "//pkg/auth:go_default_library",
-        "//pkg/kv:go_default_library",
-        "//pkg/testutil:go_default_library",
+        "//pkg/store:go_default_library",
         "//pkg/types:go_default_library",
         "//pkg/user:go_default_library",
     ],

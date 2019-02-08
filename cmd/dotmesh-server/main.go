@@ -8,6 +8,7 @@ filesystems.
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -15,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dotmesh-io/dotmesh/pkg/kv"
+	"github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/dotmesh-io/dotmesh/pkg/messaging/nats"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
@@ -150,18 +151,29 @@ func main() {
 	ips, _ := guessIPv4Addresses()
 	log.Printf("Detected my node IPs as %s", ips)
 
-	etcdClient, err := getEtcdKeysApi()
-	if err != nil {
-		log.Fatalf("Unable to get Etcd client: '%s'", err)
-	}
-	config.EtcdClient = etcdClient
+	// etcdClient, err := getEtcdKeysApi()
+	// if err != nil {
+	// 	log.Fatalf("Unable to get Etcd client: '%s'", err)
+	// }
+	// config.EtcdClient = etcdClient
+
+	fsStore, regStore, serverStore, usersIdxStore := getKVDBStores()
+	config.FilesystemStore = fsStore
+	config.RegistryStore = regStore
+	config.ServerStore = serverStore
 
 	config.ZFSExecPath = ZFS
 	config.ZPoolPath = ZPOOL
 	config.PoolName = POOL
 
-	kvClient := kv.New(etcdClient, ETCD_PREFIX)
-	config.UserManager = user.New(kvClient)
+	if os.Getenv("DOTMESH_SERVER_PORT") != "" {
+		config.APIServerPort = os.Getenv("DOTMESH_SERVER_PORT")
+	} else {
+		config.APIServerPort = client.SERVER_PORT
+	}
+
+	// kvClient := kv.New(etcdClient, ETCD_PREFIX)
+	config.UserManager = user.New(usersIdxStore)
 
 	s := NewInMemoryState(config)
 
@@ -197,6 +209,7 @@ func main() {
 		1*time.Second, 1*time.Second,
 	)
 	// kick off cleanup of deleted filesystems
+	// TODO: remove, replaced with watcher
 	go runForever(s.cleanupDeletedFilesystems, "cleanupDeletedFilesystems",
 		1*time.Second, 1*time.Second,
 	)
@@ -208,6 +221,17 @@ func main() {
 	go runForever(s.fetchAndWatchEtcd, "fetchAndWatchEtcd",
 		1*time.Second, 1*time.Second,
 	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		err := s.subscribeToClusterEvents(ctx)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error": err,
+			}).Fatal("failed to subscribe to cluster events")
+		}
+	}()
 
 	// tell k8s we're live
 	s.runLivenessServer()
