@@ -2,6 +2,7 @@ package nats
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/nats-io/gnatsd/server"
@@ -94,13 +95,19 @@ func configureClusterOpts(clusterPort int, opts *server.Options) error {
 // Logger implements the nats logging interface, backed with our own logrus logger
 type Logger struct {
 	logger *log.Entry
+	debug  bool
 }
 
 // NewLogger creates a logger backed by logrus.  Logs everything at debug level,
 // any user-facing messages should be written elsewhere.
 func NewLogger() *Logger {
+	enableNatsDebug := false
+	if os.Getenv("NATS_DEBUG") == "true" {
+		enableNatsDebug = true
+	}
 	return &Logger{
 		logger: log.WithField("category", "nats"),
+		debug:  enableNatsDebug,
 	}
 }
 
@@ -121,6 +128,10 @@ func (l *Logger) Fatalf(format string, v ...interface{}) {
 
 // Debugf logs a debug statement
 func (l *Logger) Debugf(format string, v ...interface{}) {
+	if !l.debug {
+		// discarding nats debug logs
+		return
+	}
 	l.logger.Debugf(format, v...)
 }
 
