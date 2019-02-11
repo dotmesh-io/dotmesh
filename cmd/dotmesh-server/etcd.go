@@ -604,20 +604,13 @@ func (s *InMemoryState) UpdateSnapshotsFromKnownState(server, filesystem string,
 	if err != nil {
 		return fmt.Errorf("[UpdateSnapshotsFromKnownState] Error finding master node: %s", err)
 	}
-	log.Printf(
-		"[UpdateSnapshotsFromKnownState] checking %s master: %s == %s?",
-		filesystem, masterNode, server,
-	)
+
 	if masterNode == server {
 		if len(snapshots) > 0 {
 			// notify any interested parties that there are some new snapshots on
 			// the master
 
 			latest := (snapshots)[len(snapshots)-1]
-			log.Printf(
-				"[UpdateSnapshotsFromKnownState] publishing latest snapshot %v on %s",
-				latest, filesystem,
-			)
 
 			// External pubsub
 			if len(snapshots) > len(oldSnapshots) {

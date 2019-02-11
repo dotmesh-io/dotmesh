@@ -26,8 +26,6 @@ func (s *InMemoryState) GetFilesystemMachine(filesystemId string) (fsm.FSM, erro
 }
 
 func (s *InMemoryState) InitFilesystemMachine(filesystemId string) (fsm.FSM, error) {
-	log.Debugf("[initFilesystemMachine] starting: %s", filesystemId)
-
 	fs, deleted := func() (fsm.FSM, bool) {
 		// s.filesystemsLock.Lock()
 		// defer s.filesystemsLock.Unlock()
