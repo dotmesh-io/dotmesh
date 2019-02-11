@@ -5,6 +5,14 @@ import (
 	"reflect"
 )
 
+type CommitArgs struct {
+	Namespace string
+	Name      string
+	Branch    string
+	Message   string
+	Metadata  Metadata
+}
+
 type CloneWithName struct {
 	Name  string
 	Clone Clone

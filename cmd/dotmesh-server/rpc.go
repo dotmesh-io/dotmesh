@@ -806,17 +806,9 @@ func (d *DotmeshRPC) Ping(r *http.Request, args *struct{}, result *bool) error {
 	return nil
 }
 
-type CommitArgs struct {
-	Namespace string
-	Name      string
-	Branch    string
-	Message   string
-	Metadata  Metadata
-}
-
 // Take a snapshot of a specific filesystem on the master.
 func (d *DotmeshRPC) Commit(
-	r *http.Request, args *CommitArgs,
+	r *http.Request, args *types.CommitArgs,
 	result *string,
 ) error {
 	/* Non-admin users are allowed to commit, as a temporary measure
