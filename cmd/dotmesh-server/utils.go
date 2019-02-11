@@ -44,7 +44,7 @@ func applyPrelude(prelude types.Prelude, fqfs string) error {
 					)
 					return fmt.Errorf("Error applying prelude: %s -> %v: %s", args, err, out)
 				}
-				log.Debugf("[applyPrelude] Applied snapshot props for: %s", j.Id)
+				// log.Debugf("[applyPrelude] Applied snapshot props for: %s", j.Id)
 			}
 		}
 	}

@@ -2,10 +2,11 @@ package fsm
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/dotmesh-io/dotmesh/pkg/types"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func pushPeerState(f *FsMachine) StateFn {
@@ -14,7 +15,7 @@ func pushPeerState(f *FsMachine) StateFn {
 
 	newSnapsOnMaster := make(chan interface{})
 	receiveProgress := make(chan interface{})
-	log.Printf("[pushPeerState] subscribing to newSnapsOnMaster for %s", f.filesystemId)
+	log.Infof("[pushPeerState] subscribing to newSnapsOnMaster for %s", f.filesystemId)
 
 	f.localReceiveProgress.Subscribe(f.filesystemId, receiveProgress)
 	defer f.localReceiveProgress.Unsubscribe(f.filesystemId, receiveProgress)
@@ -109,17 +110,17 @@ func pushPeerState(f *FsMachine) StateFn {
 
 	// Here we are about to block, so confirm we are ready at this
 	// point or the caller won't start to push and unblock us
-	log.Printf("[pushPeerState:%s] clearing peer to send", f.filesystemId)
+	log.Infof("[pushPeerState:%s] clearing peer to send", f.filesystemId)
 	f.innerResponses <- &types.Event{
 		Name: "awaiting-transfer",
 		Args: &types.EventArgs{},
 	}
 
-	log.Printf("[pushPeerState:%s] blocking for ZFSReceiver to tell us to proceed via pushCompleted", f.filesystemId)
+	log.Infof("[pushPeerState:%s] blocking for ZFSReceiver to tell us to proceed via pushCompleted", f.filesystemId)
 
 	select {
 	case <-timeoutTimer.C:
-		log.Printf(
+		log.Warnf(
 			"[pushPeerState:%s] Timed out waiting for pushCompleted",
 			f.filesystemId,
 		)
@@ -134,53 +135,44 @@ func pushPeerState(f *FsMachine) StateFn {
 			return backoffState
 		}
 	}
-	log.Printf(
-		"[pushPeerState:%s] ZFS receive succeeded.",
-		f.filesystemId,
-	)
+	log.Infof("[pushPeerState:%s] ZFS receive succeeded.", f.filesystemId)
 
 	// inline load, async because discover() blocks on publishing to
 	// newSnapsOnMaster chan, which we're subscribed to and so have to read
 	// from concurrently with discover() to avoid deadlock.
 	go func() {
 		err = f.discover()
-		log.Printf("[pushPeerState] done inline load")
+		log.Infof("[pushPeerState:%s] done inline load", f.filesystemId)
 		if err != nil {
 			// XXX how to propogate the error to the initiator? should their
 			// retry include sending a new peer-transfer message every time?
-			log.Printf("[pushPeerState] error during inline load: %s", err)
+			log.Errorf("[pushPeerState:%s] error during inline load: %s", f.filesystemId, err)
 		}
 	}()
 
 	// give ourselves another 60 seconds while loading
-	log.Printf("[pushPeerState] resetting timer because we're waiting for loading")
+	// log.Printf("[pushPeerState] resetting timer because we're waiting for loading")
 	reset()
 
 	for {
 		// Loops as notifications of the new snapshots arrive
-		log.Printf("[pushPeerState] about to read from newSnapsOnMaster")
+		// log.Printf("[pushPeerState] about to read from newSnapsOnMaster")
 		select {
 		case <-timeoutTimer.C:
-			log.Printf("[pushPeerState] Timed out waiting for newSnapsOnMaster")
+			log.Warnf("[pushPeerState:%s] timed out waiting for newSnapsOnMaster", f.filesystemId)
 			return backoffState
 		// check that the snapshot is the one we're expecting
 		case s := <-newSnapsOnMaster:
 			sn := s.(*types.Snapshot)
-			log.Printf(
-				"[pushPeerState] got snapshot %+v while waiting for one to arrive", sn,
-			)
+			log.Infof("[pushPeerState:%s]  got snapshot %+v while waiting for one to arrive", f.filesystemId, sn)
 			if sn.Id == targetSnapshot {
-				log.Printf(
-					"[pushPeerState] %s matches target snapshot %s!",
-					sn.Id, targetSnapshot,
-				)
 
 				f.snapshotsLock.Lock()
 				mounted := f.filesystem.Mounted
 				f.snapshotsLock.Unlock()
 
 				if mounted {
-					log.Printf(
+					log.Infof(
 						"[pushPeerState:%s] mounted case, returning activeState on snap %s",
 						f.filesystemId, sn.Id,
 					)
@@ -190,13 +182,13 @@ func pushPeerState(f *FsMachine) StateFn {
 					// receiving further pushes?
 					responseEvent, nextState := f.mount()
 					if responseEvent.Name == "mounted" {
-						log.Printf(
+						log.Infof(
 							"[pushPeerState:%s] unmounted case, returning nextState %+v on snap %s",
 							f.filesystemId, nextState, sn.Id,
 						)
 						return nextState
 					} else {
-						log.Printf(
+						log.Infof(
 							"[pushPeerState:%s] unmounted case, returning nextState %+v as mount failed: %+v",
 							f.filesystemId, nextState, responseEvent,
 						)
@@ -204,7 +196,7 @@ func pushPeerState(f *FsMachine) StateFn {
 					}
 				}
 			} else {
-				log.Printf(
+				log.Infof(
 					"[pushPeerState] %s doesn't match target snapshot %s, "+
 						"waiting for another...", sn.Id, targetSnapshot,
 				)

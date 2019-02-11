@@ -4,19 +4,21 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"io/ioutil"
 	"os/exec"
 	"strconv"
 	"strings"
 	"time"
 
+	log "github.com/sirupsen/logrus"
+
 	"encoding/base64"
+	"io"
+	"os"
+
 	"github.com/dotmesh-io/dotmesh/pkg/metrics"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/utils"
-	"io"
-	"os"
 )
 
 // this should be a coverall interface for the usage of zfs.
@@ -622,7 +624,7 @@ func (z *zfs) Recv(pipeReader *io.PipeReader, toFilesystemId string, errBuffer *
 
 func (z *zfs) ApplyPrelude(prelude types.Prelude, fs string) error {
 	// iterate over it setting zfs user properties accordingly.
-	log.Printf("[applyPrelude] Got prelude: %+v", prelude)
+	log.Infof("[applyPrelude] Got prelude: %+v", prelude)
 	for _, j := range prelude.SnapshotProperties {
 		metadataEncoded, err := utils.EncodeMetadata(j.Metadata)
 		if err != nil {
@@ -641,7 +643,7 @@ func (z *zfs) ApplyPrelude(prelude types.Prelude, fs string) error {
 					)
 					return fmt.Errorf("Error applying prelude: %s -> %v: %s", args, err, out)
 				}
-				log.Debugf("[applyPrelude] Applied snapshot props for: %s", j.Id)
+				// log.Debugf("[applyPrelude] Applied snapshot props for: %s", j.Id)
 			}
 		}
 	}
