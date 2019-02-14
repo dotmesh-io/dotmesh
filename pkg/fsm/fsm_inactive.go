@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/dotmesh-io/dotmesh/pkg/types"
+
 	log "github.com/sirupsen/logrus"
 )
 

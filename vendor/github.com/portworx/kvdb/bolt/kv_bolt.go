@@ -48,7 +48,9 @@ var (
 )
 
 func init() {
-	logrus.Debug("Registering internal KVDB provider")
+	// DOTMESH: due to certain circumstances this has to be commented since
+	// we have a require_zfs.sh which listens to what the server outputs
+	// logrus.Infof("Registering internal KVDB provider")
 	if err := kvdb.Register(Name, New, Version); err != nil {
 		panic(err.Error())
 	}

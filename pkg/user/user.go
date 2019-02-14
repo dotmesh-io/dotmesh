@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/nu7hatch/gouuid"
 	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/dotmesh-io/dotmesh/pkg/crypto"
 	"github.com/dotmesh-io/dotmesh/pkg/store"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
+	"github.com/dotmesh-io/dotmesh/pkg/uuid"
 	"github.com/dotmesh-io/dotmesh/pkg/validator"
 
 	log "github.com/sirupsen/logrus"
@@ -129,10 +129,6 @@ func (m *DefaultManager) New(username, email, password string) (*User, error) {
 		return nil, fmt.Errorf("Email already exists - contact help@dotmesh.io")
 	}
 
-	id, err := uuid.NewV4()
-	if err != nil {
-		return nil, err
-	}
 	salt, hashedPassword, err := crypto.HashPassword(password)
 	if err != nil {
 		return nil, err
@@ -144,7 +140,7 @@ func (m *DefaultManager) New(username, email, password string) (*User, error) {
 	}
 
 	u := User{
-		Id:       id.String(),
+		Id:       uuid.New().String(),
 		Name:     username,
 		Email:    email,
 		Salt:     salt,

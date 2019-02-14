@@ -13,13 +13,13 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/client"
-	"github.com/nu7hatch/gouuid"
 	"github.com/portworx/kvdb"
 	"golang.org/x/net/context"
 
 	"github.com/dotmesh-io/dotmesh/pkg/store"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
+	"github.com/dotmesh-io/dotmesh/pkg/uuid"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -373,89 +373,6 @@ func (s *InMemoryState) dispatchEvent(filesystem string, e *types.Event, request
 	return fs.Submit(e, requestId)
 }
 
-// func (s *InMemoryState) handleOneFilesystemMaster(node *client.Node) error {
-// 	if node.Value == "" {
-// 		// The filesystem is being deleted, and we need do nothing about it
-// 	} else {
-// 		pieces := strings.Split(node.Key, "/")
-// 		fs := pieces[len(pieces)-1]
-
-// 		var err error
-// 		var deleted bool
-
-// 		deleted, err = s.isFilesystemDeletedInEtcd(fs)
-// 		if err != nil {
-// 			log.Errorf("[handleOneFilesystemMaster] error determining if file system is deleted: fs: %s, etcd nodeValue: %s, error: %+v", fs, node.Value, err)
-// 			return err
-// 		}
-// 		if deleted {
-// 			log.Printf("[handleOneFilesystemMaster] filesystem is deleted so no need to mount/unmount fs: %s, etcd nodeValue: %s", fs, node.Value)
-// 			// Filesystem is being deleted, so ignore it.
-// 			return nil
-// 		}
-
-// 		_, err = s.InitFilesystemMachine(fs)
-// 		if err != nil {
-// 			log.WithFields(log.Fields{
-// 				"error":         err,
-// 				"filesystem_id": fs,
-// 			}).Error("[handleOneFilesystemMaster] failed to initialize filesystem")
-// 		}
-// 		var responseChan chan *types.Event
-// 		requestId := pieces[len(pieces)-1]
-// 		if node.Value == s.zfs.GetPoolID() {
-// 			log.Debugf("MOUNTING: %s=%s", fs, node.Value)
-// 			responseChan, err = s.dispatchEvent(fs, &types.Event{Name: "mount"}, requestId)
-// 			if err != nil {
-// 				return err
-// 			}
-// 		} else {
-// 			log.Debugf("UNMOUNTING: %s=%s", fs, node.Value)
-// 			responseChan, err = s.dispatchEvent(fs, &types.Event{Name: "unmount"}, requestId)
-// 			if err != nil {
-// 				return err
-// 			}
-// 		}
-// 		go func() {
-// 			e := <-responseChan
-// 			log.Debugf("[handleOneFilesystemMaster] filesystem %s response %#v", fs, e)
-// 		}()
-// 	}
-// 	return nil
-// }
-
-// func (s *InMemoryState) handleOneFilesystemDeletion(node *client.Node) error {
-// 	// This is where each node is notified of a filesystem being
-// 	// deleted.  We must inform the fsmachine.
-// 	log.Infof("DELETING: %s=%s", node.Key, node.Value)
-
-// 	pieces := strings.Split(node.Key, "/")
-// 	fs := pieces[len(pieces)-1]
-
-// 	f, err := s.InitFilesystemMachine(fs)
-// 	if err != nil {
-// 		log.Infof("[handleOneFilesystemDeletion:%s] after initFs.. no fsMachine, error: %s", fs, err)
-// 	} else {
-// 		log.Infof("[handleOneFilesystemDeletion:%s] after initFs.. state: %s, status: %s", fs, f.GetCurrentState(), f.GetStatus())
-// 	}
-
-// 	var responseChan chan *Event
-// 	// var err error
-// 	id, err := uuid.NewV4()
-// 	if err != nil {
-// 		return err
-// 	}
-// 	requestId := id.String()
-// 	responseChan, err = s.dispatchEvent(fs, &types.Event{Name: "delete"}, requestId)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	go func() {
-// 		<-responseChan
-// 	}()
-// 	return nil
-// }
-
 func (s *InMemoryState) handleFilesystemDeletion(fda *types.FilesystemDeletionAudit) error {
 	// This is where each node is notified of a filesystem being
 	// deleted.  We must inform the fsmachine.
@@ -472,12 +389,7 @@ func (s *InMemoryState) handleFilesystemDeletion(fda *types.FilesystemDeletionAu
 	}
 
 	var responseChan chan *Event
-	// var err error
-	id, err := uuid.NewV4()
-	if err != nil {
-		return err
-	}
-	requestId := id.String()
+	requestId := uuid.New().String()
 	responseChan, err = s.dispatchEvent(fda.FilesystemID, &types.Event{Name: "delete"}, requestId)
 	if err != nil {
 		return err
@@ -490,11 +402,8 @@ func (s *InMemoryState) handleFilesystemDeletion(fda *types.FilesystemDeletionAu
 
 // make a global request, returning its id
 func (s *InMemoryState) globalFsRequestId(fs string, event *types.Event) (chan *types.Event, string, error) {
-	id, err := uuid.NewV4()
-	if err != nil {
-		return nil, "", err
-	}
-	requestID := id.String()
+
+	requestID := uuid.New().String()
 
 	event.ID = requestID
 	event.FilesystemID = fs
@@ -528,7 +437,7 @@ func (s *InMemoryState) globalFsRequestId(fs string, event *types.Event) (chan *
 		}
 	}()
 
-	err = s.messenger.Publish(event)
+	err := s.messenger.Publish(event)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error":         err,

@@ -6,7 +6,7 @@ import (
 
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/utils"
-	"github.com/nu7hatch/gouuid"
+	"github.com/dotmesh-io/dotmesh/pkg/uuid"
 )
 
 func s3PullInitiatorState(f *FsMachine) StateFn {
@@ -81,12 +81,7 @@ func s3PullInitiatorState(f *FsMachine) StateFn {
 		return backoffState
 	}
 	if bucketChanged {
-		id, err := uuid.NewV4()
-		if err != nil {
-			f.errorDuringTransfer("failed-uuid", err)
-			return backoffState
-		}
-		snapshotId := id.String()
+		snapshotId := uuid.New().String()
 		path := fmt.Sprintf("%s/%s", utils.Mnt(f.filesystemId), "dm.s3-versions")
 		err = os.MkdirAll(path, 0775)
 		if err != nil {

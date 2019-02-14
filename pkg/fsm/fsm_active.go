@@ -2,7 +2,8 @@ package fsm
 
 import (
 	"github.com/dotmesh-io/dotmesh/pkg/types"
-	"github.com/nu7hatch/gouuid"
+	"github.com/dotmesh-io/dotmesh/pkg/uuid"
+	// "github.com/nu7hatch/gouuid"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -284,14 +285,7 @@ func activeState(f *FsMachine) StateFn {
 			originSnapshotId := (*e.Args)["originSnapshotId"].(string)
 			newBranchName := (*e.Args)["newBranchName"].(string)
 
-			uuid, err := uuid.NewV4()
-			if err != nil {
-				f.innerResponses <- &types.Event{
-					Name: "failed-uuid", Args: &types.EventArgs{"err": err},
-				}
-				return backoffState
-			}
-			newCloneFilesystemId := uuid.String()
+			newCloneFilesystemId := uuid.New().String()
 			output, err := f.zfs.Clone(f.filesystemId, originSnapshotId, newCloneFilesystemId)
 			if err != nil {
 				f.innerResponses <- &types.Event{

@@ -14,9 +14,8 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/store"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
+	"github.com/dotmesh-io/dotmesh/pkg/uuid"
 	"github.com/dotmesh-io/dotmesh/pkg/zfs"
-
-	"github.com/nu7hatch/gouuid"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -230,11 +229,7 @@ func (f *FsMachine) DumpState() *FSMStateDump {
 // can listen for a response
 func (f *FsMachine) Submit(event *types.Event, requestID string) (reply chan *types.Event, err error) {
 	if requestID == "" {
-		id, err := uuid.NewV4()
-		if err != nil {
-			return nil, err
-		}
-		requestID = id.String()
+		requestID = uuid.New().String()
 	}
 
 	if event.Args == nil {
@@ -648,12 +643,7 @@ func (f *FsMachine) fork(e *types.Event) (responseEvent *types.Event, nextState 
 		return &types.Event{Name: "cannot-fork:name-not-string"}, activeState
 	}
 
-	// Mint a new UUID
-	id, err := uuid.NewV4()
-	if err != nil {
-		return types.NewErrorEvent("cannot-fork:error-creating-fork-id", err), activeState
-	}
-	forkId := id.String()
+	forkId := uuid.New().String()
 
 	// Find our latest snapshot ID
 	latestSnap := f.latestSnapshot()
@@ -670,7 +660,7 @@ func (f *FsMachine) fork(e *types.Event) (responseEvent *types.Event, nextState 
 	}).Debug("[fork] about to fork...")
 
 	// Register in registry
-	err = f.state.RegisterNewFork(f.filesystemId, latestSnap, forkNamespace, forkName, forkId)
+	err := f.state.RegisterNewFork(f.filesystemId, latestSnap, forkNamespace, forkName, forkId)
 	if err != nil {
 		log.WithError(err).Error("Error registering fork")
 		return types.NewErrorEvent("cannot-fork:error-registering-fork", err), activeState
@@ -717,13 +707,7 @@ func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextSt
 	var snapshotId string
 	snapshotIdInter, ok := (*e.Args)["snapshotId"]
 	if !ok {
-		id, err := uuid.NewV4()
-		if err != nil {
-			return &types.Event{
-				Name: "failed-uuid", Args: &types.EventArgs{"err": fmt.Sprintf("%v", err)},
-			}, backoffState
-		}
-		snapshotId = id.String()
+		snapshotId = uuid.New().String()
 	} else {
 		snapshotId = snapshotIdInter.(string)
 	}
@@ -909,14 +893,10 @@ func (f *FsMachine) snapshotsChanged() error {
 
 func (f *FsMachine) recoverFromDivergence(rollbackToId string) error {
 	// Mint an ID for the new branch
-	id, err := uuid.NewV4()
-	if err != nil {
-		return err
-	}
-	newFilesystemId := id.String()
+	newFilesystemId := uuid.New().String()
 
 	// Roll back the filesystem to rollbackTo, but leaving the new filesystem pointing to its original state
-	err = f.zfs.StashBranch(f.filesystemId, newFilesystemId, rollbackToId)
+	err := f.zfs.StashBranch(f.filesystemId, newFilesystemId, rollbackToId)
 	if err != nil {
 		return err
 	}
