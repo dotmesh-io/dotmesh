@@ -437,7 +437,7 @@ func (s *InMemoryState) globalFsRequestId(fs string, event *types.Event) (chan *
 		}
 	}()
 
-	err = s.messenger.Publish(event)
+	err := s.messenger.Publish(event)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error":         err,
