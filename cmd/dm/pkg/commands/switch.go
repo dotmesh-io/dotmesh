@@ -27,9 +27,6 @@ func NewCmdSwitch(out io.Writer) *cobra.Command {
 					return fmt.Errorf("No dot name specified.")
 				}
 				volumeName := args[0]
-				if !client.CheckName(volumeName) {
-					return fmt.Errorf("Error: %v is an invalid name", volumeName)
-				}
 				exists, err := dm.VolumeExists(volumeName)
 				if err != nil {
 					return err

@@ -28,7 +28,7 @@ func NewCmdInit(out io.Writer) *cobra.Command {
 				}
 				v := args[0]
 				if !client.CheckName(v) {
-					return fmt.Errorf("Error: %v is an invalid name", v)
+					return fmt.Errorf("Error: %v is an invalid name: dot names must be <50 characters", v)
 				}
 				exists, err := dm.VolumeExists(v)
 				if err != nil {
