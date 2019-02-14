@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/dotmesh-io/dotmesh/pkg/auth"
+	"github.com/dotmesh-io/dotmesh/pkg/uuid"
 
 	"os"
 	"sort"
@@ -12,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nu7hatch/gouuid"
+	// "github.com/nu7hatch/gouuid"
 	"golang.org/x/net/context"
 
 	"github.com/dotmesh-io/dotmesh/pkg/container"
@@ -683,11 +684,7 @@ func (s *InMemoryState) CreateFilesystem(ctx context.Context, filesystemName *Vo
 		return nil, nil, err
 	case err != nil && store.IsKeyNotFound(err):
 		// Doesn't already exist, we can proceed as usual
-		id, err := uuid.NewV4()
-		if err != nil {
-			return nil, nil, err
-		}
-		filesystemId = id.String()
+		filesystemId = uuid.New().String()
 
 		log.Printf("[CreateFilesystem] called with name=%+v, assigned id=%s", filesystemName, filesystemId)
 		err = s.registry.RegisterFilesystem(ctx, *filesystemName, filesystemId)

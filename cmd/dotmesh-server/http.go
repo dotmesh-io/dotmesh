@@ -17,11 +17,12 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/openzipkin/zipkin-go-opentracing/examples/middleware"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/satori/go.uuid"
+
 	log "github.com/sirupsen/logrus"
 
 	"github.com/dotmesh-io/dotmesh/pkg/metrics"
 	"github.com/dotmesh-io/dotmesh/pkg/utils"
+	"github.com/dotmesh-io/dotmesh/pkg/uuid"
 )
 
 const REQUEST_ID = "X-Request-Id"
@@ -259,7 +260,7 @@ func rpcAfterFunc(reqInfo *rpc.RequestInfo) {
 }
 
 func rpcInterceptFunc(reqInfo *rpc.RequestInfo) *http.Request {
-	reqId := uuid.NewV4()
+	reqId := uuid.New()
 	reqInfo.Request.Header.Set(REQUEST_ID, reqId.String())
 	rpcTracker.mutex.Lock()
 	defer rpcTracker.mutex.Unlock()
