@@ -450,8 +450,7 @@ func (d *DotmeshRPC) DeleteUserMetadataField(
 
 // NORMAL USER API
 
-func (d *DotmeshRPC) Get(
-	r *http.Request, filesystemId *string, result *DotmeshVolume) error {
+func (d *DotmeshRPC) Get(r *http.Request, filesystemId *string, result *DotmeshVolume) error {
 	v, err := d.state.getOne(r.Context(), *filesystemId)
 	if err != nil {
 		return err
@@ -680,7 +679,9 @@ func (d *DotmeshRPC) Exists(
 		return err
 	}
 
-	fsId := d.state.registry.Exists(VolumeName{args.Namespace, args.Name}, args.Branch)
+	fsId := d.state.registry.Exists(VolumeName{
+		Namespace: args.Namespace,
+		Name:      args.Name}, args.Branch)
 	deleted, err := d.state.isFilesystemDeletedInEtcd(fsId)
 	if err != nil {
 		return err
