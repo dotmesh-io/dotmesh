@@ -657,19 +657,27 @@ func (f *FsMachine) fork(e *types.Event) (responseEvent *types.Event, nextState 
 		"forkNamespace":      forkNamespace,
 		"forkName":           forkName,
 		"forkId":             forkId,
-	}).Debug("[fork] about to fork...")
+	}).Info("[fork] creating fork in zfs...")
 
-	// Register in registry
-	err := f.state.RegisterNewFork(f.filesystemId, latestSnap, forkNamespace, forkName, forkId)
-	if err != nil {
-		log.WithError(err).Error("Error registering fork")
-		return types.NewErrorEvent("cannot-fork:error-registering-fork", err), activeState
-	}
-
-	err = f.zfs.Fork(f.filesystemId, latestSnap, forkId)
+	err := f.zfs.Fork(f.filesystemId, latestSnap, forkId)
 	if err != nil {
 		log.WithError(err).Error("Error generating fork")
 		return types.NewErrorEvent("cannot-fork:error-generating-fork", err), activeState
+	}
+
+	log.WithFields(log.Fields{
+		"originFilesystemId": f.filesystemId,
+		"originSnapshotId":   latestSnap,
+		"forkNamespace":      forkNamespace,
+		"forkName":           forkName,
+		"forkId":             forkId,
+	}).Info("[fork] creating registry entry")
+
+	// Register in registry
+	err = f.state.RegisterNewFork(f.filesystemId, latestSnap, forkNamespace, forkName, forkId)
+	if err != nil {
+		log.WithError(err).Error("Error registering fork")
+		return types.NewErrorEvent("cannot-fork:error-registering-fork", err), activeState
 	}
 
 	// go ahead and create the filesystem machine

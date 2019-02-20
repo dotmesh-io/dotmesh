@@ -3,7 +3,6 @@ package fsm
 import (
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/uuid"
-	// "github.com/nu7hatch/gouuid"
 
 	log "github.com/sirupsen/logrus"
 )
