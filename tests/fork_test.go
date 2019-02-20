@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/dotmesh-io/citools"
 	"strings"
 	"testing"
+
+	"github.com/dotmesh-io/citools"
 
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 )
@@ -87,7 +88,7 @@ func TestForks(t *testing.T) {
 		citools.RunOnNode(t, node1Name, "dm switch alice/"+fsname2)
 		output = citools.OutputFromRunOnNode(t, node1Name, "dm log")
 		if !strings.Contains(output, "Nice Commit") {
-			t.Errorf("Did not find commit in output. Got: %s", output)
+			t.Errorf("Did not find commit in output. Expected '%s', got: '%s'", "Nice Commit", output)
 		}
 
 		// Bob deletes the original

@@ -1873,15 +1873,7 @@ func (d *DotmeshRPC) AllDotsAndBranches(
 	return nil
 }
 
-func (d *DotmeshRPC) Fork(
-	r *http.Request,
-	args *struct {
-		MasterBranchID string
-		ForkNamespace  string
-		ForkName       string
-	},
-	result *string,
-) error {
+func (d *DotmeshRPC) Fork(r *http.Request, args *types.RPCForkRequest, result *string) error {
 
 	// TODO #611: strip this out and replace it with a check to make sure they're in the collaborators list
 	err := ensureAdminUser(r)
@@ -1891,6 +1883,10 @@ func (d *DotmeshRPC) Fork(
 
 	_, _, err = d.state.registry.LookupFilesystemById(args.MasterBranchID)
 	if err != nil {
+		log.WithFields(log.Fields{
+			"error":            err,
+			"master_branch_id": args.MasterBranchID,
+		}).Error("[fork] failed to lookup master filesystem")
 		return err
 	}
 
