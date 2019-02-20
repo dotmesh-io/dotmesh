@@ -2,12 +2,13 @@ package fsm
 
 import (
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/dotmesh-io/dotmesh/pkg/store"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/utils"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func (f *FsMachine) isFilesystemDeletedInEtcd(fsId string) (bool, error) {
@@ -25,7 +26,10 @@ func (f *FsMachine) isFilesystemDeletedInEtcd(fsId string) (bool, error) {
 
 func missingState(f *FsMachine) StateFn {
 	f.transitionedTo("missing", "waiting")
-	log.Printf("entering missing state for %s", f.filesystemId)
+
+	log.WithFields(log.Fields{
+		"filesystem_id": f.filesystemId,
+	}).Infof("entering missing state for %s", f.filesystemId)
 
 	// Are we missing because we're being deleted?
 	deleted, err := f.isFilesystemDeletedInEtcd(f.filesystemId)
@@ -36,7 +40,7 @@ func missingState(f *FsMachine) StateFn {
 	if deleted {
 		err := f.state.DeleteFilesystem(f.filesystemId)
 		if err != nil {
-			log.Printf("Error deleting filesystem while in missingState: %s", err)
+			log.Errorf("Error deleting filesystem while in missingState: %s", err)
 			return backoffState
 		}
 		return nil
@@ -76,7 +80,7 @@ func missingState(f *FsMachine) StateFn {
 			}
 			return nil
 		} else if e.Name == "transfer" {
-			log.Printf("GOT TRANSFER REQUEST (while missing) %+v", e.Args)
+			log.Infof("GOT TRANSFER REQUEST (while missing) %+v", e.Args)
 
 			// TODO dedupe
 			transferRequest, err := transferRequestify((*e.Args)["Transfer"])
@@ -109,7 +113,7 @@ func missingState(f *FsMachine) StateFn {
 				return pullInitiatorState
 			}
 		} else if e.Name == "s3-transfer" {
-			log.Printf("GOT S3 TRANSFER REQUEST (while missing) %+v", e.Args)
+			log.Infof("GOT S3 TRANSFER REQUEST (while missing) %+v", e.Args)
 
 			// TODO dedupe
 			transferRequest, err := s3TransferRequestify((*e.Args)["Transfer"])
@@ -156,7 +160,7 @@ func missingState(f *FsMachine) StateFn {
 					return backoffState
 				}
 			} else {
-				log.Printf("Unknown direction %s, going to backoff", f.lastS3TransferRequest.Direction)
+				log.Warnf("Unknown direction %s, going to backoff", f.lastS3TransferRequest.Direction)
 				f.innerResponses <- &types.Event{
 					Name: "failed-s3-transfer",
 					Args: &types.EventArgs{"unknown-direction": f.lastS3TransferRequest.Direction},
@@ -195,7 +199,7 @@ func missingState(f *FsMachine) StateFn {
 				}
 				return backoffState
 			} else if f.lastTransferRequest.Direction == "push" {
-				log.Printf("GOT PEER TRANSFER REQUEST FROM MISSING %+v", f.lastTransferRequest)
+				log.Infof("GOT PEER TRANSFER REQUEST FROM MISSING %+v", f.lastTransferRequest)
 				return pushPeerState
 			}
 		} else if e.Name == "create" {
@@ -239,7 +243,7 @@ func missingState(f *FsMachine) StateFn {
 				Name: "unhandled",
 				Args: &types.EventArgs{"current-state": f.currentState, "event": e},
 			}
-			log.Printf("unhandled event %s while in missingState", e)
+			log.Errorf("unhandled event %s while in missingState", e)
 		}
 	}
 	// something unknown happened, go and check the state of the system after a
