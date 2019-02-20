@@ -1874,7 +1874,6 @@ func (d *DotmeshRPC) AllDotsAndBranches(
 }
 
 func (d *DotmeshRPC) Fork(r *http.Request, args *types.RPCForkRequest, result *string) error {
-
 	// TODO #611: strip this out and replace it with a check to make sure they're in the collaborators list
 	err := ensureAdminUser(r)
 	if err != nil {
