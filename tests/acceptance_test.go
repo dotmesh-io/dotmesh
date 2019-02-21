@@ -500,6 +500,17 @@ func TestSingleNode(t *testing.T) {
 		}
 	})
 
+	t.Run("CommitIdOverride", func(t *testing.T) {
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/X")
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+		citools.RunOnNode(t, node1, "dm commit -m 'hello' -d '#commit-id=WEIRDCOMMIT'")
+		resp := citools.OutputFromRunOnNode(t, node1, "dm log")
+		if !strings.Contains(resp, "WEIRDCOMMIT") {
+			t.Error("unable to find custom commit ID in log output")
+		}
+	})
+
 	t.Run("Branch", func(t *testing.T) {
 		fsname := citools.UniqName()
 		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/X")

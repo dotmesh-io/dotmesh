@@ -31,6 +31,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const COMMIT_OVERRIDE_METADATA_KEY = "#commit-id"
+
 // TODO ensure contexts are threaded through in all RPC calls for correct
 // authorization.
 
@@ -72,7 +74,6 @@ func requireValidVolumeNameWithBranch(name VolumeName) error {
 }
 
 func ensureAdminUser(r *http.Request) error {
-	// requestId := auth.GetUserID(r)
 	requestId := auth.GetUserID(r)
 
 	// we have already authenticated the admin password so are safe to just compare ids
@@ -848,6 +849,20 @@ func (d *DotmeshRPC) Commit(
 	if err != nil {
 		return err
 	}
+
+	// Prepare snapshot event to send to active master
+	eventArgs := EventArgs{}
+
+	// Overriding the commit ID is only allowed for the admin user
+	sid, sidOverride := args.Metadata[COMMIT_OVERRIDE_METADATA_KEY]
+	if sidOverride {
+		// Remove it from the metadata that goes into the commit
+		delete(args.Metadata, COMMIT_OVERRIDE_METADATA_KEY)
+
+		// Add it to the event args
+		eventArgs["snapshotId"] = sid
+	}
+
 	// NB: metadata keys must always start lowercase, because zfs
 	user, _, _ := r.BasicAuth()
 	meta := Metadata{"message": args.Message, "author": user}
@@ -861,10 +876,12 @@ func (d *DotmeshRPC) Commit(
 		meta[name] = value
 	}
 	log.WithField("meta", meta).Infoln("Finished collating metadata with msg and author")
+	eventArgs["metadata"] = meta
+
 	responseChan, err := d.state.globalFsRequest(
 		filesystemId,
 		&Event{Name: "snapshot",
-			Args: &EventArgs{"metadata": meta}},
+			Args: &eventArgs},
 	)
 	if err != nil {
 		// meh, maybe REST *would* be nicer
