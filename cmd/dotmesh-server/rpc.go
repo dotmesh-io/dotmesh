@@ -109,9 +109,11 @@ func (d *DotmeshRPC) Procure(
 		return err
 	}
 
-	err = validator.IsValidSubdotName(args.Subdot)
-	if err != nil {
-		return err
+	if args.Subdot != "" {
+		err = validator.IsValidSubdotName(args.Subdot)
+		if err != nil {
+			return err
+		}
 	}
 
 	filesystemId, err := d.state.procureFilesystem(ctx, vn)
