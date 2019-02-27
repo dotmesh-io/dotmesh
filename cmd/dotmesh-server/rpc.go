@@ -108,7 +108,7 @@ func (d *DotmeshRPC) Procure(
 	if err != nil {
 		return err
 	}
-
+	log.WithField("subdot", args.Subdot).Debug("In procure")
 	if args.Subdot != "" {
 		err = validator.IsValidSubdotName(args.Subdot)
 		if err != nil {
