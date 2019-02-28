@@ -713,7 +713,10 @@ func (d *DotmeshRPC) Lookup(
 	}
 
 	filesystemId, err := d.state.registry.MaybeCloneFilesystemId(
-		VolumeName{args.Namespace, args.Name}, args.Branch,
+		VolumeName{
+			Namespace: args.Namespace,
+			Name:      args.Name,
+		}, args.Branch,
 	)
 	if err != nil {
 		return err
@@ -749,7 +752,7 @@ func (d *DotmeshRPC) Commits(
 	}
 
 	filesystemId, err := d.state.registry.MaybeCloneFilesystemId(
-		VolumeName{args.Namespace, args.Name},
+		VolumeName{Namespace: args.Namespace, Name: args.Name},
 		args.Branch,
 	)
 	if err != nil {
@@ -817,7 +820,7 @@ func (d *DotmeshRPC) Commit(
 	/* Non-admin users are allowed to commit, as a temporary measure
 		      until a way of making the frontend tests work without it is found.
 
-	      Please uncomment this code and close https://github.com/dotmesh-io/dotmesh/issues/179
+	      Please uncomment this code and close https://github.com/dotmesh-io/dotmesh/issues/577
 	      when resolved.
 
 			err := ensureAdminUser(r)
@@ -844,7 +847,10 @@ func (d *DotmeshRPC) Commit(
 	// wait for a response to be inserted into etcd as well, before firing with
 	// that.
 	filesystemId, err := d.state.registry.MaybeCloneFilesystemId(
-		VolumeName{args.Namespace, args.Name},
+		VolumeName{
+			Namespace: args.Namespace,
+			Name:      args.Name,
+		},
 		args.Branch,
 	)
 	if err != nil {
