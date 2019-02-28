@@ -183,8 +183,7 @@ func (s *InMemoryState) markFilesystemAsDeletedInEtcd(fsId, username string, nam
 	}
 
 	err := s.filesystemStore.SetDeleted(at, &store.SetOptions{})
-	// if err != nil && !store.IsKeyNotFound(err) {
-	if err != nil {
+	if err != nil && !store.IsKeyAlreadyExist(err) {
 		log.WithFields(log.Fields{
 			"error":         err,
 			"filesystem_id": fsId,
@@ -194,7 +193,7 @@ func (s *InMemoryState) markFilesystemAsDeletedInEtcd(fsId, username string, nam
 	}
 
 	err = s.filesystemStore.SetCleanupPending(at, &store.SetOptions{})
-	if err != nil {
+	if err != nil && !store.IsKeyAlreadyExist(err) {
 		log.WithFields(log.Fields{
 			"error":         err,
 			"filesystem_id": fsId,

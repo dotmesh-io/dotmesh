@@ -1234,6 +1234,36 @@ func TestDeletionSimple(t *testing.T) {
 
 	})
 
+	t.Run("DeletePartialFailure", func(t *testing.T) {
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO'")
+		checkTestContainerExits(t, node1)
+
+		_, err := citools.DoSetDebugFlag(f[0].GetNode(0).IP, "admin", f[0].GetNode(0).ApiKey, "PartialFailDelete", "true")
+		if err != nil {
+			t.Error(err)
+		}
+
+		// Expect failure
+		citools.RunOnNode(t, node1, "if dm dot delete -f "+fsname+"; then false; else true; fi")
+
+		_, err = citools.DoSetDebugFlag(f[0].GetNode(0).IP, "admin", f[0].GetNode(0).ApiKey, "PartialFailDelete", "false")
+		if err != nil {
+			t.Error(err)
+		}
+
+		// Expect success or failure; it may have already gone as we do try and recover from partial failures.
+		citools.RunOnNode(t, node1, "dm dot delete -f "+fsname+" || true")
+
+		// Ensure the initial delete has happened, but the metadata is
+		// still draining. This is less than half the metadata timeout
+		// configured above; the system should be in the process of
+		// cleaning up after the volume, but it should be fine to reuse
+		// the name by now.
+
+		checkDeletionWorked(t, fsname, 2*time.Second, node1, node2)
+	})
+
 	t.Run("DeleteQuickly", func(t *testing.T) {
 		fsname := citools.UniqName()
 		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" sh -c 'echo WORLD > /foo/HELLO'")
