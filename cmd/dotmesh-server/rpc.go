@@ -981,7 +981,7 @@ func (d *DotmeshRPC) Rollback(
 	// wait for a response to be inserted into etcd as well, before firing with
 	// that.
 	filesystemId, err := d.state.registry.MaybeCloneFilesystemId(
-		VolumeName{args.Namespace, args.Name},
+		VolumeName{Namespace: args.Namespace, Name: args.Name},
 		args.Branch,
 	)
 	if err != nil {
@@ -1081,7 +1081,7 @@ func (d *DotmeshRPC) Branch(
 		return err
 	}
 
-	tlf, err := d.state.registry.LookupFilesystem(VolumeName{args.Namespace, args.Name})
+	tlf, err := d.state.registry.LookupFilesystem(VolumeName{Namespace: args.Namespace, Name: args.Name})
 	if err != nil {
 		return err
 	}
