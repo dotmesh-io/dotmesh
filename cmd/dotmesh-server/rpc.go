@@ -2257,6 +2257,10 @@ func (d *DotmeshRPC) Delete(r *http.Request, args *VolumeName, result *bool) err
 		// them to eventually be deleted.
 	}
 
+	if d.state.debugPartialFailDelete {
+		return fmt.Errorf("Injected fault for debugging/testing purposes")
+	}
+
 	// If we're deleting the entire filesystem rather than just a
 	// clone, we need to unregister it.
 
@@ -2322,6 +2326,8 @@ func (d *DotmeshRPC) SetDebugFlag(
 	switch args.FlagName {
 	case "PartialFailCreateFilesystem":
 		handleBooleanFlag(&d.state.debugPartialFailCreateFilesystem, args.FlagValue, result)
+	case "PartialFailDelete":
+		handleBooleanFlag(&d.state.debugPartialFailDelete, args.FlagValue, result)
 	case "ForceStateMachineToDiscovering":
 		filesystemId := args.FlagValue
 		responseChan, err := d.state.globalFsRequest(
