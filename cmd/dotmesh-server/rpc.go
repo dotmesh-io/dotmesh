@@ -1523,7 +1523,7 @@ func (d *DotmeshRPC) Transfer(
 ) error {
 	client := dmclient.NewJsonRpcClient(args.User, args.Peer, args.ApiKey, args.Port)
 
-	log.Printf("[Transfer] starting with %+v", safeArgs(*args))
+	log.Infof("[Transfer] starting with %+v", safeArgs(*args))
 
 	// Remote name is welcome to be invalid, that's the far end's problem
 	err := validator.IsValidVolume(args.LocalNamespace, args.LocalName)
@@ -1547,7 +1547,7 @@ func (d *DotmeshRPC) Transfer(
 	}
 
 	localFilesystemId := d.state.registry.Exists(
-		VolumeName{args.LocalNamespace, args.LocalName}, args.LocalBranchName,
+		VolumeName{Namespace: args.LocalNamespace, Name: args.LocalName}, args.LocalBranchName,
 	)
 
 	remoteExists := remoteFilesystemId != ""
@@ -1566,7 +1566,7 @@ func (d *DotmeshRPC) Transfer(
 	var localPath, remotePath PathToTopLevelFilesystem
 	if args.Direction == "push" {
 		localPath, err = d.state.registry.DeducePathToTopLevelFilesystem(
-			VolumeName{args.LocalNamespace, args.LocalName}, args.LocalBranchName,
+			VolumeName{Namespace: args.LocalNamespace, Name: args.LocalName}, args.LocalBranchName,
 		)
 		if err != nil {
 			return fmt.Errorf(
@@ -1577,7 +1577,10 @@ func (d *DotmeshRPC) Transfer(
 
 		// Path is the same on the remote, except with a potentially different name
 		remotePath = localPath
-		remotePath.TopLevelFilesystemName = VolumeName{args.RemoteNamespace, args.RemoteName}
+		remotePath.TopLevelFilesystemName = VolumeName{
+			Namespace: args.RemoteNamespace,
+			Name:      args.RemoteName,
+		}
 	} else if args.Direction == "pull" {
 		err := client.CallRemote(r.Context(),
 			"DotmeshRPC.DeducePathToTopLevelFilesystem", map[string]interface{}{
@@ -1595,7 +1598,10 @@ func (d *DotmeshRPC) Transfer(
 		}
 		// Path is the same locally, except with a potentially different name
 		localPath = remotePath
-		localPath.TopLevelFilesystemName = VolumeName{args.LocalNamespace, args.LocalName}
+		localPath.TopLevelFilesystemName = VolumeName{
+			Namespace: args.LocalNamespace,
+			Name:      args.LocalName,
+		}
 	}
 
 	log.Printf("[Transfer] got paths: local=%+v remote=%+v", localPath, remotePath)
@@ -1664,15 +1670,15 @@ func (d *DotmeshRPC) Transfer(
 				if err != nil {
 					return err
 				}
-				log.Printf("[TransferIt] for %s, got dotmesh volume: %v", filesystemId, v)
+				log.Infof("[TransferIt] for %s, got dotmesh volume: %v", filesystemId, v)
 				dirtyBytes = v.DirtyBytes
-				log.Printf("[TransferIt] got %d dirty bytes for %s from peer", dirtyBytes, filesystemId)
+				log.Infof("[TransferIt] got %d dirty bytes for %s from peer", dirtyBytes, filesystemId)
 
 				err = client.CallRemote(r.Context(), "DotmeshRPC.ContainersById", filesystemId, &cs)
 				if err != nil {
 					return err
 				}
-				log.Printf("[TransferIt] got %+v remote containers for %s from peer", cs, filesystemId)
+				log.Infof("[TransferIt] got %+v remote containers for %s from peer", cs, filesystemId)
 				for _, container := range cs {
 					containersRunning = append(containersRunning, string(container.Name))
 				}
@@ -1700,7 +1706,7 @@ func (d *DotmeshRPC) Transfer(
 					// this response should have a timeout associated with it.
 					e := <-responseChan
 					if e.Name == "snapshotted" {
-						log.Printf("Stash on diverge requested with dirty data so snapshotted %s", filesystemId)
+						log.Infof("Stash on diverge requested with dirty data so snapshotted %s", filesystemId)
 					} else {
 						return maybeError(e, "snapshotted")
 					}
@@ -1723,7 +1729,7 @@ func (d *DotmeshRPC) Transfer(
 				)
 			}
 			return nil
-		}, "checking for dirty data and running containers", 2)
+		}, "checking for dirty data and running containers", 5)
 		if err != nil {
 			return err
 		}
@@ -1757,7 +1763,7 @@ func (d *DotmeshRPC) Transfer(
 		// asynchronously throw away the response, transfers can be polled via
 		// their own entries in etcd
 		e := <-responseChan
-		log.Printf("finished transfer of %+v, %+v", args, e)
+		log.Infof("finished transfer of %+v, %+v", args, e)
 	}()
 
 	*result = requestId
@@ -2064,7 +2070,10 @@ func (d *DotmeshRPC) DeducePathToTopLevelFilesystem(
 	}
 
 	res, err := d.state.registry.DeducePathToTopLevelFilesystem(
-		VolumeName{args.RemoteNamespace, args.RemoteFilesystemName}, args.RemoteCloneName,
+		VolumeName{
+			Namespace: args.RemoteNamespace,
+			Name:      args.RemoteFilesystemName,
+		}, args.RemoteCloneName,
 	)
 	if err != nil {
 		return err
