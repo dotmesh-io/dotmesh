@@ -205,6 +205,13 @@ func runForever(f func() error, label string, errorBackoff, successBackoff time.
 
 func (s *InMemoryState) waitForFilesystemDeath(filesystemId string) {
 	// We hold this lock to avoid a race between subscribe and check.
+
+	// Also, the code in fsm.go that calls
+	// terminateRUnnersWhileFilesystemLived sends the message to
+	// deathObserver *after* removing the filesystem from the map, so
+	// waitForFilesystemDeath will always return if its execution is
+	// overlapping with the execition of the termination code in
+	// FsMachine.Run.
 	var returnImmediately bool
 	deathChan := make(chan interface{})
 	func() {

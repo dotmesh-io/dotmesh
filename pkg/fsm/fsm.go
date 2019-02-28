@@ -148,7 +148,7 @@ func NewFilesystemMachine(cfg *FsConfig) *FsMachine {
 		transferUpdates: make(chan types.TransferUpdate),
 
 		filesystemMetadataTimeout: cfg.FilesystemMetadataTimeout,
-		zfs:                       zfsInter,
+		zfs: zfsInter,
 	}
 }
 
@@ -310,14 +310,11 @@ func (f *FsMachine) Run() {
 		// as filesytem is deleted from the cache in state.DeleteFilesystem
 
 		// Remove ourself from the filesystems map
-		// f.state.filesystemsLock.Lock()
-		// defer f.state.filesystemsLock.Unlock()
-		// We must hold the fslock while calling terminateRunners... to avoid a deadlock with
-		// waitForFilesystemDeath in utils.go
-		f.terminateRunnersWhileFilesystemLived(f.filesystemId)
-		// delete(f.state.filesystems, f.filesystemId)
-
 		f.state.DeleteFilesystemFromMap(f.filesystemId)
+
+		// Send a signal to anyone waiting for our death (see: InMemoryState.waitForFilesystemDeath)
+		// This MUST happen AFTER the deletion from the filesystem map, to avoid a race in waitForFilesystemDeath
+		f.terminateRunnersWhileFilesystemLived(f.filesystemId)
 
 		log.Printf("[run:%s] terminated", f.filesystemId)
 	}()
