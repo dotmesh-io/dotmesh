@@ -72,3 +72,7 @@ var (
 func IsKeyNotFound(err error) bool {
 	return err == ErrNotFound
 }
+
+func IsKeyAlreadyExist(err error) bool {
+	return err == ErrExist
+}

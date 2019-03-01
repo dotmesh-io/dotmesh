@@ -184,7 +184,7 @@ func (s *S3Handler) mountFilesystemSnapshot(filesystemId string, snapshotId stri
 	}
 	lastSnapshot := snapshots[len(snapshots)-1]
 	mountSnapshotId := lastSnapshot.Id
-	if snapshotId != "" {
+	if snapshotId != "" && snapshotId != "latest" {
 		mountSnapshotId = snapshotId
 	}
 	responseChan, err := s.state.globalFsRequest(
