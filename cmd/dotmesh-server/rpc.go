@@ -1015,18 +1015,11 @@ func (d *DotmeshRPC) Rollback(
 }
 
 func maybeError(e *Event, expected string) error {
-	log.Printf("Unexpected response '%s' (expected: '%s') - %#v", e.Name, expected, e.Args)
-	err, ok := (*e.Args)["err"]
-	if ok {
-		castedErr, ok2 := err.(error)
-		if ok2 {
-			return castedErr
-		} else {
-			return fmt.Errorf("Unknown error %s - %#v", e.Name, e.Args)
-		}
-	} else {
-		return fmt.Errorf("Unexpected response %s - %#v", e.Name, e.Args)
+	if e.Error() != nil {
+		log.Errorf("unexpected response '%s' (expected: '%s') - %#v", e.Name, expected, e.Args)
+		return e.Error()
 	}
+	return fmt.Errorf("Unexpected response %s - %#v", e.Name, e.Args)
 }
 
 // Return a list of clone names attributed to a given top-level filesystem name
