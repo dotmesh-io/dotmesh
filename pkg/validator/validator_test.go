@@ -96,7 +96,7 @@ func TestIsValidVolumeNamespace(t *testing.T) {
 		{
 			name:    "empty",
 			args:    args{str: ""},
-			wantErr: ErrEmptyName,
+			wantErr: ErrEmptyNamespace,
 		},
 		{
 			name:    "funny characters shouldn't be valid",
@@ -135,7 +135,7 @@ func TestIsValidSubdotName(t *testing.T) {
 		{
 			name:    "empty",
 			args:    args{str: ""},
-			wantErr: ErrEmptyName,
+			wantErr: ErrEmptySubdot,
 		},
 		{
 			name:    "funny characters shouldn't be valid",
