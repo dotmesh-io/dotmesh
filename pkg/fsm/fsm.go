@@ -148,7 +148,7 @@ func NewFilesystemMachine(cfg *FsConfig) *FsMachine {
 		transferUpdates: make(chan types.TransferUpdate),
 
 		filesystemMetadataTimeout: cfg.FilesystemMetadataTimeout,
-		zfs: zfsInter,
+		zfs:                       zfsInter,
 	}
 }
 
@@ -624,20 +624,20 @@ func (f *FsMachine) transitionedTo(state string, status string) {
 func (f *FsMachine) fork(e *types.Event) (responseEvent *types.Event, nextState StateFn) {
 	forkNamespaceIf, ok := (*e.Args)["ForkNamespace"]
 	if !ok {
-		return &types.Event{Name: "cannot-fork:namespace-needed"}, activeState
+		return types.NewErrorEvent("cannot-fork", fmt.Errorf("namespace not specified")), activeState
 	}
 	forkNamespace, ok := forkNamespaceIf.(string)
 	if !ok {
-		return &types.Event{Name: "cannot-fork:namespace-not-string"}, activeState
+		return types.NewErrorEvent("cannot-fork", fmt.Errorf("type error: namespace is not a string")), activeState
 	}
 
 	forkNameIf, ok := (*e.Args)["ForkName"]
 	if !ok {
-		return &types.Event{Name: "cannot-fork:name-needed"}, activeState
+		return types.NewErrorEvent("cannot-fork", fmt.Errorf("name not specified")), activeState
 	}
 	forkName, ok := forkNameIf.(string)
 	if !ok {
-		return &types.Event{Name: "cannot-fork:name-not-string"}, activeState
+		return types.NewErrorEvent("cannot-fork", fmt.Errorf("type error: name is not a string")), activeState
 	}
 
 	forkId := uuid.New().String()
@@ -645,7 +645,16 @@ func (f *FsMachine) fork(e *types.Event) (responseEvent *types.Event, nextState 
 	// Find our latest snapshot ID
 	latestSnap := f.latestSnapshot()
 	if latestSnap == "" {
-		return &types.Event{Name: "cannot-fork:filesystem-without-snapshots"}, activeState
+		log.WithFields(log.Fields{
+			"originFilesystemId": f.filesystemId,
+			"originSnapshotId":   latestSnap,
+			"forkNamespace":      forkNamespace,
+			"forkName":           forkName,
+			"forkId":             forkId,
+			"local_snapshots":    f.ListLocalSnapshots(),
+			"snapshots":          f.ListSnapshots(),
+		}).Error("[fork] can't fork filesystem, can't detect snapshots")
+		return types.NewErrorEvent("cannot-fork", fmt.Errorf("filesystem '%s' doesn't have any snapshots, cannot fork", f.ID())), activeState
 	}
 
 	log.WithFields(log.Fields{
