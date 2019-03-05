@@ -310,14 +310,11 @@ func (f *FsMachine) Run() {
 		// as filesytem is deleted from the cache in state.DeleteFilesystem
 
 		// Remove ourself from the filesystems map
-		// f.state.filesystemsLock.Lock()
-		// defer f.state.filesystemsLock.Unlock()
-		// We must hold the fslock while calling terminateRunners... to avoid a deadlock with
-		// waitForFilesystemDeath in utils.go
-		f.terminateRunnersWhileFilesystemLived(f.filesystemId)
-		// delete(f.state.filesystems, f.filesystemId)
-
 		f.state.DeleteFilesystemFromMap(f.filesystemId)
+
+		// Send a signal to anyone waiting for our death (see: InMemoryState.waitForFilesystemDeath)
+		// This MUST happen AFTER the deletion from the filesystem map, to avoid a race in waitForFilesystemDeath
+		f.terminateRunnersWhileFilesystemLived(f.filesystemId)
 
 		log.Printf("[run:%s] terminated", f.filesystemId)
 	}()
@@ -627,20 +624,20 @@ func (f *FsMachine) transitionedTo(state string, status string) {
 func (f *FsMachine) fork(e *types.Event) (responseEvent *types.Event, nextState StateFn) {
 	forkNamespaceIf, ok := (*e.Args)["ForkNamespace"]
 	if !ok {
-		return &types.Event{Name: "cannot-fork:namespace-needed"}, activeState
+		return types.NewErrorEvent("cannot-fork", fmt.Errorf("namespace not specified")), activeState
 	}
 	forkNamespace, ok := forkNamespaceIf.(string)
 	if !ok {
-		return &types.Event{Name: "cannot-fork:namespace-not-string"}, activeState
+		return types.NewErrorEvent("cannot-fork", fmt.Errorf("type error: namespace is not a string")), activeState
 	}
 
 	forkNameIf, ok := (*e.Args)["ForkName"]
 	if !ok {
-		return &types.Event{Name: "cannot-fork:name-needed"}, activeState
+		return types.NewErrorEvent("cannot-fork", fmt.Errorf("name not specified")), activeState
 	}
 	forkName, ok := forkNameIf.(string)
 	if !ok {
-		return &types.Event{Name: "cannot-fork:name-not-string"}, activeState
+		return types.NewErrorEvent("cannot-fork", fmt.Errorf("type error: name is not a string")), activeState
 	}
 
 	forkId := uuid.New().String()
@@ -648,7 +645,16 @@ func (f *FsMachine) fork(e *types.Event) (responseEvent *types.Event, nextState 
 	// Find our latest snapshot ID
 	latestSnap := f.latestSnapshot()
 	if latestSnap == "" {
-		return &types.Event{Name: "cannot-fork:filesystem-without-snapshots"}, activeState
+		log.WithFields(log.Fields{
+			"originFilesystemId": f.filesystemId,
+			"originSnapshotId":   latestSnap,
+			"forkNamespace":      forkNamespace,
+			"forkName":           forkName,
+			"forkId":             forkId,
+			"local_snapshots":    f.ListLocalSnapshots(),
+			"snapshots":          f.ListSnapshots(),
+		}).Error("[fork] can't fork filesystem, can't detect snapshots")
+		return types.NewErrorEvent("cannot-fork", fmt.Errorf("filesystem '%s' doesn't have any snapshots, cannot fork", f.ID())), activeState
 	}
 
 	log.WithFields(log.Fields{

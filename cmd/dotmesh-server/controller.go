@@ -66,6 +66,7 @@ type InMemoryState struct {
 	publisher                  notification.Publisher
 
 	debugPartialFailCreateFilesystem bool
+	debugPartialFailDelete           bool
 	versionInfo                      *VersionInfo
 	zfs                              zfs.ZFS
 }
