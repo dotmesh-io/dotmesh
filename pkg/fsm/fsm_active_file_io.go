@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/dotmesh-io/dotmesh/pkg/dirtar"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/utils"
 
@@ -78,6 +80,12 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 }
 
 func (f *FsMachine) readFile(file *types.OutputFile) StateFn {
+
+	// check whether file is a directory, if so, tarball all and write
+	if file.Filename == "/" && strings.HasSuffix(file.Filename, "/") {
+		return f.readDirectory(file)
+	}
+
 	// create the default paths
 	sourcePath := fmt.Sprintf("%s/%s/%s", file.SnapshotMountPath, "__default__", file.Filename)
 
@@ -113,4 +121,34 @@ func (f *FsMachine) readFile(file *types.OutputFile) StateFn {
 	}
 
 	return activeState
+}
+
+func (f *FsMachine) readDirectory(file *types.OutputFile) StateFn {
+
+	dirPath := filepath.Join(file.SnapshotMountPath, "__default__", file.Filename)
+
+	stat, err := os.Stat(dirPath)
+	if err != nil {
+		file.Response <- types.NewErrorEvent(types.EventNameReadFailed, fmt.Errorf("failed to stat dir '%s', error: %s ", file.Filename, err))
+		return backoffState
+	}
+
+	if !stat.IsDir() {
+		file.Response <- types.NewErrorEvent(types.EventNameReadFailed, fmt.Errorf("path '%s' is not a directory, error: %s ", file.Filename, err))
+		return backoffState
+	}
+
+	err = dirtar.Tar(dirPath, file.Contents)
+	if err != nil {
+		file.Response <- types.NewErrorEvent(types.EventNameReadFailed, fmt.Errorf("path '%s' tar failed, error: %s ", file.Filename, err))
+		return backoffState
+	}
+
+	file.Response <- &types.Event{
+		Name: types.EventNameReadSuccess,
+		Args: &types.EventArgs{},
+	}
+
+	return activeState
+
 }
