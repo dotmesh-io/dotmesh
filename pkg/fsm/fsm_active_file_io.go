@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/dotmesh-io/dotmesh/pkg/dirtar"
+	"github.com/dotmesh-io/dotmesh/pkg/archiver"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/utils"
 
@@ -81,13 +81,21 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 
 func (f *FsMachine) readFile(file *types.OutputFile) StateFn {
 
-	// check whether file is a directory, if so, tarball all and write
-	if file.Filename == "/" && strings.HasSuffix(file.Filename, "/") {
-		return f.readDirectory(file)
-	}
-
 	// create the default paths
 	sourcePath := fmt.Sprintf("%s/%s/%s", file.SnapshotMountPath, "__default__", file.Filename)
+
+	fi, err := os.Stat(sourcePath)
+	if err != nil {
+		file.Response <- &types.Event{
+			Name: types.EventNameReadFailed,
+			Args: &types.EventArgs{"err": fmt.Errorf("failed to stat %s, error: %s", file.Filename, err)},
+		}
+		return backoffState
+	}
+
+	if fi.IsDir() {
+		return f.readDirectory(file)
+	}
 
 	fileOnDisk, err := os.Open(sourcePath)
 	if err != nil {
@@ -138,7 +146,7 @@ func (f *FsMachine) readDirectory(file *types.OutputFile) StateFn {
 		return backoffState
 	}
 
-	err = dirtar.Tar(dirPath, file.Contents)
+	err = archiver.NewTar().ArchiveToStream(file.Contents, []string{dirPath})
 	if err != nil {
 		file.Response <- types.NewErrorEvent(types.EventNameReadFailed, fmt.Errorf("path '%s' tar failed, error: %s ", file.Filename, err))
 		return backoffState
