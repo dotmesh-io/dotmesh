@@ -203,5 +203,13 @@ func TestS3Api(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to untar: %s", err)
 		}
+
+		bts, err := ioutil.ReadFile(filepath.Join(tempDir, "file.txt"))
+		if err != nil {
+			t.Fatalf("failed to read untarred file: %s", err)
+		}
+		if !strings.Contains(string(bts), "helloworld1") {
+			t.Errorf("expected file contents 'helloworld1', got: '%s'", string(bts))
+		}
 	})
 }
