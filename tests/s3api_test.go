@@ -2,8 +2,13 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/dotmesh-io/dotmesh/pkg/archiver"
 
 	"github.com/dotmesh-io/citools"
 )
@@ -142,6 +147,43 @@ func TestS3Api(t *testing.T) {
 		expected2 := "helloworld2"
 		if !strings.Contains(respSecondCommit, expected2) {
 			t.Errorf("The second commit did not contain the correct file data (expected '%s', got: '%s')", expected2, respSecondCommit)
+		}
+	})
+
+	t.Run("ReadDirectoryAtSnapshot", func(t *testing.T) {
+
+		tempDir, err := ioutil.TempDir("", "test-ReadDirectoryAtSnapshot")
+		if err != nil {
+			t.Fatalf("failed to create temp dir for file write: %s", err)
+		}
+		defer os.RemoveAll(tempDir)
+
+		dotName := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm init "+dotName)
+
+		citools.RunOnNode(t, node1, "echo helloworld1 > file.txt")
+
+		cmdFile1 := fmt.Sprintf("curl -T file.txt -u admin:%s 127.0.0.1:32607/s3/admin:%s/subpath/file.txt", host.Password, dotName)
+		citools.RunOnNode(t, node1, cmdFile1)
+
+		commitIdsString := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("dm log | grep commit | awk '{print $2}'"))
+		commitIdsList := strings.Split(commitIdsString, "\n")
+
+		firstCommitId := commitIdsList[0]
+
+		t.Logf("running (first commit): '%s'", fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/subpath", host.Password, dotName, firstCommitId))
+		respFirstCommit := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/subpath", host.Password, dotName, firstCommitId))
+
+		tarPath := filepath.Join(tempDir, "out.tar")
+
+		err = ioutil.WriteFile(tarPath, []byte(respFirstCommit), os.ModeDir)
+		if err != nil {
+			t.Fatalf("failed to write file: %s", err)
+		}
+
+		err = archiver.NewTar().Unarchive(tarPath, tempDir)
+		if err != nil {
+			t.Fatalf("failed to untar: %s", err)
 		}
 	})
 }
