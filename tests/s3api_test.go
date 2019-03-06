@@ -204,18 +204,19 @@ func TestS3Api(t *testing.T) {
 			t.Fatalf("Making temporary out directory: %v", err)
 		}
 		defer os.RemoveAll(outDir)
+		os.MkdirAll(outDir, os.ModePerm)
 
 		err = archiver.NewTar().Unarchive(tarPath, outDir)
 		if err != nil {
 			t.Fatalf("failed to untar: %s", err)
 		}
 
-		bts, err := ioutil.ReadFile(filepath.Join(outDir, "file.txt"))
+		bts, err := ioutil.ReadFile(filepath.Join(outDir, "subpath", "file.txt"))
 		if err != nil {
 
 			files, rErr := OSReadDir(outDir)
 			if err != nil {
-				t.Errorf("failed to read out dir: %s", rErr)
+				t.Errorf("failed to read out dir '%s', error: %s", outDir, rErr)
 			} else {
 				t.Fatalf("failed to read untarred file: %s, available file: %s", err, strings.Join(files, ", "))
 			}
