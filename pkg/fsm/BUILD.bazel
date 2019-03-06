@@ -33,6 +33,7 @@ go_library(
     importpath = "github.com/dotmesh-io/dotmesh/pkg/fsm",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/archiver:go_default_library",
         "//pkg/client:go_default_library",
         "//pkg/container:go_default_library",
         "//pkg/metrics:go_default_library",
@@ -58,11 +59,13 @@ go_library(
 go_test(
     name = "go_default_test",
     srcs = [
+        "fsm_active_file_io_test.go",
         "fsm_handoff_test.go",
         "fsm_metadata_test.go",
     ],
     embed = [":go_default_library"],
     deps = [
+        "//pkg/archiver:go_default_library",
         "//pkg/store:go_default_library",
         "//pkg/types:go_default_library",
     ],
