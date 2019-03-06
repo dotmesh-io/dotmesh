@@ -206,10 +206,35 @@ func TestS3Api(t *testing.T) {
 
 		bts, err := ioutil.ReadFile(filepath.Join(tempDir, "file.txt"))
 		if err != nil {
-			t.Fatalf("failed to read untarred file: %s", err)
+
+			files, rErr := OSReadDir(tempDir)
+			if err != nil {
+				t.Errorf("failed to read dir: %s", rErr)
+			} else {
+				t.Fatalf("failed to read untarred file: %s, available file: %s", err, strings.Join(files, ", "))
+			}
+
 		}
 		if !strings.Contains(string(bts), "helloworld1") {
 			t.Errorf("expected file contents 'helloworld1', got: '%s'", string(bts))
 		}
 	})
+}
+
+func OSReadDir(root string) ([]string, error) {
+	var files []string
+	f, err := os.Open(root)
+	if err != nil {
+		return files, err
+	}
+	fileInfo, err := f.Readdir(-1)
+	f.Close()
+	if err != nil {
+		return files, err
+	}
+
+	for _, file := range fileInfo {
+		files = append(files, file.Name())
+	}
+	return files, nil
 }
