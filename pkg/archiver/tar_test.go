@@ -144,4 +144,39 @@ func TestTar(t *testing.T) {
 			t.Fatalf("Folders are different! \n%s", string(output))
 		}
 	})
+
+	t.Run("Create tar stream of a single subpath and untar it to a new location using ArchiveToStream", func(t *testing.T) {
+
+		pathsToTarUp := []string{path.Join(inputDir, filePath2)}
+
+		testDir, err := ioutil.TempDir("", "outputFolderFromStream")
+		if err != nil {
+			t.Fatalf("Making temporary directory: %v", err)
+		}
+		defer os.RemoveAll(testDir)
+
+		tar := bytes.NewBuffer([]byte(""))
+		if err := NewTar().ArchiveToStream(tar, pathsToTarUp); err != nil {
+			t.Fatalf("Failed to create tar archive: %s", err)
+		}
+
+		payloadDir, err := ioutil.TempDir("", "payloadFolderStream")
+		if err != nil {
+			t.Fatalf("Making temporary directory: %v", err)
+		}
+		defer os.RemoveAll(payloadDir)
+		testFP := filepath.Join(payloadDir, "out")
+		err = ioutil.WriteFile(testFP, tar.Bytes(), os.ModePerm)
+		if err != nil {
+			t.Fatalf("Failed to write archived tar to file: %s", err)
+		}
+
+		if err := NewTar().Unarchive(testFP, testDir); err != nil {
+			t.Fatalf("Failed to untar archive: %s", err)
+		}
+
+		if output, err := exec.Command("diff", "-rq", path.Join(inputDir, filePath2), testDir).Output(); err != nil {
+			t.Fatalf("Folders are different! \n%s", string(output))
+		}
+	})
 }
