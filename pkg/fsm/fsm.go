@@ -559,9 +559,9 @@ func (f *FsMachine) updateEtcdAboutSnapshots() error {
 	defer f.deathObserver.Unsubscribe(f.filesystemId, deathChan)
 
 	select {
-	case _ = <-f.snapshotsModified:
+	case <-f.snapshotsModified:
 		log.Debugf("[updateEtcdAboutSnapshots] going 'round the loop")
-	case _ = <-deathChan:
+	case <-deathChan:
 		log.Infof("[updateEtcdAboutSnapshots] terminating due to filesystem death")
 	}
 

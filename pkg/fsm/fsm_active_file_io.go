@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/dotmesh-io/dotmesh/pkg/archiver"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/utils"
 
@@ -78,8 +80,22 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 }
 
 func (f *FsMachine) readFile(file *types.OutputFile) StateFn {
+
 	// create the default paths
 	sourcePath := fmt.Sprintf("%s/%s/%s", file.SnapshotMountPath, "__default__", file.Filename)
+
+	fi, err := os.Stat(sourcePath)
+	if err != nil {
+		file.Response <- &types.Event{
+			Name: types.EventNameReadFailed,
+			Args: &types.EventArgs{"err": fmt.Errorf("failed to stat %s, error: %s", file.Filename, err)},
+		}
+		return backoffState
+	}
+
+	if fi.IsDir() {
+		return f.readDirectory(file)
+	}
 
 	fileOnDisk, err := os.Open(sourcePath)
 	if err != nil {
@@ -113,4 +129,34 @@ func (f *FsMachine) readFile(file *types.OutputFile) StateFn {
 	}
 
 	return activeState
+}
+
+func (f *FsMachine) readDirectory(file *types.OutputFile) StateFn {
+
+	dirPath := filepath.Join(file.SnapshotMountPath, "__default__", file.Filename)
+
+	stat, err := os.Stat(dirPath)
+	if err != nil {
+		file.Response <- types.NewErrorEvent(types.EventNameReadFailed, fmt.Errorf("failed to stat dir '%s', error: %s ", file.Filename, err))
+		return backoffState
+	}
+
+	if !stat.IsDir() {
+		file.Response <- types.NewErrorEvent(types.EventNameReadFailed, fmt.Errorf("path '%s' is not a directory, error: %s ", file.Filename, err))
+		return backoffState
+	}
+
+	err = archiver.NewTar().ArchiveToStream(file.Contents, []string{dirPath})
+	if err != nil {
+		file.Response <- types.NewErrorEvent(types.EventNameReadFailed, fmt.Errorf("path '%s' tar failed, error: %s ", file.Filename, err))
+		return backoffState
+	}
+
+	file.Response <- &types.Event{
+		Name: types.EventNameReadSuccess,
+		Args: &types.EventArgs{},
+	}
+
+	return activeState
+
 }
