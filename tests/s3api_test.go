@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -171,12 +172,29 @@ func TestS3Api(t *testing.T) {
 
 		firstCommitId := commitIdsList[0]
 
-		t.Logf("running (first commit): '%s'", fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/subpath", host.Password, dotName, firstCommitId))
-		respFirstCommit := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/subpath", host.Password, dotName, firstCommitId))
+		// t.Logf("running (first commit): '%s'", fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/subpath", host.Password, dotName, firstCommitId))
+		// respFirstCommit := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/subpath", host.Password, dotName, firstCommitId))
+		s3Endpoint := fmt.Sprintf("http://%s:32607/s3/admin:%s/snapshot/%s/subpath", host.IP, dotName, firstCommitId)
+		req, _ := http.NewRequest("GET", s3Endpoint, nil)
 
+		req.SetBasicAuth("admin", host.Password)
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("failed to query S3 endpoint '%s', error: %s", s3Endpoint, err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 200 {
+			t.Errorf("expected status code: %d, got: %d", 200, resp.StatusCode)
+		}
+
+		respBody, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("failed to read response body: %s", err)
+		}
 		tarPath := filepath.Join(tempDir, "out.tar")
-
-		err = ioutil.WriteFile(tarPath, []byte(respFirstCommit), os.ModeDir)
+		err = ioutil.WriteFile(tarPath, []byte(respBody), os.ModeDir)
 		if err != nil {
 			t.Fatalf("failed to write file: %s", err)
 		}
