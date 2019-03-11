@@ -66,6 +66,14 @@ func NewDotmeshAPI(configPath string, verbose bool) (*DotmeshAPI, error) {
 	return d, nil
 }
 
+func NewDotmeshAPIFromClient(client *JsonRpcClient, verbose bool) *DotmeshAPI {
+	return &DotmeshAPI{
+		Configuration: nil,
+		Client:        client,
+		verbose:       verbose,
+	}
+}
+
 func (dm *DotmeshAPI) openClient() error {
 	if dm.Client == nil {
 		client, err := dm.Configuration.ClusterFromCurrentRemote(dm.verbose)
