@@ -241,3 +241,8 @@ const (
 	EventNameReadFailed  = "read-failed"
 	EventNameReadSuccess = "read-success"
 )
+
+type MountCommitRequest struct {
+	FilesystemId string
+	CommitId     string
+}

@@ -12,6 +12,7 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/container"
 	"github.com/dotmesh-io/dotmesh/pkg/registry"
 	"github.com/dotmesh-io/dotmesh/pkg/store"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/validator"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -909,7 +910,7 @@ func (d *DotmeshRPC) Commit(
 
 func (d *DotmeshRPC) MountCommit(
 	r *http.Request,
-	args *struct{ FilesystemId, CommitId string },
+	args *types.MountCommitRequest,
 	result *string,
 ) error {
 
