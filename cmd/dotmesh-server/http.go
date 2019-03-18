@@ -24,7 +24,7 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/metrics"
 	"github.com/dotmesh-io/dotmesh/pkg/utils"
 	"github.com/dotmesh-io/dotmesh/pkg/uuid"
-	"github.com/dotmesh-io/gateway/pkg/validators"
+	"github.com/dotmesh-io/dotmesh/pkg/validator"
 )
 
 const REQUEST_ID = "X-Request-Id"
@@ -247,7 +247,7 @@ func sanitizeURL(r *http.Request) string {
 		return "/s3/*"
 	}
 
-	path := validators.ReplaceUUID(r.URL.Path, "*")
+	path := validator.ReplaceUUID(r.URL.Path, "*")
 
 	return path
 }
