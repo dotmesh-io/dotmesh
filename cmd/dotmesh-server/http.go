@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"net"
 	"net/http"
@@ -23,6 +24,7 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/metrics"
 	"github.com/dotmesh-io/dotmesh/pkg/utils"
 	"github.com/dotmesh-io/dotmesh/pkg/uuid"
+	"github.com/dotmesh-io/dotmesh/pkg/validator"
 )
 
 const REQUEST_ID = "X-Request-Id"
@@ -229,12 +231,25 @@ func Instrument(state *InMemoryState) MetricsMiddleware {
 			defer func() {
 				duration := time.Since(startedAt)
 				statusCode := fmt.Sprintf("%v", irw.statusCode)
-				metrics.RequestDuration.WithLabelValues(r.URL.String(), r.Method, statusCode).Observe(duration.Seconds())
-				metrics.RequestCounter.WithLabelValues(r.URL.String(), r.Method, statusCode).Add(1)
+				path := sanitizeURL(r)
+				metrics.RequestDuration.WithLabelValues(path, r.Method, statusCode).Observe(duration.Seconds())
+				metrics.RequestCounter.WithLabelValues(path, r.Method, statusCode).Add(1)
 			}()
 			h.ServeHTTP(irw, r)
 		})
 	}
+}
+
+func sanitizeURL(r *http.Request) string {
+
+	if strings.HasPrefix(r.URL.Path, "/s3") {
+		// removing whole path
+		return "/s3/*"
+	}
+
+	path := validator.ReplaceUUID(r.URL.Path, "*")
+
+	return path
 }
 
 func rpcAfterFunc(reqInfo *rpc.RequestInfo) {

@@ -19,12 +19,13 @@ const (
 )
 
 var (
-	rxUUID      = regexp.MustCompile(UUID)
-	rxEmail     = regexp.MustCompile(Email)
-	rxNamespace = regexp.MustCompile(VolumeNamespacePattern)
-	rxName      = regexp.MustCompile(VolumeNamePattern)
-	rxBranch    = regexp.MustCompile(BranchPattern)
-	rxSubdot    = regexp.MustCompile(SubDotPattern)
+	rxUUID        = regexp.MustCompile(UUID)
+	rxUUIDPattern = regexp.MustCompile(UUIDPattern)
+	rxEmail       = regexp.MustCompile(Email)
+	rxNamespace   = regexp.MustCompile(VolumeNamespacePattern)
+	rxName        = regexp.MustCompile(VolumeNamePattern)
+	rxBranch      = regexp.MustCompile(BranchPattern)
+	rxSubdot      = regexp.MustCompile(SubDotPattern)
 )
 
 // errors
@@ -112,4 +113,9 @@ func IsValidSubdotName(str string) error {
 	}
 
 	return nil
+}
+
+// ReplaceUUID replace UUID in string
+func ReplaceUUID(str, replace string) string {
+	return rxUUIDPattern.ReplaceAllString(str, replace)
 }
