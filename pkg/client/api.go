@@ -47,6 +47,13 @@ type DotmeshVolume struct {
 	ServerStatuses map[string]string // serverId => status
 }
 
+type Dotmesh interface {
+	CallRemote(ctx context.Context, method string, args interface{}, response interface{}) error
+	ListCommits(activeVolumeName, activeBranch string) ([]Snapshot, error)
+	GetFsId(namespace, name, branch string) (string, error)
+	Get(fsId string) (DotmeshVolume, error)
+}
+
 func CheckName(name string) bool {
 	// TODO add more checks around sensible names?
 	return len(name) <= 50
