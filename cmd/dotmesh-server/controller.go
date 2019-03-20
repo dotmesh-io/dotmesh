@@ -438,8 +438,8 @@ func (s *InMemoryState) insertInitialAdminPassword() error {
 	return s.userManager.NewAdmin(&user.User{
 		Id:       ADMIN_USER_UUID,
 		Name:     "admin",
-		Password: adminPassword,
-		ApiKey:   string(adminKey),
+		Password: []byte(strings.TrimSpace(string(adminPassword))),
+		ApiKey:   strings.TrimSpace(string(adminKey)),
 	})
 }
 
