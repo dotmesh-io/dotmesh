@@ -593,11 +593,11 @@ func (dm *DotmeshAPI) CommitWithStruct(args types.CommitArgs) (string, error) {
 }
 
 func (dm *DotmeshAPI) ListCommits(activeVolumeName, activeBranch string) ([]types.Snapshot, error) {
-	var result []Snapshot
+	var result []types.Snapshot
 
 	activeNamespace, activeVolume, err := ParseNamespacedVolume(activeVolumeName)
 	if err != nil {
-		return []Snapshot{}, err
+		return []types.Snapshot{}, err
 	}
 
 	err = dm.CallRemote(
@@ -614,7 +614,7 @@ func (dm *DotmeshAPI) ListCommits(activeVolumeName, activeBranch string) ([]type
 		&result,
 	)
 	if err != nil {
-		return []Snapshot{}, err
+		return []types.Snapshot{}, err
 	}
 	return result, nil
 }
