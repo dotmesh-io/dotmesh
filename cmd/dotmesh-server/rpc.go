@@ -88,11 +88,7 @@ func ensureAdminUser(r *http.Request) error {
 }
 
 func (d *DotmeshRPC) Procure(
-	r *http.Request, args *struct {
-		Namespace string
-		Name      string
-		Subdot    string
-	}, result *string) error {
+	r *http.Request, args *types.ProcureArgs, result *string) error {
 	err := ensureAdminUser(r)
 
 	if err != nil {

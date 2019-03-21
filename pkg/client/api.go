@@ -41,7 +41,7 @@ type Dotmesh interface {
 	ListCommits(activeVolumeName, activeBranch string) ([]Snapshot, error)
 	GetFsId(namespace, name, branch string) (string, error)
 	Get(fsId string) (types.DotmeshVolume, error)
-	ProcureVolume(volumeName string) (string, error)
+	Procure(data types.ProcureArgs) (string, error)
 }
 
 func CheckName(name string) bool {
@@ -177,28 +177,24 @@ func (dm *DotmeshAPI) NewVolume(volumeName string) error {
 	return dm.setCurrentVolume(volumeName)
 }
 
-type ProcureVolumeName struct {
-	Namespace string
-	Name      string
-	Subdot    string
-}
-
 func (dm *DotmeshAPI) ProcureVolume(volumeName string) (string, error) {
 	var response string
 	namespace, name, err := ParseNamespacedVolume(volumeName)
 	if err != nil {
 		return "", err
 	}
-	sendVolumeName := ProcureVolumeName{
+	sendVolumeName := types.ProcureArgs{
 		Namespace: namespace,
 		Name:      name,
 		Subdot:    "__default__",
 	}
-	err = dm.CallRemote(context.Background(), "DotmeshRPC.Procure", sendVolumeName, &response)
-	if err != nil {
-		return "", err
-	}
-	return response, nil
+	return dm.Procure(sendVolumeName)
+}
+
+func (dm *DotmeshAPI) Procure(data types.ProcureArgs) (string, error) {
+	var response string
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.Procure", sendVolumeName, &response)
+	return response, err
 }
 
 func (dm *DotmeshAPI) setCurrentVolume(volumeName string) error {
