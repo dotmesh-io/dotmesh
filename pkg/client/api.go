@@ -42,6 +42,7 @@ type Dotmesh interface {
 	GetFsId(namespace, name, branch string) (string, error)
 	Get(fsId string) (types.DotmeshVolume, error)
 	Procure(data types.ProcureArgs) (string, error)
+	CommitWithStruct(args types.CommitArgs) (string, error)
 }
 
 func CheckName(name string) bool {
@@ -576,25 +577,25 @@ func (dm *DotmeshAPI) Commit(activeVolumeName, activeBranch, commitMessage strin
 	if err != nil {
 		return "", err
 	}
+	args := types.CommitArgs{
+		Namespace: activeNamespace,
+		Name:      activeVolume,
+		Branch:    deMasterify(activeBranch),
+		Message:   commitMessage,
+		Metadata:  metadata,
+	}
+	return dm.CommitWithStruct(args)
+}
 
-	err = dm.CallRemote(
+func (dm *DotmeshAPI) CommitWithStruct(args types.CommitArgs) (string, error) {
+	var result string
+	err := dm.CallRemote(
 		context.Background(),
 		"DotmeshRPC.Commit",
-		// TODO replace these map[string]string's with typed structs that are
-		// shared between the client and the server for cross-rpc type safety
-		&CommitArgs{
-			Namespace: activeNamespace,
-			Name:      activeVolume,
-			Branch:    deMasterify(activeBranch),
-			Message:   commitMessage,
-			Metadata:  metadata,
-		},
+		&args,
 		&result,
 	)
-	if err != nil {
-		return "", err
-	}
-	return result, nil
+	return result, err
 }
 
 type Metadata map[string]string
