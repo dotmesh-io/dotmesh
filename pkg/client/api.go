@@ -36,22 +36,11 @@ type DotmeshAPI struct {
 	verbose       bool
 }
 
-type DotmeshVolume struct {
-	Id             string
-	Name           VolumeName
-	Clone          string
-	Master         string
-	SizeBytes      int64
-	DirtyBytes     int64
-	CommitCount    int64
-	ServerStatuses map[string]string // serverId => status
-}
-
 type Dotmesh interface {
 	CallRemote(ctx context.Context, method string, args interface{}, response interface{}) error
 	ListCommits(activeVolumeName, activeBranch string) ([]Snapshot, error)
 	GetFsId(namespace, name, branch string) (string, error)
-	Get(fsId string) (DotmeshVolume, error)
+	Get(fsId string) (types.DotmeshVolume, error)
 }
 
 func CheckName(name string) bool {
