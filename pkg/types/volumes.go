@@ -37,3 +37,9 @@ func (v VolumeName) StringWithoutAdmin() string {
 		return fmt.Sprintf("%s/%s", v.Namespace, v.Name)
 	}
 }
+
+type ProcureArgs struct {
+	Namespace string
+	Name      string
+	Subdot    string
+}
