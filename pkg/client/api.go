@@ -38,7 +38,8 @@ type DotmeshAPI struct {
 
 type Dotmesh interface {
 	CallRemote(ctx context.Context, method string, args interface{}, response interface{}) error
-	ListCommits(activeVolumeName, activeBranch string) ([]Snapshot, error)
+	ListCommits(activeVolumeName, activeBranch string) ([]types.Snapshot, error)
+	CommitsById(dotID string) ([]types.Snapshot, error)
 	GetFsId(namespace, name, branch string) (string, error)
 	Get(fsId string) (types.DotmeshVolume, error)
 	Procure(data types.ProcureArgs) (string, error)
@@ -591,14 +592,7 @@ func (dm *DotmeshAPI) CommitWithStruct(args types.CommitArgs) (string, error) {
 	return result, err
 }
 
-type Metadata map[string]string
-type Snapshot struct {
-	// exported for json serialization
-	Id       string
-	Metadata *Metadata
-}
-
-func (dm *DotmeshAPI) ListCommits(activeVolumeName, activeBranch string) ([]Snapshot, error) {
+func (dm *DotmeshAPI) ListCommits(activeVolumeName, activeBranch string) ([]types.Snapshot, error) {
 	var result []Snapshot
 
 	activeNamespace, activeVolume, err := ParseNamespacedVolume(activeVolumeName)
@@ -623,6 +617,13 @@ func (dm *DotmeshAPI) ListCommits(activeVolumeName, activeBranch string) ([]Snap
 		return []Snapshot{}, err
 	}
 	return result, nil
+}
+
+func (dm *DotmeshAPI) CommitsById(dotID string) ([]types.Snapshot, error) {
+	var commits []types.Snapshot
+
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.CommitsById", dotID, &commits)
+	return commits, err
 }
 
 func (dm *DotmeshAPI) findCommit(ref, volumeName, branchName string) (string, error) {
