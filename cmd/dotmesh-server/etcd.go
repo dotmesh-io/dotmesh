@@ -9,11 +9,13 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/coreos/etcd/client"
 	"github.com/portworx/kvdb"
+	"github.com/portworx/kvdb/bolt"
 	"golang.org/x/net/context"
 
 	"github.com/dotmesh-io/dotmesh/pkg/store"
@@ -25,6 +27,31 @@ import (
 )
 
 func getKVDBCfg() *store.KVDBConfig {
+
+	if os.Getenv(types.EnvStorageBackend) == types.StorageBackendBoltdb {
+		// using boltdb backend
+		fp := types.DefaultBoltdbPath
+		if os.Getenv(types.EnvDotmeshBoltdbPath) != "" {
+			fp = os.Getenv(types.EnvDotmeshBoltdbPath)
+		}
+		err := os.MkdirAll(fp, os.ModePerm)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error": err,
+				"path":  fp,
+			}).Error("failed to ensure Boltdb KV store directory")
+			os.Exit(1)
+		}
+
+		return &store.KVDBConfig{
+			Type:   store.KVTypeBolt,
+			Prefix: types.EtcdPrefix,
+			Options: map[string]string{
+				bolt.KvSnap: filepath.Join(fp, "dotmesh.db"),
+			},
+		}
+	}
+
 	endpoint := os.Getenv(types.EnvEtcdEndpoint)
 	if endpoint == "" {
 		log.Infof("%s not set, using default Etcd URL: '%s'", types.EnvEtcdEndpoint, types.DefaultEtcdURL)
