@@ -41,6 +41,7 @@ type Dotmesh interface {
 	ListCommits(activeVolumeName, activeBranch string) ([]Snapshot, error)
 	GetFsId(namespace, name, branch string) (string, error)
 	Get(fsId string) (types.DotmeshVolume, error)
+	ProcureVolume(volumeName string) (string, error)
 }
 
 func CheckName(name string) bool {
