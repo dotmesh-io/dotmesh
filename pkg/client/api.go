@@ -179,7 +179,6 @@ func (dm *DotmeshAPI) NewVolume(volumeName string) error {
 }
 
 func (dm *DotmeshAPI) ProcureVolume(volumeName string) (string, error) {
-	var response string
 	namespace, name, err := ParseNamespacedVolume(volumeName)
 	if err != nil {
 		return "", err
@@ -194,7 +193,7 @@ func (dm *DotmeshAPI) ProcureVolume(volumeName string) (string, error) {
 
 func (dm *DotmeshAPI) Procure(data types.ProcureArgs) (string, error) {
 	var response string
-	err := dm.CallRemote(context.Background(), "DotmeshRPC.Procure", sendVolumeName, &response)
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.Procure", data, &response)
 	return response, err
 }
 
