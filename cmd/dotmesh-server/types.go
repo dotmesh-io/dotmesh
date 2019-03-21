@@ -75,7 +75,6 @@ type SafeConfig struct {
 type Snapshot = types.Snapshot
 type Clone = types.Clone
 type Filesystem = types.Filesystem
-type Metadata = types.Metadata
 
 type TransferUpdateKind int
 

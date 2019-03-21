@@ -212,7 +212,7 @@ func (z *zfs) DiscoverSystem(fs string) (*types.Filesystem, error) {
 	// what metadata is encoded in any snapshots' zfs properties?
 	// construct metadata where it exists
 	//filesystemMeta := metadata{} // TODO fs-specific metadata
-	snapshotMeta := map[string]types.Metadata{}
+	snapshotMeta := make(map[string]map[string]string)
 	output, err := exec.Command(
 		z.zfsPath, "get", "all", "-H", "-r", "-s", "local,received", z.FQ(fs),
 	).Output()
@@ -252,7 +252,7 @@ func (z *zfs) DiscoverSystem(fs string) (*types.Filesystem, error) {
 					id := strings.Split(fsSnapshot, "@")[1]
 					_, ok := snapshotMeta[id]
 					if !ok {
-						snapshotMeta[id] = types.Metadata{}
+						snapshotMeta[id] = make(map[string]string)
 					}
 					snapshotMeta[id][keyEncoded] = string(decoded)
 				} else {
@@ -278,7 +278,7 @@ func (z *zfs) DiscoverSystem(fs string) (*types.Filesystem, error) {
 		id := strings.Split(fsSnapshot, "@")[1]
 		meta, ok := snapshotMeta[id]
 		if !ok {
-			meta = make(types.Metadata)
+			meta = make(map[string]string)
 		}
 		snapshot := &types.Snapshot{Id: id, Metadata: meta}
 		snapshots = append(snapshots, snapshot)

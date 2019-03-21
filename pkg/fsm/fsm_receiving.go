@@ -185,7 +185,7 @@ func receivingState(f *FsMachine) StateFn {
 		if strings.Contains(stdErrString, "has been modified") {
 			response, _ := f.snapshot(&types.Event{
 				Name: "snapshot",
-				Args: &types.EventArgs{"metadata": types.Metadata{
+				Args: &types.EventArgs{"metadata": map[string]string{
 					"type":   "stashing",
 					"author": "system",
 					"message": fmt.Sprintf(
