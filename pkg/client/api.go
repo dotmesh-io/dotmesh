@@ -729,7 +729,7 @@ func (dm *DotmeshAPI) AllVolumesWithContainers() ([]DotmeshVolumeAndContainers, 
 	return result, nil
 }
 
-func (dm *DotmeshAPI) RelatedContainers(volumeName VolumeName, branch string) ([]Container, error) {
+func (dm *DotmeshAPI) RelatedContainers(volumeName types.VolumeName, branch string) ([]Container, error) {
 	result := []Container{}
 	err := dm.CallRemote(
 		context.Background(),
