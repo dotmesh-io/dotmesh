@@ -492,11 +492,7 @@ func (dm *DotmeshAPI) BranchInfo(namespace, name, branch string) (types.DotmeshV
 		return types.DotmeshVolume{}, err
 	}
 
-	var result types.DotmeshVolume
-	err = dm.CallRemote(
-		context.Background(), "DotmeshRPC.Get", fsId, &result,
-	)
-	return result, err
+	return dm.Get(fsId)
 }
 
 func (dm *DotmeshAPI) ForceBranchMaster(namespace, name, branch, newMaster string) error {
