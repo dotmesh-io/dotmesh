@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	gob.Register(&Metadata{})
+	gob.Register(map[string]string{})
 	gob.Register(&container.DockerContainer{})
 	gob.Register(&Event{})
 	gob.Register(&S3TransferRequest{})

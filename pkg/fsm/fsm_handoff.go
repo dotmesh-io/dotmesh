@@ -57,7 +57,7 @@ func handoffState(f *FsMachine) StateFn {
 	// take a snapshot and wait for it to arrive on the target
 	response, _ := f.snapshot(&types.Event{
 		Name: "snapshot",
-		Args: &types.EventArgs{"metadata": types.Metadata{
+		Args: &types.EventArgs{"metadata": map[string]string{
 			"type":   "migration",
 			"author": "system",
 			"message": fmt.Sprintf(

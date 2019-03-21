@@ -868,7 +868,7 @@ func (d *DotmeshRPC) Commit(
 
 	// NB: metadata keys must always start lowercase, because zfs
 	user, _, _ := r.BasicAuth()
-	meta := Metadata{"message": args.Message, "author": user}
+	meta := map[string]string{"message": args.Message, "author": user}
 
 	// check that user submitted metadata field names all start with lowercase
 	for name, value := range args.Metadata {
@@ -1685,7 +1685,7 @@ func (d *DotmeshRPC) Transfer(
 			if dirtyBytes > 0 {
 				if args.StashDivergence {
 					user, _, _ := r.BasicAuth()
-					meta := Metadata{"message": "committing dirty data ready for stashing", "author": user}
+					meta := map[string]string{"message": "committing dirty data ready for stashing", "author": user}
 					responseChan, err := d.state.globalFsRequest(
 						filesystemId,
 						&Event{Name: "snapshot",

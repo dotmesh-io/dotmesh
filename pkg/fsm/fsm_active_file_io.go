@@ -55,7 +55,7 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 		return backoffState
 	}
 	response, _ := f.snapshot(&types.Event{Name: "snapshot",
-		Args: &types.EventArgs{"metadata": types.Metadata{
+		Args: &types.EventArgs{"metadata": map[string]string{
 			"message":      "Uploaded " + file.Filename + " (" + formatBytes(bytes) + ")",
 			"author":       file.User,
 			"type":         "upload",

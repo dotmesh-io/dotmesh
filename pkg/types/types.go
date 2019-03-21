@@ -10,7 +10,7 @@ type CommitArgs struct {
 	Name      string
 	Branch    string
 	Message   string
-	Metadata  Metadata
+	Metadata  map[string]string
 }
 
 type CloneWithName struct {

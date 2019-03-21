@@ -119,7 +119,7 @@ func s3PushInitiatorState(f *FsMachine) StateFn {
 		// create a new commit with the type "dotmesh.metadata_only" so that we can ignore it when detecting new commits
 		response, _ := f.snapshot(&types.Event{
 			Name: "snapshot",
-			Args: &types.EventArgs{"metadata": types.Metadata{
+			Args: &types.EventArgs{"metadata": map[string]string{
 				"message": "adding s3 metadata",
 				"type":    "dotmesh.metadata_only",
 			},

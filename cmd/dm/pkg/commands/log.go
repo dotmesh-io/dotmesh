@@ -43,24 +43,24 @@ func NewCmdLog(out io.Writer) *cobra.Command {
 				}
 				for _, commit := range commits {
 					fmt.Fprintf(out, "commit %s\n", commit.Id)
-					fmt.Fprintf(out, "author: %s\n", (*commit.Metadata)["author"])
-					fmt.Fprintf(out, "date: %s\n", (*commit.Metadata)["timestamp"])
+					fmt.Fprintf(out, "author: %s\n", commit.Metadata["author"])
+					fmt.Fprintf(out, "date: %s\n", commit.Metadata["timestamp"])
 
 					sortedNames := []string{}
-					for name, _ := range *commit.Metadata {
+					for name, _ := range commit.Metadata {
 						sortedNames = append(sortedNames, name)
 					}
 					sort.Strings(sortedNames)
 
 					for _, name := range sortedNames {
-						value := (*commit.Metadata)[name]
+						value := commit.Metadata[name]
 						if name != "author" && name != "message" && name != "timestamp" {
 							fmt.Fprintf(out, "%s: %s\n", name, value)
 						}
 					}
 
 					fmt.Fprintf(out, "\n")
-					fmt.Fprintf(out, "    %s\n\n", (*commit.Metadata)["message"])
+					fmt.Fprintf(out, "    %s\n\n", commit.Metadata["message"])
 				}
 				return nil
 			}()
