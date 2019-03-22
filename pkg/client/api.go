@@ -44,6 +44,7 @@ type Dotmesh interface {
 	Get(fsId string) (types.DotmeshVolume, error)
 	Procure(data types.ProcureArgs) (string, error)
 	CommitWithStruct(args types.CommitArgs) (string, error)
+	NewVolumeFromStruct(name types.VolumeName) (bool, error)
 }
 
 func CheckName(name string) bool {
@@ -163,20 +164,26 @@ func (dm *DotmeshAPI) Get(FsID string) (types.DotmeshVolume, error) {
 }
 
 func (dm *DotmeshAPI) NewVolume(volumeName string) error {
-	var response bool
 	namespace, name, err := ParseNamespacedVolume(volumeName)
 	if err != nil {
 		return err
 	}
-	sendVolumeName := VolumeName{
+	sendVolumeName := types.VolumeName{
 		Namespace: namespace,
 		Name:      name,
 	}
-	err = dm.CallRemote(context.Background(), "DotmeshRPC.Create", sendVolumeName, &response)
-	if err != nil {
-		return err
-	}
+	_, err = dm.NewVolumeFromStruct(sendVolumeName)
+
 	return dm.setCurrentVolume(volumeName)
+}
+
+func (dm *DotmeshAPI) NewVolumeFromStruct(name types.VolumeName) (bool, error) {
+	var response bool
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.Create", name, &response)
+	if err != nil {
+		return false, err
+	}
+	return response, nil
 }
 
 func (dm *DotmeshAPI) ProcureVolume(volumeName string) (string, error) {
