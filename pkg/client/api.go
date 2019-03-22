@@ -49,6 +49,7 @@ type Dotmesh interface {
 	DeleteVolumeFromStruct(name types.VolumeName) (bool, error)
 	MountCommit(request types.MountCommitRequest) (string, error)
 	Rollback(request types.RollbackRequest) (bool, error)
+	Fork(request types.ForkRequest) (string, error)
 }
 
 func CheckName(name string) bool {
@@ -102,6 +103,12 @@ func (dm *DotmeshAPI) CallRemote(
 	} else {
 		return err
 	}
+}
+
+func (dm *DotmeshAPI) Fork(request types.ForkRequest) (string, error) {
+	var forkDotId string
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.Fork", request, &forkDotId)
+	return forkDotId, err
 }
 
 func (dm *DotmeshAPI) GetMasterBranchId(volume types.VolumeName) (string, error) {
