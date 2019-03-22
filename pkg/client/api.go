@@ -47,6 +47,7 @@ type Dotmesh interface {
 	NewVolumeFromStruct(name types.VolumeName) (bool, error)
 	GetMasterBranchId(volume types.VolumeName) (string, error)
 	DeleteVolumeFromStruct(name types.VolumeName) (bool, error)
+	MountCommit(request types.MountCommitRequest) (string, error)
 }
 
 func CheckName(name string) bool {
@@ -106,6 +107,15 @@ func (dm *DotmeshAPI) GetMasterBranchId(volume types.VolumeName) (string, error)
 	var masterBranchId string
 	err := dm.CallRemote(context.Background(), "DotmeshRPC.Exists", &volume, &masterBranchId)
 	return masterBranchId, err
+}
+
+func (dm *DotmeshAPI) MountCommit(request types.MountCommitRequest) (string, error) {
+	var mountpoint string
+	err := dotmesh.CallRemote(context.Background(), "DotmeshRPC.MountCommit", dmtypes.MountCommitRequest{
+		FilesystemId: dotID,
+		CommitId:     commitID,
+	}, &mountpoint)
+	return mountpoint, err
 }
 
 func (dm *DotmeshAPI) PingLocal() (bool, error) {
@@ -1185,26 +1195,10 @@ func (dm *DotmeshAPI) IsUserPriveledged() bool {
 	return false
 }
 
-// FIXME: Put this in a shared library, as it duplicates the copy in
-// dotmesh-server/pkg/main/utils.go (now with a few differences)
-
-type VolumeName struct {
-	Namespace string
-	Name      string
-}
-
 type S3VolumeName struct {
 	Namespace string
 	Name      string
 	Prefixes  []string
-}
-
-func (v VolumeName) String() string {
-	if v.Namespace == "admin" {
-		return v.Name
-	} else {
-		return fmt.Sprintf("%s/%s", v.Namespace, v.Name)
-	}
 }
 
 func ParseNamespacedVolumeWithDefault(name, defaultNamespace string) (string, string, error) {
