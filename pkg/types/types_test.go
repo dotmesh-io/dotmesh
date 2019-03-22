@@ -5,7 +5,7 @@ import "testing"
 func TestSnapshotCopy(t *testing.T) {
 	s := &Snapshot{
 		Id: "123",
-		Metadata: Metadata{
+		Metadata: map[string]string{
 			"foo": "bar",
 		},
 	}
