@@ -48,6 +48,7 @@ type Dotmesh interface {
 	GetMasterBranchId(volume types.VolumeName) (string, error)
 	DeleteVolumeFromStruct(name types.VolumeName) (bool, error)
 	MountCommit(request types.MountCommitRequest) (string, error)
+	Rollback(request types.RollbackRequest) (bool, error)
 }
 
 func CheckName(name string) bool {
@@ -344,6 +345,12 @@ func (dm *DotmeshAPI) CurrentVolume() (string, error) {
 	}
 
 	return cv, nil
+}
+
+func (dm *DotmeshAPI) Rollback(request types.RollbackRequest) (bool, error) {
+	var result bool
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.Rollback", request, &result)
+	return result, err
 }
 
 func (dm *DotmeshAPI) BranchExists(volumeName, branchName string) (bool, error) {
