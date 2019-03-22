@@ -45,6 +45,7 @@ type Dotmesh interface {
 	Procure(data types.ProcureArgs) (string, error)
 	CommitWithStruct(args types.CommitArgs) (string, error)
 	NewVolumeFromStruct(name types.VolumeName) (bool, error)
+	GetMasterBranchId(volume types.VolumeName) (string, error)
 }
 
 func CheckName(name string) bool {
@@ -98,6 +99,12 @@ func (dm *DotmeshAPI) CallRemote(
 	} else {
 		return err
 	}
+}
+
+func (dm *DotmeshAPI) GetMasterBranchId(volume types.VolumeName) (string, error) {
+	var masterBranchId string
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.Exists", &volume, &masterBranchId)
+	return masterBranchId, err
 }
 
 func (dm *DotmeshAPI) PingLocal() (bool, error) {
