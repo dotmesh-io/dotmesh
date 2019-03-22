@@ -87,8 +87,10 @@ func TestDefaultDot(t *testing.T) {
 		// This should fail if we didn't pick up a default dot when there's only one
 		st := citools.OutputFromRunOnNode(t, node1, "if dm commit -m 'Commit without selecting a dot first'; then false; else true; fi")
 
-		if !strings.Contains(st, "No current dot is selected") {
-			t.Error(fmt.Sprintf("We didn't get an error when a default dot couldn't be found: %+v", st))
+		expectedPhrase := "No current dot is selected"
+		if !strings.Contains(st, expectedPhrase) {
+			// t.Error(fmt.Sprintf("We didn't get an error when a default dot couldn't be found: %+v", st))
+			t.Errorf("expected to find '%s' in '%s' but didn't get it", expectedPhrase, st)
 		}
 
 		// Clean up
