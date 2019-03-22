@@ -43,3 +43,10 @@ type ProcureArgs struct {
 	Name      string
 	Subdot    string
 }
+
+type RollbackRequest struct {
+	Namespace  string
+	Name       string
+	Branch     string
+	SnapshotId string
+}
