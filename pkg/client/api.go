@@ -111,10 +111,7 @@ func (dm *DotmeshAPI) GetMasterBranchId(volume types.VolumeName) (string, error)
 
 func (dm *DotmeshAPI) MountCommit(request types.MountCommitRequest) (string, error) {
 	var mountpoint string
-	err := dotmesh.CallRemote(context.Background(), "DotmeshRPC.MountCommit", dmtypes.MountCommitRequest{
-		FilesystemId: dotID,
-		CommitId:     commitID,
-	}, &mountpoint)
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.MountCommit", request, &mountpoint)
 	return mountpoint, err
 }
 
@@ -372,7 +369,7 @@ func (dm *DotmeshAPI) Branches(volumeName string) ([]string, error) {
 
 	branches := []string{}
 	err = dm.CallRemote(
-		context.Background(), "DotmeshRPC.Branches", VolumeName{namespace, name}, &branches,
+		context.Background(), "DotmeshRPC.Branches", types.VolumeName{namespace, name}, &branches,
 	)
 	if err != nil {
 		return []string{}, err
@@ -490,7 +487,7 @@ func (dm *DotmeshAPI) AllBranches(volumeName string) ([]string, error) {
 
 	var branches []string
 	err = dm.CallRemote(
-		context.Background(), "DotmeshRPC.Branches", VolumeName{namespace, name}, &branches,
+		context.Background(), "DotmeshRPC.Branches", types.VolumeName{namespace, name}, &branches,
 	)
 	// the "main" filesystem (topLevelFilesystemId) is the master branch
 	// (DEFAULT_BRANCH)
