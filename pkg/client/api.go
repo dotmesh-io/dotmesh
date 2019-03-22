@@ -46,6 +46,7 @@ type Dotmesh interface {
 	CommitWithStruct(args types.CommitArgs) (string, error)
 	NewVolumeFromStruct(name types.VolumeName) (bool, error)
 	GetMasterBranchId(volume types.VolumeName) (string, error)
+	DeleteVolumeFromStruct(name types.VolumeName) (bool, error)
 }
 
 func CheckName(name string) bool {
@@ -395,16 +396,10 @@ func (dm *DotmeshAPI) DeleteVolume(volumeName string) error {
 		return err
 	}
 
-	err = retryUntilSucceeds(func() error {
-		var result bool
-		err = dm.CallRemote(
-			context.Background(), "DotmeshRPC.Delete", VolumeName{namespace, name}, &result,
-		)
-		if err != nil {
-			return err
-		}
-		return nil
-	}, 5, 1*time.Second)
+	_, err = dm.DeleteVolumeFromStruct(types.VolumeName{
+		Namespace: namespace,
+		Name:      name,
+	})
 	if err != nil {
 		return err
 	}
@@ -416,6 +411,20 @@ func (dm *DotmeshAPI) DeleteVolume(volumeName string) error {
 		}
 	}
 	return nil
+}
+
+func (dm *DotmeshAPI) DeleteVolumeFromStruct(name types.VolumeName) (bool, error) {
+	var result bool
+	err := retryUntilSucceeds(func() error {
+		err := dm.CallRemote(
+			context.Background(), "DotmeshRPC.Delete", name, &result,
+		)
+		if err != nil {
+			return err
+		}
+		return nil
+	}, 5, 1*time.Second)
+	return result, err
 }
 
 func retryUntilSucceeds(f func() error, retries int, delay time.Duration) error {
