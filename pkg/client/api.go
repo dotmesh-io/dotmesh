@@ -856,10 +856,10 @@ type PollTransferInternalResult struct {
 	err    error
 }
 
-func UpdateBar(result PollTransferInternalResult, started bool) bool {
+func UpdateBar(result TransferPollResult, err error, started bool) bool {
 	var bar *pb.ProgressBar
 	if !started {
-		bar = pb.New64(result.result.Size)
+		bar = pb.New64(result.Size)
 		bar.ShowFinalTime = false
 		bar.SetMaxWidth(80)
 		bar.SetUnits(pb.U_BYTES)
@@ -867,43 +867,43 @@ func UpdateBar(result PollTransferInternalResult, started bool) bool {
 		started = true
 	}
 
-	if result.result.Size != 0 {
-		bar.Total = result.result.Size
+	if result.Size != 0 {
+		bar.Total = result.Size
 	}
 
-	if result.result.Sent > result.result.Size {
-		bar.Set64(result.result.Size)
+	if result.Sent > result.Size {
+		bar.Set64(result.Size)
 	} else {
-		bar.Set64(result.result.Sent)
+		bar.Set64(result.Sent)
 	}
-	bar.Prefix(result.result.Status)
+	bar.Prefix(result.Status)
 	var speed string
-	if result.result.NanosecondsElapsed > 0 {
+	if result.NanosecondsElapsed > 0 {
 		speed = fmt.Sprintf(" %.2f MiB/s",
 			// mib/sec
-			(float64(result.result.Sent)/(1024*1024))/
-				(float64(result.result.NanosecondsElapsed)/(1000*1000*1000)),
+			(float64(result.Sent)/(1024*1024))/
+				(float64(result.NanosecondsElapsed)/(1000*1000*1000)),
 		)
 	} else {
 		speed = " ? MiB/s"
 	}
-	quotient := fmt.Sprintf(" (%d/%d)", result.result.Index, result.result.Total)
+	quotient := fmt.Sprintf(" (%d/%d)", result.Index, result.Total)
 	bar.Postfix(speed + quotient)
 
-	if result.result.Index == result.result.Total && result.result.Status == "finished" {
+	if result.Index == result.Total && result.Status == "finished" {
 		if started {
 			bar.FinishPrint("Done!")
 		}
 	}
-	if result.result.Status == "error" {
+	if result.Status == "error" {
 		if started {
-			bar.FinishPrint(fmt.Sprintf("error: %s", result.result.Message))
+			bar.FinishPrint(fmt.Sprintf("error: %s", result.Message))
 		}
 	}
 	return started
 }
 
-func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer, callback func(result PollTransferInternalResult, started bool) bool) error {
+func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer, callback func(result TransferPollResult, err error, started bool) bool) error {
 
 	out.Write([]byte("Calculating...\n"))
 
@@ -969,7 +969,7 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer, callback fu
 		// Numbers reported by data transferred thru dotmesh versus size
 		// of stream reported by 'zfs send -nP' are off by a few kilobytes,
 		// fudge it (maybe no one will notice).
-		started = callback(result, started)
+		started = callback(result.result, result.err, started)
 		if debugMode {
 			out.Write([]byte(fmt.Sprintf("DEBUG status %d / %d : %s\n", result.result.Index, result.result.Total, result.result.Status)))
 		}
