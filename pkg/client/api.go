@@ -52,6 +52,7 @@ type Dotmesh interface {
 	Fork(request types.ForkRequest) (string, error)
 	List() (map[string]map[string]types.DotmeshVolume, error)
 	GetVersion() (VersionInfo, error)
+	GetTransfer(transferId string) (TransferPollResult, error)
 }
 
 func CheckName(name string) bool {
@@ -839,6 +840,16 @@ func (transferPollResult TransferPollResult) String() string {
 	return toString
 }
 
+func (dm *DotmeshAPI) GetTransfer(transferId string) (TransferPollResult, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
+	defer cancel()
+	var result TransferPollResult
+	err := dm.CallRemote(
+		ctx, "DotmeshRPC.GetTransfer", transferId, &result,
+	)
+	return result, err
+}
+
 type pollTransferInternalResult struct {
 	result TransferPollResult
 	err    error
@@ -861,18 +872,13 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 
 		rpcResult := make(chan pollTransferInternalResult, 1)
 
-		ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
-		defer cancel()
-
 		go func() {
 			if debugMode {
 				out.Write([]byte(fmt.Sprintf("DEBUG Calling GetTransfer(%s)...\n", transferId)))
 			}
 
 			var result pollTransferInternalResult
-			result.err = dm.CallRemote(
-				ctx, "DotmeshRPC.GetTransfer", transferId, &(result.result),
-			)
+			result.result, result.err = dm.GetTransfer(transferId)
 			if debugMode {
 				out.Write([]byte(fmt.Sprintf(
 					"DEBUG done GetTransfer(%s), got err %#v and result %#v...\n",
