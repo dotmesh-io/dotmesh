@@ -864,7 +864,8 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 	started := false
 
 	debugMode := os.Getenv("DEBUG_MODE") != ""
-
+	ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
+	defer cancel()
 	for {
 		if debugMode {
 			out.Write([]byte("DEBUG About to sleep for 1s...\n"))
