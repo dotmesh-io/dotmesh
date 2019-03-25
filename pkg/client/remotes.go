@@ -29,6 +29,7 @@ import (
 	"io/ioutil"
 	"os"
 	"reflect"
+	"strings"
 	"sync"
 )
 
@@ -289,6 +290,12 @@ func (c *Configuration) SetCurrentVolume(volume string) error {
 			c.CurrentRemote,
 		)
 	}
+
+	// Canonicalise
+	if strings.HasPrefix(volume, "admin/") {
+		volume = strings.TrimPrefix(volume, "admin/")
+	}
+
 	(*c.DMRemotes[c.CurrentRemote]).CurrentVolume = volume
 	return c.save()
 }
