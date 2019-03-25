@@ -799,31 +799,31 @@ func (dm *DotmeshAPI) RelatedContainers(volumeName types.VolumeName, branch stri
 }
 
 type TransferPollResult struct {
-	TransferRequestId string
-	Direction         string // "push" or "pull"
+	TransferRequestId string `json:"transfer_request_id,omitempty"`
+	Direction         string `json:"direction,omitempty"` // "push" or "pull"
 
 	// Same across both clusters
-	FilesystemId string
+	FilesystemId string `json:"filesystem_id,omitempty"`
 
 	// TODO add clusterIds? probably comes from etcd. in fact, could be the
 	// discovery id (although that is only for bootstrap... hmmm).
-	InitiatorNodeId string
-	PeerNodeId      string
+	InitiatorNodeId string `json:"initiator_node_id,omitempty"`
+	PeerNodeId      string `json:"peer_node_id,omitempty"`
 
 	// XXX a Transfer that spans multiple filesystem ids won't have a unique
 	// starting/target snapshot, so this is in the wrong place right now.
 	// although maybe it makes sense to talk about a target *final* snapshot,
 	// with interim snapshots being an implementation detail.
-	StartingSnapshot string
-	TargetSnapshot   string
+	StartingSnapshot string `json:"starting_snapshot,omitempty"`
+	TargetSnapshot   string `json:"target_snapshot,omitempty"`
 
-	Index              int    // i.e. transfer 1/4 (Index=1)
-	Total              int    //                   (Total=4)
-	Status             string // one of "starting", "running", "finished", "error"
-	NanosecondsElapsed int64
-	Size               int64 // size of current segment in bytes
-	Sent               int64 // number of bytes of current segment sent so far
-	Message            string
+	Index              int    `json:"index,omitempty"`  // i.e. transfer 1/4 (Index=1)
+	Total              int    `json:"total,omitempty"`  //                   (Total=4)
+	Status             string `json:"status,omitempty"` // one of "starting", "running", "finished", "error"
+	NanosecondsElapsed int64  `json:"nanoseconds_elapsed,omitempty"`
+	Size               int64  `json:"size,omitempty"` // size of current segment in bytes
+	Sent               int64  `json:"sent,omitempty"` // number of bytes of current segment sent so far
+	Message            string `json:"message,omitempty"`
 }
 
 func (transferPollResult TransferPollResult) String() string {
