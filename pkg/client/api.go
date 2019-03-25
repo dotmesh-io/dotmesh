@@ -50,6 +50,7 @@ type Dotmesh interface {
 	MountCommit(request types.MountCommitRequest) (string, error)
 	Rollback(request types.RollbackRequest) (bool, error)
 	Fork(request types.ForkRequest) (string, error)
+	List() (map[string]map[string]types.DotmeshVolume, error)
 }
 
 func CheckName(name string) bool {
@@ -103,6 +104,14 @@ func (dm *DotmeshAPI) CallRemote(
 	} else {
 		return err
 	}
+}
+
+func (dm *DotmeshAPI) List() (map[string]map[string]types.DotmeshVolume, error) {
+	filesystems := make(map[string]map[string]types.DotmeshVolume)
+	err := dm.CallRemote(
+		context.Background(), "DotmeshRPC.List", nil, &filesystems,
+	)
+	return filesystems, err
 }
 
 func (dm *DotmeshAPI) Fork(request types.ForkRequest) (string, error) {
