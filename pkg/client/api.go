@@ -1163,7 +1163,7 @@ func (dm *DotmeshAPI) RequestTransfer(
 			fmt.Printf("[DEBUG] TransferRequest: %#v\n", transferRequest)
 		}
 
-		transferId, err := dm.Transfer(transferRequest)
+		transferId, err = dm.Transfer(transferRequest)
 		if err != nil {
 			return "", err
 		}
