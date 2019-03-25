@@ -99,7 +99,7 @@ func NewCmdS3(out io.Writer) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				err = dm.PollTransfer(transferId, out)
+				err = dm.PollTransfer(transferId, out, dm.UpdateBar)
 				if err != nil {
 					return err
 				}
