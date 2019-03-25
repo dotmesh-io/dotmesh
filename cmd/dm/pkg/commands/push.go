@@ -49,7 +49,7 @@ Online help: https://docs.dotmesh.com/references/cli/#push-dm-push-remote-remote
 				if err != nil {
 					return err
 				}
-				err = dm.PollTransfer(transferId, out)
+				err = dm.PollTransfer(transferId, out, client.UpdateBar)
 				if err != nil {
 					return err
 				}

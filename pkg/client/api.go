@@ -856,11 +856,57 @@ type pollTransferInternalResult struct {
 	err    error
 }
 
-func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
+func UpdateBar(result pollTransferInternalResult, started bool) bool {
+	var bar *pb.ProgressBar
+	if !started {
+		bar = pb.New64(result.result.Size)
+		bar.ShowFinalTime = false
+		bar.SetMaxWidth(80)
+		bar.SetUnits(pb.U_BYTES)
+		bar.Start()
+		started = true
+	}
+
+	if result.result.Size != 0 {
+		bar.Total = result.result.Size
+	}
+
+	if result.result.Sent > result.result.Size {
+		bar.Set64(result.result.Size)
+	} else {
+		bar.Set64(result.result.Sent)
+	}
+	bar.Prefix(result.result.Status)
+	var speed string
+	if result.result.NanosecondsElapsed > 0 {
+		speed = fmt.Sprintf(" %.2f MiB/s",
+			// mib/sec
+			(float64(result.result.Sent)/(1024*1024))/
+				(float64(result.result.NanosecondsElapsed)/(1000*1000*1000)),
+		)
+	} else {
+		speed = " ? MiB/s"
+	}
+	quotient := fmt.Sprintf(" (%d/%d)", result.result.Index, result.result.Total)
+	bar.Postfix(speed + quotient)
+
+	if result.result.Index == result.result.Total && result.result.Status == "finished" {
+		if started {
+			bar.FinishPrint("Done!")
+		}
+	}
+	if result.result.Status == "error" {
+		if started {
+			bar.FinishPrint(fmt.Sprintf("error: %s", result.result.Message))
+		}
+	}
+	return started
+}
+
+func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer, callback func(result pollTransferInternalResult, started bool) bool) error {
 
 	out.Write([]byte("Calculating...\n"))
 
-	var bar *pb.ProgressBar
 	started := false
 
 	debugMode := os.Getenv("DEBUG_MODE") != ""
@@ -920,48 +966,15 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 			}
 		}
 
-		if !started {
-			bar = pb.New64(result.result.Size)
-			bar.ShowFinalTime = false
-			bar.SetMaxWidth(80)
-			bar.SetUnits(pb.U_BYTES)
-			bar.Start()
-			started = true
-		}
-
-		if result.result.Size != 0 {
-			bar.Total = result.result.Size
-		}
 		// Numbers reported by data transferred thru dotmesh versus size
 		// of stream reported by 'zfs send -nP' are off by a few kilobytes,
 		// fudge it (maybe no one will notice).
-		if result.result.Sent > result.result.Size {
-			bar.Set64(result.result.Size)
-		} else {
-			bar.Set64(result.result.Sent)
-		}
-		bar.Prefix(result.result.Status)
-		var speed string
-		if result.result.NanosecondsElapsed > 0 {
-			speed = fmt.Sprintf(" %.2f MiB/s",
-				// mib/sec
-				(float64(result.result.Sent)/(1024*1024))/
-					(float64(result.result.NanosecondsElapsed)/(1000*1000*1000)),
-			)
-		} else {
-			speed = " ? MiB/s"
-		}
-		quotient := fmt.Sprintf(" (%d/%d)", result.result.Index, result.result.Total)
-		bar.Postfix(speed + quotient)
-
+		started = callback(result, started)
 		if debugMode {
 			out.Write([]byte(fmt.Sprintf("DEBUG status %d / %d : %s\n", result.result.Index, result.result.Total, result.result.Status)))
 		}
 
 		if result.result.Index == result.result.Total && result.result.Status == "finished" {
-			if started {
-				bar.FinishPrint("Done!")
-			}
 			// A terrible hack: many of the tests race the next 'dm log' or
 			// similar command against snapshots received by a push/pull/clone
 			// updating etcd which updates nodes' local caches of state. Give
@@ -975,9 +988,6 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 			return nil
 		}
 		if result.result.Status == "error" {
-			if started {
-				bar.FinishPrint(fmt.Sprintf("error: %s", result.result.Message))
-			}
 			out.Write([]byte(result.result.Message + "\n"))
 			// A similarly terrible hack. See comment above.
 			time.Sleep(time.Second)
