@@ -851,12 +851,12 @@ func (dm *DotmeshAPI) GetTransfer(transferId string) (TransferPollResult, error)
 	return result, err
 }
 
-type pollTransferInternalResult struct {
+type PollTransferInternalResult struct {
 	result TransferPollResult
 	err    error
 }
 
-func UpdateBar(result pollTransferInternalResult, started bool) bool {
+func UpdateBar(result PollTransferInternalResult, started bool) bool {
 	var bar *pb.ProgressBar
 	if !started {
 		bar = pb.New64(result.result.Size)
@@ -903,7 +903,7 @@ func UpdateBar(result pollTransferInternalResult, started bool) bool {
 	return started
 }
 
-func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer, callback func(result pollTransferInternalResult, started bool) bool) error {
+func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer, callback func(result PollTransferInternalResult, started bool) bool) error {
 
 	out.Write([]byte("Calculating...\n"))
 
@@ -918,14 +918,14 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer, callback fu
 		}
 		time.Sleep(time.Second)
 
-		rpcResult := make(chan pollTransferInternalResult, 1)
+		rpcResult := make(chan PollTransferInternalResult, 1)
 
 		go func() {
 			if debugMode {
 				out.Write([]byte(fmt.Sprintf("DEBUG Calling GetTransfer(%s)...\n", transferId)))
 			}
 
-			var result pollTransferInternalResult
+			var result PollTransferInternalResult
 			result.result, result.err = dm.GetTransfer(transferId)
 			if debugMode {
 				out.Write([]byte(fmt.Sprintf(
@@ -942,7 +942,7 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer, callback fu
 		if debugMode {
 			out.Write([]byte("DEBUG About to select...\n"))
 		}
-		var result pollTransferInternalResult
+		var result PollTransferInternalResult
 		select {
 		case <-ctx.Done():
 			out.Write([]byte(fmt.Sprintf("Got timeout error from API, trying again: %s\n", ctx.Err())))
