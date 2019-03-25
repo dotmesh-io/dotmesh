@@ -33,6 +33,7 @@ type DotmeshAPI struct {
 	Configuration *Configuration
 	configPath    string
 	Client        *JsonRpcClient
+	PB            *pb.ProgressBar
 	verbose       bool
 }
 
@@ -856,27 +857,26 @@ type PollTransferInternalResult struct {
 	err    error
 }
 
-func UpdateBar(result TransferPollResult, err error, started bool) bool {
-	var bar *pb.ProgressBar
+func (dm *DotmeshAPI) UpdateBar(result TransferPollResult, err error, started bool) bool {
 	if !started {
-		bar = pb.New64(result.Size)
-		bar.ShowFinalTime = false
-		bar.SetMaxWidth(80)
-		bar.SetUnits(pb.U_BYTES)
-		bar.Start()
+		dm.PB = pb.New64(result.Size)
+		dm.PB.ShowFinalTime = false
+		dm.PB.SetMaxWidth(80)
+		dm.PB.SetUnits(pb.U_BYTES)
+		dm.PB.Start()
 		started = true
 	}
 
 	if result.Size != 0 {
-		bar.Total = result.Size
+		dm.PB.Total = result.Size
 	}
 
 	if result.Sent > result.Size {
-		bar.Set64(result.Size)
+		dm.PB.Set64(result.Size)
 	} else {
-		bar.Set64(result.Sent)
+		dm.PB.Set64(result.Sent)
 	}
-	bar.Prefix(result.Status)
+	dm.PB.Prefix(result.Status)
 	var speed string
 	if result.NanosecondsElapsed > 0 {
 		speed = fmt.Sprintf(" %.2f MiB/s",
@@ -888,16 +888,16 @@ func UpdateBar(result TransferPollResult, err error, started bool) bool {
 		speed = " ? MiB/s"
 	}
 	quotient := fmt.Sprintf(" (%d/%d)", result.Index, result.Total)
-	bar.Postfix(speed + quotient)
+	dm.PB.Postfix(speed + quotient)
 
 	if result.Index == result.Total && result.Status == "finished" {
 		if started {
-			bar.FinishPrint("Done!")
+			dm.PB.FinishPrint("Done!")
 		}
 	}
 	if result.Status == "error" {
 		if started {
-			bar.FinishPrint(fmt.Sprintf("error: %s", result.Message))
+			dm.PB.FinishPrint(fmt.Sprintf("error: %s", result.Message))
 		}
 	}
 	return started

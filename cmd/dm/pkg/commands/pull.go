@@ -54,7 +54,7 @@ Online help: https://docs.dotmesh.com/references/cli/#pull-dm-pull-remote-dot-br
 				if err != nil {
 					return err
 				}
-				err = dm.PollTransfer(transferId, out, client.UpdateBar)
+				err = dm.PollTransfer(transferId, out, dm.UpdateBar)
 				if err != nil {
 					return err
 				}
