@@ -429,6 +429,7 @@ func TestSingleNode(t *testing.T) {
 		resp := citools.OutputFromRunOnNode(t, node1, "if dm init "+fsname+"; then false; else true; fi ")
 
 		if !strings.Contains(resp, "Injected fault") {
+			t.Logf("resp: %s", resp)
 			t.Error("Couldn't inject fault into CreateFilesystem")
 		}
 
