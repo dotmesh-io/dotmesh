@@ -711,7 +711,7 @@ func (s *InMemoryState) CreateFilesystem(ctx context.Context, filesystemName *Vo
 			return nil, nil, fmt.Errorf("A volume called %s already exists with id %s", filesystemName, filesystemId)
 		}
 	}
-
+	fmt.Printf("%t", s.debugPartialFailCreateFilesystem)
 	if s.debugPartialFailCreateFilesystem {
 		return nil, nil, fmt.Errorf("Injected fault for debugging/testing purposes")
 	}
