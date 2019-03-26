@@ -181,7 +181,9 @@ func (dm *DotmeshAPI) NewVolume(volumeName string) error {
 		Name:      name,
 	}
 	_, err = dm.NewVolumeFromStruct(sendVolumeName)
-
+	if err != nil {
+		return err
+	}
 	return dm.setCurrentVolume(volumeName)
 }
 
