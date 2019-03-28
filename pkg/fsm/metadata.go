@@ -30,11 +30,12 @@ func encodeMetadata(meta types.Metadata) ([]string, error) {
 		}
 
 		encoded := base64.StdEncoding.EncodeToString([]byte(v))
-		if len(encoded) > 1024 {
-			return []string{}, fmt.Errorf("Encoded metadata value size exceeds 1024 bytes")
-		}
 		if v == "" {
 			encoded = "."
+		}
+
+		if len(encoded) > 1024 {
+			return []string{}, fmt.Errorf("Encoded metadata value size exceeds 1024 bytes")
 		}
 		metadataEncoded = append(
 			metadataEncoded, "-o",
@@ -42,4 +43,16 @@ func encodeMetadata(meta types.Metadata) ([]string, error) {
 		)
 	}
 	return metadataEncoded, nil
+}
+
+func encodeMapValues(meta map[string]string) map[string]string {
+	result := make(map[string]string)
+	for k, v := range meta {
+		encoded := base64.StdEncoding.EncodeToString([]byte(v))
+		if v == "" {
+			encoded = "."
+		}
+		result[k] = encoded
+	}
+	return result
 }

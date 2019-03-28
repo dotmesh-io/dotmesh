@@ -695,6 +695,24 @@ func (f *FsMachine) fork(e *types.Event) (responseEvent *types.Event, nextState 
 	return &types.Event{Name: "forked", Args: &types.EventArgs{"ForkId": forkId}}, activeState
 }
 
+func (f *FsMachine) writeMetadata(meta map[string]string, filesystemId, snapshotId string) error {
+	pathToFs := f.zfs.FQ(f.filesystemId)
+	data, err := json.Marshal(meta)
+	if err != nil {
+		return err
+	}
+	metaFile := fmt.Sprintf("%s/dotmesh.metadata/%s.json", pathToFs, snapshotId)
+	out, err := os.Create(metaFile)
+	if err != nil {
+		return err
+	}
+	err := ioutil.WriteFile(metaFile, data)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextState StateFn) {
 	var err error
 	var meta types.Metadata
@@ -712,7 +730,7 @@ func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextSt
 		meta = types.Metadata{}
 	}
 	meta["timestamp"] = fmt.Sprintf("%d", time.Now().UnixNano())
-	metadataEncoded, err := encodeMetadata(meta)
+	metadataEncoded, err := encodeMapValues(meta)
 	if err != nil {
 		return &types.Event{
 			Name: "failed-metadata-encode", Args: &types.EventArgs{"err": fmt.Sprintf("%v", err)},
@@ -725,7 +743,13 @@ func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextSt
 	} else {
 		snapshotId = snapshotIdInter.(string)
 	}
-	output, err := f.zfs.Snapshot(f.filesystemId, snapshotId, metadataEncoded)
+	err := f.WriteMetadata(metadataEncoded, f.filesystemId, snapshotId)
+	if err != nil {
+		return &types.Event{
+			Name: "failed-writing-metadata", Args: &types.EventArgs{"err": err.Error()},
+		}, backoffState
+	}
+	output, err := f.zfs.Snapshot(f.filesystemId, snapshotId)
 	if err != nil {
 		return &types.Event{
 			Name: "failed-snapshot",
