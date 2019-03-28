@@ -1027,9 +1027,9 @@ func TestSingleNode(t *testing.T) {
 		citools.RunOnNode(t, node1, "dm init "+fsname)
 		citools.RunOnNode(t, node1, "dm switch "+fsname)
 
-		value := make([]bytes, 2000)
+		value := make([]byte, 2000)
 		for i := 0; i < 2000; i++ {
-			bytes[i] = byte(65 + rand.Intn(25)) //A=65 and Z = 65+25
+			value[i] = byte(65 + rand.Intn(25)) //A=65 and Z = 65+25
 		}
 		// successfully commit with a metadata field longer than 1024 bytes
 		st := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("dm commit -m \"commit message\" --metadata test=%s", string(value)))
