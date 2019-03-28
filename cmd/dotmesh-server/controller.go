@@ -272,11 +272,7 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 		// snapshots, ok := s.globalSnapshotCache[master][fs]
 		// var commitCount int64
 		// if ok {
-		snaps := fsm.GetSnapshots(master)
-		if err != nil {
-			return DotmeshVolume{}, err
-		}
-		commitCount := int64(len(snaps))
+		commitCount := int64(len(fsm.GetSnapshots(master)))
 		// }
 		// s.globalSnapshotCacheLock.RUnlock()
 
