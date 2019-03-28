@@ -69,7 +69,7 @@ type FSM interface {
 	GetMetadata(nodeID string) map[string]string
 	ListMetadata() map[string]map[string]string
 	SetMetadata(nodeID string, meta map[string]string)
-	GetSnapshots(nodeID string) ([]*types.Snapshot, error)
+	GetSnapshots(nodeID string) []*types.Snapshot
 	ListSnapshots() map[string][]*types.Snapshot
 	SetSnapshots(nodeID string, snapshots []*types.Snapshot)
 
@@ -712,12 +712,7 @@ func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextSt
 		meta = map[string]string{}
 	}
 	meta["timestamp"] = fmt.Sprintf("%d", time.Now().UnixNano())
-	metadataEncoded, err := encodeMapValues(meta)
-	if err != nil {
-		return &types.Event{
-			Name: "failed-metadata-encode", Args: &types.EventArgs{"err": fmt.Sprintf("%v", err)},
-		}, backoffState
-	}
+	metadataEncoded := encodeMapValues(meta)
 	var snapshotId string
 	snapshotIdInter, ok := (*e.Args)["snapshotId"]
 	if !ok {
@@ -725,7 +720,7 @@ func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextSt
 	} else {
 		snapshotId = snapshotIdInter.(string)
 	}
-	err := f.WriteMetadata(metadataEncoded, f.filesystemId, snapshotId)
+	err = f.writeMetadata(metadataEncoded, f.filesystemId, snapshotId)
 	if err != nil {
 		return &types.Event{
 			Name: "failed-writing-metadata", Args: &types.EventArgs{"err": err.Error()},

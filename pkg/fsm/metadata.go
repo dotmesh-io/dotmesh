@@ -2,10 +2,12 @@ package fsm
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
-	"regexp"
-
 	"github.com/dotmesh-io/dotmesh/pkg/types"
+	"io/ioutil"
+	"os"
+	"regexp"
 )
 
 const keyRegex = "[a-z]+[a-z0-9-]*"
@@ -65,11 +67,11 @@ func (f *FsMachine) writeMetadata(meta map[string]string, filesystemId, snapshot
 		return err
 	}
 	metaFile := fmt.Sprintf("%s/dotmesh.metadata/%s.json", pathToFs, snapshotId)
-	out, err := os.Create(metaFile)
+	_, err = os.Create(metaFile)
 	if err != nil {
 		return err
 	}
-	err := ioutil.WriteFile(metaFile, data)
+	err = ioutil.WriteFile(metaFile, data, 0666)
 	if err != nil {
 		return err
 	}
@@ -80,11 +82,7 @@ func (f *FsMachine) getMetadata(commit types.Snapshot) (map[string]string, error
 	pathToFs := f.zfs.FQ(f.filesystemId)
 	result := f.Mount()
 	if result.Name != "mounted" {
-		err, ok := result.Args["err"]
-		if !ok {
-			return nil, fmt.Errorf("Failed mounting filesystem, event - %#v", result)
-		}
-		return nil, err
+		return nil, fmt.Errorf("Failed mounting filesystem, event - %#v", result)
 	}
 	metaFile := fmt.Sprintf("%s/dotmesh.metadata/%s.json", pathToFs, commit.Id)
 	data, err := ioutil.ReadFile(metaFile)
@@ -95,7 +93,7 @@ func (f *FsMachine) getMetadata(commit types.Snapshot) (map[string]string, error
 		return commit.Metadata, nil
 	}
 	var overrides map[string]string
-	err := json.Unmarshal(data, &overrides)
+	err = json.Unmarshal(data, &overrides)
 	if err != nil {
 		return nil, err
 	}
