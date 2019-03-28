@@ -8,7 +8,7 @@ variables:
     PROVISIONER_NAME: dotmesh-dynamic-provisioner
 
     CI_REGISTRY: registry.gitlab.dotmesh.com
-    CI_REPOSITORY: dotmesh/dotmesh-sync
+    CI_REPOSITORY: dotmesh/dotmesh-sync-2
     RELEASE_DOCKER_REGISTRY: quay.io
     RELEASE_DOCKER_REPOSITORY: dotmesh
 
