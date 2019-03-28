@@ -118,7 +118,11 @@ func Pipe(
 	log.Printf("[PIPE] reader %s => writer %s, COMPRESSMODE=%s", rDesc, wDesc, compressMode)
 
 	if compressMode == "compress" {
-		writer = gzip.NewWriter(w)
+		writer, err = gzip.NewWriterLevel(w, gzip.NoCompression)
+		if err != nil {
+			handleErr(fmt.Sprintf("Unable to create gzip writer: %s", err), r, w, r, w)
+			return
+		}
 		reader = r
 	} else if compressMode == "decompress" {
 		reader, err = gzip.NewReader(r)
