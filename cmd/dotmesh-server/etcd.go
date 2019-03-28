@@ -531,7 +531,10 @@ func (s *InMemoryState) UpdateSnapshotsFromKnownState(server, filesystem string,
 		return fmt.Errorf("[UpdateSnapshotsFromKnownState] Error initialising filesystem machine: %s", err)
 	}
 
-	oldSnapshots := fsm.GetSnapshots(server)
+	oldSnapshots, err := fsm.GetSnapshots(server)
+	if err != nil {
+		return err
+	}
 
 	fsm.SetSnapshots(server, snapshots)
 

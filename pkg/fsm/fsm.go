@@ -69,7 +69,7 @@ type FSM interface {
 	GetMetadata(nodeID string) map[string]string
 	ListMetadata() map[string]map[string]string
 	SetMetadata(nodeID string, meta map[string]string)
-	GetSnapshots(nodeID string) []*types.Snapshot
+	GetSnapshots(nodeID string) ([]*types.Snapshot, error)
 	ListSnapshots() map[string][]*types.Snapshot
 	SetSnapshots(nodeID string, snapshots []*types.Snapshot)
 
@@ -693,24 +693,6 @@ func (f *FsMachine) fork(e *types.Event) (responseEvent *types.Event, nextState 
 	}
 
 	return &types.Event{Name: "forked", Args: &types.EventArgs{"ForkId": forkId}}, activeState
-}
-
-func (f *FsMachine) writeMetadata(meta map[string]string, filesystemId, snapshotId string) error {
-	pathToFs := f.zfs.FQ(f.filesystemId)
-	data, err := json.Marshal(meta)
-	if err != nil {
-		return err
-	}
-	metaFile := fmt.Sprintf("%s/dotmesh.metadata/%s.json", pathToFs, snapshotId)
-	out, err := os.Create(metaFile)
-	if err != nil {
-		return err
-	}
-	err := ioutil.WriteFile(metaFile, data)
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextState StateFn) {
