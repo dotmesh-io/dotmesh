@@ -272,7 +272,7 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 		// snapshots, ok := s.globalSnapshotCache[master][fs]
 		// var commitCount int64
 		// if ok {
-		snaps, err := fsm.GetSnapshots(master)
+		snaps := fsm.GetSnapshots(master)
 		if err != nil {
 			return DotmeshVolume{}, err
 		}
@@ -306,11 +306,7 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 		if ok {
 
 			for _, server := range servers {
-				snaps, err := fsm.GetSnapshots(server.Id)
-				if err != nil {
-					return DotmeshVolume{}, err
-				}
-				numSnapshots := len(snaps)
+				numSnapshots := len(fsm.GetSnapshots(server.Id))
 				state := fsm.GetMetadata(server.Id)
 				status := ""
 				if len(state) == 0 {
