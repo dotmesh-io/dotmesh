@@ -40,21 +40,26 @@ func (f *FsMachine) SetMetadata(nodeID string, meta map[string]string) {
 	f.stateMachineMetadataMu.Unlock()
 }
 
-func (f *FsMachine) GetSnapshots(nodeID string) []*types.Snapshot {
+func (f *FsMachine) GetSnapshots(nodeID string) ([]*types.Snapshot, error) {
 	res := []*types.Snapshot{}
 	f.snapshotCacheMu.RLock()
 	defer f.snapshotCacheMu.RUnlock()
 
 	snaps, ok := f.snapshotCache[nodeID]
 	if !ok {
-		return res
+		return res, nil
 	}
 
 	for _, s := range snaps {
 		res = append(res, s.DeepCopy())
+		metadata, err := f.getMetadata(s)
+		if err != nil {
+			return nil, err
+		}
+		s.Metadata = metadata
 	}
 
-	return res
+	return res, nil
 }
 
 func (f *FsMachine) ListSnapshots() map[string][]*types.Snapshot {
