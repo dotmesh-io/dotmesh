@@ -42,6 +42,9 @@ before_script:
     - mkdir -p src/github.com/dotmesh-io
     - ln -s `realpath ..` ./src/github.com/dotmesh-io/dotmesh
     - cd src/github.com/dotmesh-io/dotmesh
+    # ensure master and the given branch are up-to-date so that versioner works reliably
+    - git checkout master && git pull --ff-only origin master
+    - git checkout $CI_COMMIT_REF_NAME && git reset --hard $CI_COMMIT_SHA
     - while [ -f /dotmesh-test-cleanup.lock ]; do echo "waiting for test cleanup..."; sleep 1; done
 
 build_client_linux:
