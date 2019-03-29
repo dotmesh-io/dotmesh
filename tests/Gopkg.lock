@@ -3,20 +3,168 @@
 
 [[projects]]
   branch = "master"
-  name = "github.com/dotmesh-io/citools"
+  digest = "1:6da51e5ec493ad2b44cb04129e2d0a068c8fb9bd6cb5739d199573558696bb94"
+  name = "github.com/Azure/go-ansiterm"
+  packages = [
+    ".",
+    "winterm",
+  ]
+  pruneopts = "UT"
+  revision = "d6e3b3328b783f23731bc4d058875b0371ff8109"
+
+[[projects]]
+  digest = "1:f9ae348e1f793dcf9ed930ed47136a67343dbd6809c5c91391322267f4476892"
+  name = "github.com/Microsoft/go-winio"
   packages = ["."]
-  revision = "57c079a1f87160fc54804695094d01fa0138e6b9"
+  pruneopts = "UT"
+  revision = "1a8911d1ed007260465c3bfbbc785ac6915a0bb8"
+  version = "v0.4.12"
 
 [[projects]]
   branch = "master"
+  digest = "1:e48c63e818c67fbf3d7afe20bba33134ab1a5bf384847385384fd027652a5a96"
+  name = "github.com/containerd/continuity"
+  packages = ["pathdriver"]
+  pruneopts = "UT"
+  revision = "004b46473808b3e7a4a3049c20e4376c91eb966d"
+
+[[projects]]
+  digest = "1:699aca47d5af672db37b96102bb088edbf26f84f73d3dafff6fa917026eb6971"
+  name = "github.com/docker/distribution"
+  packages = ["registry/api/errcode"]
+  pruneopts = "UT"
+  revision = "2461543d988979529609e8cb6fca9ca190dc48da"
+  version = "v2.7.1"
+
+[[projects]]
+  branch = "master"
+  digest = "1:0e601e89a966e0248ada99312ad7ed319f6ddce38177ffa2d7578b48bd7e5520"
+  name = "github.com/docker/docker"
+  packages = [
+    "api/types/blkiodev",
+    "api/types/container",
+    "api/types/filters",
+    "api/types/mount",
+    "api/types/network",
+    "api/types/registry",
+    "api/types/strslice",
+    "api/types/swarm",
+    "api/types/swarm/runtime",
+    "api/types/versions",
+    "errdefs",
+    "pkg/fileutils",
+    "pkg/homedir",
+    "pkg/idtools",
+    "pkg/ioutils",
+    "pkg/longpath",
+    "pkg/mount",
+    "pkg/pools",
+    "pkg/stdcopy",
+    "pkg/system",
+  ]
+  pruneopts = "UT"
+  revision = "3f08ab936f0894842daf088b2ebdec0d0bb83cb3"
+
+[[projects]]
+  digest = "1:ade935c55cd6d0367c843b109b09c9d748b1982952031414740750fdf94747eb"
+  name = "github.com/docker/go-connections"
+  packages = ["nat"]
+  pruneopts = "UT"
+  revision = "7395e3f8aa162843a74ed6d48e79627d9792ac55"
+  version = "v0.4.0"
+
+[[projects]]
+  digest = "1:6f82cacd0af5921e99bf3f46748705239b36489464f4529a1589bc895764fb18"
+  name = "github.com/docker/go-units"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "47565b4f722fb6ceae66b95f853feed578a4a51c"
+  version = "v0.3.3"
+
+[[projects]]
+  branch = "master"
+  digest = "1:39efe92ae1c32af6583872f770dfa5bd436440f1e4125a77487485e18d37bcb9"
+  name = "github.com/dotmesh-io/citools"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "4a134bf7b448afdadb6312dada2cde8b2e25f773"
+
+[[projects]]
+  branch = "master"
+  digest = "1:20619a30ec860313e44a6cfce469ccf20b5853e6bb0710db0b6d049df6e93033"
+  name = "github.com/dotmesh-io/dotmesh"
+  packages = [
+    "pkg/archiver",
+    "pkg/container",
+    "pkg/types",
+  ]
+  pruneopts = "UT"
+  revision = "dd11938435396ffd66d8ab2a03fcc64e29097761"
+
+[[projects]]
+  digest = "1:ed9147c7efe8c4604ba6d6148e22b10ca79e0923ef2e13b765dd39e299be1003"
+  name = "github.com/fsouza/go-dockerclient"
+  packages = [
+    ".",
+    "internal/archive",
+    "internal/jsonmessage",
+    "internal/term",
+  ]
+  pruneopts = "UT"
+  revision = "a8d735713a2b2b9101595fdf53fdb03cb51681b6"
+  version = "v1.3.6"
+
+[[projects]]
+  digest = "1:48092bf6632f55839850666c33469f546f6d45fdbd59a66759ec12e84d853dc2"
+  name = "github.com/gogo/protobuf"
+  packages = ["proto"]
+  pruneopts = "UT"
+  revision = "ba06b47c162d49f2af050fb4c75bcbc86a159d5c"
+  version = "v1.2.1"
+
+[[projects]]
+  digest = "1:239c4c7fd2159585454003d9be7207167970194216193a8a210b8d29576f19c9"
+  name = "github.com/golang/protobuf"
+  packages = [
+    "proto",
+    "ptypes",
+    "ptypes/any",
+    "ptypes/duration",
+    "ptypes/timestamp",
+  ]
+  pruneopts = "UT"
+  revision = "b5d812f8a3706043e23a9cd5babf2e5423744d30"
+  version = "v1.3.1"
+
+[[projects]]
+  branch = "master"
+  digest = "1:d852b4492a51021f9c1188260cd9ab4970a84ed29bf8c73208201b1d57ef0e66"
   name = "github.com/gorilla/rpc"
   packages = [
     "v2",
-    "v2/json2"
+    "v2/json2",
   ]
+  pruneopts = "UT"
   revision = "5c1378103183095acc1b9289ac1475e3bc1e818e"
 
 [[projects]]
+  branch = "master"
+  digest = "1:33f920ba428942560c22c0e145127dc09a52c52d64eac284daea6b0926fab0d1"
+  name = "github.com/ijc/Gotty"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "a8b993ba6abdb0e0c12b0125c603323a71c7790c"
+
+[[projects]]
+  digest = "1:31e761d97c76151dde79e9d28964a812c46efc5baee4085b86f68f0c654450de"
+  name = "github.com/konsorten/go-windows-terminal-sequences"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "f55edac94c9bbba5d6182a4be46d86a2c9b5b50e"
+  version = "v1.0.2"
+
+[[projects]]
+  digest = "1:5a9b598c4d455e05063c3ab45a85dafc3857a2b7154ea013809c017e3b600650"
   name = "github.com/nats-io/gnatsd"
   packages = [
     "conf",
@@ -24,39 +172,90 @@
     "server",
     "server/pse",
     "test",
-    "util"
+    "util",
   ]
+  pruneopts = "UT"
   revision = "eed4fbc1458ce110ad1aa1adf904229bc8fda2a7"
   version = "v1.3.0"
 
 [[projects]]
+  digest = "1:4ce94f3d2074662c04677db471456feb56078244ebcfe3789e6e95901c085bc5"
   name = "github.com/nats-io/go-nats"
   packages = [
     ".",
     "encoders/builtin",
-    "util"
+    "util",
   ]
+  pruneopts = "UT"
   revision = "fb0396ee0bdb8018b0fef30d6d1de798ce99cd05"
   version = "v1.6.0"
 
 [[projects]]
+  digest = "1:c3cd663f2f30b92536b9f290ac85c6310dae36a14cb8961553ae9ccf0d85ae41"
   name = "github.com/nats-io/nuid"
   packages = ["."]
+  pruneopts = "UT"
   revision = "289cccf02c178dc782430d534e3c1f5b72af807f"
   version = "v1.0.0"
 
 [[projects]]
+  digest = "1:ee4d4af67d93cc7644157882329023ce9a7bcfce956a079069a9405521c7cc8d"
+  name = "github.com/opencontainers/go-digest"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "279bed98673dd5bef374d3b6e4b09e2af76183bf"
+  version = "v1.0.0-rc1"
+
+[[projects]]
+  digest = "1:11db38d694c130c800d0aefb502fb02519e514dc53d9804ce51d1ad25ec27db6"
+  name = "github.com/opencontainers/image-spec"
+  packages = [
+    "specs-go",
+    "specs-go/v1",
+  ]
+  pruneopts = "UT"
+  revision = "d60099175f88c47cd379c4738d158884749ed235"
+  version = "v1.0.1"
+
+[[projects]]
+  digest = "1:38ee335aedf4626620f3cf8f605661e71abdcce7b40b38921962beb3980f0a20"
+  name = "github.com/opencontainers/runc"
+  packages = ["libcontainer/user"]
+  pruneopts = "UT"
+  revision = "baf6536d6259209c3edfa2b22237af82942d3dfa"
+  version = "v0.1.1"
+
+[[projects]]
+  digest = "1:cf31692c14422fa27c83a05292eb5cbe0fb2775972e8f1f8446a71549bd8980b"
+  name = "github.com/pkg/errors"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "ba968bfe8b2f7e042a574c888954fccecfa385b4"
+  version = "v0.8.1"
+
+[[projects]]
+  digest = "1:e4c72127d910a96daf869a44f3dd563b86dbe6931a172863a0e99c5ff04b59e4"
+  name = "github.com/sirupsen/logrus"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "dae0fa8d5b0c810a8ab733fbd5510c7cae84eca4"
+  version = "v1.4.0"
+
+[[projects]]
   branch = "master"
+  digest = "1:001a4e7a40e50ff2ef32e2556bca50c4f77daa457db3ac6afc8bea9bb2122cfb"
   name = "golang.org/x/crypto"
   packages = [
     "bcrypt",
     "blowfish",
-    "ssh/terminal"
+    "ssh/terminal",
   ]
+  pruneopts = "UT"
   revision = "5295e8364332db77d75fce11f1d19c053919a9c9"
 
 [[projects]]
   branch = "master"
+  digest = "1:4c90cb46acf1bb7a9d0da361f8b5ed6690d3e55a9328ba727a211229760f6e67"
   name = "golang.org/x/sys"
   packages = [
     "unix",
@@ -65,13 +264,40 @@
     "windows/svc",
     "windows/svc/debug",
     "windows/svc/eventlog",
-    "windows/svc/mgr"
+    "windows/svc/mgr",
   ]
+  pruneopts = "UT"
   revision = "dad3d9fb7b6e83d0f9ac8f54670f6334c3a287b4"
+
+[[projects]]
+  branch = "master"
+  digest = "1:c3076e7defee87de1236f1814beb588f40a75544c60121e6eb38b3b3721783e2"
+  name = "google.golang.org/genproto"
+  packages = ["googleapis/rpc/status"]
+  pruneopts = "UT"
+  revision = "d831d65fe17df2e52bcc4316d4a9f7a418701f43"
+
+[[projects]]
+  digest = "1:4a251721b698c0e6285aec21d4ba3f79ddeccd903690144461b360ea7f948106"
+  name = "google.golang.org/grpc"
+  packages = [
+    "codes",
+    "status",
+  ]
+  pruneopts = "UT"
+  revision = "3507fb8e1a5ad030303c106fef3a47c9fdad16ad"
+  version = "v1.19.1"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "69bef810cfe014406529001d9e3f2878f3f7a4380dce311403df2a28aec9015f"
+  input-imports = [
+    "github.com/dotmesh-io/citools",
+    "github.com/dotmesh-io/dotmesh/pkg/archiver",
+    "github.com/dotmesh-io/dotmesh/pkg/types",
+    "github.com/nats-io/gnatsd/server",
+    "github.com/nats-io/gnatsd/test",
+    "github.com/nats-io/go-nats",
+  ]
   solver-name = "gps-cdcl"
   solver-version = 1
