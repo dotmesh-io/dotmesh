@@ -31,7 +31,7 @@ type ZFS interface {
 	FindFilesystemIdsOnSystem() []string
 	DeleteFilesystemInZFS(fs string) error
 	GetDirtyDelta(filesystemId, latestSnap string) (int64, int64, error)
-	Snapshot(filesystemId, snapshotId string, metadataEncoded []string) ([]byte, error)
+	Snapshot(filesystemId, snapshotId string, meta []string) ([]byte, error)
 	List(filesystemId, snapshotId string) ([]byte, error)
 	FQ(filesystemId string) string
 	DiscoverSystem(fs string) (*types.Filesystem, error)
@@ -162,9 +162,9 @@ func (z *zfs) runOnFilesystem(filesystemId, snapshotId string, args []string) ([
 	return output, err
 }
 
-func (z *zfs) Snapshot(filesystemId string, snapshotId string, metadataEncoded []string) ([]byte, error) {
+func (z *zfs) Snapshot(filesystemId string, snapshotId string, meta []string) ([]byte, error) {
 	args := []string{"snapshot"}
-	args = append(args, metadataEncoded...)
+	args = append(args, meta...)
 	return z.runOnFilesystem(filesystemId, snapshotId, args)
 }
 

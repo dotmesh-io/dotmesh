@@ -51,6 +51,8 @@ Thanks!
 See [the installation docs](https://docs.dotmesh.com/install-setup/) for more details, including installing dotmesh on Kubernetes.
 
 
+
+
 ## getting started guide
 
 Try our [hosted tutorial](https://dotmesh.com/try-dotmesh/)!
