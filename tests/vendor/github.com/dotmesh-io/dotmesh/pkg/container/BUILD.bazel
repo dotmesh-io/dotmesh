@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["docker_container_client.go"],
+    importpath = "github.com/dotmesh-io/dotmesh/pkg/container",
+    visibility = ["//visibility:public"],
+    deps = ["//vendor/github.com/fsouza/go-dockerclient:go_default_library"],
+)
