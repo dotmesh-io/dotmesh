@@ -712,12 +712,6 @@ func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextSt
 		meta = types.Metadata{}
 	}
 	meta["timestamp"] = fmt.Sprintf("%d", time.Now().UnixNano())
-	metadataEncoded, err := encodeMetadata(meta)
-	if err != nil {
-		return &types.Event{
-			Name: "failed-metadata-encode", Args: &types.EventArgs{"err": fmt.Sprintf("%v", err)},
-		}, backoffState
-	}
 	var snapshotId string
 	snapshotIdInter, ok := (*e.Args)["snapshotId"]
 	if !ok {
@@ -725,7 +719,20 @@ func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextSt
 	} else {
 		snapshotId = snapshotIdInter.(string)
 	}
-	output, err := f.zfs.Snapshot(f.filesystemId, snapshotId, metadataEncoded)
+	encodedList, err := encodeMetadata(meta)
+	zfsProps := make([]string, 0)
+	if err != nil {
+		metadataEncoded := encodeMapValues(meta)
+		err = f.writeMetadata(metadataEncoded, f.filesystemId, snapshotId)
+		if err != nil {
+			return &types.Event{
+				Name: "failed-writing-metadata", Args: &types.EventArgs{"err": err.Error()},
+			}, backoffState
+		}
+	} else {
+		zfsProps = encodedList
+	}
+	output, err := f.zfs.Snapshot(f.filesystemId, snapshotId, zfsProps)
 	if err != nil {
 		return &types.Event{
 			Name: "failed-snapshot",

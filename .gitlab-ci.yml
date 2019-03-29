@@ -48,7 +48,6 @@ build_client_linux:
     retry: 2
     stage: build
     tags:
-        - ubuntu-bionic
         - fast
     script:
         - ./rebuild_client.sh Linux
@@ -63,7 +62,6 @@ build_client_macos:
     retry: 2
     stage: build
     tags:
-        - ubuntu-bionic
         - fast
     script:
         - ./rebuild_client.sh Darwin
@@ -78,7 +76,6 @@ build_yaml:
     retry: 2
     stage: build
     tags:
-        - ubuntu-bionic
         - fast
     script:
         - (cd kubernetes && ./rebuild.sh)
@@ -93,7 +90,6 @@ build_yaml:
     retry: 2
     stage: build
     tags:
-        - ubuntu-bionic
         - fast
     script:
         - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
@@ -109,7 +105,6 @@ build_operator:
     retry: 2
     stage: build
     tags:
-        - ubuntu-bionic
         - fast
     script:
         # push to the CI registry
@@ -127,7 +122,6 @@ build_provisioner:
     retry: 2
     stage: build
     tags:
-        - ubuntu-bionic
         - fast
     script:
         # push to the CI registry
@@ -145,7 +139,6 @@ build_server:
     retry: 2
     stage: build
     tags:
-        - ubuntu-bionic
         - fast
     script:
         # push to the CI registry
@@ -186,7 +179,6 @@ linux_smoke:
     retry: 2
     stage: smoke
     tags:
-        - ubuntu-bionic
         - fast
     script:
         - timeout 5m ./scripts/smoke.sh
@@ -196,7 +188,6 @@ linux_smoke:
 dotmesh_unit_tests:
     stage: test
     tags:
-        - ubuntu-bionic
         - fast
     script:
         - go test `go list ./... | egrep -v /tests`
@@ -206,7 +197,6 @@ dotmesh_unit_tests:
 versioner_unit_tests:
     stage: test
     tags:
-        - ubuntu-bionic
         - fast
     script:
         - cd cmd/versioner && go test
@@ -220,7 +210,6 @@ linux_default_dot:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
         - fast
     script:
         - ./test.sh -run TestDefaultDot
@@ -237,7 +226,6 @@ linux_single_node:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
         - fast
     script:
         - ./test.sh -run TestSingleNode
@@ -254,7 +242,6 @@ linux_recover_from_unmounted_dot_on_master:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
         - fast
     script:
         - ./test.sh -run TestRecoverFromUnmountedDotOnMaster
@@ -271,7 +258,6 @@ linux_two_nodes_same_cluster:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
         - fast
     script:
         - ./test.sh -run TestTwoNodesSameCluster
@@ -289,7 +275,6 @@ linux_two_nodes_same_cluster:
         - build_yaml
         - build_client_linux
     tags:
-        - ubuntu-bionic
         - fast
     script:
         - ./test.sh -run TestKubernetesVolumes
@@ -308,7 +293,6 @@ linux_two_nodes_same_cluster:
         - build_client_linux
         - build_server
     tags:
-        - ubuntu-bionic
         - fast
     script:
         - DOTMESH_TEST_TIMEOUT=15m ./test.sh -run TestKubernetesOperator/DynamicProvisioning
@@ -327,7 +311,6 @@ linux_two_nodes_same_cluster:
         - build_client_linux
         - build_server
     tags:
-        - ubuntu-bionic
         - fast
     script:
         - ./test.sh -run TestKubernetesOperator/PVC*
@@ -344,7 +327,6 @@ linux_deletion_simple:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
         - fast
     script:
         - ./test.sh -run TestDeletionSimple
@@ -361,7 +343,6 @@ linux_deletion_complex:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
         - fast
     script:
         - ./test.sh -run TestDeletionComplex
@@ -378,7 +359,6 @@ linux_backup_and_restore_two_single_node_clusters:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
         - fast
     script:
         - ./test.sh -run TestBackupAndRestoreTwoSingleNodeClusters
@@ -395,7 +375,6 @@ linux_two_single_node_clusters:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
         - fast
     script:
         - ./test.sh -run TestTwoSingleNodeClusters
@@ -412,7 +391,6 @@ linux_three_single_node_clusters:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
         - fast
     script:
         - ./test.sh -run TestThreeSingleNodeClusters
@@ -429,7 +407,6 @@ linux_two_double_node_clusters:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
         - fast
     script:
         - ./test.sh -run TestTwoDoubleNodeClusters
@@ -446,7 +423,6 @@ linux_two_double_node_clusters:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
         - fast
     script:
         - ./test.sh -run TestS3Remote
@@ -463,7 +439,6 @@ linux_s3api:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
         - fast
     script:
         - ./test.sh -run TestS3Api
@@ -480,7 +455,6 @@ linux_forks:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
         - fast
     script:
         - ./test.sh -run TestForks
@@ -498,7 +472,7 @@ linux_forks:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
+
         - fast
     script:
         - ./test.sh -run TestKubernetesTestTooling
@@ -515,7 +489,7 @@ linux_stress_lots_of_commits:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
+
         - fast
     script:
         - DOTMESH_TEST_TIMEOUT=30m ./test.sh -run TestStressLotsOfCommits
@@ -533,7 +507,7 @@ linux_stress_handover:
     dependencies:
         - build_client_linux
     tags:
-        - ubuntu-bionic
+
         - fast
     script:
         - DOTMESH_TEST_TIMEOUT=30m ./test.sh -run TestStressHandover
@@ -553,7 +527,7 @@ publish_images:
         - build_server
         - build_yaml
     tags:
-        - ubuntu-bionic
+
         - fast
     script:
         # push to quay.io, by re-tagging and pushing the images
@@ -566,7 +540,7 @@ publish_images:
 trigger_e2e_test:
     stage: deploy
     tags:
-        - ubuntu-bionic
+
         - fast
     script:
         - echo - curl -X POST -F "token=$CI_JOB_TOKEN" -F "ref=master" -F "variables[CI_SERVICE_BEING_TESTED]=$CI_SERVICE_BEING_TESTED" -F "variables[CI_DOCKER_TAG]=$CI_DOCKER_TAG" -F "variables[DOTMESH_CI_BUILD_REF_NAME]=$CI_BUILD_REF_NAME" https://gitlab.dotmesh.com/api/v4/projects/dotmesh%2Fe2e-sync/trigger/pipeline
@@ -584,7 +558,6 @@ deploy_unstable_build:
         - build_yaml
         - publish_images
     tags:
-        - ubuntu-bionic
         - fast
     script:
         - "ssh -o UserKnownHostsFile=./release-hosts releases@get.dotmesh.io mkdir -p /pool/releases/unstable/$CI_COMMIT_REF_NAME"
@@ -602,7 +575,6 @@ deploy_release_build:
         - build_yaml
         - publish_images
     tags:
-        - ubuntu-bionic
         - fast
     script:
         - VERSION=`cd cmd/versioner; go run versioner.go`; echo VERSION=$VERSION

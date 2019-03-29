@@ -1018,6 +1018,20 @@ func TestSingleNode(t *testing.T) {
 		}
 	})
 
+	t.Run("MassiveMetadata", func(t *testing.T) {
+		fsname := citools.UniqName()
+
+		citools.RunOnNode(t, node1, "dm init "+fsname)
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+
+		value := make([]byte, 2000)
+		for i := 0; i < 2000; i++ {
+			value[i] = byte(65 + rand.Intn(25)) //A=65 and Z = 65+25
+		}
+		// successfully commit with a metadata field longer than 1024 bytes
+		citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("dm commit -m \"commit message\" --metadata test=%s", string(value)))
+	})
+
 	t.Run("ApiKeys", func(t *testing.T) {
 		apiKey := f[0].GetNode(0).ApiKey
 		password := f[0].GetNode(0).Password

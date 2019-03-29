@@ -51,6 +51,7 @@ func (f *FsMachine) GetSnapshots(nodeID string) []*types.Snapshot {
 	}
 
 	for _, s := range snaps {
+		// why do we do this
 		res = append(res, s.DeepCopy())
 	}
 

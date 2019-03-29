@@ -60,7 +60,6 @@ func TestGetSnapshots(t *testing.T) {
 	})
 
 	snaps := fsm.GetSnapshots("123")
-
 	if snaps[0].Id != "1" {
 		t.Errorf("failed to set/list metadata")
 	}
@@ -85,7 +84,6 @@ func TestGetSnapshotsUnknownNode(t *testing.T) {
 	})
 
 	snaps := fsm.GetSnapshots("10000")
-
 	if len(snaps) != 0 {
 		t.Errorf("didn't expect to get any snaps")
 	}
