@@ -7,6 +7,7 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"regexp"
 )
 
@@ -67,7 +68,7 @@ func (f *FsMachine) writeMetadata(meta map[string]string, filesystemId, snapshot
 		return err
 	}
 	metaFile := fmt.Sprintf("%s/dotmesh.metadata/%s.json", pathToFs, snapshotId)
-	_, err = os.Create(metaFile)
+	err = os.MkdirAll(filepath.Dir(metaFile), 0666)
 	if err != nil {
 		return err
 	}
