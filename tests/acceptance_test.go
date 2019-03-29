@@ -1029,8 +1029,7 @@ func TestSingleNode(t *testing.T) {
 			value[i] = byte(65 + rand.Intn(25)) //A=65 and Z = 65+25
 		}
 		// successfully commit with a metadata field longer than 1024 bytes
-		st := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("dm commit -m \"commit message\" --metadata test=%s", string(value)))
-		t.Logf(st)
+		citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("dm commit -m \"commit message\" --metadata test=%s", string(value)))
 	})
 
 	t.Run("ApiKeys", func(t *testing.T) {
