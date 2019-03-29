@@ -315,7 +315,7 @@ func testSetup(t *testing.T, f Federation) error {
 APISERVER_PORT=${APISERVER_PORT:-8080}
 
 # Use prebuilt DIND image
-DIND_IMAGE="${DIND_IMAGE:-mirantis/kubeadm-dind-cluster:v1.10}"
+DIND_IMAGE="${DIND_IMAGE:-quay.io/dotmesh/kubeadm-dind-cluster:v1.10}"
 
 # Define which DNS service to run
 # possible values are kube-dns (default) and coredns
@@ -882,6 +882,7 @@ func dockerSystem(node string, cmd string) error {
 }
 
 func RunOnNode(t *testing.T, node string, cmd string) {
+	t.Helper()
 	fmt.Printf("RUNNING on %s: %s\n", node, cmd)
 	debugEnv := map[string]string{}
 	s, err := docker(node, cmd, debugEnv)
@@ -891,6 +892,7 @@ func RunOnNode(t *testing.T, node string, cmd string) {
 }
 
 func RunOnNodeContext(ctx context.Context, t *testing.T, node string, cmd string) {
+	t.Helper()
 	fmt.Printf("RUNNING on %s: %s\n", node, cmd)
 	debugEnv := map[string]string{}
 	s, err := dockerContext(ctx, node, cmd, debugEnv)
