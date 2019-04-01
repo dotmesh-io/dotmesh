@@ -21,6 +21,7 @@ credentials.prod.env
 cmd/dotmesh-server/pkg/dynamic-provisioning/dm-provisioner
 LAST_IMAGE_BUILD
 tests/config.sh
+tests/dind-cluster-*.sh
 bazel-*
 .vscode/*
 .gocache
