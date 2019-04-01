@@ -50,6 +50,7 @@ type Dotmesh interface {
 	MountCommit(request types.MountCommitRequest) (string, error)
 	Rollback(request types.RollbackRequest) (bool, error)
 	Fork(request types.ForkRequest) (string, error)
+	List() (map[string]map[string]types.DotmeshVolume, error)
 }
 
 func CheckName(name string) bool {
@@ -103,6 +104,14 @@ func (dm *DotmeshAPI) CallRemote(
 	} else {
 		return err
 	}
+}
+
+func (dm *DotmeshAPI) List() (map[string]map[string]types.DotmeshVolume, error) {
+	filesystems := make(map[string]map[string]types.DotmeshVolume)
+	err := dm.CallRemote(
+		context.Background(), "DotmeshRPC.List", nil, &filesystems,
+	)
+	return filesystems, err
 }
 
 func (dm *DotmeshAPI) Fork(request types.ForkRequest) (string, error) {
@@ -397,10 +406,7 @@ func (dm *DotmeshAPI) VolumeExists(volumeName string) (bool, error) {
 		return false, err
 	}
 
-	volumes := map[string]map[string]types.DotmeshVolume{}
-	err = dm.CallRemote(
-		context.Background(), "DotmeshRPC.List", nil, &volumes,
-	)
+	volumes, err := dm.List()
 	if err != nil {
 		return false, err
 	}
@@ -565,12 +571,9 @@ func (dm *DotmeshAPI) ForceBranchMaster(namespace, name, branch, newMaster strin
 }
 
 func (dm *DotmeshAPI) AllVolumes() ([]types.DotmeshVolume, error) {
-	filesystems := map[string]map[string]types.DotmeshVolume{}
 	result := []types.DotmeshVolume{}
 	interim := map[string]types.DotmeshVolume{}
-	err := dm.CallRemote(
-		context.Background(), "DotmeshRPC.List", nil, &filesystems,
-	)
+	filesystems, err := dm.List()
 	if err != nil {
 		return result, err
 	}
