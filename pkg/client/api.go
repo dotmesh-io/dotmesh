@@ -154,6 +154,15 @@ func (dm *DotmeshAPI) GetVersion() (VersionInfo, error) {
 	return response, nil
 }
 
+func (dm *DotmeshAPI) Get(FsID string) (DotmeshVolume, error) {
+	volume := DotmeshVolume{}
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.Get", FsID, &volume)
+	if err != nil {
+		return DotmeshVolume{}, err
+	}
+	return volume, nil
+}
+
 func (dm *DotmeshAPI) NewVolume(volumeName string) error {
 	var response bool
 	namespace, name, err := ParseNamespacedVolume(volumeName)

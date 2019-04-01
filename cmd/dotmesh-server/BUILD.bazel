@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 load("@io_bazel_rules_docker//docker:docker.bzl", "docker_push")
 load("@io_bazel_rules_docker//container:container.bzl", "container_image")
 
@@ -100,4 +100,10 @@ docker_push(
     repository = "{CI_REPOSITORY}/dotmesh-server",
     stamp = 1,
     tag = "{STABLE_DOCKERTAG}",
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["http_test.go"],
+    embed = [":go_default_library"],
 )
