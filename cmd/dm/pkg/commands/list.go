@@ -97,7 +97,7 @@ func NewCmdList(out io.Writer) *cobra.Command {
 					}
 
 					cells := []string{
-						v.Name.String(), b, v.Master, strings.Join(containerNames, ","),
+						v.Name.StringWithoutAdmin(), b, v.Master, strings.Join(containerNames, ","),
 						sizeString, fmt.Sprintf("%d", v.CommitCount), dirtyString,
 					}
 					fmt.Fprintf(target, start)
