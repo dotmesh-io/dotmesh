@@ -47,6 +47,9 @@ type Dotmesh interface {
 	NewVolumeFromStruct(name types.VolumeName) (bool, error)
 	GetMasterBranchId(volume types.VolumeName) (string, error)
 	DeleteVolumeFromStruct(name types.VolumeName) (bool, error)
+	MountCommit(request types.MountCommitRequest) (string, error)
+	Rollback(request types.RollbackRequest) (bool, error)
+	Fork(request types.ForkRequest) (string, error)
 }
 
 func CheckName(name string) bool {
@@ -102,10 +105,22 @@ func (dm *DotmeshAPI) CallRemote(
 	}
 }
 
+func (dm *DotmeshAPI) Fork(request types.ForkRequest) (string, error) {
+	var forkDotId string
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.Fork", request, &forkDotId)
+	return forkDotId, err
+}
+
 func (dm *DotmeshAPI) GetMasterBranchId(volume types.VolumeName) (string, error) {
 	var masterBranchId string
 	err := dm.CallRemote(context.Background(), "DotmeshRPC.Exists", &volume, &masterBranchId)
 	return masterBranchId, err
+}
+
+func (dm *DotmeshAPI) MountCommit(request types.MountCommitRequest) (string, error) {
+	var mountpoint string
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.MountCommit", request, &mountpoint)
+	return mountpoint, err
 }
 
 func (dm *DotmeshAPI) PingLocal() (bool, error) {
@@ -341,6 +356,12 @@ func (dm *DotmeshAPI) CurrentVolume() (string, error) {
 	return cv, nil
 }
 
+func (dm *DotmeshAPI) Rollback(request types.RollbackRequest) (bool, error) {
+	var result bool
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.Rollback", request, &result)
+	return result, err
+}
+
 func (dm *DotmeshAPI) BranchExists(volumeName, branchName string) (bool, error) {
 	branches, err := dm.Branches(volumeName)
 	if err != nil {
@@ -362,7 +383,7 @@ func (dm *DotmeshAPI) Branches(volumeName string) ([]string, error) {
 
 	branches := []string{}
 	err = dm.CallRemote(
-		context.Background(), "DotmeshRPC.Branches", VolumeName{namespace, name}, &branches,
+		context.Background(), "DotmeshRPC.Branches", types.VolumeName{namespace, name}, &branches,
 	)
 	if err != nil {
 		return []string{}, err
@@ -480,7 +501,7 @@ func (dm *DotmeshAPI) AllBranches(volumeName string) ([]string, error) {
 
 	var branches []string
 	err = dm.CallRemote(
-		context.Background(), "DotmeshRPC.Branches", VolumeName{namespace, name}, &branches,
+		context.Background(), "DotmeshRPC.Branches", types.VolumeName{namespace, name}, &branches,
 	)
 	// the "main" filesystem (topLevelFilesystemId) is the master branch
 	// (DEFAULT_BRANCH)
@@ -1185,26 +1206,10 @@ func (dm *DotmeshAPI) IsUserPriveledged() bool {
 	return false
 }
 
-// FIXME: Put this in a shared library, as it duplicates the copy in
-// dotmesh-server/pkg/main/utils.go (now with a few differences)
-
-type VolumeName struct {
-	Namespace string
-	Name      string
-}
-
 type S3VolumeName struct {
 	Namespace string
 	Name      string
 	Prefixes  []string
-}
-
-func (v VolumeName) String() string {
-	if v.Namespace == "admin" {
-		return v.Name
-	} else {
-		return fmt.Sprintf("%s/%s", v.Namespace, v.Name)
-	}
 }
 
 func ParseNamespacedVolumeWithDefault(name, defaultNamespace string) (string, string, error) {
