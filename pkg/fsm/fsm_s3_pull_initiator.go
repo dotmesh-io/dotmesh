@@ -94,7 +94,7 @@ func s3PullInitiatorState(f *FsMachine) StateFn {
 			f.errorDuringTransfer("couldnt-write-s3-metadata-pull", err)
 		}
 		response, _ := f.snapshot(&types.Event{Name: "snapshot",
-			Args: &types.EventArgs{"metadata": types.Metadata{"message": "s3 content"},
+			Args: &types.EventArgs{"metadata": map[string]string{"message": "s3 content"},
 				"snapshotId": snapshotId}})
 		if response.Name != "snapshotted" {
 			f.innerResponses <- response

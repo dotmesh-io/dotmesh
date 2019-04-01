@@ -38,9 +38,15 @@ type DotmeshAPI struct {
 
 type Dotmesh interface {
 	CallRemote(ctx context.Context, method string, args interface{}, response interface{}) error
-	ListCommits(activeVolumeName, activeBranch string) ([]Snapshot, error)
+	ListCommits(activeVolumeName, activeBranch string) ([]types.Snapshot, error)
+	CommitsById(dotID string) ([]types.Snapshot, error)
 	GetFsId(namespace, name, branch string) (string, error)
 	Get(fsId string) (types.DotmeshVolume, error)
+	Procure(data types.ProcureArgs) (string, error)
+	CommitWithStruct(args types.CommitArgs) (string, error)
+	NewVolumeFromStruct(name types.VolumeName) (bool, error)
+	GetMasterBranchId(volume types.VolumeName) (string, error)
+	DeleteVolumeFromStruct(name types.VolumeName) (bool, error)
 }
 
 func CheckName(name string) bool {
@@ -94,6 +100,12 @@ func (dm *DotmeshAPI) CallRemote(
 	} else {
 		return err
 	}
+}
+
+func (dm *DotmeshAPI) GetMasterBranchId(volume types.VolumeName) (string, error) {
+	var masterBranchId string
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.Exists", &volume, &masterBranchId)
+	return masterBranchId, err
 }
 
 func (dm *DotmeshAPI) PingLocal() (bool, error) {
@@ -160,44 +172,47 @@ func (dm *DotmeshAPI) Get(FsID string) (types.DotmeshVolume, error) {
 }
 
 func (dm *DotmeshAPI) NewVolume(volumeName string) error {
-	var response bool
 	namespace, name, err := ParseNamespacedVolume(volumeName)
 	if err != nil {
 		return err
 	}
-	sendVolumeName := VolumeName{
+	sendVolumeName := types.VolumeName{
 		Namespace: namespace,
 		Name:      name,
 	}
-	err = dm.CallRemote(context.Background(), "DotmeshRPC.Create", sendVolumeName, &response)
+	_, err = dm.NewVolumeFromStruct(sendVolumeName)
 	if err != nil {
 		return err
 	}
 	return dm.setCurrentVolume(volumeName)
 }
 
-type ProcureVolumeName struct {
-	Namespace string
-	Name      string
-	Subdot    string
+func (dm *DotmeshAPI) NewVolumeFromStruct(name types.VolumeName) (bool, error) {
+	var response bool
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.Create", name, &response)
+	if err != nil {
+		return false, err
+	}
+	return response, nil
 }
 
 func (dm *DotmeshAPI) ProcureVolume(volumeName string) (string, error) {
-	var response string
 	namespace, name, err := ParseNamespacedVolume(volumeName)
 	if err != nil {
 		return "", err
 	}
-	sendVolumeName := ProcureVolumeName{
+	sendVolumeName := types.ProcureArgs{
 		Namespace: namespace,
 		Name:      name,
 		Subdot:    "__default__",
 	}
-	err = dm.CallRemote(context.Background(), "DotmeshRPC.Procure", sendVolumeName, &response)
-	if err != nil {
-		return "", err
-	}
-	return response, nil
+	return dm.Procure(sendVolumeName)
+}
+
+func (dm *DotmeshAPI) Procure(data types.ProcureArgs) (string, error) {
+	var response string
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.Procure", data, &response)
+	return response, err
 }
 
 func (dm *DotmeshAPI) setCurrentVolume(volumeName string) error {
@@ -383,16 +398,10 @@ func (dm *DotmeshAPI) DeleteVolume(volumeName string) error {
 		return err
 	}
 
-	err = retryUntilSucceeds(func() error {
-		var result bool
-		err = dm.CallRemote(
-			context.Background(), "DotmeshRPC.Delete", VolumeName{namespace, name}, &result,
-		)
-		if err != nil {
-			return err
-		}
-		return nil
-	}, 5, 1*time.Second)
+	_, err = dm.DeleteVolumeFromStruct(types.VolumeName{
+		Namespace: namespace,
+		Name:      name,
+	})
 	if err != nil {
 		return err
 	}
@@ -404,6 +413,20 @@ func (dm *DotmeshAPI) DeleteVolume(volumeName string) error {
 		}
 	}
 	return nil
+}
+
+func (dm *DotmeshAPI) DeleteVolumeFromStruct(name types.VolumeName) (bool, error) {
+	var result bool
+	err := retryUntilSucceeds(func() error {
+		err := dm.CallRemote(
+			context.Background(), "DotmeshRPC.Delete", name, &result,
+		)
+		if err != nil {
+			return err
+		}
+		return nil
+	}, 5, 1*time.Second)
+	return result, err
 }
 
 func retryUntilSucceeds(f func() error, retries int, delay time.Duration) error {
@@ -494,11 +517,7 @@ func (dm *DotmeshAPI) BranchInfo(namespace, name, branch string) (types.DotmeshV
 		return types.DotmeshVolume{}, err
 	}
 
-	var result types.DotmeshVolume
-	err = dm.CallRemote(
-		context.Background(), "DotmeshRPC.Get", fsId, &result,
-	)
-	return result, err
+	return dm.Get(fsId)
 }
 
 func (dm *DotmeshAPI) ForceBranchMaster(namespace, name, branch, newMaster string) error {
@@ -573,46 +592,37 @@ type CommitArgs struct {
 }
 
 func (dm *DotmeshAPI) Commit(activeVolumeName, activeBranch, commitMessage string, metadata map[string]string) (string, error) {
-	var result string
-
 	activeNamespace, activeVolume, err := ParseNamespacedVolume(activeVolumeName)
 	if err != nil {
 		return "", err
 	}
+	args := types.CommitArgs{
+		Namespace: activeNamespace,
+		Name:      activeVolume,
+		Branch:    deMasterify(activeBranch),
+		Message:   commitMessage,
+		Metadata:  metadata,
+	}
+	return dm.CommitWithStruct(args)
+}
 
-	err = dm.CallRemote(
+func (dm *DotmeshAPI) CommitWithStruct(args types.CommitArgs) (string, error) {
+	var result string
+	err := dm.CallRemote(
 		context.Background(),
 		"DotmeshRPC.Commit",
-		// TODO replace these map[string]string's with typed structs that are
-		// shared between the client and the server for cross-rpc type safety
-		&CommitArgs{
-			Namespace: activeNamespace,
-			Name:      activeVolume,
-			Branch:    deMasterify(activeBranch),
-			Message:   commitMessage,
-			Metadata:  metadata,
-		},
+		&args,
 		&result,
 	)
-	if err != nil {
-		return "", err
-	}
-	return result, nil
+	return result, err
 }
 
-type Metadata map[string]string
-type Snapshot struct {
-	// exported for json serialization
-	Id       string
-	Metadata *Metadata
-}
-
-func (dm *DotmeshAPI) ListCommits(activeVolumeName, activeBranch string) ([]Snapshot, error) {
-	var result []Snapshot
+func (dm *DotmeshAPI) ListCommits(activeVolumeName, activeBranch string) ([]types.Snapshot, error) {
+	var result []types.Snapshot
 
 	activeNamespace, activeVolume, err := ParseNamespacedVolume(activeVolumeName)
 	if err != nil {
-		return []Snapshot{}, err
+		return []types.Snapshot{}, err
 	}
 
 	err = dm.CallRemote(
@@ -629,9 +639,16 @@ func (dm *DotmeshAPI) ListCommits(activeVolumeName, activeBranch string) ([]Snap
 		&result,
 	)
 	if err != nil {
-		return []Snapshot{}, err
+		return []types.Snapshot{}, err
 	}
 	return result, nil
+}
+
+func (dm *DotmeshAPI) CommitsById(dotID string) ([]types.Snapshot, error) {
+	var commits []types.Snapshot
+
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.CommitsById", dotID, &commits)
+	return commits, err
 }
 
 func (dm *DotmeshAPI) findCommit(ref, volumeName, branchName string) (string, error) {

@@ -129,15 +129,15 @@ type dirtyInfo struct {
 	SizeBytes  int64
 }
 
-func castToMetadata(val interface{}) (types.Metadata, error) {
+func castToMetadata(val interface{}) (map[string]string, error) {
 
 	switch v := val.(type) {
-	case types.Metadata:
+	case map[string]string:
 		return v, nil
-	case *types.Metadata:
+	case *map[string]string:
 		return *v, nil
 	case map[string]interface{}:
-		meta := types.Metadata{}
+		meta := map[string]string{}
 		// massage the data into the right type
 		cast := val.(map[string]interface{})
 		for k, v := range cast {

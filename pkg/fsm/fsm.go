@@ -697,7 +697,7 @@ func (f *FsMachine) fork(e *types.Event) (responseEvent *types.Event, nextState 
 
 func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextState StateFn) {
 	var err error
-	var meta types.Metadata
+	var meta map[string]string
 	if val, ok := (*e.Args)["metadata"]; ok {
 		meta, err = castToMetadata(val)
 		if err != nil {
@@ -709,7 +709,7 @@ func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextSt
 			return types.NewErrorEvent("unknown-metadata-format", err), backoffState
 		}
 	} else {
-		meta = types.Metadata{}
+		meta = map[string]string{}
 	}
 	meta["timestamp"] = fmt.Sprintf("%d", time.Now().UnixNano())
 	var snapshotId string
