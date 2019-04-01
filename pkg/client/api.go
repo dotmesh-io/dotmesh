@@ -36,22 +36,11 @@ type DotmeshAPI struct {
 	verbose       bool
 }
 
-type DotmeshVolume struct {
-	Id             string
-	Name           VolumeName
-	Clone          string
-	Master         string
-	SizeBytes      int64
-	DirtyBytes     int64
-	CommitCount    int64
-	ServerStatuses map[string]string // serverId => status
-}
-
 type Dotmesh interface {
 	CallRemote(ctx context.Context, method string, args interface{}, response interface{}) error
 	ListCommits(activeVolumeName, activeBranch string) ([]Snapshot, error)
 	GetFsId(namespace, name, branch string) (string, error)
-	Get(fsId string) (DotmeshVolume, error)
+	Get(fsId string) (types.DotmeshVolume, error)
 }
 
 func CheckName(name string) bool {
@@ -161,11 +150,11 @@ func (dm *DotmeshAPI) GetVersion() (VersionInfo, error) {
 	return response, nil
 }
 
-func (dm *DotmeshAPI) Get(FsID string) (DotmeshVolume, error) {
-	volume := DotmeshVolume{}
+func (dm *DotmeshAPI) Get(FsID string) (types.DotmeshVolume, error) {
+	volume := types.DotmeshVolume{}
 	err := dm.CallRemote(context.Background(), "DotmeshRPC.Get", FsID, &volume)
 	if err != nil {
-		return DotmeshVolume{}, err
+		return types.DotmeshVolume{}, err
 	}
 	return volume, nil
 }
@@ -372,7 +361,7 @@ func (dm *DotmeshAPI) VolumeExists(volumeName string) (bool, error) {
 		return false, err
 	}
 
-	volumes := map[string]map[string]DotmeshVolume{}
+	volumes := map[string]map[string]types.DotmeshVolume{}
 	err = dm.CallRemote(
 		context.Background(), "DotmeshRPC.List", nil, &volumes,
 	)
@@ -492,7 +481,7 @@ func (dm *DotmeshAPI) GetFsId(namespace, name, branch string) (string, error) {
 	return fsId, nil
 }
 
-func (dm *DotmeshAPI) BranchInfo(namespace, name, branch string) (DotmeshVolume, error) {
+func (dm *DotmeshAPI) BranchInfo(namespace, name, branch string) (types.DotmeshVolume, error) {
 	var fsId string
 	err := dm.CallRemote(
 		context.Background(), "DotmeshRPC.Lookup", struct{ Namespace, Name, Branch string }{
@@ -502,10 +491,10 @@ func (dm *DotmeshAPI) BranchInfo(namespace, name, branch string) (DotmeshVolume,
 		&fsId,
 	)
 	if err != nil {
-		return DotmeshVolume{}, err
+		return types.DotmeshVolume{}, err
 	}
 
-	var result DotmeshVolume
+	var result types.DotmeshVolume
 	err = dm.CallRemote(
 		context.Background(), "DotmeshRPC.Get", fsId, &result,
 	)
@@ -535,10 +524,10 @@ func (dm *DotmeshAPI) ForceBranchMaster(namespace, name, branch, newMaster strin
 	return err
 }
 
-func (dm *DotmeshAPI) AllVolumes() ([]DotmeshVolume, error) {
-	filesystems := map[string]map[string]DotmeshVolume{}
-	result := []DotmeshVolume{}
-	interim := map[string]DotmeshVolume{}
+func (dm *DotmeshAPI) AllVolumes() ([]types.DotmeshVolume, error) {
+	filesystems := map[string]map[string]types.DotmeshVolume{}
+	result := []types.DotmeshVolume{}
+	interim := map[string]types.DotmeshVolume{}
 	err := dm.CallRemote(
 		context.Background(), "DotmeshRPC.List", nil, &filesystems,
 	)
@@ -713,7 +702,7 @@ type Container struct {
 }
 
 type DotmeshVolumeAndContainers struct {
-	Volume     DotmeshVolume
+	Volume     types.DotmeshVolume
 	Containers []Container
 }
 
@@ -749,7 +738,7 @@ func (dm *DotmeshAPI) AllVolumesWithContainers() ([]DotmeshVolumeAndContainers, 
 	return result, nil
 }
 
-func (dm *DotmeshAPI) RelatedContainers(volumeName VolumeName, branch string) ([]Container, error) {
+func (dm *DotmeshAPI) RelatedContainers(volumeName types.VolumeName, branch string) ([]Container, error) {
 	result := []Container{}
 	err := dm.CallRemote(
 		context.Background(),

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/dotmesh-io/dotmesh/pkg/client"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/spf13/cobra"
 	"text/tabwriter"
 )
@@ -64,7 +65,7 @@ func NewCmdList(out io.Writer) *cobra.Command {
 					if err != nil {
 						return err
 					}
-					active := client.VolumeName{activeNamespace, activeVolume}
+					active := types.VolumeName{activeNamespace, activeVolume}
 
 					start := "  "
 					if active == v.Name {
@@ -96,7 +97,7 @@ func NewCmdList(out io.Writer) *cobra.Command {
 					}
 
 					cells := []string{
-						v.Name.String(), b, v.Master, strings.Join(containerNames, ","),
+						v.Name.StringWithoutAdmin(), b, v.Master, strings.Join(containerNames, ","),
 						sizeString, fmt.Sprintf("%d", v.CommitCount), dirtyString,
 					}
 					fmt.Fprintf(target, start)
