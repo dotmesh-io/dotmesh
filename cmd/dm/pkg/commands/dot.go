@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/dotmesh-io/dotmesh/pkg/client"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/spf13/cobra"
 )
 
@@ -324,7 +325,7 @@ func dotShow(cmd *cobra.Command, args []string, out io.Writer) error {
 
 	for _, branch := range bs {
 		containerNames := []string{}
-		var branchDot client.DotmeshVolume
+		var branchDot types.DotmeshVolume
 		if branch == "master" {
 			branchDot = masterDot
 		} else {
