@@ -33,6 +33,7 @@ type DotmeshAPI struct {
 	Configuration *Configuration
 	configPath    string
 	Client        *JsonRpcClient
+	PB            *pb.ProgressBar
 	verbose       bool
 }
 
@@ -801,31 +802,31 @@ func (dm *DotmeshAPI) RelatedContainers(volumeName types.VolumeName, branch stri
 }
 
 type TransferPollResult struct {
-	TransferRequestId string
-	Direction         string // "push" or "pull"
+	TransferRequestId string `json:"transfer_request_id,omitempty"`
+	Direction         string `json:"direction,omitempty"` // "push" or "pull"
 
 	// Same across both clusters
-	FilesystemId string
+	FilesystemId string `json:"filesystem_id,omitempty"`
 
 	// TODO add clusterIds? probably comes from etcd. in fact, could be the
 	// discovery id (although that is only for bootstrap... hmmm).
-	InitiatorNodeId string
-	PeerNodeId      string
+	InitiatorNodeId string `json:"initiator_node_id,omitempty"`
+	PeerNodeId      string `json:"peer_node_id,omitempty"`
 
 	// XXX a Transfer that spans multiple filesystem ids won't have a unique
 	// starting/target snapshot, so this is in the wrong place right now.
 	// although maybe it makes sense to talk about a target *final* snapshot,
 	// with interim snapshots being an implementation detail.
-	StartingSnapshot string
-	TargetSnapshot   string
+	StartingSnapshot string `json:"starting_snapshot,omitempty"`
+	TargetSnapshot   string `json:"target_snapshot,omitempty"`
 
-	Index              int    // i.e. transfer 1/4 (Index=1)
-	Total              int    //                   (Total=4)
-	Status             string // one of "starting", "running", "finished", "error"
-	NanosecondsElapsed int64
-	Size               int64 // size of current segment in bytes
-	Sent               int64 // number of bytes of current segment sent so far
-	Message            string
+	Index              int    `json:"index,omitempty"`  // i.e. transfer 1/4 (Index=1)
+	Total              int    `json:"total,omitempty"`  //                   (Total=4)
+	Status             string `json:"status,omitempty"` // one of "starting", "running", "finished", "error"
+	NanosecondsElapsed int64  `json:"nanoseconds_elapsed,omitempty"`
+	Size               int64  `json:"size,omitempty"` // size of current segment in bytes
+	Sent               int64  `json:"sent,omitempty"` // number of bytes of current segment sent so far
+	Message            string `json:"message,omitempty"`
 }
 
 func (transferPollResult TransferPollResult) String() string {
@@ -857,16 +858,61 @@ func (dm *DotmeshAPI) GetTransferWithContext(transferId string, ctx context.Cont
 	return result, err
 }
 
-type pollTransferInternalResult struct {
+type PollTransferInternalResult struct {
 	result TransferPollResult
 	err    error
 }
 
-func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
+func (dm *DotmeshAPI) UpdateBar(result TransferPollResult, err error, started bool) bool {
+	if !started {
+		dm.PB = pb.New64(result.Size)
+		dm.PB.ShowFinalTime = false
+		dm.PB.SetMaxWidth(80)
+		dm.PB.SetUnits(pb.U_BYTES)
+		dm.PB.Start()
+		started = true
+	}
+
+	if result.Size != 0 {
+		dm.PB.Total = result.Size
+	}
+
+	if result.Sent > result.Size {
+		dm.PB.Set64(result.Size)
+	} else {
+		dm.PB.Set64(result.Sent)
+	}
+	dm.PB.Prefix(result.Status)
+	var speed string
+	if result.NanosecondsElapsed > 0 {
+		speed = fmt.Sprintf(" %.2f MiB/s",
+			// mib/sec
+			(float64(result.Sent)/(1024*1024))/
+				(float64(result.NanosecondsElapsed)/(1000*1000*1000)),
+		)
+	} else {
+		speed = " ? MiB/s"
+	}
+	quotient := fmt.Sprintf(" (%d/%d)", result.Index, result.Total)
+	dm.PB.Postfix(speed + quotient)
+
+	if result.Index == result.Total && result.Status == "finished" {
+		if started {
+			dm.PB.FinishPrint("Done!")
+		}
+	}
+	if result.Status == "error" {
+		if started {
+			dm.PB.FinishPrint(fmt.Sprintf("error: %s", result.Message))
+		}
+	}
+	return started
+}
+
+func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer, callback func(result TransferPollResult, err error, started bool) bool) error {
 
 	out.Write([]byte("Calculating...\n"))
 
-	var bar *pb.ProgressBar
 	started := false
 
 	debugMode := os.Getenv("DEBUG_MODE") != ""
@@ -876,7 +922,7 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 		}
 		time.Sleep(time.Second)
 
-		rpcResult := make(chan pollTransferInternalResult, 1)
+		rpcResult := make(chan PollTransferInternalResult, 1)
 
 		ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
 		defer cancel()
@@ -884,7 +930,7 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 			if debugMode {
 				out.Write([]byte(fmt.Sprintf("DEBUG Calling GetTransfer(%s)...\n", transferId)))
 			}
-			var result pollTransferInternalResult
+			var result PollTransferInternalResult
 			result.result, result.err = dm.GetTransferWithContext(transferId, ctx, cancel)
 			if debugMode {
 				out.Write([]byte(fmt.Sprintf(
@@ -901,7 +947,7 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 		if debugMode {
 			out.Write([]byte("DEBUG About to select...\n"))
 		}
-		var result pollTransferInternalResult
+		var result PollTransferInternalResult
 		select {
 		case <-ctx.Done():
 			out.Write([]byte(fmt.Sprintf("Got timeout error from API, trying again: %s\n", ctx.Err())))
@@ -925,48 +971,15 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 			}
 		}
 
-		if !started {
-			bar = pb.New64(result.result.Size)
-			bar.ShowFinalTime = false
-			bar.SetMaxWidth(80)
-			bar.SetUnits(pb.U_BYTES)
-			bar.Start()
-			started = true
-		}
-
-		if result.result.Size != 0 {
-			bar.Total = result.result.Size
-		}
 		// Numbers reported by data transferred thru dotmesh versus size
 		// of stream reported by 'zfs send -nP' are off by a few kilobytes,
 		// fudge it (maybe no one will notice).
-		if result.result.Sent > result.result.Size {
-			bar.Set64(result.result.Size)
-		} else {
-			bar.Set64(result.result.Sent)
-		}
-		bar.Prefix(result.result.Status)
-		var speed string
-		if result.result.NanosecondsElapsed > 0 {
-			speed = fmt.Sprintf(" %.2f MiB/s",
-				// mib/sec
-				(float64(result.result.Sent)/(1024*1024))/
-					(float64(result.result.NanosecondsElapsed)/(1000*1000*1000)),
-			)
-		} else {
-			speed = " ? MiB/s"
-		}
-		quotient := fmt.Sprintf(" (%d/%d)", result.result.Index, result.result.Total)
-		bar.Postfix(speed + quotient)
-
+		started = callback(result.result, result.err, started)
 		if debugMode {
 			out.Write([]byte(fmt.Sprintf("DEBUG status %d / %d : %s\n", result.result.Index, result.result.Total, result.result.Status)))
 		}
 
 		if result.result.Index == result.result.Total && result.result.Status == "finished" {
-			if started {
-				bar.FinishPrint("Done!")
-			}
 			// A terrible hack: many of the tests race the next 'dm log' or
 			// similar command against snapshots received by a push/pull/clone
 			// updating etcd which updates nodes' local caches of state. Give
@@ -980,9 +993,6 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 			return nil
 		}
 		if result.result.Status == "error" {
-			if started {
-				bar.FinishPrint(fmt.Sprintf("error: %s", result.result.Message))
-			}
 			out.Write([]byte(result.result.Message + "\n"))
 			// A similarly terrible hack. See comment above.
 			time.Sleep(time.Second)
