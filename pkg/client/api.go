@@ -869,8 +869,6 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 	started := false
 
 	debugMode := os.Getenv("DEBUG_MODE") != ""
-	ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
-	defer cancel()
 	for {
 		if debugMode {
 			out.Write([]byte("DEBUG About to sleep for 1s...\n"))
@@ -879,11 +877,12 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 
 		rpcResult := make(chan pollTransferInternalResult, 1)
 
+		ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
+		defer cancel()
 		go func() {
 			if debugMode {
 				out.Write([]byte(fmt.Sprintf("DEBUG Calling GetTransfer(%s)...\n", transferId)))
 			}
-
 			var result pollTransferInternalResult
 			result.result, result.err = dm.GetTransferWithContext(transferId, ctx, cancel)
 			if debugMode {
