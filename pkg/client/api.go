@@ -51,6 +51,7 @@ type Dotmesh interface {
 	Rollback(request types.RollbackRequest) (bool, error)
 	Fork(request types.ForkRequest) (string, error)
 	List() (map[string]map[string]types.DotmeshVolume, error)
+	GetVersion() (VersionInfo, error)
 }
 
 func CheckName(name string) bool {
