@@ -52,6 +52,7 @@ type Dotmesh interface {
 	Fork(request types.ForkRequest) (string, error)
 	List() (map[string]map[string]types.DotmeshVolume, error)
 	GetVersion() (VersionInfo, error)
+	GetTransfer(transferId string) (TransferPollResult, error)
 }
 
 func CheckName(name string) bool {
@@ -841,6 +842,20 @@ func (transferPollResult TransferPollResult) String() string {
 	return toString
 }
 
+func (dm *DotmeshAPI) GetTransfer(transferId string) (TransferPollResult, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
+	return dm.GetTransferWithContext(transferId, ctx, cancel)
+}
+
+func (dm *DotmeshAPI) GetTransferWithContext(transferId string, ctx context.Context, cancel context.CancelFunc) (TransferPollResult, error) {
+	defer cancel()
+	var result TransferPollResult
+	err := dm.CallRemote(
+		ctx, "DotmeshRPC.GetTransfer", transferId, &result,
+	)
+	return result, err
+}
+
 type pollTransferInternalResult struct {
 	result TransferPollResult
 	err    error
@@ -854,7 +869,6 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 	started := false
 
 	debugMode := os.Getenv("DEBUG_MODE") != ""
-
 	for {
 		if debugMode {
 			out.Write([]byte("DEBUG About to sleep for 1s...\n"))
@@ -865,16 +879,12 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 
 		ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
 		defer cancel()
-
 		go func() {
 			if debugMode {
 				out.Write([]byte(fmt.Sprintf("DEBUG Calling GetTransfer(%s)...\n", transferId)))
 			}
-
 			var result pollTransferInternalResult
-			result.err = dm.CallRemote(
-				ctx, "DotmeshRPC.GetTransfer", transferId, &(result.result),
-			)
+			result.result, result.err = dm.GetTransferWithContext(transferId, ctx, cancel)
 			if debugMode {
 				out.Write([]byte(fmt.Sprintf(
 					"DEBUG done GetTransfer(%s), got err %#v and result %#v...\n",
