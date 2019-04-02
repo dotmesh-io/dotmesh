@@ -53,6 +53,7 @@ type Dotmesh interface {
 	List() (map[string]map[string]types.DotmeshVolume, error)
 	GetVersion() (VersionInfo, error)
 	GetTransfer(transferId string) (TransferPollResult, error)
+	Transfer(request types.TransferRequest) (string, error)
 }
 
 func CheckName(name string) bool {
@@ -1162,8 +1163,7 @@ func (dm *DotmeshAPI) RequestTransfer(
 			fmt.Printf("[DEBUG] TransferRequest: %#v\n", transferRequest)
 		}
 
-		err = client.CallRemote(context.Background(),
-			"DotmeshRPC.Transfer", transferRequest, &transferId)
+		transferId, err = dm.Transfer(transferRequest)
 		if err != nil {
 			return "", err
 		}
@@ -1204,6 +1204,12 @@ func (dm *DotmeshAPI) RequestTransfer(
 	}
 	return transferId, nil
 
+}
+
+func (dm *DotmeshAPI) Transfer(request types.TransferRequest) (string, error) {
+	var transferId string
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.Transfer", request, &transferId)
+	return transferId, err
 }
 
 func (dm *DotmeshAPI) IsUserPriveledged() bool {
