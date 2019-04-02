@@ -895,7 +895,14 @@ func (f *FsMachine) snapshotsChanged() error {
 	var snaps []*types.Snapshot
 	f.snapshotsLock.Lock()
 	for _, s := range f.filesystem.Snapshots {
-		snaps = append(snaps, s.DeepCopy())
+		copied := s.DeepCopy()
+		newMeta, err := f.getMetadata(*copied)
+		if err != nil {
+			return err
+		}
+		copied.Metadata = newMeta
+		snaps = append(snaps, copied)
+
 	}
 	f.snapshotsLock.Unlock()
 	return f.state.UpdateSnapshotsFromKnownState(
