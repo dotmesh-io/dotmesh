@@ -844,6 +844,10 @@ func (transferPollResult TransferPollResult) String() string {
 
 func (dm *DotmeshAPI) GetTransfer(transferId string) (TransferPollResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
+	return dm.GetTransferWithContext(transferId, ctx, cancel)
+}
+
+func (dm *DotmeshAPI) GetTransferWithContext(transferId string, ctx context.Context, cancel context.CancelFunc) (TransferPollResult, error) {
 	defer cancel()
 	var result TransferPollResult
 	err := dm.CallRemote(
@@ -881,7 +885,7 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 			}
 
 			var result pollTransferInternalResult
-			result.result, result.err = dm.GetTransfer(transferId)
+			result.result, result.err = dm.GetTransferWithContext(transferId, ctx, cancel)
 			if debugMode {
 				out.Write([]byte(fmt.Sprintf(
 					"DEBUG done GetTransfer(%s), got err %#v and result %#v...\n",
