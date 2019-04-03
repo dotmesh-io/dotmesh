@@ -719,20 +719,14 @@ func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextSt
 	} else {
 		snapshotId = snapshotIdInter.(string)
 	}
-	encodedList, err := encodeMetadata(meta)
-	zfsProps := make([]string, 0)
+	metadataEncoded := encodeMapValues(meta)
+	err = f.writeMetadata(metadataEncoded, f.filesystemId, snapshotId)
 	if err != nil {
-		metadataEncoded := encodeMapValues(meta)
-		err = f.writeMetadata(metadataEncoded, f.filesystemId, snapshotId)
-		if err != nil {
-			return &types.Event{
-				Name: "failed-writing-metadata", Args: &types.EventArgs{"err": err.Error()},
-			}, backoffState
-		}
-	} else {
-		zfsProps = encodedList
+		return &types.Event{
+			Name: "failed-writing-metadata", Args: &types.EventArgs{"err": err.Error()},
+		}, backoffState
 	}
-	output, err := f.zfs.Snapshot(f.filesystemId, snapshotId, zfsProps)
+	output, err := f.zfs.Snapshot(f.filesystemId, snapshotId, make([]string, 0))
 	if err != nil {
 		return &types.Event{
 			Name: "failed-snapshot",
