@@ -2,7 +2,7 @@
 // Source: pkg/zfs/zfs.go
 
 // Package mock_zfs is a generated GoMock package.
-package mock_zfs
+package mocks
 
 import (
 	bytes "bytes"
