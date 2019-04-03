@@ -638,6 +638,7 @@ func startDotmeshContainer(pkiPath, adminKey, adminPassword string, storage *dot
 	case types.StorageBackendEtcd:
 		args = append(args, "-e", fmt.Sprintf("%s=%s", types.EnvEtcdEndpoint, storage.etcdURL))
 	case types.StorageBackendBoltdb:
+		args = append(args, "-e", fmt.Sprintf("%s=%s", types.EnvStorageBackend, types.StorageBackendBoltdb))
 		args = append(args, "-e", fmt.Sprintf("%s=%s", types.EnvDotmeshBoltdbPath, storage.boltDBPath))
 	}
 
