@@ -100,7 +100,7 @@ func TestDefaultDot(t *testing.T) {
 	})
 }
 
-func TestDefaultDotWithBoltDBStore(t *testing.T) {
+func TestBoltDBStoreWithDefaultDot(t *testing.T) {
 	// Test default dot select on a totally fresh cluster
 	citools.TeardownFinishedTestRuns()
 
