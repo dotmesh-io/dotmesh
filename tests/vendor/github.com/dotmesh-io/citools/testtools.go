@@ -2172,7 +2172,7 @@ func (c *BlankCluster) isBlank() bool {
 
 func (c *BlankCluster) Start(t *testing.T, now int64, i int) error {
 	if c.DesiredNodeCount == 0 {
-		panic("no such thing as a zero-node cluster")
+		t.Fatal("no such thing as a zero-node cluster")
 	}
 
 	clusterName := fmt.Sprintf("cluster_%d", i)

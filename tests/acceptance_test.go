@@ -100,6 +100,75 @@ func TestDefaultDot(t *testing.T) {
 	})
 }
 
+func TestDefaultDotWithBoltDBStore(t *testing.T) {
+	// Test default dot select on a totally fresh cluster
+	citools.TeardownFinishedTestRuns()
+
+	env := map[string]string{
+		"DOTMESH_STORAGE": "boltdb",
+	}
+	f := citools.Federation{citools.NewClusterWithEnv(1, env)}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
+
+	citools.StartTiming()
+	err := f.Start(t)
+	if err != nil {
+		t.Fatalf("failed to start cluster, error: %s", err)
+	}
+	node1 := f[0].GetNode(0).Container
+
+	// These test MUST BE RUN ON A CLUSTER WITH NO DOTS.
+	// Ensure that any other test in this suite deletes all its dots at the end.
+
+	t.Run("DefaultDotSwitch", func(t *testing.T) {
+		fsname := citools.UniqName()
+
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/HELLO")
+
+		// This would fail if we didn't pick up a default dot when there's only one
+		citools.RunOnNode(t, node1, "dm commit -m 'Commit without selecting a dot first'")
+
+		// Clean up
+		checkTestContainerExits(t, node1)
+		citools.RunOnNode(t, node1, "dm dot delete -f "+fsname)
+	})
+
+	// Embarrassingly, the combination of the above and below tests
+	// together test that Configuration.DeleteStateForVolume correctly
+	// cleans up the dot name from DefaultDotSwitch sothat
+	// NoDefaultDotError runs successfully (otherwise, volume_1) is
+	// still selected so we have a default, even if it doesn't exist.
+
+	// We *could* write an explicit test for this case, but it's
+	// probably not worth it as it *is* tested here.
+
+	// But only due to the interaction between two tests. So I'm
+	// documenting this nastiness.
+
+	t.Run("NoDefaultDotError", func(t *testing.T) {
+		fsname1 := citools.UniqName()
+		fsname2 := citools.UniqName()
+
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname1)+" touch /foo/HELLO")
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname2)+" touch /foo/HELLO")
+
+		// This should fail if we didn't pick up a default dot when there's only one
+		st := citools.OutputFromRunOnNode(t, node1, "if dm commit -m 'Commit without selecting a dot first'; then false; else true; fi")
+
+		expectedPhrase := "No current dot is selected"
+		if !strings.Contains(st, expectedPhrase) {
+			// t.Error(fmt.Sprintf("We didn't get an error when a default dot couldn't be found: %+v", st))
+			t.Errorf("expected to find '%s' in '%s' but didn't get it", expectedPhrase, st)
+		}
+
+		// Clean up
+		checkTestContainerExits(t, node1)
+		citools.RunOnNode(t, node1, "dm dot delete -f "+fsname1)
+		citools.RunOnNode(t, node1, "dm dot delete -f "+fsname2)
+	})
+}
+
 func TestRecoverFromUnmountedDotOnMaster(t *testing.T) {
 	// single node tests
 	citools.TeardownFinishedTestRuns()
