@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
+	log "github.com/sirupsen/logrus"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -85,12 +86,14 @@ func (f *FsMachine) getMetadata(commit types.Snapshot) (map[string]string, error
 	if result.Name != "mounted" {
 		return nil, fmt.Errorf("Failed mounting filesystem, event - %#v", result)
 	}
+	log.WithField("path", pathToFs).Debug("[metadata.getMetadata] ok, mounted, will read files now")
 	metaFile := fmt.Sprintf("%s/dotmesh.metadata/%s.json", pathToFs, commit.Id)
 	data, err := ioutil.ReadFile(metaFile)
 	// ignore os.IsNotExist - that probably means it's a commit from before we started writing commit metadata to a file
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
 	} else if os.IsNotExist(err) {
+		log.Debug("[metadata.getMetadata] did not find any data, will return whatever was there already")
 		return commit.Metadata, nil
 	}
 	var overrides map[string]string

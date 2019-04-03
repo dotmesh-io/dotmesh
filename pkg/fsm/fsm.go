@@ -687,9 +687,13 @@ func (f *FsMachine) fork(e *types.Event) (responseEvent *types.Event, nextState 
 	}
 
 	// go ahead and create the filesystem machine
-	_, err = f.state.InitFilesystemMachine(forkId)
+	fsm, err := f.state.InitFilesystemMachine(forkId)
 	if err != nil {
 		return types.NewErrorEvent("cannot-fork:error-activating-statemachine", err), activeState
+	}
+	err = fsm.discover()
+	if err != nil {
+		return types.NewErrorEvent("forked:failed-discovering-commits", err), activeState
 	}
 
 	return &types.Event{Name: "forked", Args: &types.EventArgs{"ForkId": forkId}}, activeState
@@ -890,6 +894,7 @@ func (f *FsMachine) snapshotsChanged() error {
 	f.snapshotsLock.Lock()
 	for _, s := range f.filesystem.Snapshots {
 		copied := s.DeepCopy()
+		log.WithField("snapshot_id", s.Id).Info("[fsm.snapshotsChanged] reading snapshot data from filesystem")
 		newMeta, err := f.getMetadata(*copied)
 		if err != nil {
 			return err
