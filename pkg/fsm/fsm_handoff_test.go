@@ -9,12 +9,13 @@ import (
 
 func TestUpdateMasterA(t *testing.T) {
 
-	kvdb, err := store.NewKVDBFilesystemStore(&store.KVDBConfig{
+	client, err := store.NewKVDBClient(&store.KVDBConfig{
 		Type: store.KVTypeMem,
 	})
 	if err != nil {
 		t.Fatalf("failed to init kv store: %s", err)
 	}
+	kvdb := store.NewKVDBFilesystemStore(client)
 
 	fm := &types.FilesystemMaster{
 		NodeID:       "1",
@@ -43,12 +44,14 @@ func TestUpdateMasterA(t *testing.T) {
 
 func TestUpdateMasterB(t *testing.T) {
 
-	kvdb, err := store.NewKVDBFilesystemStore(&store.KVDBConfig{
+	client, err := store.NewKVDBClient(&store.KVDBConfig{
 		Type: store.KVTypeMem,
 	})
 	if err != nil {
 		t.Fatalf("failed to init kv store: %s", err)
 	}
+
+	kvdb := store.NewKVDBFilesystemStore(client)
 
 	fm := &types.FilesystemMaster{
 		NodeID:       "3",
