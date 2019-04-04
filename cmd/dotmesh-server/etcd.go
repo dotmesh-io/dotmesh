@@ -83,30 +83,19 @@ func getKVDBCfg() *store.KVDBConfig {
 func getKVDBStores() (store.FilesystemStore, store.RegistryStore, store.ServerStore, store.KVStoreWithIndex) {
 
 	cfg := getKVDBCfg()
-	kvdbStore, err := store.NewKVDBFilesystemStore(cfg)
+	client, err := store.NewKVDBClient(cfg)
 	if err != nil {
 		log.WithFields(log.Fields{
-			"options":  cfg.Options,
-			"endpoint": cfg.Machines,
 			"error":    err,
-		}).Fatalf("failed to setup KV store")
-	}
-	kvdbIndexStore, err := store.NewKVDBStoreWithIndex(cfg, user.UsersPrefix)
-	if err != nil {
-		log.WithFields(log.Fields{
+			"machines": cfg.Machines,
 			"options":  cfg.Options,
-			"endpoint": cfg.Machines,
-			"error":    err,
-		}).Fatalf("failed to setup KV index store")
+		}).Fatal("failed to create KVDB client")
 	}
-	serverStore, err := store.NewKVServerStore(cfg)
-	if err != nil {
-		log.WithFields(log.Fields{
-			"options":  cfg.Options,
-			"endpoint": cfg.Machines,
-			"error":    err,
-		}).Fatalf("failed to setup server store")
-	}
+
+	kvdbStore := store.NewKVDBFilesystemStore(client)
+	kvdbIndexStore := store.NewKVDBStoreWithIndex(client, user.UsersPrefix)
+	serverStore := store.NewKVServerStore(client)
+
 	return kvdbStore, kvdbStore, serverStore, kvdbIndexStore
 }
 
