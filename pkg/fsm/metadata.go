@@ -4,12 +4,13 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/dotmesh-io/dotmesh/pkg/types"
-	log "github.com/sirupsen/logrus"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
+
+	"github.com/dotmesh-io/dotmesh/pkg/types"
+	log "github.com/sirupsen/logrus"
 )
 
 const keyRegex = "[a-z]+[a-z0-9-]*"
@@ -80,7 +81,7 @@ func (f *FsMachine) writeMetadata(meta map[string]string, filesystemId, snapshot
 	return nil
 }
 
-func (f *FsMachine) getMetadata(commit types.Snapshot) (map[string]string, error) {
+func (f *FsMachine) getMetadata(commit *types.Snapshot) (map[string]string, error) {
 	pathToFs := f.zfs.FQ(f.filesystemId)
 	result := f.Mount()
 	if result.Name != "mounted" {
