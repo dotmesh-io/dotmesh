@@ -13,14 +13,17 @@ import (
 const TestPrefix = "/registrytests"
 
 func TestUpdateFilesystemFromEtcdA(t *testing.T) {
-	idxStore, _ := store.NewKVDBStoreWithIndex(&store.KVDBConfig{
-		Type: store.KVTypeMem,
-	}, "users")
-
-	um := user.New(idxStore)
-	kvClient, _ := store.NewKVDBFilesystemStore(&store.KVDBConfig{
+	client, err := store.NewKVDBClient(&store.KVDBConfig{
 		Type: store.KVTypeMem,
 	})
+	if err != nil {
+		t.Fatalf("failed to init kv store: %s", err)
+	}
+	idxStore := store.NewKVDBStoreWithIndex(client, "users")
+
+	um := user.New(idxStore)
+	kvClient := store.NewKVDBFilesystemStore(client)
+
 	registry := NewRegistry(um, kvClient)
 
 	// 1. Creating user
@@ -57,14 +60,17 @@ func TestUpdateFilesystemFromEtcdA(t *testing.T) {
 }
 
 func TestUpdateCollaborators(t *testing.T) {
-	idxStore, _ := store.NewKVDBStoreWithIndex(&store.KVDBConfig{
-		Type: store.KVTypeMem,
-	}, "users")
-
-	um := user.New(idxStore)
-	kvClient, _ := store.NewKVDBFilesystemStore(&store.KVDBConfig{
+	client, err := store.NewKVDBClient(&store.KVDBConfig{
 		Type: store.KVTypeMem,
 	})
+	if err != nil {
+		t.Fatalf("failed to init kv store: %s", err)
+	}
+	idxStore := store.NewKVDBStoreWithIndex(client, "users")
+
+	um := user.New(idxStore)
+	kvClient := store.NewKVDBFilesystemStore(client)
+
 	registry := NewRegistry(um, kvClient)
 
 	// Creating owner and collaborator
@@ -131,14 +137,16 @@ func TestUpdateCollaborators(t *testing.T) {
 }
 
 func TestDumpInternalState(t *testing.T) {
-	idxStore, _ := store.NewKVDBStoreWithIndex(&store.KVDBConfig{
-		Type: store.KVTypeMem,
-	}, "users")
-
-	um := user.New(idxStore)
-	kvClient, _ := store.NewKVDBFilesystemStore(&store.KVDBConfig{
+	client, err := store.NewKVDBClient(&store.KVDBConfig{
 		Type: store.KVTypeMem,
 	})
+	if err != nil {
+		t.Fatalf("failed to init kv store: %s", err)
+	}
+	idxStore := store.NewKVDBStoreWithIndex(client, "users")
+
+	um := user.New(idxStore)
+	kvClient := store.NewKVDBFilesystemStore(client)
 	registry := NewRegistry(um, kvClient)
 
 	// 1. Creating user
@@ -170,14 +178,16 @@ func TestDumpInternalState(t *testing.T) {
 }
 
 func TestGetFilesystemByID(t *testing.T) {
-	idxStore, _ := store.NewKVDBStoreWithIndex(&store.KVDBConfig{
-		Type: store.KVTypeMem,
-	}, "users")
-
-	um := user.New(idxStore)
-	kvClient, _ := store.NewKVDBFilesystemStore(&store.KVDBConfig{
+	client, err := store.NewKVDBClient(&store.KVDBConfig{
 		Type: store.KVTypeMem,
 	})
+	if err != nil {
+		t.Fatalf("failed to init kv store: %s", err)
+	}
+	idxStore := store.NewKVDBStoreWithIndex(client, "users")
+
+	um := user.New(idxStore)
+	kvClient := store.NewKVDBFilesystemStore(client)
 	registry := NewRegistry(um, kvClient)
 
 	// 1. Creating user
