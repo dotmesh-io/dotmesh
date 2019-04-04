@@ -892,18 +892,24 @@ func (f *FsMachine) snapshotsChanged() error {
 	// it's notified about.
 	var snaps []*types.Snapshot
 	f.snapshotsLock.Lock()
+	defer f.snapshotsLock.Unlock()
+
 	for _, s := range f.filesystem.Snapshots {
 		copied := s.DeepCopy()
 		log.WithField("snapshot_id", s.Id).Info("[fsm.snapshotsChanged] reading snapshot data from filesystem")
-		newMeta, err := f.getMetadata(*copied)
+		newMeta, err := f.getMetadata(copied)
 		if err != nil {
-			return err
+			log.WithFields(log.Fields{
+				"error":       err,
+				"snapshot_id": s.Id,
+			}).Error("snapshotsChanged: couldn't read snapshot metadata")
+		} else {
+			copied.Metadata = newMeta
 		}
-		copied.Metadata = newMeta
 		snaps = append(snaps, copied)
 
 	}
-	f.snapshotsLock.Unlock()
+
 	return f.state.UpdateSnapshotsFromKnownState(
 		f.state.NodeID(), f.filesystemId, snaps,
 	)
