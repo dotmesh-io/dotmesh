@@ -22,15 +22,10 @@ const (
 	ServerStatesPrefix    = "servers/states/"
 )
 
-func NewKVServerStore(cfg *KVDBConfig) (*KVServerStore, error) {
-	client, err := getKVDBClient(cfg)
-	if err != nil {
-		return nil, err
-	}
-
+func NewKVServerStore(client kvdb.Kvdb) *KVServerStore {
 	return &KVServerStore{
 		client: client,
-	}, nil
+	}
 }
 
 func (s *KVServerStore) ListAddresses() ([]*types.Server, error) {

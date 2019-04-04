@@ -10,12 +10,13 @@ import (
 
 func TestWatchContainersA(t *testing.T) {
 
-	kvdb, err := NewKVDBFilesystemStore(&KVDBConfig{
+	client, err := getKVDBClient(&KVDBConfig{
 		Type: KVTypeMem,
 	})
 	if err != nil {
 		t.Fatalf("failed to init kv store: %s", err)
 	}
+	kvdb := NewKVDBFilesystemStore(client)
 
 	fsID := "123456789"
 	found := false
@@ -61,12 +62,13 @@ func TestWatchContainersA(t *testing.T) {
 // Watching directory after multiple changes
 func TestWatchContainersLater(t *testing.T) {
 
-	kvdb, err := NewKVDBFilesystemStore(&KVDBConfig{
+	client, err := getKVDBClient(&KVDBConfig{
 		Type: KVTypeMem,
 	})
 	if err != nil {
 		t.Fatalf("failed to init kv store: %s", err)
 	}
+	kvdb := NewKVDBFilesystemStore(client)
 
 	fsID := "123456789"
 	var modifiedIdx uint64
