@@ -746,6 +746,7 @@ func (d *DotmeshRPC) Commits(
 	if err != nil {
 		return err
 	}
+	log.WithField("args", *args).Debug("CRG DEBUG: in `Commits`")
 
 	filesystemId, err := d.state.registry.MaybeCloneFilesystemId(
 		VolumeName{Namespace: args.Namespace, Name: args.Name},

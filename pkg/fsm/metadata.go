@@ -4,12 +4,15 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
 
 	"github.com/dotmesh-io/dotmesh/pkg/types"
+	"github.com/dotmesh-io/dotmesh/pkg/utils"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -64,12 +67,13 @@ func encodeMapValues(meta map[string]string) map[string]string {
 }
 
 func (f *FsMachine) writeMetadata(meta map[string]string, filesystemId, snapshotId string) error {
-	pathToFs := f.zfs.FQ(f.filesystemId)
+	pathToFs := utils.Mnt(f.filesystemId)
 	data, err := json.Marshal(meta)
 	if err != nil {
 		return err
 	}
 	metaFile := fmt.Sprintf("%s/dotmesh.metadata/%s.json", pathToFs, snapshotId)
+	log.WithField("meta_file", metaFile).WithField("path", pathToFs).Debug("Writing metadata to file")
 	err = os.MkdirAll(filepath.Dir(metaFile), 0666)
 	if err != nil {
 		return err
@@ -82,12 +86,12 @@ func (f *FsMachine) writeMetadata(meta map[string]string, filesystemId, snapshot
 }
 
 func (f *FsMachine) getMetadata(commit *types.Snapshot) (map[string]string, error) {
-	pathToFs := f.zfs.FQ(f.filesystemId)
+	pathToFs := utils.Mnt(f.filesystemId)
 	result := f.Mount()
 	if result.Name != "mounted" {
 		return nil, fmt.Errorf("Failed mounting filesystem, event - %#v", result)
 	}
-	log.WithField("path", pathToFs).Debug("[metadata.getMetadata] ok, mounted, will read files now")
+	log.WithField("path", pathToFs).WithField("event", *result).Debug("[metadata.getMetadata] ok, mounted, will read files now")
 	metaFile := fmt.Sprintf("%s/dotmesh.metadata/%s.json", pathToFs, commit.Id)
 	data, err := ioutil.ReadFile(metaFile)
 	// ignore os.IsNotExist - that probably means it's a commit from before we started writing commit metadata to a file
@@ -103,7 +107,12 @@ func (f *FsMachine) getMetadata(commit *types.Snapshot) (map[string]string, erro
 		return nil, err
 	}
 	for key, value := range overrides {
-		commit.Metadata[key] = value
+		decoded, err := base64.StdEncoding.DecodeString(value)
+		if err != nil {
+			return nil, err
+		}
+		commit.Metadata[key] = string(decoded)
 	}
+	log.WithField("meta", commit.Metadata).WithField("fsId", f.filesystemId).Debug("[metadata.getMetadata] CRG DEBUG")
 	return commit.Metadata, nil
 }

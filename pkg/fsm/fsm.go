@@ -687,15 +687,10 @@ func (f *FsMachine) fork(e *types.Event) (responseEvent *types.Event, nextState 
 	}
 
 	// go ahead and create the filesystem machine
-	fsm, err := f.state.InitFilesystemMachine(forkId)
+	_, err = f.state.InitFilesystemMachine(forkId)
 	if err != nil {
 		return types.NewErrorEvent("cannot-fork:error-activating-statemachine", err), activeState
 	}
-	err = fsm.discover()
-	if err != nil {
-		return types.NewErrorEvent("forked:failed-discovering-commits", err), activeState
-	}
-
 	return &types.Event{Name: "forked", Args: &types.EventArgs{"ForkId": forkId}}, activeState
 }
 
@@ -725,7 +720,9 @@ func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextSt
 	}
 	metadataEncoded := encodeMapValues(meta)
 	err = f.writeMetadata(metadataEncoded, f.filesystemId, snapshotId)
+	log.WithField("fsId", f.filesystemId).Debug("CRG debug")
 	if err != nil {
+		log.WithError(err).Error("Failed writing commit metadata to file!!!")
 		return &types.Event{
 			Name: "failed-writing-metadata", Args: &types.EventArgs{"err": err.Error()},
 		}, backoffState
@@ -907,7 +904,7 @@ func (f *FsMachine) snapshotsChanged() error {
 			copied.Metadata = newMeta
 		}
 		snaps = append(snaps, copied)
-
+		log.WithField("meta", snaps[len(snaps)-1].Metadata).WithField("snapId", snaps[len(snaps)-1].Id).WithField("FsId", f.filesystemId).Debug("[fsm.snapshotsChanged] CRG debug: completed collecting snaps")
 	}
 
 	return f.state.UpdateSnapshotsFromKnownState(
