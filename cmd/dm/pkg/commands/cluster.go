@@ -372,9 +372,23 @@ func clusterUpgrade(cmd *cobra.Command, args []string, out io.Writer) error {
 		fmt.Printf("done.\n")
 	}
 
+	storageOpts := &dotmeshStorage{}
+
+	if os.Getenv(types.EnvStorageBackend) == types.StorageBackendBoltdb {
+		storageOpts.storageBackend = types.StorageBackendBoltdb
+
+		storageOpts.boltDBPath = types.DefaultBoltdbPath
+		if os.Getenv(types.EnvDotmeshBoltdbPath) != "" {
+			storageOpts.boltDBPath = os.Getenv(types.EnvDotmeshBoltdbPath)
+		}
+	} else {
+		storageOpts.storageBackend = types.StorageBackendEtcd
+		storageOpts.etcdURL = types.DefaultEtcdURL
+	}
+
 	pkiPath := getPkiPath()
 	fmt.Printf("Starting dotmesh server... ")
-	err = startDotmeshContainer(pkiPath, "", "", types.DefaultEtcdURL)
+	err = startDotmeshContainer(pkiPath, "", "", storageOpts)
 	if err != nil {
 		return err
 	}
@@ -567,7 +581,15 @@ func pathExists(path string) (bool, error) {
 	return true, err
 }
 
-func startDotmeshContainer(pkiPath, adminKey, adminPassword, etcdClientURL string) error {
+type dotmeshStorage struct {
+	storageBackend string // etcd, boltdb
+
+	etcdURL    string
+	boltDBPath string
+}
+
+// func startDotmeshContainer(pkiPath, adminKey, adminPassword, etcdClientURL string) error {
+func startDotmeshContainer(pkiPath, adminKey, adminPassword string, storage *dotmeshStorage) error {
 	if traceAddr != "" {
 		fmt.Printf("Trace address: %s\n", traceAddr)
 	}
@@ -592,7 +614,7 @@ func startDotmeshContainer(pkiPath, adminKey, adminPassword, etcdClientURL strin
 			"/usr/sbin:/usr/bin:/sbin:/bin",
 		"-e", "LD_LIBRARY_PATH=/bundled-lib/lib:/bundled-lib/usr/lib/",
 		// Setting up Etcd endpoint
-		"-e", fmt.Sprintf("%s=%s", types.EnvEtcdEndpoint, etcdClientURL),
+		// "-e", fmt.Sprintf("%s=%s", types.EnvEtcdEndpoint, etcdClientURL),
 		// Allow tests to specify which pool to create and where.
 		"-e", fmt.Sprintf("USE_POOL_NAME=%s", usePoolName),
 		"-e", fmt.Sprintf("USE_POOL_DIR=%s", usePoolDir),
@@ -611,6 +633,15 @@ func startDotmeshContainer(pkiPath, adminKey, adminPassword, etcdClientURL strin
 		"-e", fmt.Sprintf("DOTMESH_UPGRADES_URL=%s", checkpointUrl),
 		"-e", fmt.Sprintf("DOTMESH_UPGRADES_INTERVAL_SECONDS=%d", checkpointInterval),
 	}
+
+	switch storage.storageBackend {
+	case types.StorageBackendEtcd:
+		args = append(args, "-e", fmt.Sprintf("%s=%s", types.EnvEtcdEndpoint, storage.etcdURL))
+	case types.StorageBackendBoltdb:
+		args = append(args, "-e", fmt.Sprintf("%s=%s", types.EnvStorageBackend, types.StorageBackendBoltdb))
+		args = append(args, "-e", fmt.Sprintf("%s=%s", types.EnvDotmeshBoltdbPath, storage.boltDBPath))
+	}
+
 	if adminKey != "" {
 		args = append(args, "-e", fmt.Sprintf("INITIAL_ADMIN_API_KEY=%s", adminKey))
 	}
@@ -712,31 +743,48 @@ func saveLocalAuthDetails(configPath, adminPassword, adminKey string) error {
 	return nil
 }
 
-func clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath string) error {
+func clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath string, storageBackend string) error {
 
-	fmt.Printf("Checking  whether we should start Etcd on this node.. \n")
-	startEtcd, address, err := shouldStartEtcd(clusterUrl)
-	if err != nil {
-		return fmt.Errorf("failed to check whether should start an Etcd, error: %s", err)
-	}
-	// etcdURL := types.DefaultEtcdURL
-	var etcdURL string
-	if startEtcd {
-		fmt.Printf("Starting etcd, no existing Etcd addresses detected \n")
-		err = startEtcdContainer(clusterUrl, adminPassword, adminKey, pkiPath)
+	storageOpts := &dotmeshStorage{}
+
+	switch storageBackend {
+	case types.StorageBackendEtcd:
+		fmt.Printf("Checking  whether we should start Etcd on this node.. \n")
+		startEtcd, address, err := shouldStartEtcd(clusterUrl)
 		if err != nil {
-			return fmt.Errorf("failed to start Etcd container, error: %s", err)
+			return fmt.Errorf("failed to check whether should start an Etcd, error: %s", err)
 		}
-		// ok, connecting locally. An etcd server should be created
-		// and accessible
-		etcdURL = "https://dotmesh-etcd:42379"
-	} else {
-		etcdURL = fmt.Sprintf("https://%s:%s", address, types.DefaultEtcdClientPort)
-		fmt.Printf("Found external Etcd, configuring connection to '%s'...\n", etcdURL)
+		// etcdURL := types.DefaultEtcdURL
+		var etcdURL string
+		if startEtcd {
+			fmt.Printf("Starting etcd, no existing Etcd addresses detected \n")
+			err = startEtcdContainer(clusterUrl, adminPassword, adminKey, pkiPath)
+			if err != nil {
+				return fmt.Errorf("failed to start Etcd container, error: %s", err)
+			}
+			// ok, connecting locally. An etcd server should be created
+			// and accessible
+			etcdURL = "https://dotmesh-etcd:42379"
+		} else {
+			etcdURL = fmt.Sprintf("https://%s:%s", address, types.DefaultEtcdClientPort)
+			fmt.Printf("Found external Etcd, configuring connection to '%s'...\n", etcdURL)
+		}
+
+		storageOpts.storageBackend = types.StorageBackendEtcd
+		storageOpts.etcdURL = etcdURL
+
+	case types.StorageBackendBoltdb:
+		fmt.Printf("Using Boltdb storage backend")
+		storageOpts.storageBackend = types.StorageBackendBoltdb
+
+		storageOpts.boltDBPath = types.DefaultBoltdbPath
+		if os.Getenv(types.EnvDotmeshBoltdbPath) != "" {
+			storageOpts.boltDBPath = os.Getenv(types.EnvDotmeshBoltdbPath)
+		}
 	}
 
 	if adminPassword != "" && adminKey != "" {
-		err = saveLocalAuthDetails(configPath, adminPassword, adminKey)
+		err := saveLocalAuthDetails(configPath, adminPassword, adminKey)
 		if err != nil {
 			return err
 		}
@@ -775,7 +823,7 @@ func clusterCommonSetup(clusterUrl, adminPassword, adminKey, pkiPath string) err
 
 	// - Start dotmesh-server.
 	fmt.Printf("Starting dotmesh server... \n")
-	err = startDotmeshContainer(pkiPath, adminKey, adminPassword, etcdURL)
+	err = startDotmeshContainer(pkiPath, adminKey, adminPassword, storageOpts)
 	if err != nil {
 		return err
 	}
@@ -989,6 +1037,17 @@ func clusterInit(cmd *cobra.Command, args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	storageBackend := os.Getenv(types.EnvStorageBackend)
+
+	// defaulting to etcd storage
+	if storageBackend == "" {
+		storageBackend = types.StorageBackendEtcd
+	}
+
+	if storageBackend == types.StorageBackendBoltdb && serverCount > 1 {
+		return fmt.Errorf("when using %s env variable with %s, cluster cannot be bigger than 1 node", types.EnvStorageBackend, types.StorageBackendBoltdb)
+	}
+
 	fmt.Printf("Registering new cluster... ")
 	// - Get a unique cluster id by asking discovery.dotmesh.io.
 	// support specifying size here (to avoid cliques/enable HA)
@@ -1106,7 +1165,7 @@ func clusterInit(cmd *cobra.Command, args []string, out io.Writer) error {
 
 	// - Run clusterCommonSetup.
 	err = clusterCommonSetup(
-		strings.TrimSpace(clusterUrl), adminPassword, adminKey, pkiPath,
+		strings.TrimSpace(clusterUrl), adminPassword, adminKey, pkiPath, storageBackend,
 	)
 	if err != nil {
 		return err
@@ -1208,7 +1267,7 @@ func clusterJoin(cmd *cobra.Command, args []string, out io.Writer) error {
 	}
 	fmt.Printf("done!\n")
 	// - Run clusterCommonSetup.
-	err = clusterCommonSetup(clusterUrl, adminPassword, adminApiKey, pkiPath)
+	err = clusterCommonSetup(clusterUrl, adminPassword, adminApiKey, pkiPath, types.StorageBackendEtcd)
 	if err != nil {
 		return err
 	}
