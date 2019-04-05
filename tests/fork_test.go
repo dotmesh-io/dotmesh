@@ -78,8 +78,6 @@ func TestForks(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		t.Logf("Fork id is %s", forkResp)
-
 		// Alice looks for it
 		citools.RunOnNode(t, node1Name, "dm remote switch alice")
 		output := citools.OutputFromRunOnNode(t, node1Name, "dm list")
