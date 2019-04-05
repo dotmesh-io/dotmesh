@@ -3404,6 +3404,51 @@ func TestStressLotsOfCommits(t *testing.T) {
 	})
 }
 
+func TestStressLargePush(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping stress tests in short mode.")
+	}
+
+	citools.TeardownFinishedTestRuns()
+
+	f := citools.Federation{
+		citools.NewCluster(1),
+		citools.NewCluster(1),
+	}
+
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
+
+	citools.StartTiming()
+	err := f.Start(t)
+	if err != nil {
+		t.Fatalf("failed to start cluster, error: %s", err)
+	}
+	cluster0 := f[0].GetNode(0)
+	cluster1 := f[1].GetNode(0)
+
+	t.Run("PushLargeFileTest", func(t *testing.T) {
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, cluster0.Container, citools.DockerRun(fsname)+" dd of=/foo/largefile if=/dev/urandom bs=1M count=20K")
+		citools.RunOnNode(t, cluster0.Container, fmt.Sprintf("dm switch %s", fsname))
+		citools.RunOnNode(t, cluster0.Container, "dm commit -m'Here is a large file'")
+
+		citools.RunOnNode(t, cluster0.Container, fmt.Sprintf("dm push cluster_1"))
+
+		st := citools.OutputFromRunOnNode(t, cluster1.Container, "dm list")
+		if !strings.Contains(st, fsname) {
+			t.Errorf("We didn't see the fsname we expected (%s) in %s", fsname, st)
+		}
+
+		citools.RunOnNode(t, cluster1.Container, fmt.Sprintf("dm switch %s", fsname))
+		st = citools.OutputFromRunOnNode(t, cluster1.Container, "dm log | grep 'Here is a large file' | wc -l")
+		if st != "1\n" {
+			t.Errorf("We didn't see the commit")
+		}
+		checkTestContainerExits(t, cluster1.Container)
+	})
+}
+
 func TestStressHandover(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping stress tests in short mode.")

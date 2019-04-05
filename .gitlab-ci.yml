@@ -517,6 +517,24 @@ linux_stress_lots_of_commits:
     except:
         - schedules
 
+linux_stress_large_push:
+    retry: 2
+    stage: test
+    dependencies:
+        - build_client_linux
+    tags:
+
+        - fast
+    script:
+        - DOTMESH_TEST_TIMEOUT=30m ./test.sh -run TestStressLargePush
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
+    when: manual
+    except:
+        - schedules
+
 linux_stress_handover:
     retry: 2
     stage: test
