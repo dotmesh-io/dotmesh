@@ -550,9 +550,6 @@ func (f *FsMachine) updateEtcdAboutSnapshots() error {
 		"[updateEtcdAboutSnapshots] successfully set new snaps for %s on %s, snaps: %#v",
 		f.filesystemId, f.state.NodeID(), snaps,
 	)
-	for _, s := range snaps {
-		log.WithField("commitId", (*s).Id).WithField("CommitMeta", (*s).Metadata).Debug("[updateEtcdAboutSnapshots] CRG debug, checking we have snaps and those snaps have metadata")
-	}
 	// wait until the state machine notifies us that it's changed the
 	// snapshots, but have an escape clause in case this filesystem is
 	// deleted so we don't block forever
@@ -722,7 +719,6 @@ func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextSt
 	}
 	metadataEncoded := encodeMapValues(meta)
 	err = f.writeMetadata(metadataEncoded, f.filesystemId, snapshotId)
-	log.WithField("fsId", f.filesystemId).Debug("CRG debug")
 	if err != nil {
 		log.WithError(err).Error("Failed writing commit metadata to file!!!")
 		return &types.Event{
@@ -762,7 +758,6 @@ func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextSt
 			Args: &types.EventArgs{"err": fmt.Sprintf("%v", err)},
 		}, backoffState
 	}
-	log.WithField("snaps", f.filesystem.Snapshots[0].Metadata).Debug("CRG DEBUG [f.snapshot]")
 	return &types.Event{Name: "snapshotted", Args: &types.EventArgs{"SnapshotId": snapshotId}}, activeState
 }
 
