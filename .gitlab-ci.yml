@@ -508,7 +508,7 @@ linux_stress_lots_of_commits:
 
         - fast
     script:
-        - DOTMESH_TEST_TIMEOUT=30m ./test.sh -run TestStressLotsOfCommits
+        - DOTMESH_TEST_TIMEOUT=30m ./test.sh -timeout 30m -run TestStressLotsOfCommits
     artifacts:
         paths:
         - extracted_logs
@@ -526,7 +526,7 @@ linux_stress_large_push:
 
         - fast
     script:
-        - DOTMESH_TEST_TIMEOUT=30m ./test.sh -run TestStressLargePush
+        - DOTMESH_TEST_TIMEOUT=30m ./test.sh -timeout 30m -run TestStressLargePush
     artifacts:
         paths:
         - extracted_logs
@@ -544,7 +544,7 @@ linux_stress_handover:
 
         - fast
     script:
-        - DOTMESH_TEST_TIMEOUT=30m ./test.sh -run TestStressHandover
+        - DOTMESH_TEST_TIMEOUT=30m ./test.sh -timeout 30m -run TestStressHandover
     artifacts:
         paths:
         - extracted_logs
