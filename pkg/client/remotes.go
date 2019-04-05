@@ -25,6 +25,7 @@ matter?
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"io/ioutil"
 	"os"
 	"reflect"
@@ -52,7 +53,7 @@ type DMRemote struct {
 	ApiKey               string
 	CurrentVolume        string
 	CurrentBranches      map[string]string
-	DefaultRemoteVolumes map[string]map[string]VolumeName
+	DefaultRemoteVolumes map[string]map[string]types.VolumeName
 }
 
 func (remote DMRemote) DefaultNamespace() string {
@@ -66,20 +67,20 @@ func (remote S3Remote) DefaultNamespace() string {
 // TODO is there a less hacky way of doing this? hate the duplication, but otherwise you need to cast all over the place
 func (remote *DMRemote) SetDefaultRemoteVolumeFor(localNamespace, localVolume, remoteNamespace, remoteVolume string) {
 	if remote.DefaultRemoteVolumes == nil {
-		remote.DefaultRemoteVolumes = map[string]map[string]VolumeName{}
+		remote.DefaultRemoteVolumes = map[string]map[string]types.VolumeName{}
 	}
 	if remote.DefaultRemoteVolumes[localNamespace] == nil {
-		remote.DefaultRemoteVolumes[localNamespace] = map[string]VolumeName{}
+		remote.DefaultRemoteVolumes[localNamespace] = map[string]types.VolumeName{}
 	}
-	remote.DefaultRemoteVolumes[localNamespace][localVolume] = VolumeName{remoteNamespace, remoteVolume}
+	remote.DefaultRemoteVolumes[localNamespace][localVolume] = types.VolumeName{remoteNamespace, remoteVolume}
 }
 
 func (remote *DMRemote) DefaultRemoteVolumeFor(localNamespace, localVolume string) (string, string, bool) {
 	if remote.DefaultRemoteVolumes == nil {
-		remote.DefaultRemoteVolumes = map[string]map[string]VolumeName{}
+		remote.DefaultRemoteVolumes = map[string]map[string]types.VolumeName{}
 	}
 	if remote.DefaultRemoteVolumes[localNamespace] == nil {
-		remote.DefaultRemoteVolumes[localNamespace] = map[string]VolumeName{}
+		remote.DefaultRemoteVolumes[localNamespace] = map[string]types.VolumeName{}
 	}
 	volName, ok := remote.DefaultRemoteVolumes[localNamespace][localVolume]
 	if ok {

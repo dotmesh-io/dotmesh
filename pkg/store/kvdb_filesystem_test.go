@@ -10,12 +10,14 @@ import (
 
 func TestListMastersIndex(t *testing.T) {
 
-	kvdb, err := NewKVDBFilesystemStore(&KVDBConfig{
+	client, err := getKVDBClient(&KVDBConfig{
 		Type: KVTypeMem,
 	})
 	if err != nil {
 		t.Fatalf("failed to init kv store: %s", err)
 	}
+
+	kvdb := NewKVDBFilesystemStore(client)
 
 	fsID := "123456789"
 
@@ -74,12 +76,14 @@ func TestListMastersIndex(t *testing.T) {
 
 func TestWatchMasterAfterDeletion(t *testing.T) {
 
-	kvdb, err := NewKVDBFilesystemStore(&KVDBConfig{
+	client, err := getKVDBClient(&KVDBConfig{
 		Type: KVTypeMem,
 	})
 	if err != nil {
 		t.Fatalf("failed to init kv store: %s", err)
 	}
+
+	kvdb := NewKVDBFilesystemStore(client)
 
 	fsID := "123456789"
 	found := false
@@ -145,12 +149,14 @@ func TestWatchMasterAfterDeletion(t *testing.T) {
 
 func TestWatchMasterDeleteEvent(t *testing.T) {
 
-	kvdb, err := NewKVDBFilesystemStore(&KVDBConfig{
+	client, err := getKVDBClient(&KVDBConfig{
 		Type: KVTypeMem,
 	})
 	if err != nil {
 		t.Fatalf("failed to init kv store: %s", err)
 	}
+
+	kvdb := NewKVDBFilesystemStore(client)
 
 	fsID := "123456789"
 	found := false

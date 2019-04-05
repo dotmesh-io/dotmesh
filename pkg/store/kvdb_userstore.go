@@ -37,16 +37,12 @@ type KVDBStoreWithIndex struct {
 	namespace string
 }
 
-func NewKVDBStoreWithIndex(cfg *KVDBConfig, namespace string) (*KVDBStoreWithIndex, error) {
-	client, err := getKVDBClient(cfg)
-	if err != nil {
-		return nil, err
-	}
+func NewKVDBStoreWithIndex(client kvdb.Kvdb, namespace string) *KVDBStoreWithIndex {
 
 	return &KVDBStoreWithIndex{
 		client:    client,
 		namespace: namespace,
-	}, nil
+	}
 }
 
 func (s *KVDBStoreWithIndex) List(prefix string) ([]*kvdb.KVPair, error) {

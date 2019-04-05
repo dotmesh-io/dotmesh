@@ -10,7 +10,7 @@ type CommitArgs struct {
 	Name      string
 	Branch    string
 	Message   string
-	Metadata  Metadata
+	Metadata  map[string]string
 }
 
 type CloneWithName struct {
@@ -87,12 +87,10 @@ type Origin struct {
 	SnapshotId   string
 }
 
-type Metadata map[string]string
-
 type Snapshot struct {
 	// exported for json serialization
 	Id       string
-	Metadata Metadata
+	Metadata map[string]string
 	// private (do not serialize)
 	// Filesystem *Filesystem
 }
@@ -101,7 +99,7 @@ func (s *Snapshot) DeepCopy() *Snapshot {
 	c := new(Snapshot)
 	*c = *s
 
-	meta := make(Metadata)
+	meta := make(map[string]string)
 	for k, v := range s.Metadata {
 		meta[k] = v
 	}

@@ -37,3 +37,22 @@ func (v VolumeName) StringWithoutAdmin() string {
 		return fmt.Sprintf("%s/%s", v.Namespace, v.Name)
 	}
 }
+
+type ProcureArgs struct {
+	Namespace string
+	Name      string
+	Subdot    string
+}
+
+type RollbackRequest struct {
+	Namespace  string
+	Name       string
+	Branch     string
+	SnapshotId string
+}
+
+type ForkRequest struct {
+	MasterBranchId string
+	ForkNamespace  string
+	ForkName       string
+}

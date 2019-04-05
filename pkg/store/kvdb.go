@@ -23,16 +23,10 @@ type KVDBConfig struct {
 	Prefix   string
 }
 
-func NewKVDBFilesystemStore(cfg *KVDBConfig) (*KVDBFilesystemStore, error) {
-
-	client, err := getKVDBClient(cfg)
-	if err != nil {
-		return nil, err
-	}
-
+func NewKVDBFilesystemStore(client kvdb.Kvdb) *KVDBFilesystemStore {
 	return &KVDBFilesystemStore{
 		client: client,
-	}, nil
+	}
 }
 
 // NewKVDBClient - returns kvdb.KVDB interface based on provided configuration

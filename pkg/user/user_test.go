@@ -6,13 +6,18 @@ import (
 
 	"github.com/dotmesh-io/dotmesh/pkg/store"
 
-	"github.com/nu7hatch/gouuid"
+	uuid "github.com/nu7hatch/gouuid"
 )
 
 func TestCreateUser(t *testing.T) {
-	kvClient, _ := store.NewKVDBStoreWithIndex(&store.KVDBConfig{
+
+	client, err := store.NewKVDBClient(&store.KVDBConfig{
 		Type: store.KVTypeMem,
-	}, UsersPrefix)
+	})
+	if err != nil {
+		t.Fatalf("failed to init kv store: %s", err)
+	}
+	kvClient := store.NewKVDBStoreWithIndex(client, UsersPrefix)
 
 	um := New(kvClient)
 
@@ -36,9 +41,13 @@ func TestCreateUser(t *testing.T) {
 }
 
 func TestImportUser(t *testing.T) {
-	kvClient, _ := store.NewKVDBStoreWithIndex(&store.KVDBConfig{
+	client, err := store.NewKVDBClient(&store.KVDBConfig{
 		Type: store.KVTypeMem,
-	}, UsersPrefix)
+	})
+	if err != nil {
+		t.Fatalf("failed to init kv store: %s", err)
+	}
+	kvClient := store.NewKVDBStoreWithIndex(client, UsersPrefix)
 
 	um := New(kvClient)
 
@@ -53,7 +62,7 @@ func TestImportUser(t *testing.T) {
 		Email:    "casual@email.com",
 	}
 
-	err := um.Import(immigrant)
+	err = um.Import(immigrant)
 	if err != nil {
 		t.Fatalf("didn't expect import to fail: %s", err)
 	}
@@ -84,13 +93,17 @@ func TestImportUser(t *testing.T) {
 }
 
 func TestGetWithIndex(t *testing.T) {
-	kvClient, _ := store.NewKVDBStoreWithIndex(&store.KVDBConfig{
+	client, err := store.NewKVDBClient(&store.KVDBConfig{
 		Type: store.KVTypeMem,
-	}, UsersPrefix)
+	})
+	if err != nil {
+		t.Fatalf("failed to init kv store: %s", err)
+	}
+	kvClient := store.NewKVDBStoreWithIndex(client, UsersPrefix)
 
 	um := New(kvClient)
 
-	_, err := um.New("foo", "foo@bar.works", "verysecret")
+	_, err = um.New("foo", "foo@bar.works", "verysecret")
 	if err != nil {
 		t.Fatalf("failed to create new user: %s", err)
 	}
@@ -106,13 +119,17 @@ func TestGetWithIndex(t *testing.T) {
 }
 
 func TestGetWithoutIndex(t *testing.T) {
-	kvClient, _ := store.NewKVDBStoreWithIndex(&store.KVDBConfig{
+	client, err := store.NewKVDBClient(&store.KVDBConfig{
 		Type: store.KVTypeMem,
-	}, UsersPrefix)
+	})
+	if err != nil {
+		t.Fatalf("failed to init kv store: %s", err)
+	}
+	kvClient := store.NewKVDBStoreWithIndex(client, UsersPrefix)
 
 	um := New(kvClient)
 
-	_, err := um.New("foo", "foo@bar.works", "verysecret")
+	_, err = um.New("foo", "foo@bar.works", "verysecret")
 	if err != nil {
 		t.Fatalf("failed to create new user: %s", err)
 	}
@@ -134,13 +151,16 @@ func TestGetWithoutIndex(t *testing.T) {
 }
 
 func TestAuthenticateWithoutIndex(t *testing.T) {
-	kvClient, _ := store.NewKVDBStoreWithIndex(&store.KVDBConfig{
+	client, err := store.NewKVDBClient(&store.KVDBConfig{
 		Type: store.KVTypeMem,
-	}, UsersPrefix)
-
+	})
+	if err != nil {
+		t.Fatalf("failed to init kv store: %s", err)
+	}
+	kvClient := store.NewKVDBStoreWithIndex(client, UsersPrefix)
 	um := New(kvClient)
 
-	_, err := um.New("foo", "foo@bar.works", "verysecret")
+	_, err = um.New("foo", "foo@bar.works", "verysecret")
 	if err != nil {
 		t.Fatalf("failed to create new user: %s", err)
 	}
@@ -161,13 +181,17 @@ func TestAuthenticateWithoutIndex(t *testing.T) {
 }
 
 func TestAuthenticateUserByPassword(t *testing.T) {
-	kvClient, _ := store.NewKVDBStoreWithIndex(&store.KVDBConfig{
+	client, err := store.NewKVDBClient(&store.KVDBConfig{
 		Type: store.KVTypeMem,
-	}, UsersPrefix)
+	})
+	if err != nil {
+		t.Fatalf("failed to init kv store: %s", err)
+	}
+	kvClient := store.NewKVDBStoreWithIndex(client, UsersPrefix)
 
 	um := New(kvClient)
 
-	_, err := um.New("joe", "joe@joe.com", "verysecret")
+	_, err = um.New("joe", "joe@joe.com", "verysecret")
 	if err != nil {
 		t.Fatalf("failed to create new user: %s", err)
 	}
@@ -183,9 +207,13 @@ func TestAuthenticateUserByPassword(t *testing.T) {
 }
 
 func TestAuthenticateUserByAPIKey(t *testing.T) {
-	kvClient, _ := store.NewKVDBStoreWithIndex(&store.KVDBConfig{
+	client, err := store.NewKVDBClient(&store.KVDBConfig{
 		Type: store.KVTypeMem,
-	}, UsersPrefix)
+	})
+	if err != nil {
+		t.Fatalf("failed to init kv store: %s", err)
+	}
+	kvClient := store.NewKVDBStoreWithIndex(client, UsersPrefix)
 
 	um := New(kvClient)
 

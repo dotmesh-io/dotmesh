@@ -9,11 +9,13 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/coreos/etcd/client"
 	"github.com/portworx/kvdb"
+	"github.com/portworx/kvdb/bolt"
 	"golang.org/x/net/context"
 
 	"github.com/dotmesh-io/dotmesh/pkg/store"
@@ -25,6 +27,31 @@ import (
 )
 
 func getKVDBCfg() *store.KVDBConfig {
+
+	if os.Getenv(types.EnvStorageBackend) == types.StorageBackendBoltdb {
+		// using boltdb backend
+		fp := types.DefaultBoltdbPath
+		if os.Getenv(types.EnvDotmeshBoltdbPath) != "" {
+			fp = os.Getenv(types.EnvDotmeshBoltdbPath)
+		}
+		err := os.MkdirAll(fp, os.ModePerm)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error": err,
+				"path":  fp,
+			}).Error("failed to ensure Boltdb KV store directory")
+			os.Exit(1)
+		}
+
+		return &store.KVDBConfig{
+			Type:   store.KVTypeBolt,
+			Prefix: types.EtcdPrefix,
+			Options: map[string]string{
+				bolt.KvSnap: filepath.Join(fp, "dotmesh.db"),
+			},
+		}
+	}
+
 	endpoint := os.Getenv(types.EnvEtcdEndpoint)
 	if endpoint == "" {
 		log.Infof("%s not set, using default Etcd URL: '%s'", types.EnvEtcdEndpoint, types.DefaultEtcdURL)
@@ -56,30 +83,19 @@ func getKVDBCfg() *store.KVDBConfig {
 func getKVDBStores() (store.FilesystemStore, store.RegistryStore, store.ServerStore, store.KVStoreWithIndex) {
 
 	cfg := getKVDBCfg()
-	kvdbStore, err := store.NewKVDBFilesystemStore(cfg)
+	client, err := store.NewKVDBClient(cfg)
 	if err != nil {
 		log.WithFields(log.Fields{
-			"options":  cfg.Options,
-			"endpoint": cfg.Machines,
 			"error":    err,
-		}).Fatalf("failed to setup KV store")
-	}
-	kvdbIndexStore, err := store.NewKVDBStoreWithIndex(cfg, user.UsersPrefix)
-	if err != nil {
-		log.WithFields(log.Fields{
+			"machines": cfg.Machines,
 			"options":  cfg.Options,
-			"endpoint": cfg.Machines,
-			"error":    err,
-		}).Fatalf("failed to setup KV index store")
+		}).Fatal("failed to create KVDB client")
 	}
-	serverStore, err := store.NewKVServerStore(cfg)
-	if err != nil {
-		log.WithFields(log.Fields{
-			"options":  cfg.Options,
-			"endpoint": cfg.Machines,
-			"error":    err,
-		}).Fatalf("failed to setup server store")
-	}
+
+	kvdbStore := store.NewKVDBFilesystemStore(client)
+	kvdbIndexStore := store.NewKVDBStoreWithIndex(client, user.UsersPrefix)
+	serverStore := store.NewKVServerStore(client)
+
 	return kvdbStore, kvdbStore, serverStore, kvdbIndexStore
 }
 

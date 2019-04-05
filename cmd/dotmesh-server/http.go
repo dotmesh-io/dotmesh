@@ -247,7 +247,10 @@ func sanitizeURL(r *http.Request) string {
 		return "/s3/*"
 	}
 
-	path := validator.ReplaceUUID(r.URL.Path, "*")
+	path := r.URL.Path
+
+	// replacing uuids
+	path = validator.ReplaceUUID(path, "*")
 
 	return path
 }

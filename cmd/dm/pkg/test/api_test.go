@@ -1,8 +1,9 @@
 package test
 
 import (
-	"github.com/dotmesh-io/dotmesh/pkg/client"
 	"testing"
+
+	"github.com/dotmesh-io/dotmesh/pkg/client"
 )
 
 func TestUserPriviledged(t *testing.T) {

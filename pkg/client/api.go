@@ -33,14 +33,28 @@ type DotmeshAPI struct {
 	Configuration *Configuration
 	configPath    string
 	Client        *JsonRpcClient
+	PB            *pb.ProgressBar
 	verbose       bool
 }
 
 type Dotmesh interface {
 	CallRemote(ctx context.Context, method string, args interface{}, response interface{}) error
-	ListCommits(activeVolumeName, activeBranch string) ([]Snapshot, error)
+	ListCommits(activeVolumeName, activeBranch string) ([]types.Snapshot, error)
+	CommitsById(dotID string) ([]types.Snapshot, error)
 	GetFsId(namespace, name, branch string) (string, error)
 	Get(fsId string) (types.DotmeshVolume, error)
+	Procure(data types.ProcureArgs) (string, error)
+	CommitWithStruct(args types.CommitArgs) (string, error)
+	NewVolumeFromStruct(name types.VolumeName) (bool, error)
+	GetMasterBranchId(volume types.VolumeName) (string, error)
+	DeleteVolumeFromStruct(name types.VolumeName) (bool, error)
+	MountCommit(request types.MountCommitRequest) (string, error)
+	Rollback(request types.RollbackRequest) (bool, error)
+	Fork(request types.ForkRequest) (string, error)
+	List() (map[string]map[string]types.DotmeshVolume, error)
+	GetVersion() (VersionInfo, error)
+	GetTransfer(transferId string) (TransferPollResult, error)
+	Transfer(request types.TransferRequest) (string, error)
 }
 
 func CheckName(name string) bool {
@@ -94,6 +108,32 @@ func (dm *DotmeshAPI) CallRemote(
 	} else {
 		return err
 	}
+}
+
+func (dm *DotmeshAPI) List() (map[string]map[string]types.DotmeshVolume, error) {
+	filesystems := make(map[string]map[string]types.DotmeshVolume)
+	err := dm.CallRemote(
+		context.Background(), "DotmeshRPC.List", nil, &filesystems,
+	)
+	return filesystems, err
+}
+
+func (dm *DotmeshAPI) Fork(request types.ForkRequest) (string, error) {
+	var forkDotId string
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.Fork", request, &forkDotId)
+	return forkDotId, err
+}
+
+func (dm *DotmeshAPI) GetMasterBranchId(volume types.VolumeName) (string, error) {
+	var masterBranchId string
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.Exists", &volume, &masterBranchId)
+	return masterBranchId, err
+}
+
+func (dm *DotmeshAPI) MountCommit(request types.MountCommitRequest) (string, error) {
+	var mountpoint string
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.MountCommit", request, &mountpoint)
+	return mountpoint, err
 }
 
 func (dm *DotmeshAPI) PingLocal() (bool, error) {
@@ -160,44 +200,47 @@ func (dm *DotmeshAPI) Get(FsID string) (types.DotmeshVolume, error) {
 }
 
 func (dm *DotmeshAPI) NewVolume(volumeName string) error {
-	var response bool
 	namespace, name, err := ParseNamespacedVolume(volumeName)
 	if err != nil {
 		return err
 	}
-	sendVolumeName := VolumeName{
+	sendVolumeName := types.VolumeName{
 		Namespace: namespace,
 		Name:      name,
 	}
-	err = dm.CallRemote(context.Background(), "DotmeshRPC.Create", sendVolumeName, &response)
+	_, err = dm.NewVolumeFromStruct(sendVolumeName)
 	if err != nil {
 		return err
 	}
 	return dm.setCurrentVolume(volumeName)
 }
 
-type ProcureVolumeName struct {
-	Namespace string
-	Name      string
-	Subdot    string
+func (dm *DotmeshAPI) NewVolumeFromStruct(name types.VolumeName) (bool, error) {
+	var response bool
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.Create", name, &response)
+	if err != nil {
+		return false, err
+	}
+	return response, nil
 }
 
 func (dm *DotmeshAPI) ProcureVolume(volumeName string) (string, error) {
-	var response string
 	namespace, name, err := ParseNamespacedVolume(volumeName)
 	if err != nil {
 		return "", err
 	}
-	sendVolumeName := ProcureVolumeName{
+	sendVolumeName := types.ProcureArgs{
 		Namespace: namespace,
 		Name:      name,
 		Subdot:    "__default__",
 	}
-	err = dm.CallRemote(context.Background(), "DotmeshRPC.Procure", sendVolumeName, &response)
-	if err != nil {
-		return "", err
-	}
-	return response, nil
+	return dm.Procure(sendVolumeName)
+}
+
+func (dm *DotmeshAPI) Procure(data types.ProcureArgs) (string, error) {
+	var response string
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.Procure", data, &response)
+	return response, err
 }
 
 func (dm *DotmeshAPI) setCurrentVolume(volumeName string) error {
@@ -326,6 +369,12 @@ func (dm *DotmeshAPI) CurrentVolume() (string, error) {
 	return cv, nil
 }
 
+func (dm *DotmeshAPI) Rollback(request types.RollbackRequest) (bool, error) {
+	var result bool
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.Rollback", request, &result)
+	return result, err
+}
+
 func (dm *DotmeshAPI) BranchExists(volumeName, branchName string) (bool, error) {
 	branches, err := dm.Branches(volumeName)
 	if err != nil {
@@ -347,7 +396,7 @@ func (dm *DotmeshAPI) Branches(volumeName string) ([]string, error) {
 
 	branches := []string{}
 	err = dm.CallRemote(
-		context.Background(), "DotmeshRPC.Branches", VolumeName{namespace, name}, &branches,
+		context.Background(), "DotmeshRPC.Branches", types.VolumeName{namespace, name}, &branches,
 	)
 	if err != nil {
 		return []string{}, err
@@ -361,10 +410,7 @@ func (dm *DotmeshAPI) VolumeExists(volumeName string) (bool, error) {
 		return false, err
 	}
 
-	volumes := map[string]map[string]types.DotmeshVolume{}
-	err = dm.CallRemote(
-		context.Background(), "DotmeshRPC.List", nil, &volumes,
-	)
+	volumes, err := dm.List()
 	if err != nil {
 		return false, err
 	}
@@ -383,16 +429,10 @@ func (dm *DotmeshAPI) DeleteVolume(volumeName string) error {
 		return err
 	}
 
-	err = retryUntilSucceeds(func() error {
-		var result bool
-		err = dm.CallRemote(
-			context.Background(), "DotmeshRPC.Delete", VolumeName{namespace, name}, &result,
-		)
-		if err != nil {
-			return err
-		}
-		return nil
-	}, 5, 1*time.Second)
+	_, err = dm.DeleteVolumeFromStruct(types.VolumeName{
+		Namespace: namespace,
+		Name:      name,
+	})
 	if err != nil {
 		return err
 	}
@@ -404,6 +444,20 @@ func (dm *DotmeshAPI) DeleteVolume(volumeName string) error {
 		}
 	}
 	return nil
+}
+
+func (dm *DotmeshAPI) DeleteVolumeFromStruct(name types.VolumeName) (bool, error) {
+	var result bool
+	err := retryUntilSucceeds(func() error {
+		err := dm.CallRemote(
+			context.Background(), "DotmeshRPC.Delete", name, &result,
+		)
+		if err != nil {
+			return err
+		}
+		return nil
+	}, 5, 1*time.Second)
+	return result, err
 }
 
 func retryUntilSucceeds(f func() error, retries int, delay time.Duration) error {
@@ -457,7 +511,7 @@ func (dm *DotmeshAPI) AllBranches(volumeName string) ([]string, error) {
 
 	var branches []string
 	err = dm.CallRemote(
-		context.Background(), "DotmeshRPC.Branches", VolumeName{namespace, name}, &branches,
+		context.Background(), "DotmeshRPC.Branches", types.VolumeName{namespace, name}, &branches,
 	)
 	// the "main" filesystem (topLevelFilesystemId) is the master branch
 	// (DEFAULT_BRANCH)
@@ -494,11 +548,7 @@ func (dm *DotmeshAPI) BranchInfo(namespace, name, branch string) (types.DotmeshV
 		return types.DotmeshVolume{}, err
 	}
 
-	var result types.DotmeshVolume
-	err = dm.CallRemote(
-		context.Background(), "DotmeshRPC.Get", fsId, &result,
-	)
-	return result, err
+	return dm.Get(fsId)
 }
 
 func (dm *DotmeshAPI) ForceBranchMaster(namespace, name, branch, newMaster string) error {
@@ -525,12 +575,9 @@ func (dm *DotmeshAPI) ForceBranchMaster(namespace, name, branch, newMaster strin
 }
 
 func (dm *DotmeshAPI) AllVolumes() ([]types.DotmeshVolume, error) {
-	filesystems := map[string]map[string]types.DotmeshVolume{}
 	result := []types.DotmeshVolume{}
 	interim := map[string]types.DotmeshVolume{}
-	err := dm.CallRemote(
-		context.Background(), "DotmeshRPC.List", nil, &filesystems,
-	)
+	filesystems, err := dm.List()
 	if err != nil {
 		return result, err
 	}
@@ -573,46 +620,37 @@ type CommitArgs struct {
 }
 
 func (dm *DotmeshAPI) Commit(activeVolumeName, activeBranch, commitMessage string, metadata map[string]string) (string, error) {
-	var result string
-
 	activeNamespace, activeVolume, err := ParseNamespacedVolume(activeVolumeName)
 	if err != nil {
 		return "", err
 	}
+	args := types.CommitArgs{
+		Namespace: activeNamespace,
+		Name:      activeVolume,
+		Branch:    deMasterify(activeBranch),
+		Message:   commitMessage,
+		Metadata:  metadata,
+	}
+	return dm.CommitWithStruct(args)
+}
 
-	err = dm.CallRemote(
+func (dm *DotmeshAPI) CommitWithStruct(args types.CommitArgs) (string, error) {
+	var result string
+	err := dm.CallRemote(
 		context.Background(),
 		"DotmeshRPC.Commit",
-		// TODO replace these map[string]string's with typed structs that are
-		// shared between the client and the server for cross-rpc type safety
-		&CommitArgs{
-			Namespace: activeNamespace,
-			Name:      activeVolume,
-			Branch:    deMasterify(activeBranch),
-			Message:   commitMessage,
-			Metadata:  metadata,
-		},
+		&args,
 		&result,
 	)
-	if err != nil {
-		return "", err
-	}
-	return result, nil
+	return result, err
 }
 
-type Metadata map[string]string
-type Snapshot struct {
-	// exported for json serialization
-	Id       string
-	Metadata *Metadata
-}
-
-func (dm *DotmeshAPI) ListCommits(activeVolumeName, activeBranch string) ([]Snapshot, error) {
-	var result []Snapshot
+func (dm *DotmeshAPI) ListCommits(activeVolumeName, activeBranch string) ([]types.Snapshot, error) {
+	var result []types.Snapshot
 
 	activeNamespace, activeVolume, err := ParseNamespacedVolume(activeVolumeName)
 	if err != nil {
-		return []Snapshot{}, err
+		return []types.Snapshot{}, err
 	}
 
 	err = dm.CallRemote(
@@ -629,9 +667,16 @@ func (dm *DotmeshAPI) ListCommits(activeVolumeName, activeBranch string) ([]Snap
 		&result,
 	)
 	if err != nil {
-		return []Snapshot{}, err
+		return []types.Snapshot{}, err
 	}
 	return result, nil
+}
+
+func (dm *DotmeshAPI) CommitsById(dotID string) ([]types.Snapshot, error) {
+	var commits []types.Snapshot
+
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.CommitsById", dotID, &commits)
+	return commits, err
 }
 
 func (dm *DotmeshAPI) findCommit(ref, volumeName, branchName string) (string, error) {
@@ -757,31 +802,31 @@ func (dm *DotmeshAPI) RelatedContainers(volumeName types.VolumeName, branch stri
 }
 
 type TransferPollResult struct {
-	TransferRequestId string
-	Direction         string // "push" or "pull"
+	TransferRequestId string `json:"transfer_request_id,omitempty"`
+	Direction         string `json:"direction,omitempty"` // "push" or "pull"
 
 	// Same across both clusters
-	FilesystemId string
+	FilesystemId string `json:"filesystem_id,omitempty"`
 
 	// TODO add clusterIds? probably comes from etcd. in fact, could be the
 	// discovery id (although that is only for bootstrap... hmmm).
-	InitiatorNodeId string
-	PeerNodeId      string
+	InitiatorNodeId string `json:"initiator_node_id,omitempty"`
+	PeerNodeId      string `json:"peer_node_id,omitempty"`
 
 	// XXX a Transfer that spans multiple filesystem ids won't have a unique
 	// starting/target snapshot, so this is in the wrong place right now.
 	// although maybe it makes sense to talk about a target *final* snapshot,
 	// with interim snapshots being an implementation detail.
-	StartingSnapshot string
-	TargetSnapshot   string
+	StartingSnapshot string `json:"starting_snapshot,omitempty"`
+	TargetSnapshot   string `json:"target_snapshot,omitempty"`
 
-	Index              int    // i.e. transfer 1/4 (Index=1)
-	Total              int    //                   (Total=4)
-	Status             string // one of "starting", "running", "finished", "error"
-	NanosecondsElapsed int64
-	Size               int64 // size of current segment in bytes
-	Sent               int64 // number of bytes of current segment sent so far
-	Message            string
+	Index              int    `json:"index,omitempty"`  // i.e. transfer 1/4 (Index=1)
+	Total              int    `json:"total,omitempty"`  //                   (Total=4)
+	Status             string `json:"status,omitempty"` // one of "starting", "running", "finished", "error"
+	NanosecondsElapsed int64  `json:"nanoseconds_elapsed,omitempty"`
+	Size               int64  `json:"size,omitempty"` // size of current segment in bytes
+	Sent               int64  `json:"sent,omitempty"` // number of bytes of current segment sent so far
+	Message            string `json:"message,omitempty"`
 }
 
 func (transferPollResult TransferPollResult) String() string {
@@ -799,40 +844,94 @@ func (transferPollResult TransferPollResult) String() string {
 	return toString
 }
 
-type pollTransferInternalResult struct {
+func (dm *DotmeshAPI) GetTransfer(transferId string) (TransferPollResult, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
+	return dm.GetTransferWithContext(transferId, ctx, cancel)
+}
+
+func (dm *DotmeshAPI) GetTransferWithContext(transferId string, ctx context.Context, cancel context.CancelFunc) (TransferPollResult, error) {
+	defer cancel()
+	var result TransferPollResult
+	err := dm.CallRemote(
+		ctx, "DotmeshRPC.GetTransfer", transferId, &result,
+	)
+	return result, err
+}
+
+type PollTransferInternalResult struct {
 	result TransferPollResult
 	err    error
 }
 
-func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
+func (dm *DotmeshAPI) UpdateBar(result TransferPollResult, err error, started bool) bool {
+	if !started {
+		dm.PB = pb.New64(result.Size)
+		dm.PB.ShowFinalTime = false
+		dm.PB.SetMaxWidth(80)
+		dm.PB.SetUnits(pb.U_BYTES)
+		dm.PB.Start()
+		started = true
+	}
+
+	if result.Size != 0 {
+		dm.PB.Total = result.Size
+	}
+
+	if result.Sent > result.Size {
+		dm.PB.Set64(result.Size)
+	} else {
+		dm.PB.Set64(result.Sent)
+	}
+	dm.PB.Prefix(result.Status)
+	var speed string
+	if result.NanosecondsElapsed > 0 {
+		speed = fmt.Sprintf(" %.2f MiB/s",
+			// mib/sec
+			(float64(result.Sent)/(1024*1024))/
+				(float64(result.NanosecondsElapsed)/(1000*1000*1000)),
+		)
+	} else {
+		speed = " ? MiB/s"
+	}
+	quotient := fmt.Sprintf(" (%d/%d)", result.Index, result.Total)
+	dm.PB.Postfix(speed + quotient)
+
+	if result.Index == result.Total && result.Status == "finished" {
+		if started {
+			dm.PB.FinishPrint("Done!")
+		}
+	}
+	if result.Status == "error" {
+		if started {
+			dm.PB.FinishPrint(fmt.Sprintf("error: %s", result.Message))
+		}
+	}
+	return started
+}
+
+func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer, callback func(result TransferPollResult, err error, started bool) bool) error {
 
 	out.Write([]byte("Calculating...\n"))
 
-	var bar *pb.ProgressBar
 	started := false
 
 	debugMode := os.Getenv("DEBUG_MODE") != ""
-
 	for {
 		if debugMode {
 			out.Write([]byte("DEBUG About to sleep for 1s...\n"))
 		}
 		time.Sleep(time.Second)
 
-		rpcResult := make(chan pollTransferInternalResult, 1)
+		rpcResult := make(chan PollTransferInternalResult, 1)
 
 		ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
 		defer cancel()
-
 		go func() {
 			if debugMode {
 				out.Write([]byte(fmt.Sprintf("DEBUG Calling GetTransfer(%s)...\n", transferId)))
 			}
-
-			var result pollTransferInternalResult
-			result.err = dm.CallRemote(
-				ctx, "DotmeshRPC.GetTransfer", transferId, &(result.result),
-			)
+			var result PollTransferInternalResult
+			result.result, result.err = dm.GetTransferWithContext(transferId, ctx, cancel)
 			if debugMode {
 				out.Write([]byte(fmt.Sprintf(
 					"DEBUG done GetTransfer(%s), got err %#v and result %#v...\n",
@@ -848,7 +947,7 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 		if debugMode {
 			out.Write([]byte("DEBUG About to select...\n"))
 		}
-		var result pollTransferInternalResult
+		var result PollTransferInternalResult
 		select {
 		case <-ctx.Done():
 			out.Write([]byte(fmt.Sprintf("Got timeout error from API, trying again: %s\n", ctx.Err())))
@@ -872,48 +971,15 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 			}
 		}
 
-		if !started {
-			bar = pb.New64(result.result.Size)
-			bar.ShowFinalTime = false
-			bar.SetMaxWidth(80)
-			bar.SetUnits(pb.U_BYTES)
-			bar.Start()
-			started = true
-		}
-
-		if result.result.Size != 0 {
-			bar.Total = result.result.Size
-		}
 		// Numbers reported by data transferred thru dotmesh versus size
 		// of stream reported by 'zfs send -nP' are off by a few kilobytes,
 		// fudge it (maybe no one will notice).
-		if result.result.Sent > result.result.Size {
-			bar.Set64(result.result.Size)
-		} else {
-			bar.Set64(result.result.Sent)
-		}
-		bar.Prefix(result.result.Status)
-		var speed string
-		if result.result.NanosecondsElapsed > 0 {
-			speed = fmt.Sprintf(" %.2f MiB/s",
-				// mib/sec
-				(float64(result.result.Sent)/(1024*1024))/
-					(float64(result.result.NanosecondsElapsed)/(1000*1000*1000)),
-			)
-		} else {
-			speed = " ? MiB/s"
-		}
-		quotient := fmt.Sprintf(" (%d/%d)", result.result.Index, result.result.Total)
-		bar.Postfix(speed + quotient)
-
+		started = callback(result.result, result.err, started)
 		if debugMode {
 			out.Write([]byte(fmt.Sprintf("DEBUG status %d / %d : %s\n", result.result.Index, result.result.Total, result.result.Status)))
 		}
 
 		if result.result.Index == result.result.Total && result.result.Status == "finished" {
-			if started {
-				bar.FinishPrint("Done!")
-			}
 			// A terrible hack: many of the tests race the next 'dm log' or
 			// similar command against snapshots received by a push/pull/clone
 			// updating etcd which updates nodes' local caches of state. Give
@@ -927,9 +993,6 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer) error {
 			return nil
 		}
 		if result.result.Status == "error" {
-			if started {
-				bar.FinishPrint(fmt.Sprintf("error: %s", result.result.Message))
-			}
 			out.Write([]byte(result.result.Message + "\n"))
 			// A similarly terrible hack. See comment above.
 			time.Sleep(time.Second)
@@ -1110,8 +1173,7 @@ func (dm *DotmeshAPI) RequestTransfer(
 			fmt.Printf("[DEBUG] TransferRequest: %#v\n", transferRequest)
 		}
 
-		err = client.CallRemote(context.Background(),
-			"DotmeshRPC.Transfer", transferRequest, &transferId)
+		transferId, err = dm.Transfer(transferRequest)
 		if err != nil {
 			return "", err
 		}
@@ -1154,6 +1216,12 @@ func (dm *DotmeshAPI) RequestTransfer(
 
 }
 
+func (dm *DotmeshAPI) Transfer(request types.TransferRequest) (string, error) {
+	var transferId string
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.Transfer", request, &transferId)
+	return transferId, err
+}
+
 func (dm *DotmeshAPI) IsUserPriveledged() bool {
 	err := dm.openClient()
 
@@ -1168,26 +1236,10 @@ func (dm *DotmeshAPI) IsUserPriveledged() bool {
 	return false
 }
 
-// FIXME: Put this in a shared library, as it duplicates the copy in
-// dotmesh-server/pkg/main/utils.go (now with a few differences)
-
-type VolumeName struct {
-	Namespace string
-	Name      string
-}
-
 type S3VolumeName struct {
 	Namespace string
 	Name      string
 	Prefixes  []string
-}
-
-func (v VolumeName) String() string {
-	if v.Namespace == "admin" {
-		return v.Name
-	} else {
-		return fmt.Sprintf("%s/%s", v.Namespace, v.Name)
-	}
 }
 
 func ParseNamespacedVolumeWithDefault(name, defaultNamespace string) (string, string, error) {

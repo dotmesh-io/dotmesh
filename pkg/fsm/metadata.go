@@ -15,7 +15,7 @@ const keyRegex = "[a-z]+[a-z0-9-]*"
 
 var rxKeyRegex = regexp.MustCompile(keyRegex)
 
-func encodeMetadata(meta types.Metadata) ([]string, error) {
+func encodeMetadata(meta map[string]string) ([]string, error) {
 	/*
 	   Encode a map of key value pairs into metadata-setting zfs command
 	   list-of-command-arguments (as part of 'zfs snapshot'), ie:
