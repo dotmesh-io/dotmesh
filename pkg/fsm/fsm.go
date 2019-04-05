@@ -547,10 +547,9 @@ func (f *FsMachine) updateEtcdAboutSnapshots() error {
 		return err
 	}
 	log.Debugf(
-		"[updateEtcdAboutSnapshots] successfully set new snaps for %s on %s",
-		f.filesystemId, f.state.NodeID(),
+		"[updateEtcdAboutSnapshots] successfully set new snaps for %s on %s, snaps: %#v",
+		f.filesystemId, f.state.NodeID(), snaps,
 	)
-
 	// wait until the state machine notifies us that it's changed the
 	// snapshots, but have an escape clause in case this filesystem is
 	// deleted so we don't block forever
@@ -691,7 +690,6 @@ func (f *FsMachine) fork(e *types.Event) (responseEvent *types.Event, nextState 
 	if err != nil {
 		return types.NewErrorEvent("cannot-fork:error-activating-statemachine", err), activeState
 	}
-
 	return &types.Event{Name: "forked", Args: &types.EventArgs{"ForkId": forkId}}, activeState
 }
 
@@ -719,20 +717,15 @@ func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextSt
 	} else {
 		snapshotId = snapshotIdInter.(string)
 	}
-	encodedList, err := encodeMetadata(meta)
-	zfsProps := make([]string, 0)
+	metadataEncoded := encodeMapValues(meta)
+	err = f.writeMetadata(metadataEncoded, f.filesystemId, snapshotId)
 	if err != nil {
-		metadataEncoded := encodeMapValues(meta)
-		err = f.writeMetadata(metadataEncoded, f.filesystemId, snapshotId)
-		if err != nil {
-			return &types.Event{
-				Name: "failed-writing-metadata", Args: &types.EventArgs{"err": err.Error()},
-			}, backoffState
-		}
-	} else {
-		zfsProps = encodedList
+		log.WithError(err).Error("Failed writing commit metadata to file!!!")
+		return &types.Event{
+			Name: "failed-writing-metadata", Args: &types.EventArgs{"err": err.Error()},
+		}, backoffState
 	}
-	output, err := f.zfs.Snapshot(f.filesystemId, snapshotId, zfsProps)
+	output, err := f.zfs.Snapshot(f.filesystemId, snapshotId, make([]string, 0))
 	if err != nil {
 		return &types.Event{
 			Name: "failed-snapshot",
@@ -894,10 +887,21 @@ func (f *FsMachine) snapshotsChanged() error {
 	// it's notified about.
 	var snaps []*types.Snapshot
 	f.snapshotsLock.Lock()
+	defer f.snapshotsLock.Unlock()
+
 	for _, s := range f.filesystem.Snapshots {
+		log.WithField("snapshot_id", s.Id).Info("[fsm.snapshotsChanged] reading snapshot data from filesystem")
+		newMeta, err := f.getMetadata(s)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":       err,
+				"snapshot_id": s.Id,
+			}).Error("snapshotsChanged: couldn't read snapshot metadata")
+		} else {
+			s.Metadata = newMeta
+		}
 		snaps = append(snaps, s.DeepCopy())
 	}
-	f.snapshotsLock.Unlock()
 	return f.state.UpdateSnapshotsFromKnownState(
 		f.state.NodeID(), f.filesystemId, snaps,
 	)
