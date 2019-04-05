@@ -547,10 +547,12 @@ func (f *FsMachine) updateEtcdAboutSnapshots() error {
 		return err
 	}
 	log.Debugf(
-		"[updateEtcdAboutSnapshots] successfully set new snaps for %s on %s",
-		f.filesystemId, f.state.NodeID(),
+		"[updateEtcdAboutSnapshots] successfully set new snaps for %s on %s, snaps: %#v",
+		f.filesystemId, f.state.NodeID(), snaps,
 	)
-
+	for _, s := range snaps {
+		log.WithField("commitId", (*s).Id).WithField("CommitMeta", (*s).Metadata).Debug("[updateEtcdAboutSnapshots] CRG debug, checking we have snaps and those snaps have metadata")
+	}
 	// wait until the state machine notifies us that it's changed the
 	// snapshots, but have an escape clause in case this filesystem is
 	// deleted so we don't block forever
@@ -760,6 +762,7 @@ func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextSt
 			Args: &types.EventArgs{"err": fmt.Sprintf("%v", err)},
 		}, backoffState
 	}
+	log.WithField("snaps", f.filesystem.Snapshots[0].Metadata).Debug("CRG DEBUG [f.snapshot]")
 	return &types.Event{Name: "snapshotted", Args: &types.EventArgs{"SnapshotId": snapshotId}}, activeState
 }
 
@@ -892,21 +895,18 @@ func (f *FsMachine) snapshotsChanged() error {
 	defer f.snapshotsLock.Unlock()
 
 	for _, s := range f.filesystem.Snapshots {
-		copied := s.DeepCopy()
 		log.WithField("snapshot_id", s.Id).Info("[fsm.snapshotsChanged] reading snapshot data from filesystem")
-		newMeta, err := f.getMetadata(copied)
+		newMeta, err := f.getMetadata(s)
 		if err != nil {
 			log.WithFields(log.Fields{
 				"error":       err,
 				"snapshot_id": s.Id,
 			}).Error("snapshotsChanged: couldn't read snapshot metadata")
 		} else {
-			copied.Metadata = newMeta
+			s.Metadata = newMeta
 		}
-		snaps = append(snaps, copied)
-		log.WithField("meta", snaps[len(snaps)-1].Metadata).WithField("snapId", snaps[len(snaps)-1].Id).WithField("FsId", f.filesystemId).Debug("[fsm.snapshotsChanged] CRG debug: completed collecting snaps")
+		snaps = append(snaps, s.DeepCopy())
 	}
-
 	return f.state.UpdateSnapshotsFromKnownState(
 		f.state.NodeID(), f.filesystemId, snaps,
 	)
