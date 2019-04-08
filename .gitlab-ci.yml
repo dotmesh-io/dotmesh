@@ -513,7 +513,6 @@ linux_stress_lots_of_commits:
         paths:
         - extracted_logs
         when: always
-    when: manual
     except:
         - schedules
 
@@ -531,7 +530,6 @@ linux_stress_large_push:
         paths:
         - extracted_logs
         when: always
-    when: manual
     except:
         - schedules
 
@@ -549,7 +547,6 @@ linux_stress_handover:
         paths:
         - extracted_logs
         when: always
-    when: manual
     except:
         - schedules
 
