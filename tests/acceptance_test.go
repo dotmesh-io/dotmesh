@@ -828,16 +828,33 @@ func TestSingleNode(t *testing.T) {
 		// Check branch state
 		st = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname+"@branch.__root__")+" find /foo -type f | sort")
 
-		if st != "/foo/HELLO-ROOT\n/foo/again/HELLO-AGAIN\n/foo/eat/HELLO-EAT\n/foo/flies/HELLO-FLIES\n/foo/frogs/HELLO-FROGS\n" {
-			t.Errorf("Subdots didn't work out on branch: %s", st)
+		expectedDots := []string{
+			"/foo/HELLO-ROOT",
+			"/foo/again/HELLO-AGAIN",
+			"/foo/eat/HELLO-EAT",
+			"/foo/flies/HELLO-FLIES",
+			"/foo/frogs/HELLO-FROGS",
+		}
+		for _, dot := range expectedDots {
+			if !strings.Contains(st, dot) {
+				t.Errorf("Missing subdot - %s - from output: %s", dot, st)
+			}
 		}
 
 		// Check master state
 		citools.RunOnNode(t, node1, "dm checkout master") // Restarts the containers
 		st = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname+".__root__")+" find /foo -type f | sort")
 
-		if st != "/foo/HELLO-ROOT\n/foo/eat/HELLO-EAT\n/foo/flies/HELLO-FLIES\n/foo/frogs/HELLO-FROGS\n" {
-			t.Errorf("Subdots didn't work out back on master: %s", st)
+		expectedDots2 := []string{
+			"/foo/HELLO-ROOT",
+			"/foo/eat/HELLO-EAT",
+			"/foo/flies/HELLO-FLIES",
+			"/foo/frogs/HELLO-FROGS",
+		}
+		for _, dot := range expectedDots2 {
+			if !strings.Contains(st, dot) {
+				t.Errorf("Output missing subdot - %s - output: %s", dot, st)
+			}
 		}
 
 		// Check containers all got restarted
