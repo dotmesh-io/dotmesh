@@ -233,6 +233,17 @@ type Prelude struct {
 	SnapshotProperties []*Snapshot
 }
 
+func (p Prelude) String() string {
+	str := ""
+	for idx, s := range p.SnapshotProperties {
+		if idx != 0 {
+			str = str + ", "
+		}
+		str = str + (*s).Id
+	}
+	return "Prelude{" + str + "}"
+}
+
 const (
 	EventNameSaveFailed  = "save-failed"
 	EventNameSaveSuccess = "save-success"
