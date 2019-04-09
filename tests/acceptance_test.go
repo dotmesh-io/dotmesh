@@ -3412,8 +3412,8 @@ func TestStressLargePush(t *testing.T) {
 	citools.TeardownFinishedTestRuns()
 
 	f := citools.Federation{
-		citools.NewCluster(1),
-		citools.NewCluster(1),
+		citools.NewClusterWithArgs(1, 0, map[string]string{}, " --pool-size 30G"),
+		citools.NewClusterWithArgs(1, 0, map[string]string{}, " --pool-size 30G"),
 	}
 
 	defer citools.TestMarkForCleanup(f)
@@ -3429,12 +3429,15 @@ func TestStressLargePush(t *testing.T) {
 
 	t.Run("PushLargeFileTest", func(t *testing.T) {
 		fsname := citools.UniqName()
+		// Make a 20GiB file
 		citools.RunOnNode(t, cluster0.Container, citools.DockerRun(fsname)+" dd of=/foo/largefile if=/dev/urandom bs=1M count=20K")
 		citools.RunOnNode(t, cluster0.Container, fmt.Sprintf("dm switch %s", fsname))
 		citools.RunOnNode(t, cluster0.Container, "dm commit -m'Here is a large file'")
 
+		// Push it... real good
 		citools.RunOnNode(t, cluster0.Container, fmt.Sprintf("dm push cluster_1"))
 
+		// See if it got there OK
 		st := citools.OutputFromRunOnNode(t, cluster1.Container, "dm list")
 		if !strings.Contains(st, fsname) {
 			t.Errorf("We didn't see the fsname we expected (%s) in %s", fsname, st)
