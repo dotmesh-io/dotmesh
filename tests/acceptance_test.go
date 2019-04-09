@@ -3400,11 +3400,10 @@ func TestStressLotsOfCommits(t *testing.T) {
 			t.Errorf("We didn't see the right number of commits: Got '%s', wanted %d", st, NUMBER_OF_COMMITS)
 		}
 		checkTestContainerExits(t, cluster1.Container)
-		citools.RunOnNode(t, cluster1.Container, fmt.Sprintf("dm dot delete -f %s", fsname))
 	})
 }
 
-func TestStressLargePush(t *testing.T) {
+func TestStressLargeFiles(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping stress tests in short mode.")
 	}
@@ -3412,6 +3411,7 @@ func TestStressLargePush(t *testing.T) {
 	citools.TeardownFinishedTestRuns()
 
 	f := citools.Federation{
+		citools.NewClusterWithArgs(2, 0, map[string]string{}, " --pool-size 30G"),
 		citools.NewClusterWithArgs(1, 0, map[string]string{}, " --pool-size 30G"),
 		citools.NewClusterWithArgs(1, 0, map[string]string{}, " --pool-size 30G"),
 	}
@@ -3425,15 +3425,18 @@ func TestStressLargePush(t *testing.T) {
 		t.Fatalf("failed to start cluster, error: %s", err)
 	}
 	cluster0 := f[0].GetNode(0)
+	cluster0b := f[0].GetNode(1)
 	cluster1 := f[1].GetNode(0)
+	cluster2 := f[2].GetNode(0)
+
+	fsname := citools.UniqName()
+	// Make a 20GiB file, common to all the tests
+	citools.RunOnNode(t, cluster0.Container, citools.DockerRun(fsname)+" dd of=/foo/largefile if=/dev/urandom bs=1M count=20K")
+	checkTestContainerExits(t, cluster0.Container)
+	citools.RunOnNode(t, cluster0.Container, fmt.Sprintf("dm switch %s", fsname))
+	citools.RunOnNode(t, cluster0.Container, "dm commit -m'Here is a large file'")
 
 	t.Run("PushLargeFileTest", func(t *testing.T) {
-		fsname := citools.UniqName()
-		// Make a 20GiB file
-		citools.RunOnNode(t, cluster0.Container, citools.DockerRun(fsname)+" dd of=/foo/largefile if=/dev/urandom bs=1M count=20K")
-		citools.RunOnNode(t, cluster0.Container, fmt.Sprintf("dm switch %s", fsname))
-		citools.RunOnNode(t, cluster0.Container, "dm commit -m'Here is a large file'")
-
 		// Push it... real good
 		citools.RunOnNode(t, cluster0.Container, fmt.Sprintf("dm push cluster_1"))
 
@@ -3449,6 +3452,33 @@ func TestStressLargePush(t *testing.T) {
 			t.Errorf("We didn't see the commit")
 		}
 		checkTestContainerExits(t, cluster1.Container)
+	})
+
+	t.Run("TransferLargeFileTest", func(t *testing.T) {
+		// Force it to migrate to second node of cluster
+		st := citools.OutputFromRunOnNode(t, cluster0b.Container, citools.DockerRun(fsname)+" ls -l /foo")
+		if !strings.Contains(st, "largefile") {
+			t.Errorf("We didn't see the file: %q", st)
+		}
+		checkTestContainerExits(t, cluster0b.Container)
+	})
+
+	t.Run("PullLargeFileTest", func(t *testing.T) {
+		// Pull it... real good?
+		citools.RunOnNode(t, cluster2.Container, fmt.Sprintf("dm clone cluster_0 "+fsname))
+
+		// See if it got there OK
+		st := citools.OutputFromRunOnNode(t, cluster2.Container, "dm list")
+		if !strings.Contains(st, fsname) {
+			t.Errorf("We didn't see the fsname we expected (%s) in %s", fsname, st)
+		}
+
+		citools.RunOnNode(t, cluster2.Container, fmt.Sprintf("dm switch %s", fsname))
+		st = citools.OutputFromRunOnNode(t, cluster2.Container, "dm log | grep 'Here is a large file' | wc -l")
+		if st != "1\n" {
+			t.Errorf("We didn't see the commit")
+		}
+		checkTestContainerExits(t, cluster2.Container)
 	})
 }
 
