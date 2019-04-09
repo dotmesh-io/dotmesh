@@ -522,7 +522,7 @@ linux_stress_large_files:
     dependencies:
         - build_client_linux
     tags:
-
+        - big-disk
         - fast
     script:
         - DOTMESH_TEST_TIMEOUT=30m ./test.sh -timeout 30m -run TestStressLargeFiles
