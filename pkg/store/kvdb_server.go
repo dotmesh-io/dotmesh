@@ -68,6 +68,7 @@ func (s *KVServerStore) WatchAddresses(idx uint64, cb WatchServerAddressesClones
 				"error":  err,
 				"prefix": prefix,
 			}).Error("[WatchAddresses] error while watching KV store tree")
+			return err
 		}
 
 		var srv types.Server
