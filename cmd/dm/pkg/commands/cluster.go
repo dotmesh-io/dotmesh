@@ -66,6 +66,7 @@ var (
 	dockerApiVersion   string
 	usePoolDir         string
 	usePoolName        string
+	poolSize           string
 	discoveryUrl       string
 	port               int
 	kernelZFSVersion   string
@@ -167,6 +168,10 @@ another.`,
 	cmd.PersistentFlags().StringVar(
 		&usePoolName, "use-pool-name",
 		"", "name of pool to import or create; useful for testing",
+	)
+	cmd.PersistentFlags().StringVar(
+		&poolSize, "pool-size",
+		"", "size of pool to create",
 	)
 	cmd.PersistentFlags().StringVar(
 		&discoveryUrl, "discovery-url",
@@ -618,6 +623,7 @@ func startDotmeshContainer(pkiPath, adminKey, adminPassword string, storage *dot
 		// Allow tests to specify which pool to create and where.
 		"-e", fmt.Sprintf("USE_POOL_NAME=%s", usePoolName),
 		"-e", fmt.Sprintf("USE_POOL_DIR=%s", usePoolDir),
+		"-e", fmt.Sprintf("POOL_SIZE=%s", poolSize),
 		// In case the docker daemon is older than the bundled docker client in
 		// the dotmesh-server image, at least allow the user to instruct it to
 		// fall back to an older API version.
