@@ -513,6 +513,7 @@ linux_stress_lots_of_commits:
         paths:
         - extracted_logs
         when: always
+    when: manual
     except:
         - schedules
 
