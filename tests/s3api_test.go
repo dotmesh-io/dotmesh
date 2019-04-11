@@ -66,7 +66,7 @@ func TestS3Api(t *testing.T) {
 		cmd := fmt.Sprintf("curl -T newfile.txt -u bob:password 127.0.0.1:32607/s3/admin:%s/newfile", dotName)
 		citools.RunOnNode(t, node1, "echo helloworld > newfile.txt")
 		resp := citools.OutputFromRunOnNode(t, node1, cmd)
-		if !strings.Contains(resp, "User is not the administrator of namespace admin") {
+		if !strings.Contains(resp, "User bob is not the administrator of namespace admin") {
 			t.Errorf("Expected 'User is not the administrator of namespace admin', got: '%s'", resp)
 		}
 	})
