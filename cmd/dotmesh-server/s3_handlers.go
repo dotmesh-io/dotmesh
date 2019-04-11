@@ -103,6 +103,8 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	if !isAdmin {
 		errStr := fmt.Sprintf("User %s is not the administrator of namespace %s", auth.GetUserFromCtx(req.Context()).Name, volName.Namespace)
 		log.Warn("[S3Handler.ServeHTTP] " + errStr)
+		user, pw, ok := req.BasicAuth()
+		log.Info(fmt.Sprintf("user: %s, pw: %s, ok: %t", user, pw, ok))
 		http.Error(resp, errStr, 401)
 		return
 	}
