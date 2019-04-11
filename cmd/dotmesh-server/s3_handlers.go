@@ -102,7 +102,7 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	}
 	if !isAdmin {
 		log.Warn("[S3Handler.ServeHTTP]  user is not an admin of the namespace")
-		http.Error(resp, "User is not the administrator of namespace "+volName.Namespace, 401)
+		http.Error(resp, fmt.Sprintf("User %s is not the administrator of namespace %s", auth.GetUserFromCtx(ctx), volName.Namespace), 401)
 		return
 	}
 	branch, ok := vars["branch"]
