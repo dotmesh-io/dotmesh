@@ -14,6 +14,8 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"golang.org/x/net/context"
 	pb "gopkg.in/cheggaaa/pb.v1"
+
+	log "github.com/sirupsen/logrus"
 )
 
 const DEFAULT_BRANCH string = "master"
@@ -913,13 +915,12 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer, callback fu
 
 	out.Write([]byte("Calculating...\n"))
 
+	log2 := log.WithField("transferId", transferId)
+
 	started := false
 
-	debugMode := os.Getenv("DEBUG_MODE") != ""
 	for {
-		if debugMode {
-			out.Write([]byte("DEBUG About to sleep for 1s...\n"))
-		}
+		log2.Debug("[PollTransfer] about to sleep for 1s...")
 		time.Sleep(time.Second)
 
 		rpcResult := make(chan PollTransferInternalResult, 1)
@@ -927,26 +928,19 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer, callback fu
 		ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
 		defer cancel()
 		go func() {
-			if debugMode {
-				out.Write([]byte(fmt.Sprintf("DEBUG Calling GetTransfer(%s)...\n", transferId)))
-			}
+			log2.Debug("[PollTransfer] about to call GetTransfer...")
 			var result PollTransferInternalResult
 			result.result, result.err = dm.GetTransferWithContext(transferId, ctx, cancel)
-			if debugMode {
-				out.Write([]byte(fmt.Sprintf(
-					"DEBUG done GetTransfer(%s), got err %#v and result %#v...\n",
-					transferId, result.err, result.result,
-				)))
+			if result.err != nil {
+				log2.WithError(result.err).Debug("[PollTransfer] error from GetTransfer")
+			} else {
+				log2.WithField("result", result.result).Debug("[PollTransfer] result from GetTransfer")
 			}
 			rpcResult <- result
-			if debugMode {
-				out.Write([]byte("DEBUG rpcResult consumed!\n"))
-			}
+			log2.Debug("[PollTransfer] rpcResult consumed")
 		}()
 
-		if debugMode {
-			out.Write([]byte("DEBUG About to select...\n"))
-		}
+		log2.Debug("[PollTransfer] Waiting for RPC result...")
 		var result PollTransferInternalResult
 		select {
 		case <-ctx.Done():
@@ -957,11 +951,9 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer, callback fu
 				<-rpcResult
 			}()
 
-			// Proceed with result at its default value.
+			result.result.Status = "timeout-retry"
 		case result = <-rpcResult:
-			if debugMode {
-				out.Write([]byte(fmt.Sprintf("DEBUG Got result: %s / %#v\n", result.err, result.result)))
-			}
+			log2.Debug("[PollTransfer] Got RPC result.")
 			if result.err != nil {
 				// Suppress display of "No such intercluster transfer" errors,
 				// which we get at the start before the transfer has started.
@@ -974,10 +966,13 @@ func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer, callback fu
 		// Numbers reported by data transferred thru dotmesh versus size
 		// of stream reported by 'zfs send -nP' are off by a few kilobytes,
 		// fudge it (maybe no one will notice).
+		log2.WithFields(log.Fields{
+			"index":   result.result.Index,
+			"total":   result.result.Total,
+			"status":  result.result.Status,
+			"message": result.result.Message,
+		}).Debug("[PollTransfer] Passing status to callback...")
 		started = callback(result.result, result.err, started)
-		if debugMode {
-			out.Write([]byte(fmt.Sprintf("DEBUG status %d / %d : %s\n", result.result.Index, result.result.Total, result.result.Status)))
-		}
 
 		if result.result.Index == result.result.Total && result.result.Status == "finished" {
 			// A terrible hack: many of the tests race the next 'dm log' or
