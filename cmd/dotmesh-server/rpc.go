@@ -1290,6 +1290,9 @@ func (d *DotmeshRPC) GetTransfer(
 	result *TransferPollResult,
 ) error {
 	// Poll the status of a transfer by fetching it from our local cache.
+	d.state.interclusterTransfersLock.Lock()
+	defer d.state.interclusterTransfersLock.Unlock()
+
 	res, ok := d.state.interclusterTransfers[*args]
 	if !ok {
 		return fmt.Errorf("No such intercluster transfer %s", *args)
