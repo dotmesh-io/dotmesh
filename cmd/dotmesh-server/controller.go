@@ -254,7 +254,7 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 		if ok {
 			dirtyBytes = dirty.DirtyBytes
 			sizeBytes = dirty.SizeBytes
-			log.Debugf("[getOne] got dirtyInfo %d,%d for %s with master %v in %v", sizeBytes, dirtyBytes, fs, master, s.globalDirtyCache)
+			log.Debugf("[getOne] got dirtyInfo %d,%d for %s with master %v", sizeBytes, dirtyBytes, fs, master)
 
 		} else {
 			log.Debugf("[getOne] %v was not in %v", fs, s.globalDirtyCache)
