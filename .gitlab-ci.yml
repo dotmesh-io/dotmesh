@@ -31,7 +31,6 @@ stages:
     - test
     - deploy_images
     - deploy
-    - smoke
     - manual_deploy
     - notify
 
