@@ -153,38 +153,6 @@ build_server:
     except:
         - schedules
 
-macos_docker_stable_smoke:
-    retry: 2
-    stage: smoke
-    tags:
-        - macos
-        - docker-stable
-    script:
-        - gtimeout 5m ./scripts/smoke.sh
-    after_script:
-        - docker container prune -f
-
-macos_docker_edge_smoke:
-    retry: 2
-    stage: smoke
-    tags:
-        - macos
-        - docker-edge
-    script:
-        - gtimeout 5m ./scripts/smoke.sh
-    after_script:
-        - docker container prune -f
-
-linux_smoke:
-    retry: 2
-    stage: smoke
-    tags:
-        - fast
-    script:
-        - timeout 5m ./scripts/smoke.sh
-    after_script:
-        - docker container prune -f
-
 dotmesh_unit_tests:
     stage: test
     tags:
@@ -626,12 +594,4 @@ mark_release_as_stable:
     - /^release-.*$/
   when: manual
   except:
-    - schedules
-
-notify_smoke_test_failure:
-  stage: notify
-  script:
-    - "curl -X POST -H 'Content-type: application/json' --data \"{\\\"text\\\":\\\"ALERT, Smoke tests failed $CI_PROJECT_URL/pipelines/$CI_PIPELINE_ID\\\"}\" $SLACK_WEBHOOK_URL"
-  when: on_failure
-  only:
     - schedules
