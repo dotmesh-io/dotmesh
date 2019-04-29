@@ -203,6 +203,22 @@ linux_boltdb:
     except:
         - schedules
 
+linux__restart_boltdb:
+    retry: 2
+    stage: test
+    dependencies:
+        - build_client_linux
+    tags:
+        - fast
+    script:
+        - ./test.sh -run TestRecoverFromUnmountedDotOnMasterBoltDB
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
+    except:
+        - schedules
+
 linux_single_node:
     retry: 2
     stage: test
