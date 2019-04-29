@@ -115,12 +115,18 @@ then
     go build -ldflags "-X main.serverVersion=${VERSION}" -o ./target/dotmesh-server ./cmd/dotmesh-server
 
     cp ./cmd/dotmesh-server/require_zfs.sh ./target
+    cp ./binaries/Linux/dm ./target
 
     echo "building image: ${STABLE_CI_DOCKER_SERVER_IMAGE}"
 
     cp cmd/dotmesh-server/Dockerfile target/Dockerfile
     echo 'COPY ./flexvolume /usr/local/bin/' >> target/Dockerfile
     echo 'COPY ./dotmesh-server /usr/local/bin/' >> target/Dockerfile
+    echo 'COPY ./dm /usr/local/bin/' >> target/Dockerfile
+    echo "#!/bin/sh" > target/dm-remote-add
+    echo 'echo $INITIAL_ADMIN_API_KEY | dm remote add local admin@localhost' >> target/dm-remote-add
+    chmod a+rx target/dm-remote-add
+    echo 'COPY ./dm-remote-add /usr/local/bin/' >> target/Dockerfile
 
     docker build -f target/Dockerfile -t "${STABLE_CI_DOCKER_SERVER_IMAGE}" target
 fi
