@@ -1142,11 +1142,19 @@ func (d *DotmeshRPC) registerFilesystemBecomeMaster(
 	path PathToTopLevelFilesystem,
 ) error {
 
-	// TODO handle the case where the registry entry exists but the filesystems
-	// (fsMachine map) entry doesn't.
-
 	log.Debugf("[registerFilesystemBecomeMaster] called: filesystemNamespace=%s, filesystemName=%s, cloneName=%s, filesystemId=%s path=%+v",
 		filesystemNamespace, filesystemName, cloneName, filesystemId, path)
+
+	// Check that the fsid isn't already present on this node
+	if d.state.filesystemExists(filesystemId) {
+		log.Errorf("[registerFilesystemBecomeMaster] failed to initialize filesystem %s due to it already existing", filesystemId)
+		return fmt.Errorf("Filesystem ID %s already exists", filesystemId)
+	}
+
+	log.Debugf("[registerFilesystemBecomeMaster] passed existence check")
+
+	// TODO handle the case where the registry entry exists but the filesystems
+	// (fsMachine map) entry doesn't.
 
 	filesystemIds := []string{path.TopLevelFilesystemId}
 	for _, c := range path.Clones {

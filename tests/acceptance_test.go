@@ -2093,6 +2093,19 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		}
 	})
 
+	t.Run("CloneIdClash", func(t *testing.T) {
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node2, citools.DockerRun(fsname)+" touch /foo/X")
+		citools.RunOnNode(t, node2, "dm switch "+fsname)
+		citools.RunOnNode(t, node2, "dm commit -m 'hello'")
+
+		local1 := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm clone cluster_1 "+fsname+" --local-name="+local1)
+
+		local2 := citools.UniqName()
+		citools.RunOnNode(t, node1, "if dm clone cluster_1 "+fsname+" --local-name="+local2+"; then false; else true; fi")
+	})
+
 	t.Run("CloneStashDiverged", func(t *testing.T) {
 		fsname := citools.UniqName()
 		citools.RunOnNode(t, node1, "dm init "+fsname)

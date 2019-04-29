@@ -218,6 +218,14 @@ func calculatePrelude(snaps []Snapshot, toSnapshotId string) (Prelude, error) {
 	return prelude, nil
 }
 
+func (s *InMemoryState) filesystemExists(fsId string) bool {
+	s.filesystemsLock.RLock()
+	defer s.filesystemsLock.RUnlock()
+	_, ok := s.filesystems[fsId]
+
+	return ok
+}
+
 func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, error) {
 	// TODO simplify this by refactoring it into multiple functions,
 	// simplifying locking in the process.
