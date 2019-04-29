@@ -291,6 +291,131 @@ func TestRecoverFromUnmountedDotOnMaster(t *testing.T) {
 	})
 }
 
+func TestRecoverFromUnmountedDotOnMasterBoltDB(t *testing.T) {
+	// single node tests
+	citools.TeardownFinishedTestRuns()
+
+	env := map[string]string{
+		"DOTMESH_STORAGE": "boltdb",
+	}
+
+	f := citools.Federation{citools.NewClusterWithEnv(1, env)}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
+
+	citools.StartTiming()
+	err := f.Start(t)
+	if err != nil {
+		t.Fatalf("failed to start cluster, error: %s", err)
+	}
+	node1 := f[0].GetNode(0).Container
+
+	assertMountState := func(t *testing.T, fsId string, desiredMountState bool) string {
+		var mountpoint string
+		err := citools.TryUntilSucceeds(func() error {
+			st := citools.OutputFromRunOnNode(t, node1, "docker exec -t dotmesh-server-inner mount")
+			if desiredMountState == true {
+				if !strings.Contains(st, fsId) {
+					return fmt.Errorf("%s not mounted", fsId)
+				} else {
+					fmt.Printf("%s is mounted!!! yay\n", fsId)
+					for _, line := range strings.Split(st, "\n") {
+						if strings.Contains(line, fsId) {
+							shrapnel := strings.Split(line, " ")
+							mountpoint = shrapnel[2]
+						}
+					}
+				}
+			} else {
+				if strings.Contains(st, fsId) {
+					return fmt.Errorf("%s mounted", fsId)
+				} else {
+					fmt.Printf("%s is not mounted!!! yay\n", fsId)
+				}
+			}
+			return nil
+		}, fmt.Sprintf("checking for %s to be mounted", fsId))
+		if err != nil {
+			t.Error(err)
+		}
+		return mountpoint
+	}
+
+	t.Run("FilesystemRemountedOnRestart", func(t *testing.T) {
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm init "+fsname)
+		resp := citools.OutputFromRunOnNode(t, node1, "dm list")
+		if !strings.Contains(resp, fsname) {
+			t.Error("unable to find volume name in ouput")
+		}
+
+		fsId := strings.TrimSpace(
+			citools.OutputFromRunOnNode(t, node1, "dm dot show -H | grep masterBranchId | cut -f 2"),
+		)
+
+		// wait for filesystem to be mounted (assert that it becomes mounted)
+		mountpoint := assertMountState(t, fsId, true)
+
+		// unmount the filesystem and assert that it's no longer mounted
+		citools.RunOnNode(t, node1,
+			"docker exec -t dotmesh-server-inner umount "+mountpoint,
+		)
+		assertMountState(t, fsId, false)
+
+		// restart dotmesh, and wait for it to come back
+		stopContainers(t, node1)
+		startContainers(t, node1)
+
+		// assert that dotmesh has re-mounted the filesystem
+		assertMountState(t, fsId, true)
+
+	})
+
+	t.Run("RecoverFromUnmountedDotOnMaster", func(t *testing.T) {
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm init "+fsname)
+		resp := citools.OutputFromRunOnNode(t, node1, "dm list")
+		if !strings.Contains(resp, fsname) {
+			t.Error("unable to find volume name in ouput")
+		}
+
+		fsId := strings.TrimSpace(
+			citools.OutputFromRunOnNode(t, node1, "dm dot show -H | grep masterBranchId | cut -f 2"),
+		)
+		//zfsPath := strings.Replace(node1, "cluster", "testpool", -1) + "/dmfs/" + fsId
+
+		// wait for filesystem to be mounted (assert that it becomes mounted)
+		mountpoint := assertMountState(t, fsId, true)
+
+		// unmount the filesystem and assert that it's no longer mounted
+		citools.RunOnNode(t, node1,
+			"docker exec -t dotmesh-server-inner umount "+mountpoint,
+		)
+		assertMountState(t, fsId, false)
+
+		// TODO: inject a fault into dotmesh which causes it to go back into
+		// discoveringState for this fsMachine and get wedged in inactiveState
+		// even though mastersCache says it should be active. send it a 'move'
+		// request, and observe that rather than going into an infinite loop,
+		// it self-corrects, checks mastersCache and goes back into active (and
+		// remounts the filesystem)
+		_, err := citools.DoSetDebugFlag(
+			f[0].GetNode(0).IP,
+			"admin",
+			f[0].GetNode(0).ApiKey,
+			"ForceStateMachineToDiscovering",
+			fsId,
+		)
+		if err != nil {
+			t.Error(err)
+		}
+
+		// assert that dotmesh has re-mounted the filesystem
+		assertMountState(t, fsId, true)
+
+	})
+}
+
 func TestPubSub(t *testing.T) {
 
 	// TODO: refactor test, need to start Dotmesh server with NATS environment variables
