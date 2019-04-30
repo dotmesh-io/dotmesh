@@ -1146,7 +1146,8 @@ func (d *DotmeshRPC) registerFilesystemBecomeMaster(
 		filesystemNamespace, filesystemName, cloneName, filesystemId, path)
 
 	// Check that the fsid isn't already present on this node
-	if d.state.filesystemExists(filesystemId) {
+	_, err := d.state.GetFilesystemMachine(filesystemId)
+	if err == nil {
 		log.Errorf("[registerFilesystemBecomeMaster] failed to initialize filesystem %s due to it already existing", filesystemId)
 		return fmt.Errorf("Filesystem ID %s already exists", filesystemId)
 	}
