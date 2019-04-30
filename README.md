@@ -1,6 +1,6 @@
 # dotmesh: git for data
 
-[![pipeline status](https://gitlab.dotmesh.com/dotmesh/dotmesh-sync/badges/master/pipeline.svg)](https://gitlab.dotmesh.com/dotmesh/dotmesh-sync/commits/master)
+[![pipeline status](https://gitlab.dotmesh.com/dotmesh/dotmesh/badges/master/pipeline.svg)](https://gitlab.dotmesh.com/dotmesh/dotmesh/commits/master)
 
 Dotmesh is a **git-like CLI for capturing, organizing and sharing application states**.
 
