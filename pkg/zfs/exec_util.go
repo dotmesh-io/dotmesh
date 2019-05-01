@@ -2,10 +2,14 @@ package zfs
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func doSimpleZFSCommand(cmd *exec.Cmd, description string) error {
@@ -21,6 +25,49 @@ func doSimpleZFSCommand(cmd *exec.Cmd, description string) error {
 	}
 
 	return nil
+}
+
+// zfsCommandWithRetries runs a given command, it will retry as long as ctx is not cancelled.
+func zfsCommandWithRetries(ctx context.Context, cmd *exec.Cmd, description string) error {
+	var err error
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("deadline exceeded, last error: %s", err)
+		default:
+		}
+		errBuffer := bytes.Buffer{}
+		cmd.Stderr = &errBuffer
+		cmdErr := cmd.Run()
+		if cmdErr != nil {
+			readBytes, readErr := ioutil.ReadAll(&errBuffer)
+			if readErr != nil {
+				err = fmt.Errorf("error reading error: %v", readErr)
+
+				log.WithFields(log.Fields{
+					"error":       err,
+					"description": description,
+				}).Warn("[zfsCommandWithRetries] failed to read error buffer after command failed")
+
+				time.Sleep(500 * time.Millisecond)
+				continue
+			}
+
+			err = fmt.Errorf("error running ZFS command to %s: %v / %v", description, cmdErr, string(readBytes))
+
+			log.WithFields(log.Fields{
+				"error":       err,
+				"description": description,
+			}).Warn("[zfsCommandWithRetries] zfs command failed")
+
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+
+		// success!
+		return nil
+
+	}
 }
 
 // TODO: why not use a logger and using a file with it
