@@ -3,6 +3,7 @@ package zfs
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os/exec"
@@ -483,8 +484,11 @@ func (z *zfs) StashBranch(existingFs string, newFs string, rollbackTo string) er
 
 	log.Debugf("ABS TEST: Got mountpoints: %#v\n", mounts)
 
+	zfsRenameCtx, zfsRenameCancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer zfsRenameCancel()
+
 	LogZFSCommand(existingFs, fmt.Sprintf("%s rename %s %s", z.zfsPath, z.FQ(existingFs), z.FQ(newFs)))
-	err = doSimpleZFSCommand(exec.Command(z.zfsPath, "rename", z.FQ(existingFs), z.FQ(newFs)),
+	err = zfsCommandWithRetries(zfsRenameCtx, exec.Command(z.zfsPath, "rename", z.FQ(existingFs), z.FQ(newFs)),
 		fmt.Sprintf("rename filesystem %s (%s) to %s (%s) for retroBranch",
 			existingFs, z.FQ(existingFs),
 			newFs, z.FQ(newFs),
@@ -494,8 +498,11 @@ func (z *zfs) StashBranch(existingFs string, newFs string, rollbackTo string) er
 		return err
 	}
 
+	zfsCloneCtx, zfsCloneCancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer zfsCloneCancel()
+
 	LogZFSCommand(existingFs, fmt.Sprintf("%s clone %s@%s %s", z.zfsPath, z.FQ(newFs), rollbackTo, z.FQ(existingFs)))
-	err = doSimpleZFSCommand(exec.Command(z.zfsPath, "clone", z.FQ(newFs)+"@"+rollbackTo, z.FQ(existingFs)),
+	err = zfsCommandWithRetries(zfsCloneCtx, exec.Command(z.zfsPath, "clone", z.FQ(newFs)+"@"+rollbackTo, z.FQ(existingFs)),
 		fmt.Sprintf("clone snapshot %s of filesystem %s (%s) to %s (%s) for retroBranch",
 			rollbackTo, newFs, z.FQ(newFs)+"@"+rollbackTo,
 			existingFs, z.FQ(existingFs),
@@ -505,17 +512,16 @@ func (z *zfs) StashBranch(existingFs string, newFs string, rollbackTo string) er
 		return err
 	}
 
+	zfsPromoteCtx, zfsPromoteCancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer zfsPromoteCancel()
+
 	LogZFSCommand(existingFs, fmt.Sprintf("%s promote %s", z.zfsPath, z.FQ(existingFs)))
-	err = doSimpleZFSCommand(exec.Command(z.zfsPath, "promote", z.FQ(existingFs)),
+	err = zfsCommandWithRetries(zfsPromoteCtx, exec.Command(z.zfsPath, "promote", z.FQ(existingFs)),
 		fmt.Sprintf("promote filesystem %s (%s) for retroBranch",
 			existingFs, z.FQ(existingFs),
 		),
 	)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 /*
