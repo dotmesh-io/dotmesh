@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func doSimpleZFSCommand(cmd *exec.Cmd, description string) error {
@@ -40,12 +42,25 @@ func zfsCommandWithRetries(ctx context.Context, cmd *exec.Cmd, description strin
 		if cmdErr != nil {
 			readBytes, readErr := ioutil.ReadAll(&errBuffer)
 			if readErr != nil {
-				time.Sleep(500 * time.Millisecond)
 				err = fmt.Errorf("error reading error: %v", readErr)
+
+				log.WithFields(log.Fields{
+					"error":       err,
+					"description": description,
+				}).Warn("[zfsCommandWithRetries] failed to read error buffer after command failed")
+
+				time.Sleep(500 * time.Millisecond)
 				continue
 			}
-			time.Sleep(500 * time.Millisecond)
+
 			err = fmt.Errorf("error running ZFS command to %s: %v / %v", description, cmdErr, string(readBytes))
+
+			log.WithFields(log.Fields{
+				"error":       err,
+				"description": description,
+			}).Warn("[zfsCommandWithRetries] zfs command failed")
+
+			time.Sleep(500 * time.Millisecond)
 			continue
 		}
 
