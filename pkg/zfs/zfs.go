@@ -48,23 +48,10 @@ type ZFS interface {
 	SetCanmount(filesystemId, snapshotId string) ([]byte, error)
 	Mount(filesystemId, snapshotId string, options string, mountPath string) ([]byte, error)
 	Fork(filesystemId, latestSnapshot, forkFilesystemId string) error
-	Diff(snapshot, snapshotOrFilesystem string) ([]ZFSFileDiff, error)
+	Diff(filesystemId, snapshot, snapshotOrFilesystem string) ([]types.ZFSFileDiff, error)
 }
 
-type FileChange int
-
-const (
-	FileChangeUnknown FileChange = iota
-	FileChangeAdded
-	FileChangeModified
-	FileChangeRemoved
-	FileChangeRenamed
-)
-
-type ZFSFileDiff struct {
-	Change   FileChange
-	Filename string
-}
+var _ ZFS = &zfs{}
 
 type zfs struct {
 	zfsPath   string
@@ -780,12 +767,14 @@ func (z *zfs) Fork(filesystemId, latestSnapshot, forkFilesystemId string) error 
 	return nil
 }
 
-func (z *zfs) Diff(snapshot, snapshotOrFilesystem string) ([]ZFSFileDiff, error) {
+func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types.ZFSFileDiff, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, z.zfsPath, "diff", snapshot, snapshotOrFilesystem)
+	fullID := z.fullZFSFilesystemPath(filesystemID, snapshot)
+
+	cmd := exec.CommandContext(ctx, z.zfsPath, "diff", fullID, z.FQ(snapshotOrFilesystem))
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -799,7 +788,7 @@ func (z *zfs) Diff(snapshot, snapshotOrFilesystem string) ([]ZFSFileDiff, error)
 }
 
 // filterZFSDiff - filter out any files that are not under __default__ dir
-func filterZFSDiff(files []ZFSFileDiff, snapshotOrFilesystem string) []ZFSFileDiff {
+func filterZFSDiff(files []types.ZFSFileDiff, snapshotOrFilesystem string) []types.ZFSFileDiff {
 	rx := regexp.MustCompile(".*" + snapshotOrFilesystem + "/__default__.*")
 	b := files[:0]
 	for _, x := range files {
@@ -820,9 +809,9 @@ func matchFile(filename string, rx *regexp.Regexp) bool {
 // —           |  File or directory is present in the older snapshot but not in the more recent snapshot
 // +           |  File or directory is present in the more recent snapshot but not in the older snapshot
 // R           |  File or directory has been renamed
-func parseZFSDiffOutput(data string) []ZFSFileDiff {
+func parseZFSDiffOutput(data string) []types.ZFSFileDiff {
 
-	var files []ZFSFileDiff
+	var files []types.ZFSFileDiff
 
 	scanner := bufio.NewScanner(strings.NewReader(data))
 	for scanner.Scan() {
@@ -835,20 +824,20 @@ func parseZFSDiffOutput(data string) []ZFSFileDiff {
 			}).Warn("[parseZFSDiffOutput] expected 2 parts, skipping line")
 			continue
 		}
-		f := ZFSFileDiff{
+		f := types.ZFSFileDiff{
 			Filename: parts[1],
 		}
 		switch parts[0] {
 		case "+":
-			f.Change = FileChangeAdded
+			f.Change = types.FileChangeAdded
 		case "M":
-			f.Change = FileChangeModified
+			f.Change = types.FileChangeModified
 		case "-":
-			f.Change = FileChangeRemoved
+			f.Change = types.FileChangeRemoved
 		case "R":
-			f.Change = FileChangeRenamed
+			f.Change = types.FileChangeRenamed
 		default:
-			f.Change = FileChangeUnknown
+			f.Change = types.FileChangeUnknown
 		}
 		files = append(files, f)
 
