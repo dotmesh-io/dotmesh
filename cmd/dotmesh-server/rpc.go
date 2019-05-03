@@ -2990,7 +2990,6 @@ func (d *DotmeshRPC) Diff(r *http.Request, q *types.RPCDiffRequest, result *type
 		return fmt.Errorf("no snapshots found")
 	}
 
-	// mountSnapshotId := lastSnapshot.Id
 	if q.SnapshotID == "" || q.SnapshotID == "latest" {
 		q.SnapshotID = snapshots[len(snapshots)-1].Id
 	}
@@ -3000,5 +2999,8 @@ func (d *DotmeshRPC) Diff(r *http.Request, q *types.RPCDiffRequest, result *type
 		return fmt.Errorf("diff failed: %s", err)
 	}
 
-	*result.Files = diffFiles
+	*result = types.RPCDiffResponse{
+		Files: diffFiles,
+	}
+	return nil
 }
