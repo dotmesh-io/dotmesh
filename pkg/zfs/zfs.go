@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -47,6 +48,22 @@ type ZFS interface {
 	SetCanmount(filesystemId, snapshotId string) ([]byte, error)
 	Mount(filesystemId, snapshotId string, options string, mountPath string) ([]byte, error)
 	Fork(filesystemId, latestSnapshot, forkFilesystemId string) error
+	Diff(snapshot, snapshotOrFilesystem string) ([]ZFSFileDiff, error)
+}
+
+type FileChange int
+
+const (
+	FileChangeUnknown FileChange = iota
+	FileChangeAdded
+	FileChangeModified
+	FileChangeRemoved
+	FileChangeRenamed
+)
+
+type ZFSFileDiff struct {
+	Change   FileChange
+	Filename string
 }
 
 type zfs struct {
@@ -761,4 +778,81 @@ func (z *zfs) Fork(filesystemId, latestSnapshot, forkFilesystemId string) error 
 	log.WithField("duration", fmt.Sprintf("%v", elapsed)).Info("ZFS fork completed")
 
 	return nil
+}
+
+func (z *zfs) Diff(snapshot, snapshotOrFilesystem string) ([]ZFSFileDiff, error) {
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, z.zfsPath, "diff", snapshot, snapshotOrFilesystem)
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.WithError(err).Error("[diff] got error on zfs diff command")
+		return nil, err
+	}
+
+	// parsing ZFS output and then filtering out any files that should not be visible for the
+	// consumer
+	return filterZFSDiff(parseZFSDiffOutput(string(out)), snapshotOrFilesystem), nil
+}
+
+// filterZFSDiff - filter out any files that are not under __default__ dir
+func filterZFSDiff(files []ZFSFileDiff, snapshotOrFilesystem string) []ZFSFileDiff {
+	rx := regexp.MustCompile(".*" + snapshotOrFilesystem + "/__default__.*")
+	b := files[:0]
+	for _, x := range files {
+		if matchFile(x.Filename, rx) {
+			b = append(b, x)
+		}
+	}
+	return b
+}
+
+func matchFile(filename string, rx *regexp.Regexp) bool {
+	return rx.MatchString(filename)
+}
+
+// File or Directory Change
+// Identifier
+// M           |  File or directory has been modified or file or directory link has changed
+// —           |  File or directory is present in the older snapshot but not in the more recent snapshot
+// +           |  File or directory is present in the more recent snapshot but not in the older snapshot
+// R           |  File or directory has been renamed
+func parseZFSDiffOutput(data string) []ZFSFileDiff {
+
+	var files []ZFSFileDiff
+
+	scanner := bufio.NewScanner(strings.NewReader(data))
+	for scanner.Scan() {
+		l := scanner.Text()
+		// fmt.Println(l)
+		parts := strings.SplitN(l, "	", 2)
+		if len(parts) < 2 {
+			log.WithFields(log.Fields{
+				"line": l,
+			}).Warn("[parseZFSDiffOutput] expected 2 parts, skipping line")
+			continue
+		}
+		f := ZFSFileDiff{
+			Filename: parts[1],
+		}
+		switch parts[0] {
+		case "+":
+			f.Change = FileChangeAdded
+		case "M":
+			f.Change = FileChangeModified
+		case "-":
+			f.Change = FileChangeRemoved
+		case "R":
+			f.Change = FileChangeRenamed
+		default:
+			f.Change = FileChangeUnknown
+		}
+		files = append(files, f)
+
+	}
+
+	return files
 }
