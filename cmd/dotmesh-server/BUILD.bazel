@@ -9,6 +9,7 @@ go_library(
         "checkupdates.go",
         "controller.go",
         "controller_fsm.go",
+        "diff_handlers.go",
         "docker.go",
         "dockerclient.go",
         "etcd.go",

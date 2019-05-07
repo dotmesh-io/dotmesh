@@ -4,6 +4,7 @@ go_library(
     name = "go_default_library",
     srcs = [
         "backup.go",
+        "diff.go",
         "event.go",
         "event_names.go",
         "filesystem.go",
