@@ -760,10 +760,7 @@ func (z *zfs) Fork(filesystemId, latestSnapshot, forkFilesystemId string) error 
 		return err
 	}
 
-	t := time.Now()
-	elapsed := t.Sub(start)
-
-	log.WithField("duration", fmt.Sprintf("%v", elapsed)).Info("ZFS fork completed")
+	log.WithField("duration", fmt.Sprintf("%v", time.Since(start))).Info("ZFS fork completed")
 
 	return nil
 }
