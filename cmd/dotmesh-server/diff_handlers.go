@@ -178,13 +178,18 @@ func (s *DiffHandler) getDiff(filesystemID, snapshotID string) ([]types.ZFSFileD
 			return nil, fmt.Errorf("no files returned")
 		}
 
-		files, ok := f.([]types.ZFSFileDiff)
+		encodedFiles, ok := f.(string)
 		if !ok {
 			return nil, fmt.Errorf("interface conversion failed to files: %v", f)
 		}
 
+		files, err := types.DecodeZFSFileDiff(encodedFiles)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode zfs diff files: %s", err)
+		}
+
 		return files, nil
 	}
-	return nil, e.Error()
+	return nil, fmt.Errorf("diff failed: %s", err)
 
 }
