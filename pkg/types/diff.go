@@ -16,8 +16,8 @@ type ZFSFileDiff struct {
 }
 
 type RPCDiffRequest struct {
-	FilesystemID string
-	SnapshotID   string // snapshot ID to
+	FilesystemID string //
+	SnapshotID   string // snapshot (defaults to latest)
 }
 
 type RPCDiffResponse struct {
