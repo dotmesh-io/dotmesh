@@ -125,7 +125,7 @@ func TestDotDiff(t *testing.T) {
 		// adding a file but don't commit
 		citools.RunOnNode(t, node1, citools.DockerRun(dotName)+" touch /foo/HELLO")
 
-		cmd := fmt.Sprintf("curl -T newfile.txt -u admin:%s 127.0.0.1:32607/diff/admin:%s", f[0].GetNode(0).Password, dotName)		
+		cmd := fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/diff/admin:%s", f[0].GetNode(0).Password, dotName)		
 		resp := citools.OutputFromRunOnNode(t, node1, cmd)
 
 		t.Error(resp)
