@@ -25,6 +25,8 @@
 #   unused-packages = true
 
 
+ignored = ["github.com/dotmesh-io/dotmesh*"]
+
 [[constraint]]
   branch = "master"
   name = "github.com/dotmesh-io/citools"
