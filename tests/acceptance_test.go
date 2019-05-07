@@ -125,7 +125,7 @@ func TestDotDiff(t *testing.T) {
 		// adding a file but don't commit
 		citools.RunOnNode(t, node1, citools.DockerRun(dotName)+" touch /foo/HELLO")
 
-		req, err := http.NewRequest("GET", "http://" + f[0].GetNode(0).IP +":32607/diff", nil)
+		req, err := http.NewRequest("GET", "http://" + f[0].GetNode(0).IP +":32607/diff/admin:"+dotName, nil)
 		if err != nil {
 			t.Fatalf("failed to create request: %s", err)
 			return
