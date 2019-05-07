@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -162,12 +163,26 @@ func TestDotDiff(t *testing.T) {
 		t.Logf("status code: %d", resp.StatusCode)
 		t.Logf("response body: %s", string(bts))
 
-		// todo add check
+		if resp.StatusCode != 200 {
+			t.Errorf("unexpected status code: %d (wanted 200)",resp.StatusCode )
+		}
 
-		t.Error(string(bts))
+		var res []types.ZFSFileDiff
+		err = json.Unmarshal(bts, &res)
+		if err != nil {
+			t.Errorf("failed to decode: %s", err)
+		}
 
-		// This would fail if we didn't pick up a default dot when there's only one
-		// citools.RunOnNode(t, node1, "dm commit -m 'Commit without selecting a dot first'")
+		found := false
+		for _, file := range res {
+				if file.Filename == "FOOBAR" && file.Change == types.FileChangeAdded {
+					found = true
+				}
+		}
+
+		if !found {
+			t.Errorf("couldn't find our file, found files: %s", res)
+		}		
 
 		// Clean up
 		checkTestContainerExits(t, node1)
