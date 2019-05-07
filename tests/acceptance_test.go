@@ -122,10 +122,13 @@ func TestDotDiff(t *testing.T) {
 		dotName := citools.UniqName()
 		citools.RunOnNode(t, node1, "dm init "+dotName)
 
-		// adding a file but don't commit
+		// adding a file 
 		citools.RunOnNode(t, node1, citools.DockerRun(dotName)+" touch /foo/HELLO")
 		citools.RunOnNode(t, node1, "dm switch "+dotName)
 		citools.RunOnNode(t, node1, "dm commit -m 'hello'")
+
+		// touching another file again
+		citools.RunOnNode(t, node1, citools.DockerRun(dotName)+" touch /foo/FOOBAR")
 
 		req, err := http.NewRequest("GET", "http://" + f[0].GetNode(0).IP +":32607/diff/admin:"+dotName, nil)
 		if err != nil {
