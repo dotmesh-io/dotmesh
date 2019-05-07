@@ -21,4 +21,5 @@ go_test(
     name = "go_default_test",
     srcs = ["zfs_test.go"],
     embed = [":go_default_library"],
+    deps = ["//pkg/types:go_default_library"],
 )

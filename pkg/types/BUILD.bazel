@@ -7,6 +7,7 @@ go_library(
         "diff.go",
         "event.go",
         "event_names.go",
+        "filechange_jsonenums.go",
         "filesystem.go",
         "fork.go",
         "fsm_types.go",
