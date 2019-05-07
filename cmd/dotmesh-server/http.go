@@ -87,6 +87,9 @@ func (state *InMemoryState) runServer() {
 			),
 		).Methods("POST")
 
+		// display diff since the last commit
+		router.Handle("/diff/{namespace}:{name}", Instrument(state)(NewAuthHandler(NewDiffHandler(state), state.userManager))).Methods("GET")
+
 		// list files in the latest snapshot
 		router.Handle("/s3/{namespace}:{name}", middleware.FromHTTPRequest(tracer, "s3")(Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager)))).Methods("GET")
 		// list files in a specific snapshot
