@@ -94,7 +94,7 @@ func (s *DiffHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	filesystemID := s.state.registry.Exists(volName, "")
 	if err != nil {
 		log.Warnf("[DiffHandler.ServeHTTP] filesystem '%s' not found", filesystemID)
-		http.Error(resp, "filesystem not found", 404)
+		http.Error(resp, "filesystem not found", http.StatusPreconditionFailed)
 		return
 	}
 

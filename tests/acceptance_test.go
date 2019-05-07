@@ -125,13 +125,42 @@ func TestDotDiff(t *testing.T) {
 		// adding a file but don't commit
 		citools.RunOnNode(t, node1, citools.DockerRun(dotName)+" touch /foo/HELLO")
 
-		cmd := fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/diff/admin:%s", f[0].GetNode(0).Password, dotName)		
-		resp := citools.OutputFromRunOnNode(t, node1, cmd)
-
-		t.Error(resp)
-		if !strings.Contains(resp, "HELLO") {
-			t.Error("failed to get a diff")
+		req, err := http.NewRequest("GET", "http://" + f[0].GetNode(0).IP +":32607/diff", nil)
+		if err != nil {
+			t.Fatalf("failed to create request: %s", err)
+			return
 		}
+
+		req.SetBasicAuth("admin", f[0].GetNode(0).Password)
+
+		resp, err := http.DefaultClient.Do(req)
+		if resp.Body != nil {
+			defer resp.Body.Close()
+		}
+		if err != nil {
+			t.Errorf("failed to make diff request: %s", err)
+			
+			bts, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				t.Errorf("failed to read req body: %s", err)
+				return
+			}
+			t.Logf("response body: %s", string(bts))
+			return
+		}
+
+		bts, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			t.Errorf("failed to read req body: %s", err)
+			return
+		}
+
+		t.Logf("status code: %d", resp.StatusCode)
+		t.Logf("response body: %s", string(bts))
+
+		// todo add check
+
+		t.Error(string(bts))
 
 		// This would fail if we didn't pick up a default dot when there's only one
 		// citools.RunOnNode(t, node1, "dm commit -m 'Commit without selecting a dot first'")
@@ -689,7 +718,7 @@ func TestSingleNode(t *testing.T) {
 		var validRemote = regexp.MustCompile(`^Current remote: `)
 
 		serverResponse := citools.OutputFromRunOnNode(t, node1, "dm version")
-		fmt.Sprintf("Server response: %s\n", serverResponse)
+		t.Logf("Server response: %s", serverResponse)
 
 		lines := strings.Split(serverResponse, "\n")
 
