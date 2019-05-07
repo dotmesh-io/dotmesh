@@ -120,7 +120,6 @@ func TestDotDiff(t *testing.T) {
 
 	t.Run("DotDiffForAFile", func(t *testing.T) {
 		dotName := citools.UniqName()
-		citools.RunOnNode(t, node1, "dm init "+dotName)
 
 		// adding a file 
 		citools.RunOnNode(t, node1, citools.DockerRun(dotName)+" touch /foo/HELLO")
