@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os/exec"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -787,18 +786,15 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 
 // filterZFSDiff - filter out any files that are not under __default__ dir
 func filterZFSDiff(files []types.ZFSFileDiff, snapshotOrFilesystem string) []types.ZFSFileDiff {
-	rx := regexp.MustCompile(".*" + snapshotOrFilesystem + "/__default__.*")
 	b := files[:0]
 	for _, x := range files {
-		if matchFile(x.Filename, rx) {
+		parts := strings.SplitN(x.Filename, snapshotOrFilesystem+"/__default__/", 2)
+		if len(parts) == 2 {
+			x.Filename = parts[1]
 			b = append(b, x)
 		}
 	}
 	return b
-}
-
-func matchFile(filename string, rx *regexp.Regexp) bool {
-	return rx.MatchString(filename)
 }
 
 // File or Directory Change

@@ -84,7 +84,7 @@ func Test_filterZFSDiff(t *testing.T) {
 			want: []types.ZFSFileDiff{
 				{
 					Change:   types.FileChangeAdded,
-					Filename: "/var/lib/dotmesh/mnt/dmfs/fb042d52-7d76-450a-8c5b-58704ee9477f/__default__/dest/test.csv",
+					Filename: "dest/test.csv",
 				},
 			},
 		},
