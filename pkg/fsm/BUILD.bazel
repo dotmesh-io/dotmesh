@@ -8,6 +8,7 @@ go_library(
         "fsm_active.go",
         "fsm_active_file_io.go",
         "fsm_backoff.go",
+        "fsm_diff.go",
         "fsm_discovering.go",
         "fsm_failed.go",
         "fsm_handoff.go",

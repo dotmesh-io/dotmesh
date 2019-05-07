@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -97,6 +98,95 @@ func TestDefaultDot(t *testing.T) {
 		checkTestContainerExits(t, node1)
 		citools.RunOnNode(t, node1, "dm dot delete -f "+fsname1)
 		citools.RunOnNode(t, node1, "dm dot delete -f "+fsname2)
+	})
+}
+
+func TestDotDiff(t *testing.T) {
+	// Test default dot select on a totally fresh cluster
+	citools.TeardownFinishedTestRuns()
+
+	f := citools.Federation{citools.NewCluster(1)}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
+
+	citools.StartTiming()
+	err := f.Start(t)
+	if err != nil {
+		t.Fatalf("failed to start cluster, error: %s", err)
+	}
+	node1 := f[0].GetNode(0).Container
+
+	// These test MUST BE RUN ON A CLUSTER WITH NO DOTS.
+	// Ensure that any other test in this suite deletes all its dots at the end.
+
+	t.Run("DotDiffForAFile", func(t *testing.T) {
+		dotName := citools.UniqName()
+
+		// adding a file 
+		citools.RunOnNode(t, node1, citools.DockerRun(dotName)+" touch /foo/HELLO")
+		citools.RunOnNode(t, node1, "dm switch "+dotName)
+		citools.RunOnNode(t, node1, "dm commit -m 'hello'")
+
+		// touching another file again
+		citools.RunOnNode(t, node1, citools.DockerRun(dotName)+" touch /foo/FOOBAR")
+
+		req, err := http.NewRequest("GET", "http://" + f[0].GetNode(0).IP +":32607/diff/admin:"+dotName, nil)
+		if err != nil {
+			t.Fatalf("failed to create request: %s", err)
+			return
+		}
+
+		req.SetBasicAuth("admin", f[0].GetNode(0).Password)
+
+		resp, err := http.DefaultClient.Do(req)
+		if resp.Body != nil {
+			defer resp.Body.Close()
+		}
+		if err != nil {
+			t.Errorf("failed to make diff request: %s", err)
+			
+			bts, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				t.Errorf("failed to read req body: %s", err)
+				return
+			}
+			t.Logf("response body: %s", string(bts))
+			return
+		}
+
+		bts, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			t.Errorf("failed to read req body: %s", err)
+			return
+		}
+
+		t.Logf("status code: %d", resp.StatusCode)
+		t.Logf("response body: %s", string(bts))
+
+		if resp.StatusCode != 200 {
+			t.Errorf("unexpected status code: %d (wanted 200)",resp.StatusCode )
+		}
+
+		var res []types.ZFSFileDiff
+		err = json.Unmarshal(bts, &res)
+		if err != nil {
+			t.Errorf("failed to decode: %s", err)
+		}
+
+		found := false
+		for _, file := range res {
+				if file.Filename == "FOOBAR" && file.Change == types.FileChangeAdded {
+					found = true
+				}
+		}
+
+		if !found {
+			t.Errorf("couldn't find our file, found files: %s", res)
+		}		
+
+		// Clean up
+		checkTestContainerExits(t, node1)
+		citools.RunOnNode(t, node1, "dm dot delete -f "+dotName)
 	})
 }
 
@@ -647,7 +737,7 @@ func TestSingleNode(t *testing.T) {
 		var validRemote = regexp.MustCompile(`^Current remote: `)
 
 		serverResponse := citools.OutputFromRunOnNode(t, node1, "dm version")
-		fmt.Sprintf("Server response: %s\n", serverResponse)
+		t.Logf("Server response: %s", serverResponse)
 
 		lines := strings.Split(serverResponse, "\n")
 

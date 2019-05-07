@@ -187,6 +187,22 @@ linux_default_dot:
     except:
         - schedules
 
+linux_dot_diff:
+    retry: 2
+    stage: test
+    dependencies:
+        - build_client_linux
+    tags:
+        - fast
+    script:
+        - ./test.sh -run TestDotDiff
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
+    except:
+        - schedules
+
 linux_boltdb:
     retry: 2
     stage: test

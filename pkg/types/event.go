@@ -15,6 +15,8 @@ func init() {
 	gob.Register(&S3TransferRequest{})
 	gob.Register(&TransferRequest{})
 	gob.Register(&TransferPollResult{})
+	gob.Register(&ZFSFileDiff{})
+	// gob.Register(FileChange)
 }
 
 type EventType int
@@ -51,7 +53,7 @@ func (e Event) Error() error {
 	if ok {
 		return err
 	}
-	return nil
+	return fmt.Errorf("error specified but wrong type, contents: %s", err)
 }
 
 func NewEvent(name string) *Event {

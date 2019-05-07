@@ -163,6 +163,10 @@ func activeState(f *FsMachine) StateFn {
 			response, state := f.fork(e)
 			f.innerResponses <- response
 			return state
+		} else if e.Name == "diff" {
+			response, state := f.diff(e)
+			f.innerResponses <- response
+			return state
 		} else if e.Name == "snapshot" {
 			response, state := f.snapshot(e)
 			f.innerResponses <- response

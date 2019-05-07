@@ -47,7 +47,10 @@ type ZFS interface {
 	SetCanmount(filesystemId, snapshotId string) ([]byte, error)
 	Mount(filesystemId, snapshotId string, options string, mountPath string) ([]byte, error)
 	Fork(filesystemId, latestSnapshot, forkFilesystemId string) error
+	Diff(filesystemId, snapshot, snapshotOrFilesystem string) ([]types.ZFSFileDiff, error)
 }
+
+var _ ZFS = &zfs{}
 
 type zfs struct {
 	zfsPath   string
@@ -728,6 +731,7 @@ func (z *zfs) Fork(filesystemId, latestSnapshot, forkFilesystemId string) error 
 	sendCommand.Stdout = out
 
 	sendResultChan := make(chan error)
+	defer close(sendResultChan)
 
 	start := time.Now()
 
@@ -755,10 +759,83 @@ func (z *zfs) Fork(filesystemId, latestSnapshot, forkFilesystemId string) error 
 		return err
 	}
 
-	t := time.Now()
-	elapsed := t.Sub(start)
-
-	log.WithField("duration", fmt.Sprintf("%v", elapsed)).Info("ZFS fork completed")
+	log.WithField("duration", fmt.Sprintf("%v", time.Since(start))).Info("ZFS fork completed")
 
 	return nil
+}
+
+func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types.ZFSFileDiff, error) {
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	fullID := z.fullZFSFilesystemPath(filesystemID, snapshot)
+
+	cmd := exec.CommandContext(ctx, z.zfsPath, "diff", fullID, z.FQ(snapshotOrFilesystem))
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.WithError(err).Error("[diff] got error on zfs diff command")
+		return nil, err
+	}
+
+	// parsing ZFS output and then filtering out any files that should not be visible for the
+	// consumer
+	return filterZFSDiff(parseZFSDiffOutput(string(out)), snapshotOrFilesystem), nil
+}
+
+// filterZFSDiff - filter out any files that are not under __default__ dir
+func filterZFSDiff(files []types.ZFSFileDiff, snapshotOrFilesystem string) []types.ZFSFileDiff {
+	b := files[:0]
+	for _, x := range files {
+		parts := strings.SplitN(x.Filename, snapshotOrFilesystem+"/__default__/", 2)
+		if len(parts) == 2 {
+			x.Filename = parts[1]
+			b = append(b, x)
+		}
+	}
+	return b
+}
+
+// File or Directory Change
+// Identifier
+// M           |  File or directory has been modified or file or directory link has changed
+// —           |  File or directory is present in the older snapshot but not in the more recent snapshot
+// +           |  File or directory is present in the more recent snapshot but not in the older snapshot
+// R           |  File or directory has been renamed
+func parseZFSDiffOutput(data string) []types.ZFSFileDiff {
+
+	var files []types.ZFSFileDiff
+
+	scanner := bufio.NewScanner(strings.NewReader(data))
+	for scanner.Scan() {
+		l := scanner.Text()
+		// fmt.Println(l)
+		parts := strings.SplitN(l, "	", 2)
+		if len(parts) < 2 {
+			log.WithFields(log.Fields{
+				"line": l,
+			}).Warn("[parseZFSDiffOutput] expected 2 parts, skipping line")
+			continue
+		}
+		f := types.ZFSFileDiff{
+			Filename: parts[1],
+		}
+		switch parts[0] {
+		case "+":
+			f.Change = types.FileChangeAdded
+		case "M":
+			f.Change = types.FileChangeModified
+		case "-":
+			f.Change = types.FileChangeRemoved
+		case "R":
+			f.Change = types.FileChangeRenamed
+		default:
+			f.Change = types.FileChangeUnknown
+		}
+		files = append(files, f)
+
+	}
+
+	return files
 }

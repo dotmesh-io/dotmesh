@@ -19,7 +19,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-	"github.com/nu7hatch/gouuid"
+	uuid "github.com/nu7hatch/gouuid"
 	"golang.org/x/net/context"
 
 	"github.com/dotmesh-io/dotmesh/pkg/auth"
@@ -2977,5 +2977,30 @@ func (d *DotmeshRPC) RestoreEtcd(r *http.Request, args *struct {
 		return fmt.Errorf("got error while importing backup: %v", errs)
 	}
 
+	return nil
+}
+
+func (d *DotmeshRPC) Diff(r *http.Request, q *types.RPCDiffRequest, result *types.RPCDiffResponse) error {
+
+	snapshots, err := d.state.SnapshotsForCurrentMaster(q.FilesystemID)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve snapshots: %s", err)
+	}
+	if len(snapshots) == 0 {
+		return fmt.Errorf("no snapshots found")
+	}
+
+	if q.SnapshotID == "" || q.SnapshotID == "latest" {
+		q.SnapshotID = snapshots[len(snapshots)-1].Id
+	}
+
+	diffFiles, err := d.state.zfs.Diff(q.FilesystemID, q.SnapshotID, q.FilesystemID)
+	if err != nil {
+		return fmt.Errorf("diff failed: %s", err)
+	}
+
+	*result = types.RPCDiffResponse{
+		Files: diffFiles,
+	}
 	return nil
 }
