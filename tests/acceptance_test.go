@@ -100,6 +100,48 @@ func TestDefaultDot(t *testing.T) {
 	})
 }
 
+func TestDotDiff(t *testing.T) {
+	// Test default dot select on a totally fresh cluster
+	citools.TeardownFinishedTestRuns()
+
+	f := citools.Federation{citools.NewCluster(1)}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
+
+	citools.StartTiming()
+	err := f.Start(t)
+	if err != nil {
+		t.Fatalf("failed to start cluster, error: %s", err)
+	}
+	node1 := f[0].GetNode(0).Container
+
+	// These test MUST BE RUN ON A CLUSTER WITH NO DOTS.
+	// Ensure that any other test in this suite deletes all its dots at the end.
+
+	t.Run("DotDiffForAFile", func(t *testing.T) {
+		dotName := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm init "+dotName)
+
+		// adding a file but don't commit
+		citools.RunOnNode(t, node1, citools.DockerRun(dotName)+" touch /foo/HELLO")
+
+		cmd := fmt.Sprintf("curl -T newfile.txt -u admin:%s 127.0.0.1:32607/diff/admin:%s", f[0].GetNode(0).Password, dotName)		
+		resp := citools.OutputFromRunOnNode(t, node1, cmd)
+
+		t.Error(resp)
+		if !strings.Contains(resp, "HELLO") {
+			t.Error("failed to get a diff")
+		}
+
+		// This would fail if we didn't pick up a default dot when there's only one
+		// citools.RunOnNode(t, node1, "dm commit -m 'Commit without selecting a dot first'")
+
+		// Clean up
+		checkTestContainerExits(t, node1)
+		citools.RunOnNode(t, node1, "dm dot delete -f "+dotName)
+	})
+}
+
 func TestBoltDBStoreWithDefaultDot(t *testing.T) {
 	// Test default dot select on a totally fresh cluster
 	citools.TeardownFinishedTestRuns()
