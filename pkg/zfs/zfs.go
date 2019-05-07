@@ -732,6 +732,7 @@ func (z *zfs) Fork(filesystemId, latestSnapshot, forkFilesystemId string) error 
 	sendCommand.Stdout = out
 
 	sendResultChan := make(chan error)
+	defer close(sendResultChan)
 
 	start := time.Now()
 
