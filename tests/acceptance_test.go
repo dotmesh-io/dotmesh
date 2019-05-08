@@ -16,11 +16,14 @@ import (
 
 	"github.com/dotmesh-io/citools"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
+	"github.com/dotmesh-io/dotmesh/pkg/client"
+
 
 	natsServer "github.com/nats-io/gnatsd/server"
 	natsTest "github.com/nats-io/gnatsd/test"
 	nats "github.com/nats-io/go-nats"
 )
+
 
 /*
 
@@ -102,7 +105,6 @@ func TestDefaultDot(t *testing.T) {
 }
 
 func TestDotDiff(t *testing.T) {
-	// Test default dot select on a totally fresh cluster
 	citools.TeardownFinishedTestRuns()
 
 	f := citools.Federation{citools.NewCluster(1)}
@@ -116,11 +118,14 @@ func TestDotDiff(t *testing.T) {
 	}
 	node1 := f[0].GetNode(0).Container
 
-	// These test MUST BE RUN ON A CLUSTER WITH NO DOTS.
-	// Ensure that any other test in this suite deletes all its dots at the end.
-
 	t.Run("DotDiffForAFile", func(t *testing.T) {
 		dotName := citools.UniqName()
+		
+		cleanup := func() {
+			// Clean up
+			checkTestContainerExits(t, node1)
+			citools.RunOnNode(t, node1, "dm dot delete -f "+dotName)
+		}
 
 		// adding a file 
 		citools.RunOnNode(t, node1, citools.DockerRun(dotName)+" touch /foo/HELLO")
@@ -133,9 +138,9 @@ func TestDotDiff(t *testing.T) {
 		req, err := http.NewRequest("GET", "http://" + f[0].GetNode(0).IP +":32607/diff/admin:"+dotName, nil)
 		if err != nil {
 			t.Fatalf("failed to create request: %s", err)
+			cleanup()
 			return
 		}
-
 		req.SetBasicAuth("admin", f[0].GetNode(0).Password)
 
 		resp, err := http.DefaultClient.Do(req)
@@ -151,12 +156,14 @@ func TestDotDiff(t *testing.T) {
 				return
 			}
 			t.Logf("response body: %s", string(bts))
+			cleanup()
 			return
 		}
 
 		bts, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			t.Errorf("failed to read req body: %s", err)
+			cleanup()
 			return
 		}
 
@@ -184,9 +191,62 @@ func TestDotDiff(t *testing.T) {
 			t.Errorf("couldn't find our file, found files: %s", res)
 		}		
 
-		// Clean up
-		checkTestContainerExits(t, node1)
-		citools.RunOnNode(t, node1, "dm dot delete -f "+dotName)
+		cleanup()
+	})
+
+	t.Run("DotDiffDMClient", func(t *testing.T) {
+		dotName := citools.UniqName()
+
+		cleanup := func() {
+			// Clean up
+			checkTestContainerExits(t, node1)
+			citools.RunOnNode(t, node1, "dm dot delete -f "+dotName)
+		}		
+
+		// adding a file 
+		citools.RunOnNode(t, node1, citools.DockerRun(dotName)+" touch /foo/HELLO")
+		citools.RunOnNode(t, node1, "dm switch "+dotName)
+		citools.RunOnNode(t, node1, "dm commit -m 'hello'")
+
+		// touching another file again
+		citools.RunOnNode(t, node1, citools.DockerRun(dotName)+" touch /foo/FOOBAR")
+
+		remote := &client.DMRemote{
+			User: "admin",
+			ApiKey: f[0].GetNode(0).Password,
+			Hostname:  f[0].GetNode(0).IP,
+			Port: 32607,
+		}
+
+		cfg := client.Configuration{
+			CurrentRemote: "default",
+			DMRemotes: map[string]*client.DMRemote{
+				"default": remote,
+			},
+		}
+
+		apiClient := client.DotmeshAPI{
+			Configuration: &cfg,
+		}
+
+
+		res, err := apiClient.Diff("admin", dotName)
+		if err != nil {
+			t.Errorf("failed to get diff from API: %s", err)			
+		}
+
+		found := false
+		for _, file := range res {
+				if file.Filename == "FOOBAR" && file.Change == types.FileChangeAdded {
+					found = true
+				}
+		}
+
+		if !found {
+			t.Errorf("couldn't find our file, found files: %s", res)
+		}		
+
+		cleanup()	
 	})
 }
 
@@ -1016,7 +1076,7 @@ func TestSingleNode(t *testing.T) {
 		citools.RunOnNode(t, node1, citools.DockerRunDetached(fsname+".flies")+" sh -c 'touch /foo/HELLO-FLIES; sleep 30'")
 		citools.RunOnNode(t, node1, citools.DockerRunDetached(fsname+".__root__")+" sh -c 'touch /foo/HELLO-ROOT; sleep 30'")
 		// Let everything get started
-		time.Sleep(5)
+		time.Sleep(5 * time.Second)
 
 		st := citools.OutputFromRunOnNode(t, node1, "dm list")
 		matched, err := regexp.MatchString("/[a-z]+_[a-z]+,/[a-z]+_[a-z]+,/[a-z]+_[a-z]+,/[a-z]+_[a-z]+", st)
@@ -1092,7 +1152,7 @@ func TestSingleNode(t *testing.T) {
 		citools.RunOnNode(t, node1, citools.DockerRun(fsname+"@branch_A.frogs")+" sh -c 'echo A_FROGS > /foo/HELLO'")
 		citools.RunOnNode(t, node1, citools.DockerRun(fsname+"@branch_A")+" sh -c 'echo A_DEFAULT > /foo/HELLO'")
 		citools.RunOnNode(t, node1, "dm commit -m 'branch A commit'")
-		time.Sleep(5)
+		time.Sleep(5 * time.Second)
 
 		// Set up branch B
 		citools.RunOnNode(t, node1, "dm checkout master")
@@ -1508,7 +1568,7 @@ func TestDeletionSimple(t *testing.T) {
 		}()
 
 		for !strings.Contains(citools.OutputFromRunOnNode(t, node1, "docker ps"), "busybox") {
-			time.Sleep(1)
+			time.Sleep(1 * time.Second)
 		}
 
 		// Delete, while the container is running! Which should fail!

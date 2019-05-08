@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"net/http"
 	"os"
 	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -43,6 +46,7 @@ type Dotmesh interface {
 	CallRemote(ctx context.Context, method string, args interface{}, response interface{}) error
 	ListCommits(activeVolumeName, activeBranch string) ([]types.Snapshot, error)
 	CommitsById(dotID string) ([]types.Snapshot, error)
+	Diff(namespace, name string) ([]types.ZFSFileDiff, error)
 	GetFsId(namespace, name, branch string) (string, error)
 	Get(fsId string) (types.DotmeshVolume, error)
 	Procure(data types.ProcureArgs) (string, error)
@@ -58,6 +62,8 @@ type Dotmesh interface {
 	GetTransfer(transferId string) (TransferPollResult, error)
 	Transfer(request types.TransferRequest) (string, error)
 }
+
+var _ Dotmesh = &DotmeshAPI{}
 
 func CheckName(name string) bool {
 	// TODO add more checks around sensible names?
@@ -1253,4 +1259,53 @@ func ParseNamespacedVolumeWithDefault(name, defaultNamespace string) (string, st
 
 func ParseNamespacedVolume(name string) (string, string, error) {
 	return ParseNamespacedVolumeWithDefault(name, "admin")
+}
+
+func (dm *DotmeshAPI) Diff(namespace, name string) ([]types.ZFSFileDiff, error) {
+
+	remoteCreds, err := dm.Configuration.CredsForRemote(dm.Configuration.CurrentRemote)
+	if err != nil {
+		return nil, err
+	}
+
+	var url string
+
+	if remoteCreds.Port == 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		url, err = DeduceUrl(ctx, []string{remoteCreds.Hostname}, "external", remoteCreds.User, remoteCreds.ApiKey)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		url = "http://" + remoteCreds.Hostname + ":" + strconv.Itoa(remoteCreds.Port)
+	}
+
+	req, err := http.NewRequest(http.MethodGet, url+"/diff/"+namespace+":"+name, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.SetBasicAuth(remoteCreds.User, remoteCreds.ApiKey)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("[%d]: failed to read resp body: %s", resp.StatusCode, err)
+		}
+		return nil, fmt.Errorf("[%d]: %s", resp.StatusCode, string(body))
+	}
+
+	var res []types.ZFSFileDiff
+	err = json.NewDecoder(resp.Body).Decode(&res)
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
 }
