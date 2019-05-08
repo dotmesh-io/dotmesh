@@ -25,12 +25,13 @@ matter?
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"io/ioutil"
 	"os"
 	"reflect"
 	"strings"
 	"sync"
+
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 )
 
 type Remote interface {
@@ -465,6 +466,19 @@ func (c *Configuration) RemoveRemote(remote string) error {
 		c.CurrentRemote = ""
 	}
 	return c.save()
+}
+
+func (c *Configuration) CredsForRemote(remote string) (*DMRemote, error) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	remoteCreds, ok := c.DMRemotes[remote]
+	if !ok {
+		return nil, fmt.Errorf("No such remote '%s'", remote)
+	}
+	res := new(DMRemote)
+	*res = *remoteCreds
+
+	return res, nil
 }
 
 func (c *Configuration) ClusterFromRemote(remote string, verbose bool) (*JsonRpcClient, error) {
