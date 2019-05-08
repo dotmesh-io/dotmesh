@@ -121,13 +121,11 @@ func TestDotDiff(t *testing.T) {
 	t.Run("DotDiffForAFile", func(t *testing.T) {
 		dotName := citools.UniqName()
 		
-
 		cleanup := func() {
-				// Clean up
-				checkTestContainerExits(t, node1)
-				citools.RunOnNode(t, node1, "dm dot delete -f "+dotName)
+			// Clean up
+			checkTestContainerExits(t, node1)
+			citools.RunOnNode(t, node1, "dm dot delete -f "+dotName)
 		}
-		defer cleanup()
 
 		// adding a file 
 		citools.RunOnNode(t, node1, citools.DockerRun(dotName)+" touch /foo/HELLO")
@@ -140,9 +138,9 @@ func TestDotDiff(t *testing.T) {
 		req, err := http.NewRequest("GET", "http://" + f[0].GetNode(0).IP +":32607/diff/admin:"+dotName, nil)
 		if err != nil {
 			t.Fatalf("failed to create request: %s", err)
+			cleanup()
 			return
 		}
-
 		req.SetBasicAuth("admin", f[0].GetNode(0).Password)
 
 		resp, err := http.DefaultClient.Do(req)
@@ -158,12 +156,14 @@ func TestDotDiff(t *testing.T) {
 				return
 			}
 			t.Logf("response body: %s", string(bts))
+			cleanup()
 			return
 		}
 
 		bts, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			t.Errorf("failed to read req body: %s", err)
+			cleanup()
 			return
 		}
 
@@ -191,7 +191,7 @@ func TestDotDiff(t *testing.T) {
 			t.Errorf("couldn't find our file, found files: %s", res)
 		}		
 
-	
+		cleanup()
 	})
 
 	t.Run("DotDiffDMClient", func(t *testing.T) {
@@ -200,11 +200,8 @@ func TestDotDiff(t *testing.T) {
 		cleanup := func() {
 			// Clean up
 			checkTestContainerExits(t, node1)
-
-
 			citools.RunOnNode(t, node1, "dm dot delete -f "+dotName)
-		}
-		defer cleanup()
+		}		
 
 		// adding a file 
 		citools.RunOnNode(t, node1, citools.DockerRun(dotName)+" touch /foo/HELLO")
@@ -249,9 +246,7 @@ func TestDotDiff(t *testing.T) {
 			t.Errorf("couldn't find our file, found files: %s", res)
 		}		
 
-		// Clean up
-		checkTestContainerExits(t, node1)
-		citools.RunOnNode(t, node1, "dm dot delete -f "+dotName)
+		cleanup()	
 	})
 }
 
