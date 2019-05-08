@@ -29,6 +29,9 @@ func TestS3Api(t *testing.T) {
 	host := f[0].GetNode(0)
 	node1 := host.Container
 	err = citools.RegisterUser(host, "bob", "bob@bob.com", "password")
+	if err != nil {
+		t.Errorf("failed to register user: %s", err)
+	}
 
 	t.Run("Put", func(t *testing.T) {
 		dotName := citools.UniqName()
