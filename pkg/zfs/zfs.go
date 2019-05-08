@@ -130,7 +130,7 @@ func (z *zfs) Create(filesystemId string) ([]byte, error) {
 }
 
 func (z *zfs) Rollback(filesystemId, snapshotId string) ([]byte, error) {
-	return z.runOnFilesystem(filesystemId, snapshotId, []string{"rollback", "-r"})
+	return z.runOnFilesystem(filesystemId, snapshotId, []string{"rollback", "-Rfr"})
 }
 
 func (z *zfs) SetCanmount(filesystemId, snapshotId string) ([]byte, error) {
