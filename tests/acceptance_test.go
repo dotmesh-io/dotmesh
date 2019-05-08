@@ -16,11 +16,14 @@ import (
 
 	"github.com/dotmesh-io/citools"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
+	"github.com/dotmesh-io/dotmesh/pkg/client"
+
 
 	natsServer "github.com/nats-io/gnatsd/server"
 	natsTest "github.com/nats-io/gnatsd/test"
 	nats "github.com/nats-io/go-nats"
 )
+
 
 /*
 
@@ -102,7 +105,6 @@ func TestDefaultDot(t *testing.T) {
 }
 
 func TestDotDiff(t *testing.T) {
-	// Test default dot select on a totally fresh cluster
 	citools.TeardownFinishedTestRuns()
 
 	f := citools.Federation{citools.NewCluster(1)}
@@ -115,9 +117,6 @@ func TestDotDiff(t *testing.T) {
 		t.Fatalf("failed to start cluster, error: %s", err)
 	}
 	node1 := f[0].GetNode(0).Container
-
-	// These test MUST BE RUN ON A CLUSTER WITH NO DOTS.
-	// Ensure that any other test in this suite deletes all its dots at the end.
 
 	t.Run("DotDiffForAFile", func(t *testing.T) {
 		dotName := citools.UniqName()
@@ -171,6 +170,58 @@ func TestDotDiff(t *testing.T) {
 		err = json.Unmarshal(bts, &res)
 		if err != nil {
 			t.Errorf("failed to decode: %s", err)
+		}
+
+		found := false
+		for _, file := range res {
+				if file.Filename == "FOOBAR" && file.Change == types.FileChangeAdded {
+					found = true
+				}
+		}
+
+		if !found {
+			t.Errorf("couldn't find our file, found files: %s", res)
+		}		
+
+		// Clean up
+		checkTestContainerExits(t, node1)
+		citools.RunOnNode(t, node1, "dm dot delete -f "+dotName)
+	})
+
+	t.Run("DotDiffDMClient", func(t *testing.T) {
+		dotName := citools.UniqName()
+
+		// adding a file 
+		citools.RunOnNode(t, node1, citools.DockerRun(dotName)+" touch /foo/HELLO")
+		citools.RunOnNode(t, node1, "dm switch "+dotName)
+		citools.RunOnNode(t, node1, "dm commit -m 'hello'")
+
+		// touching another file again
+		citools.RunOnNode(t, node1, citools.DockerRun(dotName)+" touch /foo/FOOBAR")
+
+		remote := &client.DMRemote{
+			User: "admin",
+			ApiKey: f[0].GetNode(0).Password,
+			Hostname:  f[0].GetNode(0).IP,
+			Port: 32607,
+		}
+
+		cfg := client.Configuration{
+			CurrentRemote: "default",
+			DMRemotes: map[string]*client.DMRemote{
+				"default": remote,
+			},
+		}
+
+		apiClient := client.DotmeshAPI{
+			Configuration: &cfg,
+		}
+
+
+		res, err := apiClient.Diff("admin", dotName)
+		if err != nil {
+			t.Errorf("failed to get diff from API: %s", err)
+			return
 		}
 
 		found := false
