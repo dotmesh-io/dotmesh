@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"reflect"
@@ -1280,7 +1281,7 @@ func (dm *DotmeshAPI) Diff(namespace, name string) ([]types.ZFSFileDiff, error) 
 		url = "http://" + remoteCreds.Hostname + ":" + strconv.Itoa(remoteCreds.Port)
 	}
 
-	req, err := http.NewRequest(http.MethodGet, url+"/diff/"+namespace+"/"+name, nil)
+	req, err := http.NewRequest(http.MethodGet, url+"/diff/"+namespace+":"+name, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1291,6 +1292,14 @@ func (dm *DotmeshAPI) Diff(namespace, name string) ([]types.ZFSFileDiff, error) 
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("[%d]: failed to read resp body: %s", resp.StatusCode, err)
+		}
+		return nil, fmt.Errorf("[%d]: %s", resp.StatusCode, string(body))
+	}
 
 	var res []types.ZFSFileDiff
 	err = json.NewDecoder(resp.Body).Decode(&res)
