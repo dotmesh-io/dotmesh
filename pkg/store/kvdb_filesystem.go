@@ -659,6 +659,10 @@ func (s *KVDBFilesystemStore) SetTransfer(t *types.TransferPollResult, opts *Set
 		return err
 	}
 	_, err = s.client.Put(FilesystemTransfersPrefix+t.TransferRequestId, bts, 0)
+	log.WithFields(log.Fields{
+		"t": fmt.Sprintf("%#v", t),
+	}).Debug("[ABS TEST SetTransfer] DONE SET IT")
+
 	return err
 }
 
@@ -697,6 +701,10 @@ func (s *KVDBFilesystemStore) WatchTransfers(idx uint64, cb WatchTransfersCB) er
 		}
 
 		t.Meta = getMeta(kvp)
+
+		log.WithFields(log.Fields{
+			"t": fmt.Sprintf("%#v", t),
+		}).Debug("[ABS TEST WatchTransfers] DONE SAW IT")
 
 		err = cb(&t)
 		if err != nil {
