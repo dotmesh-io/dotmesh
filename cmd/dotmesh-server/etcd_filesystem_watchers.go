@@ -223,6 +223,9 @@ func (s *InMemoryState) processTransferPollResults(t *types.TransferPollResult) 
 		// XXX temporarily commented out, since they seem to be deleted too often.
 		// delete(s.interclusterTransfers, t.TransferRequestId)
 	case types.KVGet, types.KVCreate, types.KVSet:
+		log.WithFields(log.Fields{
+			"t": fmt.Sprintf("%#v", t),
+		}).Error("[processTransferPollResults] SOMETHING ARRIVED")
 		s.interclusterTransfers[t.TransferRequestId] = *t
 	}
 	return
