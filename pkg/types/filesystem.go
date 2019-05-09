@@ -84,8 +84,8 @@ const (
 	KVDelete
 	// KVExpire set when the key expires
 	KVExpire
-	// KVUknown operation on KV pair
-	KVUknown
+	// KVUnknown operation on KV pair
+	KVUnknown
 )
 
 func (kv KVAction) String() string {
@@ -100,7 +100,7 @@ func (kv KVAction) String() string {
 		return "delete"
 	case KVExpire:
 		return "expire"
-	case KVUknown:
+	case KVUnknown:
 		return "unknown"
 	default:
 		return "not set"

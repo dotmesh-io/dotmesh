@@ -40,7 +40,7 @@ func getMeta(kvp *kvdb.KVPair) *types.KVMeta {
 	case kvdb.KVExpire:
 		action = types.KVExpire
 	case kvdb.KVUknown:
-		action = types.KVUknown
+		action = types.KVUnknown
 	}
 
 	return &types.KVMeta{
@@ -64,7 +64,7 @@ func ActionString(a kvdb.KVAction) string {
 	case kvdb.KVExpire:
 		return "KVExpire"
 	case kvdb.KVUknown:
-		return "KVUknown"
+		return "KVUnknown"
 	}
 	return fmt.Sprintf("unknown: %d", a)
 }
