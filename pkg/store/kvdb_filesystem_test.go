@@ -2,10 +2,16 @@ package store
 
 import (
 	"context"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/dotmesh-io/dotmesh/pkg/types"
+	"github.com/portworx/kvdb"
+	"github.com/portworx/kvdb/bolt"
 )
 
 func TestListMastersIndex(t *testing.T) {
@@ -201,6 +207,67 @@ func TestWatchMasterDeleteEvent(t *testing.T) {
 			}
 			// success
 			return
+		}
+	}
+}
+
+func TestWatchTransfers(t *testing.T) {
+
+	dir, err := ioutil.TempDir(os.TempDir(), "")
+	if err != nil {
+		t.Fatalf("failed to get temp dir: %s", err)
+		return
+	}
+
+	defer os.RemoveAll(dir)
+
+	client, err := getKVDBClient(&KVDBConfig{
+		Type: KVTypeBolt,
+		Options: map[string]string{
+			bolt.KvSnap: filepath.Join(dir, "dotmesh.db"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("failed to init kv store: %s", err)
+	}
+
+	var actions []string
+
+	watchFunc := func(prefix string, opaque interface{}, kvp *kvdb.KVPair, err error) error {
+
+		actions = append(actions, ActionString(kvp.Action))
+		return nil
+	}
+
+	client.WatchTree(FilesystemTransfersPrefix, 0, nil, watchFunc)
+
+	kvdb := NewKVDBFilesystemStore(client)
+
+	// setting some transfers
+
+	kvdb.SetTransfer(&types.TransferPollResult{TransferRequestId: "1"}, &SetOptions{})
+	kvdb.SetTransfer(&types.TransferPollResult{TransferRequestId: "1"}, &SetOptions{})
+
+	time.Sleep(500 * time.Millisecond)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*4)
+	defer cancel()
+
+	for {
+		select {
+		case <-ctx.Done():
+			t.Errorf("unexpected actions: %s", strings.Join(actions, ", "))
+			return
+		default:
+			if len(actions) != 2 {
+				time.Sleep(300 * time.Millisecond)
+				continue
+			}
+			if actions[0] == "KVSet" && actions[1] == "KVSet" {
+				// ok
+				return
+			}
+			t.Errorf("unexpected actions: %s", strings.Join(actions, ", "))
 		}
 	}
 }
