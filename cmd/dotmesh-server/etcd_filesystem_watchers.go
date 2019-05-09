@@ -217,7 +217,11 @@ func (s *InMemoryState) processTransferPollResults(t *types.TransferPollResult) 
 
 	switch t.Meta.Action {
 	case types.KVDelete:
-		delete(s.interclusterTransfers, t.TransferRequestId)
+		log.WithFields(log.Fields{
+			"t": fmt.Sprintf("%#v", t),
+		}).Error("[processTransferPollResults] DELETE IS CALLED BUT NOT HAPPENING")
+		// XXX temporarily commented out, since they seem to be deleted too often.
+		// delete(s.interclusterTransfers, t.TransferRequestId)
 	case types.KVGet, types.KVCreate, types.KVSet:
 		s.interclusterTransfers[t.TransferRequestId] = *t
 	}
