@@ -371,18 +371,19 @@ exit
 # you should now have accesss because we added authorized_keys
 ssh gitlab-runner@<HOSTNAME-OF-RUNNER>
 su - gitlab-runner
-# clone the dotmesh repo
-mkdir -p $GOPATH/src/github.com/dotmesh-io
-cd $GOPATH/src/github.com/dotmesh-io
-git clone git@github.com:dotmesh-io/dotmesh.git
-cd dotmesh
-./prime.sh
 
 # clone & setup the dotmesh-instrumentation repo
 cd ~/
 git clone git@github.com:dotmesh-io/dotmesh-instrumentation
 cd dotmesh-instrumentation
 ./up.sh
+
+# clone the dotmesh repo
+mkdir -p $GOPATH/src/github.com/dotmesh-io
+cd $GOPATH/src/github.com/dotmesh-io
+git clone git@github.com:dotmesh-io/dotmesh.git
+cd dotmesh
+./prime.sh
 
 # clone & setup the discovery.dotmesh.io repo
 cd ~/
