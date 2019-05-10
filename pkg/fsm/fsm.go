@@ -148,7 +148,7 @@ func NewFilesystemMachine(cfg *FsConfig) *FsMachine {
 		transferUpdates: make(chan types.TransferUpdate),
 
 		filesystemMetadataTimeout: cfg.FilesystemMetadataTimeout,
-		zfs: zfsInter,
+		zfs:                       zfsInter,
 	}
 }
 
@@ -509,17 +509,16 @@ func (f *FsMachine) updateEtcdAboutTransfers() error {
 		// Send the update
 		log.Debugf("[updateEtcdAboutTransfers] pollResult = %#v", pollResult)
 
+		// Immediately store the fact in our local state as well, to avoid
+		// issues where we miss the "echo" from kv store when the update
+		// happens locally.
+		f.state.UpdateInterclusterTransfer(pollResult.TransferRequestId, pollResult)
+
+		// And persist it to the kv store.
 		err := f.filesystemStore.SetTransfer(&pollResult, &store.SetOptions{})
 		if err != nil {
 			return err
 		}
-
-		func() {
-			s := f.state
-			s.interclusterTransfersLock.Lock()
-			defer s.interclusterTransfersLock.Unlock()
-			s.interclusterTransfers[pollResult.TransferRequestId] = pollResult
-		}()
 
 		// Go around the loop for the next command
 	}
