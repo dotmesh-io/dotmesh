@@ -100,11 +100,10 @@ func (s *InMemoryState) InitFilesystemMachine(filesystemId string) (fsm.FSM, err
 	return fs, nil
 }
 
-func (s *InMemoryState) UpdateInterclusterTransfer(transferRequestId string, pollResult types.TransferPollResult) error {
+func (s *InMemoryState) UpdateInterclusterTransfer(transferRequestId string, pollResult types.TransferPollResult) {
 	s.interclusterTransfersLock.Lock()
 	defer s.interclusterTransfersLock.Unlock()
 	s.interclusterTransfers[transferRequestId] = pollResult
-	return nil
 }
 
 func (s *InMemoryState) NodeID() string {

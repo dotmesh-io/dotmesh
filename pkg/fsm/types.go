@@ -37,7 +37,7 @@ type StateManager interface {
 
 	RegisterNewFork(originFilesystemId, originSnapshotId, forkNamespace, forkName, forkFilesystemId string) error
 
-	UpdateInterclusterTransfer(transferRequestId string, pollResult types.TransferPollResult) error
+	UpdateInterclusterTransfer(transferRequestId string, pollResult types.TransferPollResult)
 
 	// TODO: move under a separate interface for Etcd related things
 	MarkFilesystemAsLiveInEtcd(topLevelFilesystemId string) error
