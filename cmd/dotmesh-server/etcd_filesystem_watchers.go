@@ -202,10 +202,8 @@ func (s *InMemoryState) watchTransfers() error {
 			idxMax = val.Meta.ModifiedIndex
 		}
 		s.processTransferPollResults(val)
-	}
 
-	// ABS TEST HACK
-	idxMax = 0
+	}
 
 	return s.filesystemStore.WatchTransfers(idxMax, func(val *types.TransferPollResult) error {
 		s.processTransferPollResults(val)
