@@ -198,15 +198,18 @@ func (s *InMemoryState) watchTransfers() error {
 
 	var idxMax uint64
 	for _, val := range vals {
+		log.WithFields(log.Fields{
+			"current":           idxMax,
+			"v.m.ModifiedIndex": val.Meta.ModifiedIndex,
+		}).Debug("[ABS TEST] tracking initial idx")
 		if val.Meta.ModifiedIndex > idxMax {
 			idxMax = val.Meta.ModifiedIndex
+			log.Debug("[ABS TEST] Looks like that's higher")
 		}
 		s.processTransferPollResults(val)
 	}
 
-	// ABS TEST HACK
-	idxMax = 0
-
+	log.WithField("idxMax", idxMax).Debug("[ABS TEST] Chose idxMax")
 	return s.filesystemStore.WatchTransfers(idxMax, func(val *types.TransferPollResult) error {
 		s.processTransferPollResults(val)
 		return nil
