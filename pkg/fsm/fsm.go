@@ -148,7 +148,7 @@ func NewFilesystemMachine(cfg *FsConfig) *FsMachine {
 		transferUpdates: make(chan types.TransferUpdate),
 
 		filesystemMetadataTimeout: cfg.FilesystemMetadataTimeout,
-		zfs: zfsInter,
+		zfs:                       zfsInter,
 	}
 }
 
@@ -513,13 +513,6 @@ func (f *FsMachine) updateEtcdAboutTransfers() error {
 		if err != nil {
 			return err
 		}
-
-		func() {
-			s := f.state
-			s.interclusterTransfersLock.Lock()
-			defer s.interclusterTransfersLock.Unlock()
-			s.interclusterTransfers[pollResult.TransferRequestId] = pollResult
-		}()
 
 		// Go around the loop for the next command
 	}
