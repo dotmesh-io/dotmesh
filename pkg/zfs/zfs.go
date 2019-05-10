@@ -787,14 +787,51 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 // filterZFSDiff - filter out any files that are not under __default__ dir
 func filterZFSDiff(files []types.ZFSFileDiff, snapshotOrFilesystem string) []types.ZFSFileDiff {
 	b := files[:0]
+	var (
+		was string
+		now string
+
+		ok    bool
+		nowOk bool
+		wasOk bool
+	)
 	for _, x := range files {
-		parts := strings.SplitN(x.Filename, snapshotOrFilesystem+"/__default__/", 2)
-		if len(parts) == 2 {
-			x.Filename = parts[1]
-			b = append(b, x)
+		switch x.Change {
+		case types.FileChangeRenamed:
+			files := strings.Split(x.Filename, " -> ")
+			if len(files) != 2 {
+				log.WithFields(log.Fields{
+					"changed_files":          x.Filename,
+					"snapshot_or_filesystem": snapshotOrFilesystem,
+				}).Warn("[filterZFSDiff] could not properly separate file prefix, leaving original")
+				b = append(b, x)
+				continue
+			}
+			prefix := snapshotOrFilesystem + "/__default__/"
+			was, wasOk = stripDotPrefix(files[0], prefix)
+			now, nowOk = stripDotPrefix(files[1], prefix)
+
+			if nowOk || wasOk {
+				x.Filename = was + " -> " + now
+				b = append(b, x)
+			}
+
+		default:
+			x.Filename, ok = stripDotPrefix(x.Filename, snapshotOrFilesystem+"/__default__/")
+			if ok {
+				b = append(b, x)
+			}
 		}
 	}
 	return b
+}
+
+func stripDotPrefix(filename, prefix string) (string, bool) {
+	parts := strings.SplitN(filename, prefix, 2)
+	if len(parts) == 2 {
+		return parts[1], true
+	}
+	return "", false
 }
 
 // File or Directory Change
