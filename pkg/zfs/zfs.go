@@ -487,7 +487,7 @@ func (z *zfs) StashBranch(existingFs string, newFs string, rollbackTo string) er
 
 	log.Debugf("ABS TEST: Got mountpoints: %#v\n", mounts)
 
-	zfsRenameCtx, zfsRenameCancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	zfsRenameCtx, zfsRenameCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer zfsRenameCancel()
 
 	LogZFSCommand(existingFs, fmt.Sprintf("%s rename %s %s", z.zfsPath, z.FQ(existingFs), z.FQ(newFs)))
@@ -501,7 +501,7 @@ func (z *zfs) StashBranch(existingFs string, newFs string, rollbackTo string) er
 		return err
 	}
 
-	zfsCloneCtx, zfsCloneCancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	zfsCloneCtx, zfsCloneCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer zfsCloneCancel()
 
 	LogZFSCommand(existingFs, fmt.Sprintf("%s clone %s@%s %s", z.zfsPath, z.FQ(newFs), rollbackTo, z.FQ(existingFs)))
@@ -515,7 +515,7 @@ func (z *zfs) StashBranch(existingFs string, newFs string, rollbackTo string) er
 		return err
 	}
 
-	zfsPromoteCtx, zfsPromoteCancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	zfsPromoteCtx, zfsPromoteCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer zfsPromoteCancel()
 
 	LogZFSCommand(existingFs, fmt.Sprintf("%s promote %s", z.zfsPath, z.FQ(existingFs)))
@@ -766,7 +766,7 @@ func (z *zfs) Fork(filesystemId, latestSnapshot, forkFilesystemId string) error 
 
 func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types.ZFSFileDiff, error) {
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Minute)
 	defer cancel()
 
 	fullID := z.fullZFSFilesystemPath(filesystemID, snapshot)
