@@ -367,7 +367,7 @@ func (f *FsMachine) retryPull(
 			}, backoffState
 		case *ToSnapsAhead:
 			if transferRequest.StashDivergence {
-				f.updateTransfer("finished", "This remote is ahead of the cluster you are pulling from - did you mean 'dm push'?")
+				f.updateTransfer("finished", "This remote is ahead of the cluster you are pulling from - nothing to do")
 				// in this case, there are no further snaps to pull from the other side as our local version was ahead
 				return &types.Event{
 					Name: "peer-up-to-date",
