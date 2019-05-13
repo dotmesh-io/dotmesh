@@ -8,7 +8,7 @@ import (
 )
 
 var testZfsOutputMinimal = `M	/var/lib/dotmesh/mnt/dmfs/fb042d52-7d76-450a-8c5b-58704ee9477f/dotscience_logs/7c029fd1-461c-447e-a447-aa36bdc4d3b3
-R	/var/lib/dotmesh/mnt/dmfs/fb042d52-7d76-450a-8c5b-58704ee9477f/dotscience_logs/7c029fd1-461c-447e-a447-aa36bdc4d3b3/agent-stdout.log
+R	/var/lib/dotmesh/mnt/dmfs/f7f660b4-6154-497a-89ff-5053c41d1ff4/__default__/foo-bar.txt -> /var/lib/dotmesh/mnt/dmfs/f7f660b4-6154-497a-89ff-5053c41d1ff4/__default__/foo-bar-2.txt
 +	/var/lib/dotmesh/mnt/dmfs/fb042d52-7d76-450a-8c5b-58704ee9477f/__default__/dest
 -	/var/lib/dotmesh/mnt/dmfs/fb042d52-7d76-450a-8c5b-58704ee9477f/__default__/dest/train_images.zip
 +	/var/lib/dotmesh/mnt/dmfs/fb042d52-7d76-450a-8c5b-58704ee9477f/__default__/dest/test.csv`
@@ -32,7 +32,7 @@ func Test_parseZFSDiffOutput(t *testing.T) {
 				},
 				{
 					Change:   types.FileChangeRenamed,
-					Filename: "/var/lib/dotmesh/mnt/dmfs/fb042d52-7d76-450a-8c5b-58704ee9477f/dotscience_logs/7c029fd1-461c-447e-a447-aa36bdc4d3b3/agent-stdout.log",
+					Filename: "/var/lib/dotmesh/mnt/dmfs/f7f660b4-6154-497a-89ff-5053c41d1ff4/__default__/foo-bar.txt -> /var/lib/dotmesh/mnt/dmfs/f7f660b4-6154-497a-89ff-5053c41d1ff4/__default__/foo-bar-2.txt",
 				},
 				{
 					Change:   types.FileChangeAdded,
@@ -100,6 +100,24 @@ func Test_filterZFSDiff(t *testing.T) {
 				snapshotOrFilesystem: "fb042d52-7d76-450a-8c5b-58704ee9477f",
 			},
 			want: []types.ZFSFileDiff{},
+		},
+		{
+			name: "renamed",
+			args: args{
+				files: []types.ZFSFileDiff{
+					{
+						Change:   types.FileChangeRenamed,
+						Filename: "/var/lib/dotmesh/mnt/dmfs/f7f660b4-6154-497a-89ff-5053c41d1ff4/__default__/foo-bar.txt -> /var/lib/dotmesh/mnt/dmfs/f7f660b4-6154-497a-89ff-5053c41d1ff4/__default__/foo-bar-2.txt",
+					},
+				},
+				snapshotOrFilesystem: "f7f660b4-6154-497a-89ff-5053c41d1ff4",
+			},
+			want: []types.ZFSFileDiff{
+				{
+					Change:   types.FileChangeRenamed,
+					Filename: "foo-bar.txt -> foo-bar-2.txt",
+				},
+			},
 		},
 	}
 	for _, tt := range tests {
