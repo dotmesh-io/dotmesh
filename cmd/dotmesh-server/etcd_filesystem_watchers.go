@@ -219,9 +219,8 @@ func (s *InMemoryState) processTransferPollResults(t *types.TransferPollResult) 
 	case types.KVDelete:
 		log.WithFields(log.Fields{
 			"t": fmt.Sprintf("%#v", t),
-		}).Debug("[ABS TEST processTransferPollResults] DELETE IS CALLED BUT NOT HAPPENING")
-		// XXX temporarily commented out, since they seem to be deleted too often.
-		// delete(s.interclusterTransfers, t.TransferRequestId)
+		}).Debug("[ABS TEST processTransferPollResults] DELETE IS HAPPENING")
+		delete(s.interclusterTransfers, t.TransferRequestId)
 	case types.KVGet, types.KVCreate, types.KVSet:
 		log.WithFields(log.Fields{
 			"t": fmt.Sprintf("%#v", t),
