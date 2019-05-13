@@ -77,6 +77,13 @@ func writeS3Metadata(path string, versions map[string]string) error {
 }
 
 func getKeysForDir(parentPath string, subPath string) (map[string]os.FileInfo, int64, error) {
+	// Default to 100 entry limit, to avoid large dots blowing up consumers of this API.
+	// TODO: Improve this later, make it more flexible with query args
+	r, size, _, err := getKeysForDirLimit(parentPath, subPath, 100)
+	return r, size, err
+}
+
+func getKeysForDirLimit(parentPath string, subPath string, limit int64) (map[string]os.FileInfo, int64, int64, error) {
 	// given a directory, recurse it creating s3 style keys for all the files in it (aka relative paths from that directory)
 	// send back a map of keys -> file sizes, and the whole directory's size
 	path := parentPath
@@ -85,26 +92,24 @@ func getKeysForDir(parentPath string, subPath string) (map[string]os.FileInfo, i
 	}
 	files, err := ioutil.ReadDir(path)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, 0, err
 	}
 
 	var dirSize int64
+	var used int64
 	keys := make(map[string]os.FileInfo)
+	dirsToTraverse := make([]os.FileInfo, 0)
+
 	for _, fileInfo := range files {
+		if limit-used <= 0 {
+			// no point looking at more files when we're over the limit
+			break
+		}
 		if fileInfo.IsDir() {
-			paths, size, err := getKeysForDir(path, fileInfo.Name())
-			if err != nil {
-				return nil, 0, err
-			}
-			for k, v := range paths {
-				if subPath == "" {
-					keys[k] = v
-				} else {
-					keys[subPath+"/"+k] = v
-				}
-			}
-			dirSize += size
+			// save these for later, so that we're breadth first
+			dirsToTraverse = append(dirsToTraverse, fileInfo)
 		} else {
+			used = used + 1
 			keyPath := fileInfo.Name()
 			if subPath != "" {
 				keyPath = subPath + "/" + keyPath
@@ -113,7 +118,28 @@ func getKeysForDir(parentPath string, subPath string) (map[string]os.FileInfo, i
 			dirSize += fileInfo.Size()
 		}
 	}
-	return keys, dirSize, nil
+
+	for _, dirInfo := range dirsToTraverse {
+		// no point recursing into more directories when we're over the limit
+		if limit-used <= 0 {
+			break
+		}
+		paths, size, recursiveUsed, err := getKeysForDirLimit(path, dirInfo.Name(), limit-used)
+		used = used + recursiveUsed
+		if err != nil {
+			return nil, 0, 0, err
+		}
+		for k, v := range paths {
+			if subPath == "" {
+				keys[k] = v
+			} else {
+				keys[subPath+"/"+k] = v
+			}
+		}
+		dirSize += size
+	}
+
+	return keys, dirSize, used, nil
 }
 
 func getS3Client(transferRequest types.S3TransferRequest) (*s3.S3, error) {
