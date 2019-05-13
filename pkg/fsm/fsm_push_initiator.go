@@ -204,8 +204,11 @@ func (f *FsMachine) push(
 		pipeReader, fmt.Sprintf("stdout of zfs send for %s", filesystemId),
 		postWriter, "http request body",
 		finished,
+
+		// Permanently empty cancellation channel, and noop cancellation callback
 		make(chan *types.Event),
 		func(e *types.Event, c chan *types.Event) {},
+
 		func(bytes int64, t int64) {
 			f.transferUpdates <- types.TransferUpdate{
 				Kind: types.TransferProgress,
@@ -224,6 +227,22 @@ func (f *FsMachine) push(
 					(float64(bytes)/(1024*1024))/(float64(t)/(1000*1000*1000)),
 				),
 			)
+
+			// Reject any waiting requests, leaving them waiting for
+			// (potentially) hours will just annoy callers and make RPCs time
+			// out which makes everyone more sad than being told "try again
+			// later" straight away.
+			select {
+			case _ = <-f.innerRequests:
+				f.innerResponses <- &types.Event{
+					Name: "busy-transferring",
+					Args: &types.EventArgs{
+						"currentState": "pushInitiatorState",
+						"progress":     bytes,
+					},
+				}
+			}
+
 		},
 		"compress",
 	)

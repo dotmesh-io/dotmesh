@@ -217,7 +217,6 @@ func (f *FsMachine) pull(
 	// cmd := exec.Command(ZFS, "recv", fq(f.filesystemId))
 	finished := make(chan bool)
 
-	// TODO: make this update the pollResult
 	pipeReader, pipeWriter := io.Pipe()
 	defer pipeReader.Close()
 	defer pipeWriter.Close()
@@ -225,9 +224,11 @@ func (f *FsMachine) pull(
 		resp.Body, fmt.Sprintf("http response body for %s", toFilesystemId),
 		pipeWriter, "stdin of zfs recv",
 		finished,
-		f.innerRequests,
-		// put the event back on the channel in the cancellation case
-		func(e *types.Event, c chan *types.Event) { c <- e },
+
+		// Permanently empty cancellation channel, and noop cancellation callback
+		make(chan *types.Event),
+		func(e *types.Event, c chan *types.Event) {},
+
 		func(bytes int64, t int64) {
 			f.transferUpdates <- types.TransferUpdate{
 				Kind: types.TransferProgress,
@@ -238,7 +239,7 @@ func (f *FsMachine) pull(
 				},
 			}
 
-			f.transitionedTo("pull",
+			f.transitionedTo("pullInitiatorState",
 				fmt.Sprintf(
 					"transferred %.2fMiB in %.2fs (%.2fMiB/s)...",
 					// bytes => mebibytes       nanoseconds => seconds
@@ -247,6 +248,22 @@ func (f *FsMachine) pull(
 					(float64(bytes)/(1024*1024))/(float64(t)/(1000*1000*1000)),
 				),
 			)
+
+			// Reject any waiting requests, leaving them waiting for
+			// (potentially) hours will just annoy callers and make RPCs time
+			// out which makes everyone more sad than being told "try again
+			// later" straight away.
+			select {
+			case _ = <-f.innerRequests:
+				f.innerResponses <- &types.Event{
+					Name: "busy-transferring",
+					Args: &types.EventArgs{
+						"currentState": "pullInitiatorState",
+						"progress":     bytes,
+					},
+				}
+			}
+
 		},
 		"decompress",
 	)
