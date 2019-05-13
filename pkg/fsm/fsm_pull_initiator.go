@@ -262,6 +262,9 @@ func (f *FsMachine) pull(
 						"progress":     bytes,
 					},
 				}
+			default:
+				// Non-blocking read, carry on if there are no senders to
+				// disappoint.
 			}
 
 		},

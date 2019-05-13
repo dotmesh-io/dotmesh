@@ -241,6 +241,9 @@ func (f *FsMachine) push(
 						"progress":     bytes,
 					},
 				}
+			default:
+				// Non-blocking read, carry on if there are no senders to
+				// disappoint.
 			}
 
 		},
