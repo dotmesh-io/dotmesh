@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -9,21 +10,18 @@ import (
 	"os"
 	"regexp"
 	"strconv"
-	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/dotmesh-io/citools"
-	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/client"
-
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 
 	natsServer "github.com/nats-io/gnatsd/server"
 	natsTest "github.com/nats-io/gnatsd/test"
 	nats "github.com/nats-io/go-nats"
 )
-
 
 /*
 
@@ -120,14 +118,14 @@ func TestDotDiff(t *testing.T) {
 
 	t.Run("DotDiffForAFile", func(t *testing.T) {
 		dotName := citools.UniqName()
-		
+
 		cleanup := func() {
 			// Clean up
 			checkTestContainerExits(t, node1)
 			citools.RunOnNode(t, node1, "dm dot delete -f "+dotName)
 		}
 
-		// adding a file 
+		// adding a file
 		citools.RunOnNode(t, node1, citools.DockerRun(dotName)+" touch /foo/HELLO")
 		citools.RunOnNode(t, node1, "dm switch "+dotName)
 		citools.RunOnNode(t, node1, "dm commit -m 'hello'")
@@ -135,7 +133,7 @@ func TestDotDiff(t *testing.T) {
 		// touching another file again
 		citools.RunOnNode(t, node1, citools.DockerRun(dotName)+" touch /foo/FOOBAR")
 
-		req, err := http.NewRequest("GET", "http://" + f[0].GetNode(0).IP +":32607/diff/admin:"+dotName, nil)
+		req, err := http.NewRequest("GET", "http://"+f[0].GetNode(0).IP+":32607/diff/admin:"+dotName, nil)
 		if err != nil {
 			t.Fatalf("failed to create request: %s", err)
 			cleanup()
@@ -149,7 +147,7 @@ func TestDotDiff(t *testing.T) {
 		}
 		if err != nil {
 			t.Errorf("failed to make diff request: %s", err)
-			
+
 			bts, err := ioutil.ReadAll(resp.Body)
 			if err != nil {
 				t.Errorf("failed to read req body: %s", err)
@@ -171,7 +169,7 @@ func TestDotDiff(t *testing.T) {
 		t.Logf("response body: %s", string(bts))
 
 		if resp.StatusCode != 200 {
-			t.Errorf("unexpected status code: %d (wanted 200)",resp.StatusCode )
+			t.Errorf("unexpected status code: %d (wanted 200)", resp.StatusCode)
 		}
 
 		var res []types.ZFSFileDiff
@@ -182,14 +180,14 @@ func TestDotDiff(t *testing.T) {
 
 		found := false
 		for _, file := range res {
-				if file.Filename == "FOOBAR" && file.Change == types.FileChangeAdded {
-					found = true
-				}
+			if file.Filename == "FOOBAR" && file.Change == types.FileChangeAdded {
+				found = true
+			}
 		}
 
 		if !found {
 			t.Errorf("couldn't find our file, found files: %s", res)
-		}		
+		}
 
 		cleanup()
 	})
@@ -201,9 +199,9 @@ func TestDotDiff(t *testing.T) {
 			// Clean up
 			checkTestContainerExits(t, node1)
 			citools.RunOnNode(t, node1, "dm dot delete -f "+dotName)
-		}		
+		}
 
-		// adding a file 
+		// adding a file
 		citools.RunOnNode(t, node1, citools.DockerRun(dotName)+" touch /foo/HELLO")
 		citools.RunOnNode(t, node1, "dm switch "+dotName)
 		citools.RunOnNode(t, node1, "dm commit -m 'hello'")
@@ -212,10 +210,10 @@ func TestDotDiff(t *testing.T) {
 		citools.RunOnNode(t, node1, citools.DockerRun(dotName)+" touch /foo/FOOBAR")
 
 		remote := &client.DMRemote{
-			User: "admin",
-			ApiKey: f[0].GetNode(0).Password,
-			Hostname:  f[0].GetNode(0).IP,
-			Port: 32607,
+			User:     "admin",
+			ApiKey:   f[0].GetNode(0).Password,
+			Hostname: f[0].GetNode(0).IP,
+			Port:     32607,
 		}
 
 		cfg := client.Configuration{
@@ -229,24 +227,23 @@ func TestDotDiff(t *testing.T) {
 			Configuration: &cfg,
 		}
 
-
 		res, err := apiClient.Diff("admin", dotName)
 		if err != nil {
-			t.Errorf("failed to get diff from API: %s", err)			
+			t.Errorf("failed to get diff from API: %s", err)
 		}
 
 		found := false
 		for _, file := range res {
-				if file.Filename == "FOOBAR" && file.Change == types.FileChangeAdded {
-					found = true
-				}
+			if file.Filename == "FOOBAR" && file.Change == types.FileChangeAdded {
+				found = true
+			}
 		}
 
 		if !found {
 			t.Errorf("couldn't find our file, found files: %s", res)
-		}		
+		}
 
-		cleanup()	
+		cleanup()
 	})
 }
 
