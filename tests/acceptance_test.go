@@ -2228,8 +2228,8 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		result := citools.OutputFromRunOnNode(t, node2, "dm push cluster_0 || true") // an error code is ok
 
 		if !strings.Contains(result, "diverged") && !strings.Contains(result, "hello") {
-			t.Error(
-				"pushing didn't fail when there was a divergence",
+			t.Errorf(
+				"pushing didn't fail when there was a divergence, got: %#v", result,
 			)
 		}
 	})
