@@ -886,6 +886,8 @@ func TestSingleNode(t *testing.T) {
 		citools.RunOnNode(t, node1, "dm checkout -b branch1")
 		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/Y")
 		citools.RunOnNode(t, node1, "dm commit -m 'there'")
+		// wait for status to get back to us before we compare
+		time.Sleep(1 * time.Second)
 		resp := citools.OutputFromRunOnNode(t, node1, "dm dot show")
 		if !strings.Contains(resp, "master") {
 			t.Error("failed to show master status")
