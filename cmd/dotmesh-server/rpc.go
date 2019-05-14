@@ -1775,7 +1775,7 @@ func (d *DotmeshRPC) Transfer(
 			errorPollResult := TransferPollResult{
 				TransferRequestId: requestId,
 				Status:            "error",
-				Message:           fmt.Sprintf("Transfer failed with: %#v", e),
+				Message:           fmt.Sprintf("Transfer failed with: %s", e),
 			}
 
 			logFields := log.Fields{
