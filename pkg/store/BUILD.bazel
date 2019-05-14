@@ -33,5 +33,9 @@ go_test(
         "utils_test.go",
     ],
     embed = [":go_default_library"],
-    deps = ["//pkg/types:go_default_library"],
+    deps = [
+        "//pkg/types:go_default_library",
+        "//vendor/github.com/portworx/kvdb:go_default_library",
+        "//vendor/github.com/portworx/kvdb/bolt:go_default_library",
+    ],
 )
