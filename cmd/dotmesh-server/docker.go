@@ -279,7 +279,7 @@ func (state *InMemoryState) runPlugin() {
 
 	http.HandleFunc("/VolumeDriver.Path", func(w http.ResponseWriter, r *http.Request) {
 		// TODO: Only return the path if it's actually active on the local host.
-		log.Print("<= /VolumeDriver.Path")
+
 		requestJSON, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			writeResponseErr(err, w)
@@ -302,12 +302,11 @@ func (state *InMemoryState) runPlugin() {
 		}
 		mountPoint := containerMntSubvolume(name, subvolume)
 
-		log.Printf("Mountpoint for %s: %s", name, mountPoint)
 		responseJSON, _ := json.Marshal(&ResponseMount{
 			Mountpoint: mountPoint,
 			Err:        "",
 		})
-		log.Printf("=> %s", string(responseJSON))
+
 		w.Write(responseJSON)
 		// asynchronously notify dotmesh that the containers running on a
 		// volume may have changed
@@ -354,7 +353,6 @@ func (state *InMemoryState) runPlugin() {
 			defer state.containersLock.Unlock()
 		*/
 
-		log.Printf("Mountpoint for %s: %s", name, mountpoint)
 		responseJSON, _ := json.Marshal(&ResponseMount{
 			Mountpoint: mountpoint,
 			Err:        "",
@@ -395,7 +393,6 @@ func (state *InMemoryState) runPlugin() {
 		}
 
 		for _, fs := range (*state).registry.Filesystems() {
-			log.Printf("Mountpoint for %s: %s", fs, containerMnt(fs))
 			response.Volumes = append(response.Volumes, ResponseListVolume{
 				Name:       fs.StringWithoutAdmin(),
 				Mountpoint: containerMnt(fs),
@@ -444,7 +441,7 @@ func (state *InMemoryState) runPlugin() {
 		}
 
 		mountpoint := containerMntSubvolume(fs.MasterBranch.Name, subvolume)
-		log.Printf("Mountpoint for %s (%+v): %s", request.Name, fs, mountpoint)
+
 		response.Volume = ResponseListVolume{
 			Name:       request.Name,
 			Mountpoint: mountpoint,
@@ -507,7 +504,7 @@ func (state *InMemoryState) runErrorPlugin() {
 
 		name := VolumeName{namespace, localName}
 		mountpoint := containerMntSubvolume(name, subvolume)
-		log.Printf("Mountpoint for %s: %s", name, mountpoint)
+
 		responseJSON, _ := json.Marshal(&ResponseMount{
 			Mountpoint: mountpoint,
 			Err:        "",

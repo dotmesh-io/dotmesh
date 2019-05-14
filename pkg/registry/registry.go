@@ -123,25 +123,13 @@ func (r *DefaultRegistry) DeducePathToTopLevelFilesystem(name types.VolumeName, 
 		peer's registry.
 
 	*/
-	log.Printf("[DeducePathToTopLevelFilesystem] looking up %s", name)
+
 	tlf, err := r.LookupFilesystem(name)
 	if err != nil {
-		log.Printf(
-			"[DeducePathToTopLevelFilesystem] error looking up %s: %s",
-			name, err,
-		)
 		return types.PathToTopLevelFilesystem{}, err
 	}
-	log.Printf(
-		"[DeducePathToTopLevelFilesystem] looking up maybe-clone pair %s,%s",
-		name, cloneName,
-	)
 	filesystemId, err := r.MaybeCloneFilesystemId(name, cloneName)
 	if err != nil {
-		log.Printf(
-			"[DeducePathToTopLevelFilesystem] error looking up maybe-clone %s,%s: %s",
-			name, cloneName, err,
-		)
 		return types.PathToTopLevelFilesystem{}, err
 	}
 	nextFilesystemId := filesystemId
@@ -149,10 +137,6 @@ func (r *DefaultRegistry) DeducePathToTopLevelFilesystem(name types.VolumeName, 
 	clist := types.ClonesList{}
 
 	for {
-		log.Printf(
-			"[DeducePathToTopLevelFilesystem] %s == %s ?",
-			nextFilesystemId, tlf.MasterBranch.Id,
-		)
 		// base case - nextFilesystemId is the top level one.
 		if nextFilesystemId == tlf.MasterBranch.Id {
 			return types.PathToTopLevelFilesystem{
@@ -480,7 +464,6 @@ func (r *DefaultRegistry) LookupFilesystemById(filesystemId string) (types.TopLe
 	for _, tlf := range r.topLevelFilesystems {
 		if tlf.MasterBranch.Id == filesystemId {
 			// empty-string cloneName ~= "master branch"
-			log.Debugf("[LookupFilesystemById] result: %+v, clone: master", tlf)
 			return tlf, "", nil
 		}
 	}
@@ -490,7 +473,6 @@ func (r *DefaultRegistry) LookupFilesystemById(filesystemId string) (types.TopLe
 				// find the tlf for this topLevelFilesystemId
 				for _, tlf := range r.topLevelFilesystems {
 					if tlf.MasterBranch.Id == topLevelFilesystemId {
-						log.Debugf("[LookupFilesystemById] result: %+v, clone: %v", tlf, cloneName)
 
 						return tlf, cloneName, nil
 					}
