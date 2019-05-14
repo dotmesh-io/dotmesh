@@ -79,10 +79,45 @@ func TestS3Api(t *testing.T) {
 		cmd := fmt.Sprintf("curl -T newfile.txt -u admin:%s 127.0.0.1:32607/s3/admin:%s/newfile", host.Password, dotName)
 		citools.RunOnNode(t, node1, "echo helloworld > newfile.txt")
 		citools.RunOnNode(t, node1, cmd)
-		resp := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s", host.Password, dotName))
-		if !strings.Contains(resp, "newfile") {
-			fmt.Printf(resp)
-			t.Error("failed to include file")
+
+		req, err := http.NewRequest("GET", "http://"+host.IP+":32607/s3/admin:"+dotName, nil)
+		if err != nil {
+			t.Fatalf("failed to create request: %s", err)
+			return
+		}
+		req.SetBasicAuth("admin", host.Password)
+
+		resp, err := http.DefaultClient.Do(req)
+		if resp.Body != nil {
+			defer resp.Body.Close()
+		}
+		if err != nil {
+			t.Errorf("failed to make S3 API list request: %s", err)
+
+			bts, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				t.Errorf("failed to read req body: %s", err)
+				return
+			}
+			t.Logf("response body: %s", string(bts))
+			return
+		}
+
+		bts, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			t.Errorf("failed to read req body: %s", err)
+			return
+		}
+
+		t.Logf("status code: %d", resp.StatusCode)
+		t.Logf("response body: %s", string(bts))
+
+		if resp.StatusCode != 200 {
+			t.Errorf("unexpected status code: %d (wanted 200)", resp.StatusCode)
+		}
+
+		if !strings.Contains(string(bts), "newfile") {
+			t.Errorf("wanted to fine 'newfile' in response but didn't. Response: \n %s \n", string(bts))
 		}
 	})
 
