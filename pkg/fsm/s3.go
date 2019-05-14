@@ -76,16 +76,9 @@ func writeS3Metadata(path string, versions map[string]string) error {
 	return nil
 }
 
-func getKeysForDir(parentPath string, subPath string) (map[string]os.FileInfo, int64, error) {
-	// Default to 100 entry limit, to avoid large dots blowing up consumers of this API.
-	// TODO: Improve this later, make it more flexible with query args
-	r, size, _, err := getKeysForDirLimit(parentPath, subPath, 100)
-	return r, size, err
-}
-
-func getKeysForDirLimit(parentPath string, subPath string, limit int64) (map[string]os.FileInfo, int64, int64, error) {
-	// given a directory, recurse it creating s3 style keys for all the files in it (aka relative paths from that directory)
-	// send back a map of keys -> file sizes, and the whole directory's size
+//GetKeysForDirLimit - recurse it creating s3 style keys for all the files in it (aka relative paths from that directory)
+// send back a map of keys -> file sizes, and the whole directory's size
+func GetKeysForDirLimit(parentPath string, subPath string, limit int64) (keys map[string]os.FileInfo, dirSize int64, used int64, err error) {
 	path := parentPath
 	if subPath != "" {
 		path += "/" + subPath
@@ -95,13 +88,11 @@ func getKeysForDirLimit(parentPath string, subPath string, limit int64) (map[str
 		return nil, 0, 0, err
 	}
 
-	var dirSize int64
-	var used int64
-	keys := make(map[string]os.FileInfo)
+	keys = make(map[string]os.FileInfo)
 	dirsToTraverse := make([]os.FileInfo, 0)
 
 	for _, fileInfo := range files {
-		if limit-used <= 0 {
+		if limit != 0 && limit-used <= 0 {
 			// no point looking at more files when we're over the limit
 			break
 		}
@@ -121,10 +112,16 @@ func getKeysForDirLimit(parentPath string, subPath string, limit int64) (map[str
 
 	for _, dirInfo := range dirsToTraverse {
 		// no point recursing into more directories when we're over the limit
-		if limit-used <= 0 {
+		if limit != 0 && limit-used <= 0 {
 			break
 		}
-		paths, size, recursiveUsed, err := getKeysForDirLimit(path, dirInfo.Name(), limit-used)
+
+		var currentLimit int64
+		if limit != 0 {
+			currentLimit = limit - used
+		}
+
+		paths, size, recursiveUsed, err := GetKeysForDirLimit(path, dirInfo.Name(), currentLimit)
 		used = used + recursiveUsed
 		if err != nil {
 			return nil, 0, 0, err

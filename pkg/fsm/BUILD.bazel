@@ -63,6 +63,7 @@ go_test(
         "fsm_active_file_io_test.go",
         "fsm_handoff_test.go",
         "fsm_metadata_test.go",
+        "s3_test.go",
     ],
     embed = [":go_default_library"],
     deps = [

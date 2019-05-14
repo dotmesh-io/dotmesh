@@ -23,7 +23,6 @@ go_library(
         "messaging.go",
         "replication.go",
         "rpc.go",
-        "s3.go",
         "s3_handlers.go",
         "types.go",
         "users.go",
