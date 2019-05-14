@@ -27,6 +27,7 @@ func NewServer(config *Config) (*NatsServer, error) {
 	opts.Logtime = config.Logtime
 	opts.Debug = config.Debug
 	opts.Trace = config.Trace
+	opts.MaxPayload = config.MaxPayload
 
 	log.WithFields(log.Fields{
 		"port":         opts.Port,

@@ -31,6 +31,7 @@ type Config struct {
 	Logtime     bool
 	Debug       bool
 	Trace       bool
+	MaxPayload  int
 }
 
 // DefaultConfig returns the default options for the messaging client & server.
@@ -43,6 +44,7 @@ func DefaultConfig() *Config {
 		Logtime:     true,
 		Debug:       true,
 		Trace:       true,
+		MaxPayload:  1073741824, // for large zfs diff results, until https://github.com/dotmesh-io/dotmesh/issues/691 is fixed
 	}
 }
 
