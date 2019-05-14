@@ -226,8 +226,6 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 		return DotmeshVolume{}, err
 	}
 
-	// log.Debugf("[getOne] starting for %v", fs)
-
 	if tlf, clone, err := s.registry.LookupFilesystemById(fs); err == nil {
 		authorized, err := tlf.Authorize(auth.GetUserFromCtx(ctx))
 		if err != nil {
@@ -242,23 +240,12 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 		// if not exists, 0 is fine
 		s.globalDirtyCacheLock.RLock()
 
-		// log.WithFields(log.Fields{
-		// 	"fs":     fs,
-		// 	"master": master,
-		// 	"cache":  s.globalDirtyCache,
-		// }).Debug("[getOne] looking up fs with master in cache")
-
 		dirty, ok := s.globalDirtyCache[fs]
 		var dirtyBytes int64
 		var sizeBytes int64
 		if ok {
 			dirtyBytes = dirty.DirtyBytes
 			sizeBytes = dirty.SizeBytes
-			log.Debugf("[getOne] got dirtyInfo %d,%d for %s with master %v", sizeBytes, dirtyBytes, fs, master)
-
-		} else {
-			log.Debugf("[getOne] %v was not in %v", fs, s.globalDirtyCache)
-
 		}
 		s.globalDirtyCacheLock.RUnlock()
 		// if not exists, 0 is fine
@@ -318,7 +305,6 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 			}
 		}
 
-		// log.Debugf("[getOne] here is your volume: %v", d)
 		return d, nil
 	} else {
 		return DotmeshVolume{}, fmt.Errorf("Unable to find filesystem name for id %s", fs)
@@ -383,9 +369,7 @@ func (s *InMemoryState) processFilesystemEvent(event *types.Event) error {
 }
 
 func (s *InMemoryState) notifyPushCompleted(filesystemId string, success bool) {
-	// s.filesystemsLock.RLock()
-	// f, ok := s.filesystems[filesystemId]
-	// s.filesystemsLock.RUnlock()
+
 	f, err := s.GetFilesystemMachine(filesystemId)
 	if err != nil {
 		log.Printf("[notifyPushCompleted] No such filesystem id %s", filesystemId)
@@ -404,13 +388,6 @@ func (s *InMemoryState) getCurrentState(filesystemId string) (string, error) {
 		return "", err
 	}
 	return fs.GetCurrentState(), nil
-	// s.filesystemsLock.RLock()
-	// defer s.filesystemsLock.RUnlock()
-	// f, ok := s.filesystems[filesystemId]
-	// if !ok {
-	// 	return "", fmt.Errorf("No such filesystem id %s", filesystemId)
-	// }
-	// return f.getCurrentState(), nil
 }
 
 func (s *InMemoryState) insertInitialAdminPassword() error {
@@ -551,11 +528,6 @@ func (state *InMemoryState) reallyProcureFilesystem(ctx context.Context, name Vo
 		}
 	}
 
-	log.Printf(
-		"*** Attempting to procure filesystem name %s and clone name %s",
-		name, cloneName,
-	)
-
 	filesystemId, err := state.registry.MaybeCloneFilesystemId(name, cloneName)
 	if err == nil {
 		// TODO can we synchronize with the state machine somehow, to
@@ -566,12 +538,10 @@ func (state *InMemoryState) reallyProcureFilesystem(ctx context.Context, name Vo
 			return "", err
 		}
 		if master == state.zfs.GetPoolID() {
-			log.Printf("Volume already here, we are done %s", filesystemId)
 			return filesystemId, nil
 		} else if master == "" {
 			return "", fmt.Errorf("Internal error: The volume name exists, but the volume does not (have a master). Name:%s Clone:%s ID:%s", name, cloneName, filesystemId)
 		} else {
-			log.Printf("Triggering move request for filesystem: %s from master: %s to me: %s", filesystemId, master, state.zfs.GetPoolID())
 			// put in a request for the current master of the filesystem to
 			// move it to me
 			responseChan, err := state.globalFsRequest(
@@ -584,12 +554,7 @@ func (state *InMemoryState) reallyProcureFilesystem(ctx context.Context, name Vo
 			if err != nil {
 				return "", err
 			}
-			log.Printf(
-				"Attempting to move %s from %s to me (%s)",
-				filesystemId,
-				master,
-				state.zfs.GetPoolID(),
-			)
+
 			var e *Event
 			select {
 			case <-time.After(30 * time.Second):
@@ -604,10 +569,7 @@ func (state *InMemoryState) reallyProcureFilesystem(ctx context.Context, name Vo
 			case e = <-responseChan:
 				// tally ho!
 			}
-			log.Printf(
-				"Attempting to move %s from %s to me (%s)",
-				filesystemId, master, state.zfs.GetPoolID(),
-			)
+
 			if e.Name != "moved" {
 				return "", fmt.Errorf(
 					"failed to move %s from %s to %s: %s",
@@ -621,14 +583,11 @@ func (state *InMemoryState) reallyProcureFilesystem(ctx context.Context, name Vo
 			state.filesystemsLock.Lock()
 			if state.filesystems[filesystemId].GetCurrentState() == "active" {
 				// great - we're already active
-				log.Printf("Found %s was already active, giving it to Docker", filesystemId)
+
 				state.filesystemsLock.Unlock()
 			} else {
 				for state.filesystems[filesystemId].GetCurrentState() != "active" {
-					log.Printf(
-						"%s was %s, waiting for it to change to active...",
-						filesystemId, state.filesystems[filesystemId].GetCurrentState(),
-					)
+
 					// wait for state change
 					stateChangeChan := make(chan interface{})
 					state.filesystems[filesystemId].TransitionSubscribe("transitions", stateChangeChan)
@@ -637,7 +596,7 @@ func (state *InMemoryState) reallyProcureFilesystem(ctx context.Context, name Vo
 					state.filesystemsLock.Lock()
 					state.filesystems[filesystemId].TransitionUnsubscribe("transitions", stateChangeChan)
 				}
-				log.Printf("%s finally changed to active, proceeding!", filesystemId)
+
 				state.filesystemsLock.Unlock()
 			}
 		}
@@ -650,12 +609,12 @@ func (state *InMemoryState) reallyProcureFilesystem(ctx context.Context, name Vo
 		if cloneName != "" {
 			return "", fmt.Errorf("Cannot use branch-pinning syntax (docker run -v volume@branch:/path) to create a non-existent volume with a non-master branch")
 		}
-		log.Printf("WAITING FOR CREATE %s", name)
+
 		e := <-ch
 		if e.Name != "created" {
 			return "", fmt.Errorf("Could not create volume %s: unexpected response %s - %s", name, e.Name, e.Args)
 		}
-		log.Printf("DONE CREATE %s", name)
+
 	}
 	return filesystemId, nil
 }
@@ -719,7 +678,7 @@ func (s *InMemoryState) CreateFilesystem(ctx context.Context, filesystemName *Vo
 		NodeID:       s.NodeID(),
 	}, &store.SetOptions{})
 	if err != nil {
-		log.Printf(
+		log.Errorf(
 			"[CreateFilesystem] Error while trying to create key-that-does-not-exist in etcd prior to creating filesystem %s: %s",
 			filesystemId, err,
 		)
@@ -737,10 +696,10 @@ func (s *InMemoryState) CreateFilesystem(ctx context.Context, filesystemName *Vo
 
 	ch, err := s.dispatchEvent(filesystemId, &Event{Name: "create"}, "")
 	if err != nil {
-		log.Printf(
-			"error during dispatch create! %s %s",
-			filesystemId, err,
-		)
+		log.WithFields(log.Fields{
+			"error":         err,
+			"filesystem_id": filesystemId,
+		}).Error("error during dispatch create")
 		return nil, nil, err
 	}
 
@@ -753,16 +712,9 @@ func (s *InMemoryState) GetReplicationLatency(fs string) map[string][]string {
 	allCommits := map[string]struct{}{}
 	result := map[string][]string{}
 
-	// s.filesystemsLock.RLock()
-	// defer s.filesystemsLock.RUnlock()
-
-	// for fsID, fsm := range s.filesystems {
-	// snaps := fsm.GetSnapshots()
-	// }
-
 	fsm, err := s.GetFilesystemMachine(fs)
 	if err != nil {
-		log.Printf("[GetReplicationLatency] failed to get filesystem: %s", err)
+		log.Errorf("[GetReplicationLatency] failed to get filesystem: %s", err)
 		return result
 	}
 
@@ -777,24 +729,6 @@ func (s *InMemoryState) GetReplicationLatency(fs string) map[string][]string {
 		}
 	}
 
-	// s.globalSnapshotCacheLock.RLock()
-	// for server, filesystems := range s.globalSnapshotCache {
-	// 	commitsOnServer[server] = map[string]struct{}{}
-
-	// 	snapshots, ok := filesystems[fs]
-	// 	if ok {
-	// 		commitsOnServer[server] = map[string]struct{}{}
-	// 		for _, snapshot := range snapshots {
-	// 			commitsOnServer[server][snapshot.Id] = struct{}{}
-	// 			allCommits[snapshot.Id] = struct{}{}
-	// 		}
-	// 	}
-	// }
-	// s.globalSnapshotCacheLock.RUnlock()
-
-	log.Printf("[GetReplicationLatency] got initial data: %+v", commitsOnServer)
-	log.Printf("[GetReplicationLatency] all commits: %+v", allCommits)
-
 	// Compute which elements are missing for each server
 	for server, commits := range commitsOnServer {
 		missingForServer := []string{}
@@ -807,7 +741,6 @@ func (s *InMemoryState) GetReplicationLatency(fs string) map[string][]string {
 		result[server] = missingForServer
 	}
 
-	log.Printf("[GetReplicationLatency] result: %+v", result)
 	return result
 }
 
@@ -826,7 +759,7 @@ func (s *InMemoryState) GetListOfVolumes(ctx context.Context) ([]DotmeshVolume, 
 			case PermissionDenied:
 				continue
 			default:
-				log.Printf("[GetListOfVolumes] err: %v", err)
+				log.Errorf("[GetListOfVolumes] err: %v", err)
 				// If we got an error looking something up, it might just be
 				// because the fsMachine list or the registry is temporarily
 				// inconsistent wrt the mastersCache. Proceed, at the risk of
@@ -855,9 +788,8 @@ func (state *InMemoryState) mustCleanupSocket() {
 }
 
 func (state *InMemoryState) initFilesystemMachines() {
-	log.Info("Initialising filesystem machines")
+
 	for _, filesystemId := range state.zfs.FindFilesystemIdsOnSystem() {
-		log.Debugf("Initializing fsMachine for %s", filesystemId)
 		go func(fsID string) {
 			_, err := state.InitFilesystemMachine(fsID)
 			if err != nil {
