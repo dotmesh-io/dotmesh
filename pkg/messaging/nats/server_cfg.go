@@ -42,8 +42,8 @@ func DefaultConfig() *Config {
 		ClusterPort: DefaultClusterPort,
 		HTTPPort:    DefaultHTTPPort,
 		Logtime:     true,
-		Debug:       true,
-		Trace:       true,
+		Debug:       false,
+		Trace:       false,
 		MaxPayload:  1073741824, // for large zfs diff results, until https://github.com/dotmesh-io/dotmesh/issues/691 is fixed
 	}
 }
