@@ -1766,9 +1766,36 @@ func (d *DotmeshRPC) Transfer(
 		return err
 	}
 	go func() {
-		// asynchronously throw away the response, transfers can be polled via
-		// their own entries in etcd
+		// asynchronously consume the response, and update any in-progress
+		// transfer in error cases
 		e := <-responseChan
+		// detect success cases, ignore them - we assume that the pollResult will be updated in those cases
+		if !(e.Name == "finished-push" || e.Name == "finished-pull" || e.Name == "peer-up-to-date") {
+
+			errorPollResult := TransferPollResult{
+				TransferRequestId: requestId,
+				Status:            "error",
+				Message:           fmt.Sprintf("Transfer failed with: %#v", e),
+			}
+
+			logFields := log.Fields{
+				"errorPollResult": fmt.Sprintf("%#v", errorPollResult),
+				"response":        fmt.Sprintf("%#v", e),
+			}
+			log.WithFields(logFields).Error("transfer failed, updating poll result in-memory and in-kv")
+
+			// Immediately store the fact in our local state as well, to avoid
+			// issues where we miss the "echo" from kv store when the update
+			// happens locally.
+			d.state.UpdateInterclusterTransfer(requestId, errorPollResult)
+
+			// And persist it to the kv store.
+			err := d.state.filesystemStore.SetTransfer(&errorPollResult, &store.SetOptions{})
+			if err != nil {
+				log.WithFields(logFields).WithError(err).Error("Failed setting transfer state for error poll result")
+			}
+
+		}
 		log.Infof("finished transfer of %+v, %+v", args, e)
 	}()
 
