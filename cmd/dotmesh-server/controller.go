@@ -488,8 +488,6 @@ func (s *InMemoryState) findRelatedContainers() error {
 		myFilesystems = append(myFilesystems, fs)
 	}
 
-	log.Printf("findRelatedContainers with containerMap %s, myFilesystems %s", containerMap, myFilesystems)
-
 	for _, filesystemId := range myFilesystems {
 		// update etcd with the list of containers and this node; we'll learn
 		// about the state via our own watch on etcd
@@ -521,7 +519,6 @@ func (s *InMemoryState) findRelatedContainers() error {
 		}
 		s.globalContainerCacheLock.Unlock()
 
-		log.Infof("[findRelatedContainers] setting containers (%d) for global cache", len(value.Containers))
 		err = s.filesystemStore.SetContainers(&value, &store.SetOptions{})
 
 		if err != nil {
@@ -687,18 +684,17 @@ func (s *InMemoryState) CreateFilesystem(ctx context.Context, filesystemName *Vo
 		// Doesn't already exist, we can proceed as usual
 		filesystemId = uuid.New().String()
 
-		log.Printf("[CreateFilesystem] called with name=%+v, assigned id=%s", filesystemName, filesystemId)
 		err = s.registry.RegisterFilesystem(ctx, *filesystemName, filesystemId)
 		if err != nil {
-			log.Printf(
-				"[CreateFilesystem] Error while trying to register filesystem name %s => id %s: %s",
-				filesystemName, filesystemId, err,
-			)
+			log.WithFields(log.Fields{
+				"error":           err,
+				"filesystem_id":   filesystemId,
+				"filesystem_name": filesystemName,
+			}).Error("[CreateFilesystem] Error while trying to register filesystem name)")
 			return nil, nil, err
 		}
 	default:
 		filesystemId = existingFS.Id
-		log.Printf("[CreateFilesystem] called with name=%+v, examining existing id %s", filesystemName, filesystemId)
 
 		// Check for an existing master mapping
 		_, err = s.filesystemStore.GetMaster(filesystemId)

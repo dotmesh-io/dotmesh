@@ -2064,7 +2064,6 @@ func (d *DotmeshRPC) DeducePathToTopLevelFilesystem(
 	},
 	result *PathToTopLevelFilesystem,
 ) error {
-	log.Printf("[DeducePathToTopLevelFilesystem] called with args: %+v", args)
 
 	err := validator.IsValidVolume(args.RemoteNamespace, args.RemoteFilesystemName)
 	if err != nil {
@@ -2085,7 +2084,7 @@ func (d *DotmeshRPC) DeducePathToTopLevelFilesystem(
 		return err
 	}
 	*result = res
-	log.Printf("[DeducePathToTopLevelFilesystem] succeeded: args %+v -> result %+v", args, res)
+
 	return nil
 }
 
@@ -2099,13 +2098,7 @@ func (d *DotmeshRPC) PredictSize(
 	},
 	result *int64,
 ) error {
-	log.Printf(
-		"[predictSize] Adding  globaslFsRequest for  %s@%s to %s@%s",
-		args.FromFilesystemId,
-		args.FromSnapshotId,
-		args.ToFilesystemId,
-		args.ToSnapshotId,
-	)
+
 	responseChan, err := d.state.globalFsRequest(
 		args.ToFilesystemId,
 		&Event{Name: "predictSize",

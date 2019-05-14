@@ -2,7 +2,6 @@ package fsm
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -452,7 +451,6 @@ func (f *FsMachine) updateEtcdAboutTransfers() error {
 		var update types.TransferUpdate
 		select {
 		case update = <-(f.transferUpdates):
-			log.Debugf("[updateEtcdAboutTransfers] Received command %#v", update)
 		case _ = <-deathChan:
 			log.Infof("[updateEtcdAboutTransfers] Terminating due to filesystem death")
 			return nil
@@ -507,8 +505,6 @@ func (f *FsMachine) updateEtcdAboutTransfers() error {
 		}
 
 		// Send the update
-		log.Debugf("[updateEtcdAboutTransfers] pollResult = %#v", pollResult)
-
 		// Immediately store the fact in our local state as well, to avoid
 		// issues where we miss the "echo" from kv store when the update
 		// happens locally.
@@ -552,10 +548,7 @@ func (f *FsMachine) updateEtcdAboutSnapshots() error {
 	if err != nil {
 		return err
 	}
-	log.Debugf(
-		"[updateEtcdAboutSnapshots] successfully set new snaps for %s on %s, snaps: %#v",
-		f.filesystemId, f.state.NodeID(), snaps,
-	)
+
 	// wait until the state machine notifies us that it's changed the
 	// snapshots, but have an escape clause in case this filesystem is
 	// deleted so we don't block forever
@@ -676,14 +669,6 @@ func (f *FsMachine) fork(e *types.Event) (responseEvent *types.Event, nextState 
 		return types.NewErrorEvent("cannot-fork:error-generating-fork", err), activeState
 	}
 
-	log.WithFields(log.Fields{
-		"originFilesystemId": f.filesystemId,
-		"originSnapshotId":   latestSnap,
-		"forkNamespace":      forkNamespace,
-		"forkName":           forkName,
-		"forkId":             forkId,
-	}).Info("[fork] creating registry entry")
-
 	// Register in registry
 	err = f.state.RegisterNewFork(f.filesystemId, latestSnap, forkNamespace, forkName, forkId)
 	if err != nil {
@@ -738,27 +723,14 @@ func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextSt
 			Args: &types.EventArgs{"err": fmt.Sprintf("%v", err), "combined-output": string(output)},
 		}, backoffState
 	}
-	list, err := f.zfs.List(f.filesystemId, snapshotId)
-	if err != nil {
-		return &types.Event{
-			Name: "failed-snapshot",
-			Args: &types.EventArgs{"err": fmt.Sprintf("%v", err), "combined-output": string(output)},
-		}, backoffState
-	}
 
-	log.Printf("[snapshot] listed snapshot: '%q'", strconv.Quote(string(list)))
-	func() {
-		f.snapshotsLock.Lock()
-		defer f.snapshotsLock.Unlock()
-		log.Printf("[snapshot] Succeeded snapshotting (out: '%s'), saving: %+v", output, &types.Snapshot{
-			Id: snapshotId, Metadata: meta,
-		})
-		f.filesystem.Snapshots = append(f.filesystem.Snapshots,
-			&types.Snapshot{Id: snapshotId, Metadata: meta})
-	}()
+	f.snapshotsLock.Lock()
+	f.filesystem.Snapshots = append(f.filesystem.Snapshots, &types.Snapshot{Id: snapshotId, Metadata: meta})
+	f.snapshotsLock.Unlock()
+
 	err = f.snapshotsChanged()
 	if err != nil {
-		log.Printf("[snapshot] %v while trying to inform that snapshots changed %s", err, f.zfs.FQ(f.filesystemId))
+		log.Errorf("[snapshot] %v while trying to inform that snapshots changed %s", err, f.zfs.FQ(f.filesystemId))
 		return &types.Event{
 			Name: "failed-snapshot-changed",
 			Args: &types.EventArgs{"err": fmt.Sprintf("%v", err)},
