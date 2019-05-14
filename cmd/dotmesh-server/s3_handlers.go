@@ -7,11 +7,13 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/dotmesh-io/dotmesh/pkg/auth"
 	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
+	"github.com/dotmesh-io/dotmesh/pkg/fsm"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 	"github.com/gorilla/mux"
@@ -321,7 +323,19 @@ func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name
 	switch e.Name {
 	case "mounted":
 		result := (*e.Args)["mount-path"].(string)
-		keys, _, err := getKeysForDir(result+"/__default__", "")
+
+		// setting default limit to 100 files
+		var limit int64 = 100
+
+		limitStr := req.URL.Query().Get("limit")
+		if limitStr != "" {
+			newLimit, err := strconv.Atoi(limitStr)
+			if err == nil {
+				limit = int64(newLimit)
+			}
+		}
+
+		keys, _, _, err := fsm.GetKeysForDirLimit(result+"/__default__", "", limit)
 		if err != nil {
 			http.Error(resp, "failed to get keys for dir: "+err.Error(), 500)
 			return
