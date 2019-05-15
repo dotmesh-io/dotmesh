@@ -184,7 +184,10 @@ func (z *zfs) Clone(filesystemId, originSnapshotId, newCloneFilesystemId string)
 		z.FQ(newCloneFilesystemId),
 	).CombinedOutput()
 	if err != nil {
-		log.Printf("[list] %v while trying to list snapshot for filesystem %s", err, z.FQ(filesystemId))
+		log.Printf(
+			"[Clone] %v while trying to clone filesystem %s, %s -> %s",
+			err, z.FQ(filesystemId), originSnapshotId, newCloneFilesystemId,
+		)
 	}
 	return out, err
 }
@@ -280,6 +283,9 @@ func (z *zfs) DiscoverSystem(fs string) (*types.Filesystem, error) {
 	for _, values := range listLines {
 		fsSnapshot := strings.Split(values, "\t")[0]
 		id := strings.Split(fsSnapshot, "@")[1]
+		if strings.HasPrefix(id, "dotmesh-fastdiff") {
+			continue
+		}
 		meta, ok := snapshotMeta[id]
 		if !ok {
 			meta = make(map[string]string)
@@ -764,24 +770,179 @@ func (z *zfs) Fork(filesystemId, latestSnapshot, forkFilesystemId string) error 
 	return nil
 }
 
+type DiffResult struct {
+	mtime string
+	size  string
+}
+type DiffSide map[string]DiffResult
+
+func diffSideFromLines(result []byte) (DiffSide, error) {
+	lines := strings.Split(string(latestFiles), "\n")
+	ds := DiffSide{}
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		shrapnel := strings.Split(line, "\n", 3)
+		if len(shrapnel) < 3 {
+			return fmt.Errorf("too few parts")
+		}
+		mtime := shrapnel[0]
+		size := shrapnel[1]
+		filename := shrapnel[2]
+		prefix := "./__default__/"
+		if strings.HasPrefix(filename, prefix) {
+			filename = filename[len(prefix):]
+		}
+		ds[filename] = DiffResult{mtime: mtime, size: size}
+	}
+	return ds
+}
+
 func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types.ZFSFileDiff, error) {
+	// Diff the default subdot of a given dot.
+
+	// NB: this function should not be run in parallel with itself
 
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Minute)
 	defer cancel()
 
-	fullID := z.fullZFSFilesystemPath(filesystemID, snapshot)
+	tmpSnapshotName := "dotmesh-fastdiff"
 
-	cmd := exec.CommandContext(ctx, z.zfsPath, "diff", fullID, z.FQ(snapshotOrFilesystem))
+	// latest is the latest "dotmesh" snapshot
+	latest := z.fullZFSFilesystemPath(filesystemID, snapshot)
 
-	out, err := cmd.CombinedOutput()
+	// tmp is a new, temporary snapshot which is newer than the "latest"
+	// snapshot
+	tmp := z.FQ(FullIdWithSnapshot(filesystemId, tmpSnapshotName))
+
+	latestMnt := utils.Mnt("diff-latest-" + filesystemID)
+	tmpMnt := utils.Mnt("diff-tmp-" + filesystemID)
+
+	err := os.MkdirAll(latestMnt, 0775)
 	if err != nil {
-		log.WithError(err).Error("[diff] got error on zfs diff command")
+		log.WithError(err).Error("[diff] error mkdir latestMnt")
 		return nil, err
 	}
 
+	err := os.MkdirAll(tmpMnt, 0775)
+	if err != nil {
+		log.WithError(err).Error("[diff] error mkdir tmpMnt")
+		return nil, err
+	}
+
+	// it's ok if these fail, they are just cleanup from previous partial runs
+	exec.CommandContext(ctx, "umount", latestMnt).Run()
+	exec.CommandContext(ctx, "umount", tmpMnt).Run()
+	exec.CommandContext(ctx, z.zfsPath, "destroy", tmp).Run()
+
+	_, err := z.Snapshot(filesystemID, tmpSnapshotName)
+	if err != nil {
+		log.WithError(err).Error("[diff] error snapshot")
+		return err
+	}
+
+	out, err := exec.CommandContext(ctx, "mount", "-t", "zfs", latest, latestMnt).CombinedOutput()
+	if err != nil {
+		log.WithError(err).Error("[diff] error mount latest")
+		return err
+	}
+
+	out, err := exec.CommandContext(ctx, "mount", "-t", "zfs", tmp, tmpMnt).CombinedOutput()
+	if err != nil {
+		log.WithError(err).Error("[diff] error mount tmp")
+		return err
+	}
+
+	findCmdTmpl := `(cd %s; find . -printf "%T+ %s %p\n")`
+
+	latestFiles, err := exec.CommandContext(
+		ctx, "bash", "-c", fmt.Sprintf(findCmdTmpl, latestMnt)).CombinedOutput()
+	if err != nil {
+		log.WithError(err).Error("[diff] getting latest files")
+		return err
+	}
+	mapLatest, err := diffSideFromLines(latestFiles)
+	if err != nil {
+		log.WithError(err).Error("[diff] parsing latest files")
+		return err
+	}
+
+	tmp, err := exec.CommandContext(
+		ctx, "bash", "-c", fmt.Sprintf(findCmdTmpl, tmpMnt)).CombinedOutput()
+	if err != nil {
+		log.WithError(err).Error("[diff] getting tmp files")
+		return err
+	}
+	mapTmp, err := diffSideFromLines(tmpFiles)
+	if err != nil {
+		log.WithError(err).Error("[diff] parsing tmp files")
+		return err
+	}
+
+	result := []types.ZFSFileDiff{}
+
+	for filename, tmpProps := range mapTmp {
+		if latestProps, ok := mapLatest[filename]; ok {
+			// exists in previous snap, check if modified
+			if tmpProps != latestProps {
+				// modified!
+				result = append(result, ZFSFileDiff{
+					Change:   types.FileChangeModified,
+					Filename: filename,
+				})
+			}
+		} else {
+			// does not exist in previous snap, created
+			result = append(result, ZFSFileDiff{
+				Change:   types.FileChangeAdded,
+				Filename: filename,
+			})
+		}
+	}
+	for filename, latestProps := range mapLatest {
+		if _, ok := mapLatest[filename]; !ok {
+			// exists in latest but not tmp, must have been deleted
+			result = append(result, ZFSFileDiff{
+				Change:   types.FileChangeRemoved,
+				Filename: filename,
+			})
+		}
+	}
+
+	_, err = exec.CommandContext(ctx, "umount", latestMnt).Run()
+	if err != nil {
+		log.WithError(err).Error("[diff] failed unmounting latest")
+		return nil, err
+	}
+
+	_, err = exec.CommandContext(ctx, "umount", tmpMnt).Run()
+	if err != nil {
+		log.WithError(err).Error("[diff] failed unmounting latest")
+		return nil, err
+	}
+	_, err = exec.CommandContext(ctx, z.zfsPath, "destroy", tmp).Run()
+	if err != nil {
+		log.WithError(err).Error("[diff] failed deleting tmp snap")
+		return nil, err
+	}
+	_, err = exec.CommandContext(ctx, "rmdir", latestMnt).Run()
+	if err != nil {
+		log.WithError(err).Error("[diff] failed cleaning up latest mount")
+		return nil, err
+	}
+	_, err = exec.CommandContext(ctx, "rmdir", tmpMnt).Run()
+	if err != nil {
+		log.WithError(err).Error("[diff] failed cleaning up tmp mount")
+		return nil, err
+	}
+
+	// TODO do some of this?
 	// parsing ZFS output and then filtering out any files that should not be visible for the
 	// consumer
-	return filterZFSDiff(parseZFSDiffOutput(string(out)), snapshotOrFilesystem), nil
+	// return filterZFSDiff(parseZFSDiffOutput(string(out)), snapshotOrFilesystem), nil
+
+	return result, nil
 }
 
 // filterZFSDiff - filter out any files that are not under __default__ dir
