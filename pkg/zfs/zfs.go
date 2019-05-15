@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -884,34 +885,43 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 		return nil, err
 	}
 
-	result := []types.ZFSFileDiff{}
+	result := map[string]types.ZFSFileDiff{}
+	resultFiles := []string{}
 
 	for filename, tmpProps := range mapTmp {
 		if latestProps, ok := mapLatest[filename]; ok {
 			// exists in previous snap, check if modified
 			if tmpProps != latestProps {
 				// modified!
-				result = append(result, types.ZFSFileDiff{
+				resultFiles = append(resultFiles, filename)
+				result[filename] = types.ZFSFileDiff{
 					Change:   types.FileChangeModified,
 					Filename: filename,
-				})
+				}
 			}
 		} else {
 			// does not exist in previous snap, created
-			result = append(result, types.ZFSFileDiff{
+			resultFiles = append(resultFiles, filename)
+			result[filename] = types.ZFSFileDiff{
 				Change:   types.FileChangeAdded,
 				Filename: filename,
-			})
+			}
 		}
 	}
 	for filename, _ := range mapLatest {
 		if _, ok := mapLatest[filename]; !ok {
 			// exists in latest but not tmp, must have been deleted
-			result = append(result, types.ZFSFileDiff{
+			resultFiles = append(resultFiles, filename)
+			result[filename] = types.ZFSFileDiff{
 				Change:   types.FileChangeRemoved,
 				Filename: filename,
-			})
+			}
 		}
+	}
+	sort.Strings(resultFiles)
+	sortedResult := []types.ZFSFileDiff{}
+	for _, file := range resultFiles {
+		sortedResult = append(sortedResult, result[file])
 	}
 
 	err = exec.CommandContext(ctx, "umount", latestMnt).Run()
@@ -946,7 +956,7 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 	// consumer
 	// return filterZFSDiff(parseZFSDiffOutput(string(out)), snapshotOrFilesystem), nil
 
-	return result, nil
+	return sortedResult, nil
 }
 
 // filterZFSDiff - filter out any files that are not under __default__ dir
