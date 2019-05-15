@@ -783,7 +783,7 @@ func diffSideFromLines(result []byte) (DiffSide, error) {
 		if line == "" {
 			continue
 		}
-		shrapnel := strings.SplitN(line, "\n", 3)
+		shrapnel := strings.SplitN(line, " ", 3)
 		if len(shrapnel) < 3 {
 			return nil, fmt.Errorf("too few parts")
 		}
