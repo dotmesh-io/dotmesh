@@ -858,7 +858,7 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 		return nil, err
 	}
 
-	findCmdTmpl := `(cd %s; find . -printf "%T+ %s %p\n")`
+	findCmdTmpl := `(cd %s; find . -printf "%%T+ %%s %%p\n")`
 
 	latestFiles, err := exec.CommandContext(
 		ctx, "bash", "-c", fmt.Sprintf(findCmdTmpl, latestMnt)).CombinedOutput()
