@@ -1765,6 +1765,28 @@ func (d *DotmeshRPC) Transfer(
 	if err != nil {
 		return err
 	}
+
+	startingPollResult := TransferPollResult{
+		TransferRequestId: requestId,
+		Status:            "starting",
+	}
+
+	logFields := log.Fields{
+		"startingPollResult": fmt.Sprintf("%#v", startingPollResult),
+	}
+	log.WithFields(logFields).Info("transfer started, updating poll result in-memory and in-kv")
+
+	// Immediately store the fact in our local state as well, to avoid
+	// issues where we miss the "echo" from kv store when the update
+	// happens locally.
+	d.state.UpdateInterclusterTransfer(requestId, startingPollResult)
+
+	// And persist it to the kv store.
+	err = d.state.filesystemStore.SetTransfer(&startingPollResult, &store.SetOptions{})
+	if err != nil {
+		log.WithFields(logFields).WithError(err).Error("Failed setting transfer state for starting poll result")
+	}
+
 	go func() {
 		// asynchronously consume the response, and update any in-progress
 		// transfer in error cases
