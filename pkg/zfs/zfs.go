@@ -791,15 +791,12 @@ func diffSideFromLines(result []byte) (DiffSide, error) {
 		mtime := shrapnel[0]
 		size := shrapnel[1]
 		filename := shrapnel[2]
-		log.Infof("[diffSideFromLines] processing line %s", line)
 		prefix := "./__default__/"
 		if !strings.HasPrefix(filename, prefix) {
-			log.Infof("[diffSideFromLines] skipping")
 			continue
 		}
 		filename = filename[len(prefix):]
 		ds[filename] = DiffResult{mtime: mtime, size: size}
-		log.Infof("[diffSideFromLines] adding %#v", ds[filename])
 	}
 	return ds, nil
 }
