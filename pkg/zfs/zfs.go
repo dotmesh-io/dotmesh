@@ -777,15 +777,15 @@ type DiffResult struct {
 type DiffSide map[string]DiffResult
 
 func diffSideFromLines(result []byte) (DiffSide, error) {
-	lines := strings.Split(string(latestFiles), "\n")
+	lines := strings.Split(string(result), "\n")
 	ds := DiffSide{}
 	for _, line := range lines {
 		if line == "" {
 			continue
 		}
-		shrapnel := strings.Split(line, "\n", 3)
+		shrapnel := strings.SplitN(line, "\n", 3)
 		if len(shrapnel) < 3 {
-			return fmt.Errorf("too few parts")
+			return nil, fmt.Errorf("too few parts")
 		}
 		mtime := shrapnel[0]
 		size := shrapnel[1]
@@ -796,7 +796,7 @@ func diffSideFromLines(result []byte) (DiffSide, error) {
 		}
 		ds[filename] = DiffResult{mtime: mtime, size: size}
 	}
-	return ds
+	return ds, nil
 }
 
 func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types.ZFSFileDiff, error) {
@@ -814,7 +814,7 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 
 	// tmp is a new, temporary snapshot which is newer than the "latest"
 	// snapshot
-	tmp := z.FQ(FullIdWithSnapshot(filesystemId, tmpSnapshotName))
+	tmp := z.FQ(FullIdWithSnapshot(filesystemID, tmpSnapshotName))
 
 	latestMnt := utils.Mnt("diff-latest-" + filesystemID)
 	tmpMnt := utils.Mnt("diff-tmp-" + filesystemID)
@@ -825,7 +825,7 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 		return nil, err
 	}
 
-	err := os.MkdirAll(tmpMnt, 0775)
+	err = os.MkdirAll(tmpMnt, 0775)
 	if err != nil {
 		log.WithError(err).Error("[diff] error mkdir tmpMnt")
 		return nil, err
@@ -836,22 +836,22 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 	exec.CommandContext(ctx, "umount", tmpMnt).Run()
 	exec.CommandContext(ctx, z.zfsPath, "destroy", tmp).Run()
 
-	_, err := z.Snapshot(filesystemID, tmpSnapshotName)
+	_, err = z.Snapshot(filesystemID, tmpSnapshotName, []string{})
 	if err != nil {
 		log.WithError(err).Error("[diff] error snapshot")
-		return err
+		return nil, err
 	}
 
-	out, err := exec.CommandContext(ctx, "mount", "-t", "zfs", latest, latestMnt).CombinedOutput()
+	err = exec.CommandContext(ctx, "mount", "-t", "zfs", latest, latestMnt).Run()
 	if err != nil {
 		log.WithError(err).Error("[diff] error mount latest")
-		return err
+		return nil, err
 	}
 
-	out, err := exec.CommandContext(ctx, "mount", "-t", "zfs", tmp, tmpMnt).CombinedOutput()
+	err = exec.CommandContext(ctx, "mount", "-t", "zfs", tmp, tmpMnt).Run()
 	if err != nil {
 		log.WithError(err).Error("[diff] error mount tmp")
-		return err
+		return nil, err
 	}
 
 	findCmdTmpl := `(cd %s; find . -printf "%T+ %s %p\n")`
@@ -860,24 +860,24 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 		ctx, "bash", "-c", fmt.Sprintf(findCmdTmpl, latestMnt)).CombinedOutput()
 	if err != nil {
 		log.WithError(err).Error("[diff] getting latest files")
-		return err
+		return nil, err
 	}
 	mapLatest, err := diffSideFromLines(latestFiles)
 	if err != nil {
 		log.WithError(err).Error("[diff] parsing latest files")
-		return err
+		return nil, err
 	}
 
-	tmp, err := exec.CommandContext(
+	tmpFiles, err := exec.CommandContext(
 		ctx, "bash", "-c", fmt.Sprintf(findCmdTmpl, tmpMnt)).CombinedOutput()
 	if err != nil {
 		log.WithError(err).Error("[diff] getting tmp files")
-		return err
+		return nil, err
 	}
 	mapTmp, err := diffSideFromLines(tmpFiles)
 	if err != nil {
 		log.WithError(err).Error("[diff] parsing tmp files")
-		return err
+		return nil, err
 	}
 
 	result := []types.ZFSFileDiff{}
@@ -887,51 +887,51 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 			// exists in previous snap, check if modified
 			if tmpProps != latestProps {
 				// modified!
-				result = append(result, ZFSFileDiff{
+				result = append(result, types.ZFSFileDiff{
 					Change:   types.FileChangeModified,
 					Filename: filename,
 				})
 			}
 		} else {
 			// does not exist in previous snap, created
-			result = append(result, ZFSFileDiff{
+			result = append(result, types.ZFSFileDiff{
 				Change:   types.FileChangeAdded,
 				Filename: filename,
 			})
 		}
 	}
-	for filename, latestProps := range mapLatest {
+	for filename, _ := range mapLatest {
 		if _, ok := mapLatest[filename]; !ok {
 			// exists in latest but not tmp, must have been deleted
-			result = append(result, ZFSFileDiff{
+			result = append(result, types.ZFSFileDiff{
 				Change:   types.FileChangeRemoved,
 				Filename: filename,
 			})
 		}
 	}
 
-	_, err = exec.CommandContext(ctx, "umount", latestMnt).Run()
+	err = exec.CommandContext(ctx, "umount", latestMnt).Run()
 	if err != nil {
 		log.WithError(err).Error("[diff] failed unmounting latest")
 		return nil, err
 	}
 
-	_, err = exec.CommandContext(ctx, "umount", tmpMnt).Run()
+	err = exec.CommandContext(ctx, "umount", tmpMnt).Run()
 	if err != nil {
 		log.WithError(err).Error("[diff] failed unmounting latest")
 		return nil, err
 	}
-	_, err = exec.CommandContext(ctx, z.zfsPath, "destroy", tmp).Run()
+	err = exec.CommandContext(ctx, z.zfsPath, "destroy", tmp).Run()
 	if err != nil {
 		log.WithError(err).Error("[diff] failed deleting tmp snap")
 		return nil, err
 	}
-	_, err = exec.CommandContext(ctx, "rmdir", latestMnt).Run()
+	err = exec.CommandContext(ctx, "rmdir", latestMnt).Run()
 	if err != nil {
 		log.WithError(err).Error("[diff] failed cleaning up latest mount")
 		return nil, err
 	}
-	_, err = exec.CommandContext(ctx, "rmdir", tmpMnt).Run()
+	err = exec.CommandContext(ctx, "rmdir", tmpMnt).Run()
 	if err != nil {
 		log.WithError(err).Error("[diff] failed cleaning up tmp mount")
 		return nil, err
