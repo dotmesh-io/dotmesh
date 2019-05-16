@@ -5,6 +5,9 @@ create_context:
 clear_context:
 	rm -rf context
 
+build_client:
+	mkdir -p target && CGO_ENABLED=0 go build -ldflags "-X main.clientVersion=${VERSION} -X main.dockerTag=${DOCKER_TAG} -s" -o target/dm ./cmd/dm
+
 build_server: 
 	docker build -t ${REPOSITORY}/dotmesh-server:${DOCKER_TAG} ./context --build-arg VERSION=${VERSION} --build-arg STABLE_DOCKER_TAG=${DOCKER_TAG} -f dockerfiles/dotmesh.Dockerfile
 

@@ -36,8 +36,9 @@ build_client_linux:
     tags:
         - fast
     script:
-        - mkdir -p target
-        - CGO_ENABLED=0 go build -ldflags "-X main.clientVersion=${CI_COMMIT_TAG:-$CI_COMMIT_SHA} -X main.dockerTag=${CI_COMMIT_TAG:-$CI_COMMIT_SHA} -s" -o target/dm ./cmd/dm
+    - export DOCKER_TAG=${CI_COMMIT_TAG:-${CI_COMMIT_SHA:-latest}}
+    - export VERSION=$DOCKER_TAG # todo could change this to a "short" sha if needed
+    - make build_client
     artifacts:
         paths:
             - target
