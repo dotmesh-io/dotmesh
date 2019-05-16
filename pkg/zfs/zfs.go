@@ -874,12 +874,6 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 		log.Infof("[diff] tmp %s not exists", tmp)
 	}
 
-	err := os.MkdirAll(latestMnt, 0775)
-	if err != nil {
-		log.WithError(err).Error("[diff] error mkdir latestMnt")
-		return nil, err
-	}
-
 	err = os.MkdirAll(tmpMnt, 0775)
 	if err != nil {
 		log.WithError(err).Error("[diff] error mkdir tmpMnt")
@@ -908,18 +902,27 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 
 	// only mount & fetch file list from latest if we haven't got it cached already
 
-	var mapLatest DiffSide
+	var mapLatest DiffSide = false
+	var mountedLatest bool
 
 	log.Infof("[diff] checking diffSideCache[%s] for snap %s", filesystemID, snapshot)
 	if latestCache, ok := diffSideCache[filesystemID]; ok && latestCache.SnapshotID == snapshot {
 		log.Info("[diff] using latest diffSide from cache")
 		mapLatest = latestCache.DiffSide
 	} else {
+		// do all setup for latestMnt only in the case that we actually need it
+		// (can't read it from in-memory cache)
+		err := os.MkdirAll(latestMnt, 0775)
+		if err != nil {
+			log.WithError(err).Error("[diff] error mkdir latestMnt")
+			return nil, err
+		}
 		out, err := exec.CommandContext(ctx, "mount", "-t", "zfs", latest, latestMnt).CombinedOutput()
 		if err != nil {
 			log.WithError(err).Errorf("[diff] error mount latest: %s", string(out))
 			return nil, err
 		}
+		mountedLatest = true
 		latestFiles, err := exec.CommandContext(
 			ctx, "bash", "-c", fmt.Sprintf(findCmdTmpl, latestMnt)).CombinedOutput()
 		if err != nil {
@@ -989,11 +992,20 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 		sortedResult = append(sortedResult, result[file])
 	}
 
-	out, err := exec.CommandContext(ctx, "umount", latestMnt).CombinedOutput()
-	if err != nil {
-		log.WithError(err).Errorf("[diff] failed unmounting latest: %s", string(out))
-		return nil, err
+	// only try to clean up latest mount if we needed to mount it at all
+	if mountedLatest {
+		out, err := exec.CommandContext(ctx, "umount", latestMnt).CombinedOutput()
+		if err != nil {
+			log.WithError(err).Errorf("[diff] failed unmounting latest: %s", string(out))
+			return nil, err
+		}
+		err = exec.CommandContext(ctx, "rmdir", latestMnt).Run()
+		if err != nil {
+			log.WithError(err).Error("[diff] failed cleaning up latest mount")
+			return nil, err
+		}
 	}
+
 	out, err = exec.CommandContext(ctx, "umount", tmpMnt).CombinedOutput()
 	if err != nil {
 		log.WithError(err).Errorf("[diff] failed unmounting tmp: %s", string(out))
@@ -1005,16 +1017,6 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 	// will get cleaned up if there is dirty data and a new tmp snap created
 	// then.
 
-	err = exec.CommandContext(ctx, z.zfsPath, "destroy", tmp).Run()
-	if err != nil {
-		log.WithError(err).Error("[diff] failed deleting tmp snap")
-		return nil, err
-	}
-	err = exec.CommandContext(ctx, "rmdir", latestMnt).Run()
-	if err != nil {
-		log.WithError(err).Error("[diff] failed cleaning up latest mount")
-		return nil, err
-	}
 	err = exec.CommandContext(ctx, "rmdir", tmpMnt).Run()
 	if err != nil {
 		log.WithError(err).Error("[diff] failed cleaning up tmp mount")
