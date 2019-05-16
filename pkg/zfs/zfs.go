@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -184,7 +185,10 @@ func (z *zfs) Clone(filesystemId, originSnapshotId, newCloneFilesystemId string)
 		z.FQ(newCloneFilesystemId),
 	).CombinedOutput()
 	if err != nil {
-		log.Printf("[list] %v while trying to list snapshot for filesystem %s", err, z.FQ(filesystemId))
+		log.Printf(
+			"[Clone] %v while trying to clone filesystem %s, %s -> %s",
+			err, z.FQ(filesystemId), originSnapshotId, newCloneFilesystemId,
+		)
 	}
 	return out, err
 }
@@ -280,6 +284,9 @@ func (z *zfs) DiscoverSystem(fs string) (*types.Filesystem, error) {
 	for _, values := range listLines {
 		fsSnapshot := strings.Split(values, "\t")[0]
 		id := strings.Split(fsSnapshot, "@")[1]
+		if strings.HasPrefix(id, "dotmesh-fastdiff") {
+			continue
+		}
 		meta, ok := snapshotMeta[id]
 		if !ok {
 			meta = make(map[string]string)
@@ -764,115 +771,264 @@ func (z *zfs) Fork(filesystemId, latestSnapshot, forkFilesystemId string) error 
 	return nil
 }
 
+type DiffResult struct {
+	mtime string
+	size  string
+}
+type DiffSide map[string]DiffResult
+
+func diffSideFromLines(result []byte) (DiffSide, error) {
+	lines := strings.Split(string(result), "\n")
+	ds := DiffSide{}
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		shrapnel := strings.SplitN(line, " ", 3)
+		if len(shrapnel) < 3 {
+			return nil, fmt.Errorf("too few parts")
+		}
+		mtime := shrapnel[0]
+		size := shrapnel[1]
+		filename := shrapnel[2]
+		prefix := "./__default__/"
+		if !strings.HasPrefix(filename, prefix) {
+			continue
+		}
+		filename = filename[len(prefix):]
+		ds[filename] = DiffResult{mtime: mtime, size: size}
+	}
+	return ds, nil
+}
+
+// NB: the following caches would be better on an object than as globals.
+
+type FilesystemDiffCache struct {
+	// latest snapshot cached (we only cache one DiffSide result per
+	// filesystem, this points to which snapshot it is for)
+	SnapshotID string
+	DiffSide   DiffSide
+}
+
+type FilesystemResultCache struct {
+	SnapshotID string
+	Result     []types.ZFSFileDiff
+}
+
+// map from filesystem id to cached DiffSide for latest snap inspected
+var diffSideCache = map[string]FilesystemDiffCache{}
+
+// map from filesystem id to cached final result in case where tmp snap has
+// zero size (no changes since last time it was run)
+var diffResultCache = map[string]FilesystemResultCache{}
+
 func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types.ZFSFileDiff, error) {
+	/*
+		Diff the default subdot of a given dot.
+
+		NB:
+		1. the snapshotOrFilesystem arg is ignored.
+		2. this function should not be run in parallel with itself.
+		3. this function assumes that 'snapshot' is the latest snapshot of the
+		   filesystem.
+	*/
 
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Minute)
 	defer cancel()
 
-	fullID := z.fullZFSFilesystemPath(filesystemID, snapshot)
+	tmpSnapshotName := "dotmesh-fastdiff"
 
-	cmd := exec.CommandContext(ctx, z.zfsPath, "diff", fullID, z.FQ(snapshotOrFilesystem))
+	// latest is the latest "dotmesh" snapshot
+	latest := z.fullZFSFilesystemPath(filesystemID, snapshot)
 
-	out, err := cmd.CombinedOutput()
+	// tmp is a new, temporary snapshot which is newer than the "latest"
+	// snapshot
+	tmp := z.FQ(FullIdWithSnapshot(filesystemID, tmpSnapshotName))
+
+	latestMnt := utils.Mnt("diff-latest-" + filesystemID)
+	tmpMnt := utils.Mnt("diff-tmp-" + filesystemID)
+
+	// First, if the dotmesh-fastdiff snapshot exists and there's no dirty data
+	// on it, and we have a cached diffResultCache, return it
+
+	tmpExistsErr := exec.CommandContext(ctx, z.zfsPath, "get", "name", tmp).Run()
+	if tmpExistsErr == nil {
+		dirty, _, err := z.GetDirtyDelta(filesystemID, tmpSnapshotName)
+		if err != nil {
+			log.WithError(err).Error("[diff] error get dirty delta")
+			return nil, err
+		}
+
+		log.Infof("[diff] tmp %s dirty = %d", tmp, dirty)
+		if dirty == 0 {
+			// try to use the cache
+			log.Infof("[diff] checking diffResultCache[%s] for snap %s", filesystemID, snapshot)
+			if result, ok := diffResultCache[filesystemID]; ok {
+				if result.SnapshotID == snapshot {
+					log.Info("[diff] using cached result")
+					return result.Result, nil
+				}
+			}
+		}
+	} else {
+		log.Infof("[diff] tmp %s not exists", tmp)
+	}
+
+	err := os.MkdirAll(tmpMnt, 0775)
 	if err != nil {
-		log.WithError(err).Error("[diff] got error on zfs diff command")
+		log.WithError(err).Error("[diff] error mkdir tmpMnt")
 		return nil, err
 	}
 
-	// parsing ZFS output and then filtering out any files that should not be visible for the
-	// consumer
-	return filterZFSDiff(parseZFSDiffOutput(string(out)), snapshotOrFilesystem), nil
-}
+	// it's ok if these fail, they are just cleanup from previous runs if they
+	// happened
+	exec.CommandContext(ctx, "umount", latestMnt).Run()
+	exec.CommandContext(ctx, "umount", tmpMnt).Run()
+	exec.CommandContext(ctx, z.zfsPath, "destroy", tmp).Run()
 
-// filterZFSDiff - filter out any files that are not under __default__ dir
-func filterZFSDiff(files []types.ZFSFileDiff, snapshotOrFilesystem string) []types.ZFSFileDiff {
-	b := files[:0]
-	var (
-		was string
-		now string
+	_, err = z.Snapshot(filesystemID, tmpSnapshotName, []string{})
+	if err != nil {
+		log.WithError(err).Error("[diff] error snapshot")
+		return nil, err
+	}
 
-		ok    bool
-		nowOk bool
-		wasOk bool
-	)
-	for _, x := range files {
-		switch x.Change {
-		case types.FileChangeRenamed:
-			files := strings.Split(x.Filename, " -> ")
-			if len(files) != 2 {
-				log.WithFields(log.Fields{
-					"changed_files":          x.Filename,
-					"snapshot_or_filesystem": snapshotOrFilesystem,
-				}).Warn("[filterZFSDiff] could not properly separate file prefix, leaving original")
-				b = append(b, x)
-				continue
+	err = exec.CommandContext(ctx, "mount", "-t", "zfs", tmp, tmpMnt).Run()
+	if err != nil {
+		log.WithError(err).Error("[diff] error mount tmp")
+		return nil, err
+	}
+
+	findCmdTmpl := `(cd %s; find . -printf "%%T+ %%s %%p\n")`
+
+	// only mount & fetch file list from latest if we haven't got it cached already
+
+	var mapLatest DiffSide
+	var mountedLatest bool = false
+
+	log.Infof("[diff] checking diffSideCache[%s] for snap %s", filesystemID, snapshot)
+	if latestCache, ok := diffSideCache[filesystemID]; ok && latestCache.SnapshotID == snapshot {
+		log.Info("[diff] using latest diffSide from cache")
+		mapLatest = latestCache.DiffSide
+	} else {
+		// do all setup for latestMnt only in the case that we actually need it
+		// (can't read it from in-memory cache)
+		err := os.MkdirAll(latestMnt, 0775)
+		if err != nil {
+			log.WithError(err).Error("[diff] error mkdir latestMnt")
+			return nil, err
+		}
+		out, err := exec.CommandContext(ctx, "mount", "-t", "zfs", latest, latestMnt).CombinedOutput()
+		if err != nil {
+			log.WithError(err).Errorf("[diff] error mount latest: %s", string(out))
+			return nil, err
+		}
+		mountedLatest = true
+		latestFiles, err := exec.CommandContext(
+			ctx, "bash", "-c", fmt.Sprintf(findCmdTmpl, latestMnt)).CombinedOutput()
+		if err != nil {
+			log.WithError(err).Error("[diff] getting latest files")
+			return nil, err
+		}
+		mapLatest, err = diffSideFromLines(latestFiles)
+		if err != nil {
+			log.WithError(err).Error("[diff] parsing latest files")
+			return nil, err
+		}
+		log.Infof("[diff] setting diffSideCache[%s] -> (%s, %#v)", filesystemID, snapshot, mapLatest)
+		diffSideCache[filesystemID] = FilesystemDiffCache{
+			SnapshotID: snapshot,
+			DiffSide:   mapLatest,
+		}
+	}
+
+	tmpFiles, err := exec.CommandContext(
+		ctx, "bash", "-c", fmt.Sprintf(findCmdTmpl, tmpMnt)).CombinedOutput()
+	if err != nil {
+		log.WithError(err).Error("[diff] getting tmp files")
+		return nil, err
+	}
+	mapTmp, err := diffSideFromLines(tmpFiles)
+	if err != nil {
+		log.WithError(err).Error("[diff] parsing tmp files")
+		return nil, err
+	}
+
+	result := map[string]types.ZFSFileDiff{}
+	resultFiles := []string{}
+
+	for filename, tmpProps := range mapTmp {
+		if latestProps, ok := mapLatest[filename]; ok {
+			// exists in previous snap, check if modified
+			if tmpProps != latestProps {
+				// modified!
+				resultFiles = append(resultFiles, filename)
+				result[filename] = types.ZFSFileDiff{
+					Change:   types.FileChangeModified,
+					Filename: filename,
+				}
 			}
-			prefix := snapshotOrFilesystem + "/__default__/"
-			was, wasOk = stripDotPrefix(files[0], prefix)
-			now, nowOk = stripDotPrefix(files[1], prefix)
-
-			if nowOk || wasOk {
-				x.Filename = was + " -> " + now
-				b = append(b, x)
-			}
-
-		default:
-			x.Filename, ok = stripDotPrefix(x.Filename, snapshotOrFilesystem+"/__default__/")
-			if ok {
-				b = append(b, x)
+		} else {
+			// does not exist in previous snap, created
+			resultFiles = append(resultFiles, filename)
+			result[filename] = types.ZFSFileDiff{
+				Change:   types.FileChangeAdded,
+				Filename: filename,
 			}
 		}
 	}
-	return b
-}
-
-func stripDotPrefix(filename, prefix string) (string, bool) {
-	parts := strings.SplitN(filename, prefix, 2)
-	if len(parts) == 2 {
-		return parts[1], true
+	for filename, _ := range mapLatest {
+		if _, ok := mapLatest[filename]; !ok {
+			// exists in latest but not tmp, must have been deleted
+			resultFiles = append(resultFiles, filename)
+			result[filename] = types.ZFSFileDiff{
+				Change:   types.FileChangeRemoved,
+				Filename: filename,
+			}
+		}
 	}
-	return "", false
-}
-
-// File or Directory Change
-// Identifier
-// M           |  File or directory has been modified or file or directory link has changed
-// —           |  File or directory is present in the older snapshot but not in the more recent snapshot
-// +           |  File or directory is present in the more recent snapshot but not in the older snapshot
-// R           |  File or directory has been renamed
-func parseZFSDiffOutput(data string) []types.ZFSFileDiff {
-
-	var files []types.ZFSFileDiff
-
-	scanner := bufio.NewScanner(strings.NewReader(data))
-	for scanner.Scan() {
-		l := scanner.Text()
-		// fmt.Println(l)
-		parts := strings.SplitN(l, "	", 2)
-		if len(parts) < 2 {
-			log.WithFields(log.Fields{
-				"line": l,
-			}).Warn("[parseZFSDiffOutput] expected 2 parts, skipping line")
-			continue
-		}
-		f := types.ZFSFileDiff{
-			Filename: parts[1],
-		}
-		switch parts[0] {
-		case "+":
-			f.Change = types.FileChangeAdded
-		case "M":
-			f.Change = types.FileChangeModified
-		case "-":
-			f.Change = types.FileChangeRemoved
-		case "R":
-			f.Change = types.FileChangeRenamed
-		default:
-			f.Change = types.FileChangeUnknown
-		}
-		files = append(files, f)
-
+	sort.Strings(resultFiles)
+	sortedResult := []types.ZFSFileDiff{}
+	for _, file := range resultFiles {
+		sortedResult = append(sortedResult, result[file])
 	}
 
-	return files
+	// only try to clean up latest mount if we needed to mount it at all
+	if mountedLatest {
+		out, err := exec.CommandContext(ctx, "umount", latestMnt).CombinedOutput()
+		if err != nil {
+			log.WithError(err).Errorf("[diff] failed unmounting latest: %s", string(out))
+			return nil, err
+		}
+		err = exec.CommandContext(ctx, "rmdir", latestMnt).Run()
+		if err != nil {
+			log.WithError(err).Error("[diff] failed cleaning up latest mount")
+			return nil, err
+		}
+	}
+
+	out, err := exec.CommandContext(ctx, "umount", tmpMnt).CombinedOutput()
+	if err != nil {
+		log.WithError(err).Errorf("[diff] failed unmounting tmp: %s", string(out))
+		return nil, err
+	}
+
+	// NB: we don't destroy the tmp snap here because we want to compare its
+	// dirty data value to know whether to use the cache next time round. It
+	// will get cleaned up if there is dirty data and a new tmp snap created
+	// then.
+
+	err = exec.CommandContext(ctx, "rmdir", tmpMnt).Run()
+	if err != nil {
+		log.WithError(err).Error("[diff] failed cleaning up tmp mount")
+		return nil, err
+	}
+
+	// stash for later
+	log.Infof("[diff] setting diffResultCache[%s] -> (%s, %#v)", filesystemID, snapshot, sortedResult)
+	diffResultCache[filesystemID] = FilesystemResultCache{
+		SnapshotID: snapshot,
+		Result:     sortedResult,
+	}
+
+	return sortedResult, nil
 }
