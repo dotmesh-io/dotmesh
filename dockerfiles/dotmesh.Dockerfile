@@ -2,7 +2,9 @@ FROM golang:1.12.5-alpine3.9 AS build-env
 WORKDIR /usr/local/go/src/github.com/dotmesh-io/dotmesh
 RUN apk update && apk upgrade && \
     apk add --no-cache bash git openssh
-COPY . /usr/local/go/src/github.com/dotmesh-io/dotmesh-server
+COPY ./cmd /usr/local/go/src/github.com/dotmesh-io/dotmesh/cmd
+COPY ./pkg /usr/local/go/src/github.com/dotmesh-io/dotmesh/pkg
+COPY ./vendor /usr/local/go/src/github.com/dotmesh-io/dotmesh/vendor
 RUN cd cmd/dotmesh-server && go install -ldflags="-w -s"
 RUN cd cmd/dm && go install -ldflags="-w -s"
 RUN cd cmd/flexvolume && go install -ldflags="-w -s"
@@ -22,7 +24,7 @@ RUN apt-get -y update && apt-get -y install iproute2 kmod curl && \
     rm -rf /tmp/d && \
     cd /opt && curl https://get.dotmesh.io/zfs-userland/zfs-0.6.tar.gz |tar xzf - && \
     curl https://get.dotmesh.io/zfs-userland/zfs-0.7.tar.gz |tar xzf -
-COPY ./scripts/require_zfs.sh /require_zfs.sh
+COPY ./cmd/dotmesh-server/require_zfs.sh /require_zfs.sh
 COPY --from=build-env /usr/local/go/bin/flexvolume /usr/local/bin/
 COPY --from=build-env /usr/local/go/bin/dotmesh-server /usr/local/bin/
 COPY --from=build-env /usr/local/go/bin/dm /usr/local/bin/
