@@ -9,9 +9,6 @@ variables:
 
     RELEASE_DOCKER_REGISTRY: quay.io
     RELEASE_DOCKER_REPOSITORY: dotmesh
-
-    DOCKER_TAG: ${CI_COMMIT_TAG:-${CI_COMMIT_SHA:-latest}}
-    VERSION: ${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}
     CI_SERVICE_BEING_TESTED: dotmesh-server
 
     DOTMESH_TEST_CLEANUP: always
@@ -75,6 +72,8 @@ build_operator:
     tags:
         - fast
     script:
+    - export DOCKER_TAG=${CI_COMMIT_TAG:-${CI_COMMIT_SHA:-latest}}
+    - export VERSION=${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}
     - export REPOSITORY=${CI_REGISTRY}/${CI_PROJECT_PATH}
     - make gitlab_registry_login
     - make create_context
@@ -87,6 +86,8 @@ build_provisioner:
     tags:
         - fast
     script:
+    - export DOCKER_TAG=${CI_COMMIT_TAG:-${CI_COMMIT_SHA:-latest}}
+    - export VERSION=${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}
     - export REPOSITORY=${CI_REGISTRY}/${CI_PROJECT_PATH}
     - make gitlab_registry_login
     - make create_context
@@ -101,6 +102,8 @@ build_server:
     tags:
     - fast
     script:
+    - export DOCKER_TAG=${CI_COMMIT_TAG:-${CI_COMMIT_SHA:-latest}}
+    - export VERSION=${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}
     - export REPOSITORY=${CI_REGISTRY}/${CI_PROJECT_PATH}
     - make gitlab_registry_login
     - make create_context
