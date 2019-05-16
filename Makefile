@@ -6,7 +6,7 @@ clear_context:
 	rm -rf context
 
 build_server:
-    docker build -t /$CI_PROJECT_PATH/dotmesh-server:${CI_COMMIT_TAG:-$CI_COMMIT_SHA} ./context --build-arg VERSION=${CI_COMMIT_TAG:-CI_COMMIT_SHORT_SHA} --build-arg STABLE_DOCKER_TAG=${CI_COMMIT_TAG:-$CI_COMMIT_SHA} -f dockerfiles/dotmesh.Dockerfile; \
+    docker build -t ${REPOSITORY}/dotmesh-server:${CI_COMMIT_TAG:-$CI_COMMIT_SHA} ./context --build-arg VERSION=${CI_COMMIT_TAG:-CI_COMMIT_SHORT_SHA} --build-arg STABLE_DOCKER_TAG=${CI_COMMIT_TAG:-$CI_COMMIT_SHA} -f dockerfiles/dotmesh.Dockerfile; \
     docker build -t ${REPOSITORY}/dind-dynamic-provisioner:${CI_COMMIT_TAG:-$CI_COMMIT_SHA} ./context -f dockerfiles/dind-provisioner.Dockerfile
 
 push_server:
