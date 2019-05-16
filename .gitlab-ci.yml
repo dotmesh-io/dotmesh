@@ -93,8 +93,9 @@ build_operator:
     script:
         # push to the CI registry
         - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
-        - docker build -t quay.io/dotmesh/dotmesh-operator:${CI_COMMIT_TAG:-CI_COMMIT_SHA} --build-arg VERSION=${CI_COMMIT_TAG:-CI_COMMIT_SHORT_SHA} --build-arg STABLE_DOTMESH_SERVER_IMAGE=quay.io/dotmesh/dotmesh-server:${CI_COMMIT_TAG:-CI_COMMIT_SHA} . -f dockerfiles/operator.Dockerfile
-        - docker push quay.io/dotmesh/dotmesh-operator:${CI_COMMIT_TAG:-CI_COMMIT_SHA}
+        - mkdir context && cp ./pkg ./context/pkg && cp ./vendor ./context/vendor ./cmd ./context/cmd
+        - docker build -t registry.gitlab.dotmesh.com/$CI_PROJECT_PATH/dotmesh-operator:${CI_COMMIT_TAG:-CI_COMMIT_SHA} --build-arg VERSION=${CI_COMMIT_TAG:-CI_COMMIT_SHORT_SHA} --build-arg STABLE_DOTMESH_SERVER_IMAGE=quay.io/dotmesh/dotmesh-server:${CI_COMMIT_TAG:-CI_COMMIT_SHA} ./context -f dockerfiles/operator.Dockerfile
+        - docker push registry.gitlab.dotmesh.com/$CI_PROJECT_PATH/dotmesh-operator:${CI_COMMIT_TAG:-CI_COMMIT_SHA}
     artifacts:
         paths:
             - target
@@ -110,8 +111,9 @@ build_provisioner:
     script:
         # push to the CI registry
         - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
-        - (./rebuild_provisioner.sh) # also pushes
-        - echo "pushed $CI_DOCKER_PROVISIONER_IMAGE"
+        - mkdir context && cp ./pkg ./context/pkg && cp ./vendor ./context/vendor ./cmd ./context/cmd
+        - docker build -t registry.gitlab.dotmesh.com/$CI_PROJECT_PATH/dotmesh-dynamic-provisioner:${CI_COMMIT_TAG:-CI_COMMIT_SHA} ./context -f dockerfiles/provisioner.Dockerfile
+        - docker push registry.gitlab.dotmesh.com/$CI_PROJECT_PATH/dotmesh-dynamic-provisioner:${CI_COMMIT_TAG:-CI_COMMIT_SHA}
     artifacts:
         paths:
             - target
@@ -127,9 +129,9 @@ build_server:
     script:
         # push to the CI registry
         - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
-        - (./rebuild_server.sh) # also pushes
-        - echo "pushed $CI_DOCKER_SERVER_IMAGE"
-        - echo "pushed $CI_DOCKER_DIND_PROVISIONER_IMAGE"
+        - mkdir context && cp ./pkg ./context/pkg && cp ./vendor ./context/vendor ./cmd ./context/cmd
+        - docker build -t registry.gitlab.dotmesh.com/$CI_PROJECT_PATH/dotmesh-server:${CI_COMMIT_TAG:-CI_COMMIT_SHA} ./context --build-arg VERSION=${CI_COMMIT_TAG:-CI_COMMIT_SHORT_SHA} --build-arg STABLE_DOCKER_TAG=${CI_COMMIT_TAG:-CI_COMMIT_SHA} -f dockerfiles/dotmesh.Dockerfile
+        - docker push registry.gitlab.dotmesh.com/$CI_PROJECT_PATH/dotmesh-server:${CI_COMMIT_TAG:-CI_COMMIT_SHA}
     artifacts:
         paths:
             - target
