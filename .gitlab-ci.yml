@@ -7,20 +7,10 @@ variables:
     SERVER_NAME: dotmesh-server
     PROVISIONER_NAME: dotmesh-dynamic-provisioner
 
-    CI_REGISTRY: registry.gitlab.dotmesh.com
-    CI_REPOSITORY: dotmesh/dotmesh
     RELEASE_DOCKER_REGISTRY: quay.io
     RELEASE_DOCKER_REPOSITORY: dotmesh
 
     CI_DOCKER_TAG: $CI_COMMIT_SHA
-
-    # PLEASE NOTE: If you change these, you also need to update the BUILD.bazel files in those projects
-    # to make their docker_push thingies match - they don't automatically remain in sync.
-    STABLE_CI_DOCKER_SERVER_IMAGE: $CI_REGISTRY/$CI_REPOSITORY/dotmesh-server:$CI_COMMIT_SHA
-    CI_DOCKER_PROVISIONER_IMAGE: $CI_REGISTRY/$CI_REPOSITORY/dotmesh-dynamic-provisioner:$CI_COMMIT_SHA
-    CI_DOCKER_OPERATOR_IMAGE: $CI_REGISTRY/$CI_REPOSITORY/dotmesh-operator:$CI_COMMIT_SHA
-    CI_DOCKER_DIND_PROVISIONER_IMAGE: $CI_REGISTRY/$CI_REPOSITORY/dind-dynamic-provisioner:$CI_COMMIT_SHA
-
     CI_SERVICE_BEING_TESTED: dotmesh-server
 
     DOTMESH_TEST_CLEANUP: always
@@ -55,8 +45,6 @@ build_client_linux:
         paths:
             - target
         expire_in: 1 week
-    except:
-        - schedules
 
 build_client_macos:
     retry: 2
@@ -70,21 +58,15 @@ build_client_macos:
             - binaries
         expire_in: 1 week
     except:
-        - schedules
+    - schedules
 
 build_yaml:
     retry: 2
     stage: build
     tags:
-        - fast
+    - fast
     script:
-        - (cd kubernetes && ./rebuild.sh)
-    artifacts:
-        paths:
-            - yaml
-        expire_in: 1 week
-    except:
-        - schedules
+    - (cd kubernetes && ./rebuild.sh)
 
 build_operator:
     retry: 2
@@ -92,17 +74,11 @@ build_operator:
     tags:
         - fast
     script:
-        # push to the CI registry
-        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
-        - mkdir context && cp -r ./pkg ./context/pkg && cp -r ./vendor ./context/vendor && cp -r ./cmd ./context/cmd
-        - docker build -t registry.gitlab.dotmesh.com/$CI_PROJECT_PATH/dotmesh-operator:${CI_COMMIT_TAG:-$CI_COMMIT_SHA} --build-arg VERSION=${CI_COMMIT_TAG:-CI_COMMIT_SHORT_SHA} --build-arg STABLE_DOTMESH_SERVER_IMAGE=quay.io/dotmesh/dotmesh-server:${CI_COMMIT_TAG:-$CI_COMMIT_SHA} ./context -f dockerfiles/operator.Dockerfile
-        - docker push registry.gitlab.dotmesh.com/$CI_PROJECT_PATH/dotmesh-operator:${CI_COMMIT_TAG:-$CI_COMMIT_SHA}
-    artifacts:
-        paths:
-            - target
-        expire_in: 1 week
-    except:
-        - schedules
+    - export REPOSITORY=${CI_REGISTRY}/${CI_PROJECT_PATH}
+    - make gitlab_registry_login
+    - make create_context
+    - make build_operator
+    - make push_operator
 
 build_provisioner:
     retry: 2
@@ -110,37 +86,25 @@ build_provisioner:
     tags:
         - fast
     script:
-        # push to the CI registry
-        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
-        - mkdir context && cp -r ./pkg ./context/pkg && cp -r ./vendor ./context/vendor && cp -r ./cmd ./context/cmd
-        - docker build -t registry.gitlab.dotmesh.com/$CI_PROJECT_PATH/dotmesh-dynamic-provisioner:${CI_COMMIT_TAG:-$CI_COMMIT_SHA} ./context -f dockerfiles/provisioner.Dockerfile
-        - docker push registry.gitlab.dotmesh.com/$CI_PROJECT_PATH/dotmesh-dynamic-provisioner:${CI_COMMIT_TAG:-$CI_COMMIT_SHA}
-    artifacts:
-        paths:
-            - target
-        expire_in: 1 week
+    - export REPOSITORY=${CI_REGISTRY}/${CI_PROJECT_PATH}
+    - make gitlab_registry_login
+    - make create_context
+    - make build_provisioner
+    - make push_provisioner
     except:
-        - schedules
+    - schedules
 
 build_server:
     retry: 2
     stage: build
     tags:
-        - fast
+    - fast
     script:
-        # push to the CI registry
-        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
-        - mkdir context && cp -r ./pkg ./context/pkg && cp -r ./vendor ./context/vendor && cp -r ./cmd ./context/cmd && cp -r ./scripts ./context/scripts
-        - docker build -t registry.gitlab.dotmesh.com/$CI_PROJECT_PATH/dotmesh-server:${CI_COMMIT_TAG:-$CI_COMMIT_SHA} ./context --build-arg VERSION=${CI_COMMIT_TAG:-CI_COMMIT_SHORT_SHA} --build-arg STABLE_DOCKER_TAG=${CI_COMMIT_TAG:-$CI_COMMIT_SHA} -f dockerfiles/dotmesh.Dockerfile
-        - docker build -t registry.gitlab.dotmesh.com/$CI_PROJECT_PATH/dind-dynamic-provisioner:${CI_COMMIT_TAG:-$CI_COMMIT_SHA} ./context -f dockerfiles/dind-provisioner.Dockerfile
-        - docker push registry.gitlab.dotmesh.com/$CI_PROJECT_PATH/dotmesh-server:${CI_COMMIT_TAG:-$CI_COMMIT_SHA}
-        - docker push registry.gitlab.dotmesh.com/$CI_PROJECT_PATH/dind-dynamic-provisioner:${CI_COMMIT_TAG:-$CI_COMMIT_SHA}
-    artifacts:
-        paths:
-            - target
-        expire_in: 1 week
-    except:
-        - schedules
+    - export REPOSITORY=${CI_REGISTRY}/${CI_PROJECT_PATH}
+    - make gitlab_registry_login
+    - make create_context
+    - make build_server
+    - make push_server
 
 dotmesh_unit_tests:
     stage: test

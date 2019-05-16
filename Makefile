@@ -1,39 +1,30 @@
-.PHONY: build
-build: ; bash dev.sh build
+# create the context dir before running any of the commands below - ensures the smallest docker context to make builds faster
+create_context:
+	mkdir context && cp -r ./pkg ./context/pkg && cp -r ./vendor ./context/vendor && cp -r ./cmd ./context/cmd && cp -r ./scripts ./context/scripts
 
-.PHONY: cluster.build
-cluster.build: ; bash dev.sh cluster-build
+clear_context:
+	rm -rf context
 
-.PHONY: cluster.start
-cluster.start: ; bash dev.sh cluster-start
+build_server:
+    docker build -t /$CI_PROJECT_PATH/dotmesh-server:${CI_COMMIT_TAG:-$CI_COMMIT_SHA} ./context --build-arg VERSION=${CI_COMMIT_TAG:-CI_COMMIT_SHORT_SHA} --build-arg STABLE_DOCKER_TAG=${CI_COMMIT_TAG:-$CI_COMMIT_SHA} -f dockerfiles/dotmesh.Dockerfile; \
+    docker build -t ${REPOSITORY}/dind-dynamic-provisioner:${CI_COMMIT_TAG:-$CI_COMMIT_SHA} ./context -f dockerfiles/dind-provisioner.Dockerfile
 
-.PHONY: cluster.stop
-cluster.stop: ; bash dev.sh cluster-stop
+push_server:
+	docker push ${REPOSITORY}/dotmesh-server:${CI_COMMIT_TAG:-$CI_COMMIT_SHA}; \
+    docker push ${REPOSITORY}/dind-dynamic-provisioner:${CI_COMMIT_TAG:-$CI_COMMIT_SHA}
 
-.PHONY: cluster.upgrade
-cluster.upgrade: ; bash dev.sh cluster-upgrade
+build_operator:
+    mkdir context && cp -r ./pkg ./context/pkg && cp -r ./vendor ./context/vendor && cp -r ./cmd ./context/cmd; \
+    docker build -t ${REPOSITORY}/dotmesh-operator:${CI_COMMIT_TAG:-$CI_COMMIT_SHA} --build-arg VERSION=${CI_COMMIT_TAG:-CI_COMMIT_SHORT_SHA} --build-arg STABLE_DOTMESH_SERVER_IMAGE=quay.io/dotmesh/dotmesh-server:${CI_COMMIT_TAG:-$CI_COMMIT_SHA} ./context -f dockerfiles/operator.Dockerfile
 
-.PHONY: cli.build
-cli.build:
-	bash dev.sh cli-build
+push_operator:
+	docker push ${REPOSITORY}/dotmesh-operator:${CI_COMMIT_TAG:-$CI_COMMIT_SHA}
 
-.PHONY: reset
-reset: ; bash dev.sh reset
+build_provisioner:
+    docker build -t ${REPOSITORY}/dotmesh-dynamic-provisioner:${CI_COMMIT_TAG:-$CI_COMMIT_SHA} ./context -f dockerfiles/provisioner.Dockerfile
 
-.PHONY: vagrant.sync
-vagrant.sync: ; bash dev.sh vagrant-sync
+push_provisioner:
+	docker push ${REPOSITORY}/dotmesh-dynamic-provisioner:${CI_COMMIT_TAG:-$CI_COMMIT_SHA}
 
-.PHONY: vagrant.prepare
-vagrant.prepare: ; bash dev.sh vagrant-prepare
-
-.PHONY: vagrant.test
-vagrant.test: ; bash dev.sh vagrant-test
-
-.PHONY: vagrant.changed
-vagrant.changed:
-	bash dev.sh vagrant-list-changed-files
-
-.PHONY: vagrant.copy
-vagrant.copy:
-	bash dev.sh vagrant-copy-changed-files
-
+gitlab_registry_login:
+	docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
