@@ -38,7 +38,7 @@ build_client_linux:
         - fast
     script:
         - mkdir -p target
-        - CGO_ENABLED=0 go build -ldflags "-X main.clientVersion=${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA} -X main.dockerTag=${CI_COMMIT_TAG:-$CI_COMMIT_SHA} -s" -o target/dm ./cmd/dm
+        - CGO_ENABLED=0 go build -ldflags "-X main.clientVersion=${CI_COMMIT_TAG:-$CI_COMMIT_SHA} -X main.dockerTag=${CI_COMMIT_TAG:-$CI_COMMIT_SHA} -s" -o target/dm ./cmd/dm
     artifacts:
         paths:
             - target
@@ -73,8 +73,7 @@ build_operator:
         - fast
     script:
     - export DOCKER_TAG=${CI_COMMIT_TAG:-${CI_COMMIT_SHA:-latest}}
-    - shortVer=$(expr substr ${CI_COMMIT_SHA} 0 8)
-    - export VERSION=${CI_COMMIT_TAG:-${shortVer}}
+    - export VERSION=$DOCKER_TAG # todo could change this to a "short" sha if needed
     - export REPOSITORY=${CI_REGISTRY}/${CI_PROJECT_PATH}
     - make gitlab_registry_login
     - make create_context
@@ -88,7 +87,7 @@ build_provisioner:
         - fast
     script:
     - export DOCKER_TAG=${CI_COMMIT_TAG:-${CI_COMMIT_SHA:-latest}}
-    - export VERSION=${CI_COMMIT_TAG:-`expr substr $CI_COMMIT_SHA 0 8`}
+    - export VERSION=$DOCKER_TAG # todo could change this to a "short" sha if needed
     - export REPOSITORY=${CI_REGISTRY}/${CI_PROJECT_PATH}
     - make gitlab_registry_login
     - make create_context
@@ -104,7 +103,7 @@ build_server:
     - fast
     script:
     - export DOCKER_TAG=${CI_COMMIT_TAG:-${CI_COMMIT_SHA:-latest}}
-    - export VERSION=${CI_COMMIT_TAG:-`expr substr $CI_COMMIT_SHA 0 8`}
+    - export VERSION=$DOCKER_TAG # todo could change this to a "short" sha if needed
     - export REPOSITORY=${CI_REGISTRY}/${CI_PROJECT_PATH}
     - make gitlab_registry_login
     - make create_context
