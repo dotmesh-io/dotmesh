@@ -882,7 +882,8 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 		return nil, err
 	}
 
-	// it's ok if these fail, they are just cleanup from previous partial runs
+	// it's ok if these fail, they are just cleanup from previous runs if they
+	// happened
 	exec.CommandContext(ctx, "umount", latestMnt).Run()
 	exec.CommandContext(ctx, "umount", tmpMnt).Run()
 	exec.CommandContext(ctx, z.zfsPath, "destroy", tmp).Run()
@@ -890,12 +891,6 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 	_, err = z.Snapshot(filesystemID, tmpSnapshotName, []string{})
 	if err != nil {
 		log.WithError(err).Error("[diff] error snapshot")
-		return nil, err
-	}
-
-	err = exec.CommandContext(ctx, "mount", "-t", "zfs", latest, latestMnt).Run()
-	if err != nil {
-		log.WithError(err).Error("[diff] error mount latest")
 		return nil, err
 	}
 
@@ -907,16 +902,30 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 
 	findCmdTmpl := `(cd %s; find . -printf "%%T+ %%s %%p\n")`
 
-	latestFiles, err := exec.CommandContext(
-		ctx, "bash", "-c", fmt.Sprintf(findCmdTmpl, latestMnt)).CombinedOutput()
-	if err != nil {
-		log.WithError(err).Error("[diff] getting latest files")
-		return nil, err
-	}
-	mapLatest, err := diffSideFromLines(latestFiles)
-	if err != nil {
-		log.WithError(err).Error("[diff] parsing latest files")
-		return nil, err
+	// only mount & fetch file list from latest if we haven't got it cached already
+
+	var mapLatest DiffSide
+
+	if latestCache, ok := diffSideCache[filesystemID]; ok && latestCache.SnapshotID == snapshot {
+		log.Info("[diff] using latest diffSide from cache")
+		mapLatest = latestCache.DiffSide
+	} else {
+		err = exec.CommandContext(ctx, "mount", "-t", "zfs", latest, latestMnt).Run()
+		if err != nil {
+			log.WithError(err).Error("[diff] error mount latest")
+			return nil, err
+		}
+		latestFiles, err := exec.CommandContext(
+			ctx, "bash", "-c", fmt.Sprintf(findCmdTmpl, latestMnt)).CombinedOutput()
+		if err != nil {
+			log.WithError(err).Error("[diff] getting latest files")
+			return nil, err
+		}
+		mapLatest, err = diffSideFromLines(latestFiles)
+		if err != nil {
+			log.WithError(err).Error("[diff] parsing latest files")
+			return nil, err
+		}
 	}
 
 	tmpFiles, err := exec.CommandContext(
