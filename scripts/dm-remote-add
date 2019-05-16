@@ -1,0 +1,2 @@
+#!/bin/sh
+echo $INITIAL_ADMIN_API_KEY | dm remote add local admin@localhost
