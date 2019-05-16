@@ -859,8 +859,10 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 			return nil, err
 		}
 
+		log.Infof("[diff] tmp %s dirty = %d", dirty)
 		if dirty == 0 {
 			// try to use the cache
+			log.Infof("[diff] checking diffResultCache[%s] for snap %s", filesystemID, snapshot)
 			if result, ok := diffResultCache[filesystemID]; ok {
 				if result.SnapshotID == snapshot {
 					log.Info("[diff] using cached result")
@@ -868,6 +870,8 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 				}
 			}
 		}
+	} else {
+		log.Infof("[diff] tmp %s not exists", tmp)
 	}
 
 	err := os.MkdirAll(latestMnt, 0775)
@@ -906,6 +910,7 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 
 	var mapLatest DiffSide
 
+	log.Infof("[diff] checking diffSideCache[%s] for snap %s", filesystemID, snapshot)
 	if latestCache, ok := diffSideCache[filesystemID]; ok && latestCache.SnapshotID == snapshot {
 		log.Info("[diff] using latest diffSide from cache")
 		mapLatest = latestCache.DiffSide
@@ -925,6 +930,11 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 		if err != nil {
 			log.WithError(err).Error("[diff] parsing latest files")
 			return nil, err
+		}
+		log.Infof("[diff] setting diffSideCache[%s] -> (%s, %#v)", filesystemID, snapshot, mapLatest)
+		diffSideCache[filesystemID] = FilesystemDiffCache{
+			SnapshotID: snapshot,
+			DiffSide:   mapLatest,
 		}
 	}
 
@@ -1012,6 +1022,7 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 	}
 
 	// stash for later
+	log.Infof("[diff] setting diffResultCache[%s] -> (%s, %#v)", filesystemID, snapshot, sortedResult)
 	diffResultCache[filesystemID] = FilesystemResultCache{
 		SnapshotID: snapshot,
 		Result:     sortedResult,
