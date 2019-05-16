@@ -915,9 +915,9 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 		log.Info("[diff] using latest diffSide from cache")
 		mapLatest = latestCache.DiffSide
 	} else {
-		err = exec.CommandContext(ctx, "mount", "-t", "zfs", latest, latestMnt).Run()
+		out, err := exec.CommandContext(ctx, "mount", "-t", "zfs", latest, latestMnt).CombinedOutput()
 		if err != nil {
-			log.WithError(err).Error("[diff] error mount latest")
+			log.WithError(err).Errorf("[diff] error mount latest: %s", string(out))
 			return nil, err
 		}
 		latestFiles, err := exec.CommandContext(
@@ -989,14 +989,14 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 		sortedResult = append(sortedResult, result[file])
 	}
 
-	err = exec.CommandContext(ctx, "umount", latestMnt).Run()
+	out, err := exec.CommandContext(ctx, "umount", latestMnt).CombinedOutput()
 	if err != nil {
-		log.WithError(err).Error("[diff] failed unmounting latest")
+		log.WithError(err).Errorf("[diff] failed unmounting latest: %s", string(out))
 		return nil, err
 	}
-	err = exec.CommandContext(ctx, "umount", tmpMnt).Run()
+	out, err = exec.CommandContext(ctx, "umount", tmpMnt).CombinedOutput()
 	if err != nil {
-		log.WithError(err).Error("[diff] failed unmounting latest")
+		log.WithError(err).Error("[diff] failed unmounting tmp: %s", string(out))
 		return nil, err
 	}
 
