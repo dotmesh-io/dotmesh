@@ -386,24 +386,6 @@ linux_forks:
     except:
         - schedules
 
-# Test disabled while we rethink how it works (see comments in acceptance_test.go)
-.linux_kubernetes_test_tooling:
-    retry: 2
-    stage: test
-    dependencies:
-        - build_client_linux
-    tags:
-
-        - fast
-    script:
-        - ./test.sh -run TestKubernetesTestTooling
-    artifacts:
-        paths:
-        - extracted_logs
-        when: always
-    except:
-        - schedules
-
 linux_stress_lots_of_commits:
     retry: 2
     stage: test
