@@ -10,7 +10,8 @@ variables:
     RELEASE_DOCKER_REGISTRY: quay.io
     RELEASE_DOCKER_REPOSITORY: dotmesh
 
-    CI_DOCKER_TAG: $CI_COMMIT_SHA
+    DOCKER_TAG: ${CI_COMMIT_TAG:-${CI_COMMIT_SHA:-latest}}
+    VERSION: ${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}
     CI_SERVICE_BEING_TESTED: dotmesh-server
 
     DOTMESH_TEST_CLEANUP: always
@@ -104,6 +105,8 @@ build_server:
     - make gitlab_registry_login
     - make create_context
     - make build_server
+    - make build_dind_prov
+    - make push_dind_prov
     - make push_server
 
 dotmesh_unit_tests:
