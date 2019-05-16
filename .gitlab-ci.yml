@@ -49,7 +49,7 @@ build_client_linux:
     tags:
         - fast
     script:
-        - ./rebuild_client.sh Linux
+        - ./scripts/rebuild_client.sh Linux
     artifacts:
         paths:
             - binaries
@@ -63,7 +63,7 @@ build_client_macos:
     tags:
         - fast
     script:
-        - ./rebuild_client.sh Darwin
+        - ./scripts/rebuild_client.sh Darwin
     artifacts:
         paths:
             - binaries
