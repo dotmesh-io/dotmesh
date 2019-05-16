@@ -874,7 +874,7 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 		log.Infof("[diff] tmp %s not exists", tmp)
 	}
 
-	err = os.MkdirAll(tmpMnt, 0775)
+	err := os.MkdirAll(tmpMnt, 0775)
 	if err != nil {
 		log.WithError(err).Error("[diff] error mkdir tmpMnt")
 		return nil, err
@@ -902,8 +902,8 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 
 	// only mount & fetch file list from latest if we haven't got it cached already
 
-	var mapLatest DiffSide = false
-	var mountedLatest bool
+	var mapLatest DiffSide
+	var mountedLatest bool = false
 
 	log.Infof("[diff] checking diffSideCache[%s] for snap %s", filesystemID, snapshot)
 	if latestCache, ok := diffSideCache[filesystemID]; ok && latestCache.SnapshotID == snapshot {
@@ -1006,7 +1006,7 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 		}
 	}
 
-	out, err = exec.CommandContext(ctx, "umount", tmpMnt).CombinedOutput()
+	out, err := exec.CommandContext(ctx, "umount", tmpMnt).CombinedOutput()
 	if err != nil {
 		log.WithError(err).Errorf("[diff] failed unmounting tmp: %s", string(out))
 		return nil, err
