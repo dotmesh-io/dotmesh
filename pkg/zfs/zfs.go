@@ -801,10 +801,37 @@ func diffSideFromLines(result []byte) (DiffSide, error) {
 	return ds, nil
 }
 
-func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types.ZFSFileDiff, error) {
-	// Diff the default subdot of a given dot.
+// NB: the following caches would be better on an object than as globals.
 
-	// NB: this function should not be run in parallel with itself
+type FilesystemDiffCache struct {
+	// latest snapshot cached (we only cache one DiffSide result per
+	// filesystem, this points to which snapshot it is for)
+	SnapshotID string
+	DiffSide   DiffSide
+}
+
+type FilesystemResultCache struct {
+	SnapshotID string
+	Result     []types.ZFSFileDiff
+}
+
+// map from filesystem id to cached DiffSide for latest snap inspected
+var diffSideCache map[string]FilesystemDiffCache
+
+// map from filesystem id to cached final result in case where tmp snap has
+// zero size (no changes since last time it was run)
+var diffResultCache map[string]FilesystemResultCache
+
+func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types.ZFSFileDiff, error) {
+	/*
+		Diff the default subdot of a given dot.
+
+		NB:
+		1. the snapshotOrFilesystem arg is ignored.
+		2. this function should not be run in parallel with itself.
+		3. this function assumes that 'snapshot' is the latest snapshot of the
+		   filesystem.
+	*/
 
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Minute)
 	defer cancel()
@@ -820,6 +847,28 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 
 	latestMnt := utils.Mnt("diff-latest-" + filesystemID)
 	tmpMnt := utils.Mnt("diff-tmp-" + filesystemID)
+
+	// First, if the dotmesh-fastdiff snapshot exists and there's no dirty data
+	// on it, and we have a cached diffResultCache, return it
+
+	tmpExistsErr := exec.CommandContext(ctx, z.zfsPath, "get", "name", tmp).Run()
+	if tmpExistsErr == nil {
+		dirty, _, err := z.GetDirtyDelta(filesystemID, tmpSnapshotName)
+		if err != nil {
+			log.WithError(err).Error("[diff] error get dirty delta")
+			return nil, err
+		}
+
+		if dirty == 0 {
+			// try to use the cache
+			if result, ok := diffResultCache[filesystemID]; ok {
+				if result.SnapshotID == snapshot {
+					log.Info("[diff] using cached result")
+					return result.Result, nil
+				}
+			}
+		}
+	}
 
 	err := os.MkdirAll(latestMnt, 0775)
 	if err != nil {
@@ -926,12 +975,17 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 		log.WithError(err).Error("[diff] failed unmounting latest")
 		return nil, err
 	}
-
 	err = exec.CommandContext(ctx, "umount", tmpMnt).Run()
 	if err != nil {
 		log.WithError(err).Error("[diff] failed unmounting latest")
 		return nil, err
 	}
+
+	// NB: we don't destroy the tmp snap here because we want to compare its
+	// dirty data value to know whether to use the cache next time round. It
+	// will get cleaned up if there is dirty data and a new tmp snap created
+	// then.
+
 	err = exec.CommandContext(ctx, z.zfsPath, "destroy", tmp).Run()
 	if err != nil {
 		log.WithError(err).Error("[diff] failed deleting tmp snap")
@@ -948,103 +1002,11 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 		return nil, err
 	}
 
-	// TODO do some of this?
-	// parsing ZFS output and then filtering out any files that should not be visible for the
-	// consumer
-	// return filterZFSDiff(parseZFSDiffOutput(string(out)), snapshotOrFilesystem), nil
+	// stash for later
+	diffResultCache[filesystemID] = FilesystemResultCache{
+		SnapshotID: snapshot,
+		Result:     sortedResult,
+	}
 
 	return sortedResult, nil
-}
-
-// filterZFSDiff - filter out any files that are not under __default__ dir
-func filterZFSDiff(files []types.ZFSFileDiff, snapshotOrFilesystem string) []types.ZFSFileDiff {
-	b := files[:0]
-	var (
-		was string
-		now string
-
-		ok    bool
-		nowOk bool
-		wasOk bool
-	)
-	for _, x := range files {
-		switch x.Change {
-		case types.FileChangeRenamed:
-			files := strings.Split(x.Filename, " -> ")
-			if len(files) != 2 {
-				log.WithFields(log.Fields{
-					"changed_files":          x.Filename,
-					"snapshot_or_filesystem": snapshotOrFilesystem,
-				}).Warn("[filterZFSDiff] could not properly separate file prefix, leaving original")
-				b = append(b, x)
-				continue
-			}
-			prefix := snapshotOrFilesystem + "/__default__/"
-			was, wasOk = stripDotPrefix(files[0], prefix)
-			now, nowOk = stripDotPrefix(files[1], prefix)
-
-			if nowOk || wasOk {
-				x.Filename = was + " -> " + now
-				b = append(b, x)
-			}
-
-		default:
-			x.Filename, ok = stripDotPrefix(x.Filename, snapshotOrFilesystem+"/__default__/")
-			if ok {
-				b = append(b, x)
-			}
-		}
-	}
-	return b
-}
-
-func stripDotPrefix(filename, prefix string) (string, bool) {
-	parts := strings.SplitN(filename, prefix, 2)
-	if len(parts) == 2 {
-		return parts[1], true
-	}
-	return "", false
-}
-
-// File or Directory Change
-// Identifier
-// M           |  File or directory has been modified or file or directory link has changed
-// —           |  File or directory is present in the older snapshot but not in the more recent snapshot
-// +           |  File or directory is present in the more recent snapshot but not in the older snapshot
-// R           |  File or directory has been renamed
-func parseZFSDiffOutput(data string) []types.ZFSFileDiff {
-
-	var files []types.ZFSFileDiff
-
-	scanner := bufio.NewScanner(strings.NewReader(data))
-	for scanner.Scan() {
-		l := scanner.Text()
-		// fmt.Println(l)
-		parts := strings.SplitN(l, "	", 2)
-		if len(parts) < 2 {
-			log.WithFields(log.Fields{
-				"line": l,
-			}).Warn("[parseZFSDiffOutput] expected 2 parts, skipping line")
-			continue
-		}
-		f := types.ZFSFileDiff{
-			Filename: parts[1],
-		}
-		switch parts[0] {
-		case "+":
-			f.Change = types.FileChangeAdded
-		case "M":
-			f.Change = types.FileChangeModified
-		case "-":
-			f.Change = types.FileChangeRemoved
-		case "R":
-			f.Change = types.FileChangeRenamed
-		default:
-			f.Change = types.FileChangeUnknown
-		}
-		files = append(files, f)
-
-	}
-
-	return files
 }
