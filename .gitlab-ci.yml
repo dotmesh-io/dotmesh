@@ -131,7 +131,9 @@ build_server:
         - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
         - mkdir context && cp -r ./pkg ./context/pkg && cp -r ./vendor ./context/vendor && cp -r ./cmd ./context/cmd && cp -r ./scripts ./context/scripts
         - docker build -t registry.gitlab.dotmesh.com/$CI_PROJECT_PATH/dotmesh-server:${CI_COMMIT_TAG:-$CI_COMMIT_SHA} ./context --build-arg VERSION=${CI_COMMIT_TAG:-CI_COMMIT_SHORT_SHA} --build-arg STABLE_DOCKER_TAG=${CI_COMMIT_TAG:-$CI_COMMIT_SHA} -f dockerfiles/dotmesh.Dockerfile
+        - docker build -t registry.gitlab.dotmesh.com/$CI_PROJECT_PATH/dind-dynamic-provisioner:${CI_COMMIT_TAG:-$CI_COMMIT_SHA} ./context -f dockerfiles/dind-provisioner.Dockerfile
         - docker push registry.gitlab.dotmesh.com/$CI_PROJECT_PATH/dotmesh-server:${CI_COMMIT_TAG:-$CI_COMMIT_SHA}
+        - docker push registry.gitlab.dotmesh.com/$CI_PROJECT_PATH/dind-dynamic-provisioner:${CI_COMMIT_TAG:-$CI_COMMIT_SHA}
     artifacts:
         paths:
             - target
