@@ -113,6 +113,5 @@ func (f *FsMachine) getMetadata(commit *types.Snapshot) (map[string]string, erro
 		}
 		commit.Metadata[key] = string(decoded)
 	}
-	log.WithField("meta", commit.Metadata).WithField("fsId", f.filesystemId).Debug("[metadata.getMetadata] CRG DEBUG")
 	return commit.Metadata, nil
 }
