@@ -20,20 +20,20 @@ push_server: ; docker push ${REPOSITORY}/dotmesh-server:${DOCKER_TAG}
 push_dind_prov: ; docker push ${REPOSITORY}/dind-dynamic-provisioner:${DOCKER_TAG}
 
 .PHONY: build_operator
-build_operator: ; docker build -t ${REPOSITORY}/dotmesh-operator:${DOCKER_TAG} --build-arg VERSION=${VERSION} --build-arg STABLE_DOTMESH_SERVER_IMAGE=quay.io/dotmesh/dotmesh-server:${CI_COMMIT_TAG:-$CI_COMMIT_SHA} ./context -f dockerfiles/operator.Dockerfile
+build_operator: ; docker build -t ${REPOSITORY}/dotmesh-operator:${DOCKER_TAG} --build-arg VERSION=${VERSION} --build-arg STABLE_DOTMESH_SERVER_IMAGE=quay.io/dotmesh/dotmesh-server:${DOCKER_TAG} ./context -f dockerfiles/operator.Dockerfile
 
 .PHONY: push_operator
 push_operator:
-	docker push ${REPOSITORY}/dotmesh-operator:${CI_COMMIT_TAG:-${CI_COMMIT_SHA:-latest}}
+	docker push ${REPOSITORY}/dotmesh-operator:${DOCKER_TAG}
 
 .PHONY: build_provisioner
 build_provisioner:
-    docker build -t ${REPOSITORY}/dotmesh-dynamic-provisioner:${CI_COMMIT_TAG:-${CI_COMMIT_SHA:-latest}} ./context -f dockerfiles/provisioner.Dockerfile
+    docker build -t ${REPOSITORY}/dotmesh-dynamic-provisioner:${DOCKER_TAG} ./context -f dockerfiles/provisioner.Dockerfile
 
 .PHONY: push_provisioner
 push_provisioner:
-	docker push ${REPOSITORY}/dotmesh-dynamic-provisioner:${CI_COMMIT_TAG:-${CI_COMMIT_SHA:-latest}}
+	docker push ${REPOSITORY}/dotmesh-dynamic-provisioner:${DOCKER_TAG}
 
 .PHONY: gitlab_registry_login
 gitlab_registry_login:
-	docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
+	docker login -u gitlab-ci-token -p ${CI_BUILD_TOKEN} ${CI_REGISTRY}
