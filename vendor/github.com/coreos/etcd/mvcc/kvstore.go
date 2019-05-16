@@ -156,18 +156,12 @@ func (s *store) compactBarrier(ctx context.Context, ch chan struct{}) {
 }
 
 func (s *store) Hash() (hash uint32, revision int64, err error) {
-	start := time.Now()
-
 	s.b.ForceCommit()
 	h, err := s.b.Hash(DefaultIgnores)
-
-	hashDurations.Observe(time.Since(start).Seconds())
 	return h, s.currentRev, err
 }
 
 func (s *store) HashByRev(rev int64) (hash uint32, currentRev int64, compactRev int64, err error) {
-	start := time.Now()
-
 	s.mu.RLock()
 	s.revMu.RLock()
 	compactRev, currentRev = s.compactMainRev, s.currentRev
@@ -212,10 +206,7 @@ func (s *store) HashByRev(rev int64) (hash uint32, currentRev int64, compactRev 
 		h.Write(v)
 		return nil
 	})
-	hash = h.Sum32()
-
-	hashRevDurations.Observe(time.Since(start).Seconds())
-	return hash, currentRev, compactRev, err
+	return h.Sum32(), currentRev, compactRev, err
 }
 
 func (s *store) Compact(rev int64) (<-chan struct{}, error) {
@@ -309,14 +300,10 @@ func (s *store) Restore(b backend.Backend) error {
 }
 
 func (s *store) restore() error {
-	b := s.b
-
 	reportDbTotalSizeInBytesMu.Lock()
+	b := s.b
 	reportDbTotalSizeInBytes = func() float64 { return float64(b.Size()) }
 	reportDbTotalSizeInBytesMu.Unlock()
-	reportDbTotalSizeInUseInBytesMu.Lock()
-	reportDbTotalSizeInUseInBytes = func() float64 { return float64(b.SizeInUse()) }
-	reportDbTotalSizeInUseInBytesMu.Unlock()
 
 	min, max := newRevBytes(), newRevBytes()
 	revToBytes(revision{main: 1}, min)

@@ -22,7 +22,6 @@ import (
 	"net/http"
 	"path"
 	"strings"
-	"time"
 
 	pioutil "github.com/coreos/etcd/pkg/ioutil"
 	"github.com/coreos/etcd/pkg/types"
@@ -150,8 +149,6 @@ func newSnapshotHandler(tr Transporter, r Raft, snapshotter *snap.Snapshotter, c
 	}
 }
 
-const unknownSnapshotSender = "UNKNOWN_SNAPSHOT_SENDER"
-
 // ServeHTTP serves HTTP request to receive and process snapshot message.
 //
 // If request sender dies without closing underlying TCP connection,
@@ -162,12 +159,9 @@ const unknownSnapshotSender = "UNKNOWN_SNAPSHOT_SENDER"
 // received and processed.
 // 2. this case should happen rarely, so no further optimization is done.
 func (h *snapshotHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	start := time.Now()
-
 	if r.Method != "POST" {
 		w.Header().Set("Allow", "POST")
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-		snapshotReceiveFailures.WithLabelValues(unknownSnapshotSender).Inc()
 		return
 	}
 
@@ -175,7 +169,6 @@ func (h *snapshotHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if err := checkClusterCompatibilityFromHeader(r.Header, h.cid); err != nil {
 		http.Error(w, err.Error(), http.StatusPreconditionFailed)
-		snapshotReceiveFailures.WithLabelValues(unknownSnapshotSender).Inc()
 		return
 	}
 
@@ -184,22 +177,19 @@ func (h *snapshotHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	dec := &messageDecoder{r: r.Body}
 	// let snapshots be very large since they can exceed 512MB for large installations
 	m, err := dec.decodeLimit(uint64(1 << 63))
-	from := types.ID(m.From).String()
 	if err != nil {
 		msg := fmt.Sprintf("failed to decode raft message (%v)", err)
 		plog.Errorf(msg)
 		http.Error(w, msg, http.StatusBadRequest)
 		recvFailures.WithLabelValues(r.RemoteAddr).Inc()
-		snapshotReceiveFailures.WithLabelValues(from).Inc()
 		return
 	}
 
-	receivedBytes.WithLabelValues(from).Add(float64(m.Size()))
+	receivedBytes.WithLabelValues(types.ID(m.From).String()).Add(float64(m.Size()))
 
 	if m.Type != raftpb.MsgSnap {
 		plog.Errorf("unexpected raft message type %s on snapshot path", m.Type)
 		http.Error(w, "wrong raft message type", http.StatusBadRequest)
-		snapshotReceiveFailures.WithLabelValues(from).Inc()
 		return
 	}
 
@@ -210,10 +200,9 @@ func (h *snapshotHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		msg := fmt.Sprintf("failed to save KV snapshot (%v)", err)
 		plog.Error(msg)
 		http.Error(w, msg, http.StatusInternalServerError)
-		snapshotReceiveFailures.WithLabelValues(from).Inc()
 		return
 	}
-	receivedBytes.WithLabelValues(from).Add(float64(n))
+	receivedBytes.WithLabelValues(types.ID(m.From).String()).Add(float64(n))
 	plog.Infof("received and saved database snapshot [index: %d, from: %s] successfully", m.Snapshot.Metadata.Index, types.ID(m.From))
 
 	if err := h.r.Process(context.TODO(), m); err != nil {
@@ -226,16 +215,12 @@ func (h *snapshotHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			msg := fmt.Sprintf("failed to process raft message (%v)", err)
 			plog.Warningf(msg)
 			http.Error(w, msg, http.StatusInternalServerError)
-			snapshotReceiveFailures.WithLabelValues(from).Inc()
 		}
 		return
 	}
 	// Write StatusNoContent header after the message has been processed by
 	// raft, which facilitates the client to report MsgSnap status.
 	w.WriteHeader(http.StatusNoContent)
-
-	snapshotReceive.WithLabelValues(from).Inc()
-	snapshotReceiveSeconds.WithLabelValues(from).Observe(time.Since(start).Seconds())
 }
 
 type streamHandler struct {

@@ -2704,7 +2704,7 @@ func (d *DotmeshRPC) DumpEtcdOld(
 		return err
 	}
 
-	snapshotDB, _, err := kv.Snapshot(cfg.Prefix + args.Prefix)
+	snapshotDB, _, err := kv.Snapshot([]string{cfg.Prefix + args.Prefix}, true)
 	if err != nil {
 		return err
 	}

@@ -170,8 +170,8 @@
     "wal",
     "wal/walpb"
   ]
-  revision = "2cf9e51d2a78003b164c2998886158e60ded1cbb"
-  version = "v3.3.11"
+  revision = "28f3f26c0e303392556035b694f75768d449d33d"
+  version = "v3.3.1"
 
 [[projects]]
   name = "github.com/coreos/go-semver"
@@ -217,6 +217,12 @@
   name = "github.com/dotmesh-io/go-checkpoint"
   packages = ["."]
   revision = "edad9decbae8e2e2e58a64b18f7bd5efa76deb5a"
+
+[[projects]]
+  name = "github.com/dustin/go-humanize"
+  packages = ["."]
+  revision = "9f541cc9db5d55bce703bd99987c9d5cb8eea45e"
+  version = "v1.0.0"
 
 [[projects]]
   name = "github.com/eapache/go-resiliency"
@@ -440,12 +446,6 @@
   version = "v1.2.0"
 
 [[projects]]
-  name = "github.com/grpc-ecosystem/go-grpc-middleware"
-  packages = ["."]
-  revision = "c250d6563d4d4c20252cd865923440e829844f4e"
-  version = "v1.0.0"
-
-[[projects]]
   name = "github.com/grpc-ecosystem/go-grpc-prometheus"
   packages = ["."]
   revision = "c225b8c3b01faf2899099b768856a9e916e5087b"
@@ -509,8 +509,8 @@
 [[projects]]
   name = "github.com/hashicorp/memberlist"
   packages = ["."]
-  revision = "ce8abaa0c60c2d6bee7219f5ddf500e0a1457b28"
-  version = "v0.1.0"
+  revision = "e1138a6a4d8a6eaec6c919aeae5efbe4d69b1ece"
+  version = "v0.1.4"
 
 [[projects]]
   branch = "master"
@@ -552,6 +552,12 @@
   packages = ["."]
   revision = "59fac5042749a5afb9af70e813da1dd5474f0167"
   version = "1.0.1"
+
+[[projects]]
+  name = "github.com/konsorten/go-windows-terminal-sequences"
+  packages = ["."]
+  revision = "f55edac94c9bbba5d6182a4be46d86a2c9b5b50e"
+  version = "v1.0.2"
 
 [[projects]]
   name = "github.com/kubernetes-incubator/external-storage"
@@ -712,7 +718,8 @@
     "mem",
     "test"
   ]
-  revision = "cccaa09abfc969969eff7b4716c42d820b63c4ec"
+  revision = "ba4127d5b9cc00d90fe25f928737fd399ec28766"
+  source = "github.com/rusenask/kvdb"
 
 [[projects]]
   name = "github.com/prometheus/client_golang"
@@ -765,8 +772,8 @@
 [[projects]]
   name = "github.com/sirupsen/logrus"
   packages = ["."]
-  revision = "c155da19408a8799da419ed3eeb0cb5db0ad5dbc"
-  version = "v1.0.5"
+  revision = "8bdbc7bcc01dcbb8ec23dc8a28e332258d25251f"
+  version = "v1.4.1"
 
 [[projects]]
   name = "github.com/soheilhy/cmux"
@@ -812,31 +819,6 @@
   packages = ["."]
   revision = "07dd2e8dfe18522e9c447ba95f2fe95262f63bb2"
   version = "0.0.1"
-
-[[projects]]
-  name = "go.uber.org/atomic"
-  packages = ["."]
-  revision = "1ea20fb1cbb1cc08cbd0d913a96dead89aa18289"
-  version = "v1.3.2"
-
-[[projects]]
-  name = "go.uber.org/multierr"
-  packages = ["."]
-  revision = "3c4937480c32f4c13a875a1829af76c98ca3d40a"
-  version = "v1.1.0"
-
-[[projects]]
-  name = "go.uber.org/zap"
-  packages = [
-    ".",
-    "buffer",
-    "internal/bufferpool",
-    "internal/color",
-    "internal/exit",
-    "zapcore"
-  ]
-  revision = "ff33455a0e382e8a81d14dd7c922020b6b5e7982"
-  version = "v1.9.1"
 
 [[projects]]
   branch = "master"
@@ -1141,6 +1123,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "7126e573cd6a366385272814ac048c45e54bd048fabbeb137de8da9cc641e7af"
+  inputs-digest = "ead6dee2674ef39f87f6791f6407ea1024456cac3f13371473be2762c815d599"
   solver-name = "gps-cdcl"
   solver-version = 1

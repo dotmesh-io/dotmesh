@@ -85,8 +85,6 @@ type Transporter interface {
 	// If the connection is active since peer was added, it returns the adding time.
 	// If the connection is currently inactive, it returns zero time.
 	ActiveSince(id types.ID) time.Time
-	// ActivePeers returns the number of active peers.
-	ActivePeers() int
 	// Stop closes the connections and stops the transporter.
 	Stop()
 }
@@ -127,8 +125,7 @@ type Transport struct {
 	remotes map[types.ID]*remote // remotes map that helps newly joined member to catch up
 	peers   map[types.ID]Peer    // peers map
 
-	pipelineProber probing.Prober
-	streamProber   probing.Prober
+	prober probing.Prober
 }
 
 func (t *Transport) Start() error {
@@ -143,8 +140,7 @@ func (t *Transport) Start() error {
 	}
 	t.remotes = make(map[types.ID]*remote)
 	t.peers = make(map[types.ID]Peer)
-	t.pipelineProber = probing.NewProber(t.pipelineRt)
-	t.streamProber = probing.NewProber(t.streamRt)
+	t.prober = probing.NewProber(t.pipelineRt)
 
 	// If client didn't provide dial retry frequency, use the default
 	// (100ms backoff between attempts to create a new stream),
@@ -212,8 +208,7 @@ func (t *Transport) Stop() {
 	for _, p := range t.peers {
 		p.stop()
 	}
-	t.pipelineProber.RemoveAll()
-	t.streamProber.RemoveAll()
+	t.prober.RemoveAll()
 	if tr, ok := t.streamRt.(*http.Transport); ok {
 		tr.CloseIdleConnections()
 	}
@@ -292,8 +287,8 @@ func (t *Transport) AddPeer(id types.ID, us []string) {
 	}
 	fs := t.LeaderStats.Follower(id.String())
 	t.peers[id] = startPeer(t, urls, id, fs)
-	addPeerToProber(t.pipelineProber, id.String(), us, RoundTripperNameSnapshot, rtts)
-	addPeerToProber(t.streamProber, id.String(), us, RoundTripperNameRaftMessage, rtts)
+	addPeerToProber(t.prober, id.String(), us)
+
 	plog.Infof("added peer %s", id)
 }
 
@@ -320,8 +315,7 @@ func (t *Transport) removePeer(id types.ID) {
 	}
 	delete(t.peers, id)
 	delete(t.LeaderStats.Followers, id.String())
-	t.pipelineProber.Remove(id.String())
-	t.streamProber.Remove(id.String())
+	t.prober.Remove(id.String())
 	plog.Infof("removed peer %s", id)
 }
 
@@ -338,10 +332,8 @@ func (t *Transport) UpdatePeer(id types.ID, us []string) {
 	}
 	t.peers[id].update(urls)
 
-	t.pipelineProber.Remove(id.String())
-	addPeerToProber(t.pipelineProber, id.String(), us, RoundTripperNameSnapshot, rtts)
-	t.streamProber.Remove(id.String())
-	addPeerToProber(t.streamProber, id.String(), us, RoundTripperNameRaftMessage, rtts)
+	t.prober.Remove(id.String())
+	addPeerToProber(t.prober, id.String(), us)
 	plog.Infof("updated peer %s", id)
 }
 
@@ -383,20 +375,6 @@ func (t *Transport) Resume() {
 	}
 }
 
-// ActivePeers returns a channel that closes when an initial
-// peer connection has been established. Use this to wait until the
-// first peer connection becomes active.
-func (t *Transport) ActivePeers() (cnt int) {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	for _, p := range t.peers {
-		if !p.activeSince().IsZero() {
-			cnt++
-		}
-	}
-	return cnt
-}
-
 type nopTransporter struct{}
 
 func NewNopTransporter() Transporter {
@@ -413,7 +391,6 @@ func (s *nopTransporter) RemovePeer(id types.ID)              {}
 func (s *nopTransporter) RemoveAllPeers()                     {}
 func (s *nopTransporter) UpdatePeer(id types.ID, us []string) {}
 func (s *nopTransporter) ActiveSince(id types.ID) time.Time   { return time.Time{} }
-func (s *nopTransporter) ActivePeers() int                    { return 0 }
 func (s *nopTransporter) Stop()                               {}
 func (s *nopTransporter) Pause()                              {}
 func (s *nopTransporter) Resume()                             {}

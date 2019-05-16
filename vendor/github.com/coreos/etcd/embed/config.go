@@ -26,12 +26,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/coreos/etcd/compactor"
 	"github.com/coreos/etcd/etcdserver"
 	"github.com/coreos/etcd/pkg/cors"
 	"github.com/coreos/etcd/pkg/netutil"
 	"github.com/coreos/etcd/pkg/srv"
-	"github.com/coreos/etcd/pkg/tlsutil"
 	"github.com/coreos/etcd/pkg/transport"
 	"github.com/coreos/etcd/pkg/types"
 
@@ -92,58 +90,22 @@ func init() {
 type Config struct {
 	// member
 
-	CorsInfo       *cors.CORSInfo
-	LPUrls, LCUrls []url.URL
-	Dir            string `json:"data-dir"`
-	WalDir         string `json:"wal-dir"`
-	MaxSnapFiles   uint   `json:"max-snapshots"`
-	MaxWalFiles    uint   `json:"max-wals"`
-	Name           string `json:"name"`
-	SnapCount      uint64 `json:"snapshot-count"`
-
-	// AutoCompactionMode is either 'periodic' or 'revision'.
-	AutoCompactionMode string `json:"auto-compaction-mode"`
-	// AutoCompactionRetention is either duration string with time unit
-	// (e.g. '5m' for 5-minute), or revision unit (e.g. '5000').
-	// If no time unit is provided and compaction mode is 'periodic',
-	// the unit defaults to hour. For example, '5' translates into 5-hour.
+	CorsInfo                *cors.CORSInfo
+	LPUrls, LCUrls          []url.URL
+	Dir                     string `json:"data-dir"`
+	WalDir                  string `json:"wal-dir"`
+	MaxSnapFiles            uint   `json:"max-snapshots"`
+	MaxWalFiles             uint   `json:"max-wals"`
+	Name                    string `json:"name"`
+	SnapCount               uint64 `json:"snapshot-count"`
 	AutoCompactionRetention string `json:"auto-compaction-retention"`
+	AutoCompactionMode      string `json:"auto-compaction-mode"`
 
 	// TickMs is the number of milliseconds between heartbeat ticks.
 	// TODO: decouple tickMs and heartbeat tick (current heartbeat tick = 1).
 	// make ticks a cluster wide configuration.
-	TickMs     uint `json:"heartbeat-interval"`
-	ElectionMs uint `json:"election-timeout"`
-
-	// InitialElectionTickAdvance is true, then local member fast-forwards
-	// election ticks to speed up "initial" leader election trigger. This
-	// benefits the case of larger election ticks. For instance, cross
-	// datacenter deployment may require longer election timeout of 10-second.
-	// If true, local node does not need wait up to 10-second. Instead,
-	// forwards its election ticks to 8-second, and have only 2-second left
-	// before leader election.
-	//
-	// Major assumptions are that:
-	//  - cluster has no active leader thus advancing ticks enables faster
-	//    leader election, or
-	//  - cluster already has an established leader, and rejoining follower
-	//    is likely to receive heartbeats from the leader after tick advance
-	//    and before election timeout.
-	//
-	// However, when network from leader to rejoining follower is congested,
-	// and the follower does not receive leader heartbeat within left election
-	// ticks, disruptive election has to happen thus affecting cluster
-	// availabilities.
-	//
-	// Disabling this would slow down initial bootstrap process for cross
-	// datacenter deployments. Make your own tradeoffs by configuring
-	// --initial-election-tick-advance at the cost of slow initial bootstrap.
-	//
-	// If single-node, it advances ticks regardless.
-	//
-	// See https://github.com/coreos/etcd/issues/9333 for more detail.
-	InitialElectionTickAdvance bool `json:"initial-election-tick-advance"`
-
+	TickMs            uint  `json:"heartbeat-interval"`
+	ElectionMs        uint  `json:"election-timeout"`
 	QuotaBackendBytes int64 `json:"quota-backend-bytes"`
 	MaxTxnOps         uint  `json:"max-txn-ops"`
 	MaxRequestBytes   uint  `json:"max-request-bytes"`
@@ -183,11 +145,6 @@ type Config struct {
 	ClientAutoTLS bool
 	PeerTLSInfo   transport.TLSInfo
 	PeerAutoTLS   bool
-
-	// CipherSuites is a list of supported TLS cipher suites between
-	// client/server and peers. If empty, Go auto-populates the list.
-	// Note that cipher suites are prioritized in the given order.
-	CipherSuites []string `json:"cipher-suites"`
 
 	// debug
 
@@ -260,30 +217,29 @@ func NewConfig() *Config {
 	lcurl, _ := url.Parse(DefaultListenClientURLs)
 	acurl, _ := url.Parse(DefaultAdvertiseClientURLs)
 	cfg := &Config{
-		CorsInfo:                   &cors.CORSInfo{},
-		MaxSnapFiles:               DefaultMaxSnapshots,
-		MaxWalFiles:                DefaultMaxWALs,
-		Name:                       DefaultName,
-		SnapCount:                  etcdserver.DefaultSnapCount,
-		MaxTxnOps:                  DefaultMaxTxnOps,
-		MaxRequestBytes:            DefaultMaxRequestBytes,
-		GRPCKeepAliveMinTime:       DefaultGRPCKeepAliveMinTime,
-		GRPCKeepAliveInterval:      DefaultGRPCKeepAliveInterval,
-		GRPCKeepAliveTimeout:       DefaultGRPCKeepAliveTimeout,
-		TickMs:                     100,
-		ElectionMs:                 1000,
-		InitialElectionTickAdvance: true,
-		LPUrls:              []url.URL{*lpurl},
-		LCUrls:              []url.URL{*lcurl},
-		APUrls:              []url.URL{*apurl},
-		ACUrls:              []url.URL{*acurl},
-		ClusterState:        ClusterStateFlagNew,
-		InitialClusterToken: "etcd-cluster",
-		StrictReconfigCheck: DefaultStrictReconfigCheck,
-		LogOutput:           DefaultLogOutput,
-		Metrics:             "basic",
-		EnableV2:            DefaultEnableV2,
-		AuthToken:           "simple",
+		CorsInfo:              &cors.CORSInfo{},
+		MaxSnapFiles:          DefaultMaxSnapshots,
+		MaxWalFiles:           DefaultMaxWALs,
+		Name:                  DefaultName,
+		SnapCount:             etcdserver.DefaultSnapCount,
+		MaxTxnOps:             DefaultMaxTxnOps,
+		MaxRequestBytes:       DefaultMaxRequestBytes,
+		GRPCKeepAliveMinTime:  DefaultGRPCKeepAliveMinTime,
+		GRPCKeepAliveInterval: DefaultGRPCKeepAliveInterval,
+		GRPCKeepAliveTimeout:  DefaultGRPCKeepAliveTimeout,
+		TickMs:                100,
+		ElectionMs:            1000,
+		LPUrls:                []url.URL{*lpurl},
+		LCUrls:                []url.URL{*lcurl},
+		APUrls:                []url.URL{*apurl},
+		ACUrls:                []url.URL{*acurl},
+		ClusterState:          ClusterStateFlagNew,
+		InitialClusterToken:   "etcd-cluster",
+		StrictReconfigCheck:   DefaultStrictReconfigCheck,
+		LogOutput:             DefaultLogOutput,
+		Metrics:               "basic",
+		EnableV2:              DefaultEnableV2,
+		AuthToken:             "simple",
 	}
 	cfg.InitialCluster = cfg.InitialClusterFromName(cfg.Name)
 	return cfg
@@ -432,25 +388,6 @@ func (cfg *configYAML) configFromFile(path string) error {
 	return cfg.Validate()
 }
 
-func updateCipherSuites(tls *transport.TLSInfo, ss []string) error {
-	if len(tls.CipherSuites) > 0 && len(ss) > 0 {
-		return fmt.Errorf("TLSInfo.CipherSuites is already specified (given %v)", ss)
-	}
-	if len(ss) > 0 {
-		cs := make([]uint16, len(ss))
-		for i, s := range ss {
-			var ok bool
-			cs[i], ok = tlsutil.GetCipherSuite(s)
-			if !ok {
-				return fmt.Errorf("unexpected TLS cipher suite %q", s)
-			}
-		}
-		tls.CipherSuites = cs
-	}
-	return nil
-}
-
-// Validate ensures that '*embed.Config' fields are properly configured.
 func (cfg *Config) Validate() error {
 	if err := checkBindURLs(cfg.LPUrls); err != nil {
 		return err
@@ -510,13 +447,6 @@ func (cfg *Config) Validate() error {
 	// check this last since proxying in etcdmain may make this OK
 	if cfg.LCUrls != nil && cfg.ACUrls == nil {
 		return ErrUnsetAdvertiseClientURLsFlag
-	}
-
-	switch cfg.AutoCompactionMode {
-	case "":
-	case compactor.ModeRevision, compactor.ModePeriodic:
-	default:
-		return fmt.Errorf("unknown auto-compaction-mode %q", cfg.AutoCompactionMode)
 	}
 
 	return nil
@@ -586,41 +516,31 @@ func (cfg Config) defaultClientHost() bool {
 }
 
 func (cfg *Config) ClientSelfCert() (err error) {
-	if !cfg.ClientAutoTLS {
-		return nil
-	}
-	if !cfg.ClientTLSInfo.Empty() {
-		plog.Warningf("ignoring client auto TLS since certs given")
-		return nil
-	}
-	chosts := make([]string, len(cfg.LCUrls))
-	for i, u := range cfg.LCUrls {
-		chosts[i] = u.Host
-	}
-	cfg.ClientTLSInfo, err = transport.SelfCert(filepath.Join(cfg.Dir, "fixtures", "client"), chosts)
-	if err != nil {
+	if cfg.ClientAutoTLS && cfg.ClientTLSInfo.Empty() {
+		chosts := make([]string, len(cfg.LCUrls))
+		for i, u := range cfg.LCUrls {
+			chosts[i] = u.Host
+		}
+		cfg.ClientTLSInfo, err = transport.SelfCert(filepath.Join(cfg.Dir, "fixtures", "client"), chosts)
 		return err
+	} else if cfg.ClientAutoTLS {
+		plog.Warningf("ignoring client auto TLS since certs given")
 	}
-	return updateCipherSuites(&cfg.ClientTLSInfo, cfg.CipherSuites)
+	return nil
 }
 
 func (cfg *Config) PeerSelfCert() (err error) {
-	if !cfg.PeerAutoTLS {
-		return nil
-	}
-	if !cfg.PeerTLSInfo.Empty() {
-		plog.Warningf("ignoring peer auto TLS since certs given")
-		return nil
-	}
-	phosts := make([]string, len(cfg.LPUrls))
-	for i, u := range cfg.LPUrls {
-		phosts[i] = u.Host
-	}
-	cfg.PeerTLSInfo, err = transport.SelfCert(filepath.Join(cfg.Dir, "fixtures", "peer"), phosts)
-	if err != nil {
+	if cfg.PeerAutoTLS && cfg.PeerTLSInfo.Empty() {
+		phosts := make([]string, len(cfg.LPUrls))
+		for i, u := range cfg.LPUrls {
+			phosts[i] = u.Host
+		}
+		cfg.PeerTLSInfo, err = transport.SelfCert(filepath.Join(cfg.Dir, "fixtures", "peer"), phosts)
 		return err
+	} else if cfg.PeerAutoTLS {
+		plog.Warningf("ignoring peer auto TLS since certs given")
 	}
-	return updateCipherSuites(&cfg.PeerTLSInfo, cfg.CipherSuites)
+	return nil
 }
 
 // UpdateDefaultClusterFromName updates cluster advertise URLs with, if available, default host,

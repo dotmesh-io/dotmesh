@@ -70,6 +70,9 @@ func getKVDBCfg() *store.KVDBConfig {
 		options[kvdb.CertKeyFileKey] = fmt.Sprintf("%s/apiserver-key.pem", pkiPath)
 		options[kvdb.CertFileKey] = fmt.Sprintf("%s/apiserver.pem", pkiPath)
 	}
+	// server currently has 1073741824, we set a bit lower number
+	options[kvdb.MaxCallSendMsgSize] = "1073701824"
+	options[kvdb.MaxCallRecvMsgSize] = "1073701824"
 
 	cfg := &store.KVDBConfig{
 		Machines: []string{endpoint},

@@ -48,7 +48,6 @@ var (
 )
 
 func init() {
-	// logrus.Infof("Registering internal KVDB provider")
 	if err := kvdb.Register(Name, New, Version); err != nil {
 		panic(err.Error())
 	}
@@ -569,7 +568,7 @@ func (kv *boltKV) snapDB() (string, error) {
 	return snapPath, nil
 }
 
-func (kv *boltKV) Snapshot(prefix string) (kvdb.Kvdb, uint64, error) {
+func (kv *boltKV) Snapshot(prefix []string, consistent bool) (kvdb.Kvdb, uint64, error) {
 	kv.mutex.Lock()
 	defer kv.mutex.Unlock()
 

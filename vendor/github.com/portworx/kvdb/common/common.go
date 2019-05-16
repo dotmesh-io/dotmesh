@@ -3,6 +3,7 @@ package common
 import (
 	"container/list"
 	"encoding/json"
+	"strings"
 	"sync"
 	"time"
 
@@ -62,7 +63,7 @@ func (b *BaseKvdb) CheckLockTimeout(
 ) {
 	b.lock.Lock()
 	defer b.lock.Unlock()
-	if b.LockTimeout > 0 && time.Since(startTime) > lockTimeout {
+	if lockTimeout > 0 && time.Since(startTime) > lockTimeout {
 		b.lockTimedout(key)
 	}
 }
@@ -163,4 +164,25 @@ func (w *watchQueue) Enqueue(key string, kvp *kvdb.KVPair, err error) {
 	w.updates.PushBack(&watchUpdate{key: key, kvp: kvp, err: err})
 	w.cv.Signal()
 	w.m.Unlock()
+}
+
+// PrunePrefixes will return all the top level prefixes from a given list
+// so that any enumerate on these prefixes will not end up returning duplicate keys
+func PrunePrefixes(prefixes []string) []string {
+	prunedPrefixes := []string{}
+	for i := 0; i < len(prefixes); i++ {
+		foundPrefix := false
+		for j := 0; j < len(prefixes); j++ {
+			if i == j {
+				continue
+			}
+			if strings.HasPrefix(prefixes[i], prefixes[j]) {
+				foundPrefix = true
+			}
+		}
+		if !foundPrefix {
+			prunedPrefixes = append(prunedPrefixes, prefixes[i])
+		}
+	}
+	return prunedPrefixes
 }
