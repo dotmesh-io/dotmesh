@@ -36,7 +36,6 @@ func (s *InMemoryState) InitFilesystemMachine(filesystemId string) (fsm.FSM, err
 		// deleted := false
 		// var err error
 		if ok {
-			log.Debugf("[initFilesystemMachine] reusing fsMachine for %s", filesystemId)
 			return fs, false
 		}
 		s.filesystemsLock.Lock()
@@ -46,22 +45,19 @@ func (s *InMemoryState) InitFilesystemMachine(filesystemId string) (fsm.FSM, err
 
 		fs, ok = s.filesystems[filesystemId]
 		if ok {
-			log.Debugf("[initFilesystemMachine] reusing fsMachine for %s", filesystemId)
 			return fs, false
 		}
 
 		// Don't create a new fsMachine if we've been deleted
 		deleted, err := s.isFilesystemDeletedInEtcd(filesystemId)
 		if err != nil {
-			log.Printf("%v while requesting deletion state from etcd", err)
+			log.Errorf("%v while requesting deletion state from etcd", err)
 			return nil, false
 		}
 
 		if deleted {
 			return nil, deleted
 		}
-
-		log.Debugf("[initFilesystemMachine] initializing new fsMachine for %s", filesystemId)
 
 		s.filesystems[filesystemId] = fsm.NewFilesystemMachine(&fsm.FsConfig{
 			FilesystemID:              filesystemId,
@@ -89,7 +85,6 @@ func (s *InMemoryState) InitFilesystemMachine(filesystemId string) (fsm.FSM, err
 	}()
 	// NB: deleteFilesystem takes filesystemsLock
 	if deleted {
-		log.Debugf("[initFilesystemMachine] deleted fsMachine '%s' found, deleting locally", filesystemId)
 		err := s.DeleteFilesystem(filesystemId)
 		if err != nil {
 			log.Errorf("Error deleting filesystem: %v", err)
