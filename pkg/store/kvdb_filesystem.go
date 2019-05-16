@@ -7,8 +7,6 @@ import (
 	"github.com/portworx/kvdb"
 
 	log "github.com/sirupsen/logrus"
-
-	"fmt"
 )
 
 // static FilesystemStore check
