@@ -30,6 +30,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//vendor/github.com/armon/go-metrics:go_default_library",
+        "//vendor/github.com/google/btree:go_default_library",
         "//vendor/github.com/hashicorp/go-msgpack/codec:go_default_library",
         "//vendor/github.com/hashicorp/go-multierror:go_default_library",
         "//vendor/github.com/hashicorp/go-sockaddr:go_default_library",
