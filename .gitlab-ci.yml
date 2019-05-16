@@ -5,7 +5,6 @@
 
 variables:
     SERVER_NAME: dotmesh-server
-    PROVISIONER_NAME: dotmesh-dynamic-provisioner
 
     RELEASE_DOCKER_REGISTRY: quay.io
     RELEASE_DOCKER_REPOSITORY: dotmesh
@@ -236,59 +235,6 @@ linux_two_nodes_same_cluster:
         - fast
     script:
         - ./test.sh -run TestTwoNodesSameCluster
-    artifacts:
-        paths:
-        - extracted_logs
-        when: always
-    except:
-        - schedules
-
-.linux_kubernetes_volumes:
-    retry: 2
-    stage: test
-    dependencies:
-        - build_yaml
-        - build_client_linux
-    tags:
-        - fast
-    script:
-        - ./test.sh -run TestKubernetesVolumes
-    artifacts:
-        paths:
-        - extracted_logs
-        when: always
-    except:
-        - schedules
-
-.linux_kubernetes_operator_dynamic_provisioning:
-    retry: 2
-    stage: test
-    dependencies:
-        - build_yaml
-        - build_client_linux
-        - build_server
-    tags:
-        - fast
-    script:
-        - DOTMESH_TEST_TIMEOUT=15m ./test.sh -run TestKubernetesOperator/DynamicProvisioning
-    artifacts:
-        paths:
-        - extracted_logs
-        when: always
-    except:
-        - schedules
-
-.linux_kubernetes_operator_PVC:
-    retry: 2
-    stage: test
-    dependencies:
-        - build_yaml
-        - build_client_linux
-        - build_server
-    tags:
-        - fast
-    script:
-        - ./test.sh -run TestKubernetesOperator/PVC*
     artifacts:
         paths:
         - extracted_logs
