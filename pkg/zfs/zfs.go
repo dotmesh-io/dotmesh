@@ -816,11 +816,11 @@ type FilesystemResultCache struct {
 }
 
 // map from filesystem id to cached DiffSide for latest snap inspected
-var diffSideCache map[string]FilesystemDiffCache
+var diffSideCache = map[string]FilesystemDiffCache{}
 
 // map from filesystem id to cached final result in case where tmp snap has
 // zero size (no changes since last time it was run)
-var diffResultCache map[string]FilesystemResultCache
+var diffResultCache = map[string]FilesystemResultCache{}
 
 func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types.ZFSFileDiff, error) {
 	/*
