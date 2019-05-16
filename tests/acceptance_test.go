@@ -142,9 +142,6 @@ func TestDotDiff(t *testing.T) {
 		req.SetBasicAuth("admin", f[0].GetNode(0).Password)
 
 		resp, err := http.DefaultClient.Do(req)
-		if resp.Body != nil {
-			defer resp.Body.Close()
-		}
 		if err != nil {
 			t.Errorf("failed to make diff request: %s", err)
 
@@ -156,6 +153,9 @@ func TestDotDiff(t *testing.T) {
 			t.Logf("response body: %s", string(bts))
 			cleanup()
 			return
+		}
+		if resp.Body != nil {
+			defer resp.Body.Close()
 		}
 
 		bts, err := ioutil.ReadAll(resp.Body)
