@@ -68,10 +68,11 @@ func (m *Mutex) Lock(ctx context.Context) error {
 
 	// wait for deletion revisions prior to myKey
 	hdr, werr := waitDeletes(ctx, client, m.pfx, m.myRev-1)
-	// release lock key if wait failed
-	if werr != nil {
+	// release lock key if cancelled
+	select {
+	case <-ctx.Done():
 		m.Unlock(client.Ctx())
-	} else {
+	default:
 		m.hdr = hdr
 	}
 	return werr

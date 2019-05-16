@@ -44,6 +44,3 @@ var (
 // Some options are exposed to "clientv3.Config".
 // Defaults will be overridden by the settings in "clientv3.Config".
 var defaultCallOpts = []grpc.CallOption{defaultFailFast, defaultMaxCallSendMsgSize, defaultMaxCallRecvMsgSize}
-
-// MaxLeaseTTL is the maximum lease TTL value
-const MaxLeaseTTL = 9000000000

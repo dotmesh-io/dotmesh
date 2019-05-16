@@ -84,26 +84,23 @@ type Authenticator interface {
 }
 
 func (s *EtcdServer) Range(ctx context.Context, r *pb.RangeRequest) (*pb.RangeResponse, error) {
-	var resp *pb.RangeResponse
-	var err error
-	defer func(start time.Time) {
-		warnOfExpensiveReadOnlyRangeRequest(start, r, resp, err)
-	}(time.Now())
+	defer warnOfExpensiveReadOnlyRangeRequest(time.Now(), r)
 
 	if !r.Serializable {
-		err = s.linearizableReadNotify(ctx)
+		err := s.linearizableReadNotify(ctx)
 		if err != nil {
 			return nil, err
 		}
 	}
+	var resp *pb.RangeResponse
+	var err error
 	chk := func(ai *auth.AuthInfo) error {
 		return s.authStore.IsRangePermitted(ai, r.Key, r.RangeEnd)
 	}
 
 	get := func() { resp, err = s.applyV3Base.Range(nil, r) }
 	if serr := s.doSerialize(ctx, chk, get); serr != nil {
-		err = serr
-		return nil, err
+		return nil, serr
 	}
 	return resp, err
 }
@@ -138,9 +135,7 @@ func (s *EtcdServer) Txn(ctx context.Context, r *pb.TxnRequest) (*pb.TxnResponse
 			return checkTxnAuth(s.authStore, ai, r)
 		}
 
-		defer func(start time.Time) {
-			warnOfExpensiveReadOnlyTxnRequest(start, r, resp, err)
-		}(time.Now())
+		defer warnOfExpensiveReadOnlyRangeRequest(time.Now(), r)
 
 		get := func() { resp, err = s.applyV3Base.Txn(r) }
 		if serr := s.doSerialize(ctx, chk, get); serr != nil {
@@ -610,9 +605,8 @@ func (s *EtcdServer) linearizableReadLoop() {
 	var rs raft.ReadState
 
 	for {
-		ctxToSend := make([]byte, 8)
-		id1 := s.reqIDGen.Next()
-		binary.BigEndian.PutUint64(ctxToSend, id1)
+		ctx := make([]byte, 8)
+		binary.BigEndian.PutUint64(ctx, s.reqIDGen.Next())
 
 		select {
 		case <-s.readwaitc:
@@ -628,13 +622,12 @@ func (s *EtcdServer) linearizableReadLoop() {
 		s.readMu.Unlock()
 
 		cctx, cancel := context.WithTimeout(context.Background(), s.Cfg.ReqTimeout())
-		if err := s.r.ReadIndex(cctx, ctxToSend); err != nil {
+		if err := s.r.ReadIndex(cctx, ctx); err != nil {
 			cancel()
 			if err == raft.ErrStopped {
 				return
 			}
 			plog.Errorf("failed to get read index from raft: %v", err)
-			readIndexFailed.Inc()
 			nr.notify(err)
 			continue
 		}
@@ -647,24 +640,16 @@ func (s *EtcdServer) linearizableReadLoop() {
 		for !timeout && !done {
 			select {
 			case rs = <-s.r.readStateC:
-				done = bytes.Equal(rs.RequestCtx, ctxToSend)
+				done = bytes.Equal(rs.RequestCtx, ctx)
 				if !done {
 					// a previous request might time out. now we should ignore the response of it and
 					// continue waiting for the response of the current requests.
-					id2 := uint64(0)
-					if len(rs.RequestCtx) == 8 {
-						id2 = binary.BigEndian.Uint64(rs.RequestCtx)
-					}
-					plog.Warningf("ignored out-of-date read index response; local node read indexes queueing up and waiting to be in sync with leader (request ID want %d, got %d)", id1, id2)
-					slowReadIndex.Inc()
+					plog.Warningf("ignored out-of-date read index response (want %v, got %v)", rs.RequestCtx, ctx)
 				}
-
 			case <-time.After(s.Cfg.ReqTimeout()):
-				plog.Warningf("timed out waiting for read index response (local node might have slow network)")
+				plog.Warningf("timed out waiting for read index response")
 				nr.notify(ErrTimeout)
 				timeout = true
-				slowReadIndex.Inc()
-
 			case <-s.stopping:
 				return
 			}
@@ -717,4 +702,5 @@ func (s *EtcdServer) AuthInfoFromCtx(ctx context.Context) (*auth.AuthInfo, error
 	}
 	authInfo = s.AuthStore().AuthInfoFromTLS(ctx)
 	return authInfo, nil
+
 }

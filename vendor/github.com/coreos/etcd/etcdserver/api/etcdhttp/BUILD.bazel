@@ -23,7 +23,6 @@ go_library(
         "//vendor/github.com/coreos/etcd/rafthttp:go_default_library",
         "//vendor/github.com/coreos/etcd/version:go_default_library",
         "//vendor/github.com/coreos/pkg/capnslog:go_default_library",
-        "//vendor/github.com/prometheus/client_golang/prometheus:go_default_library",
         "//vendor/github.com/prometheus/client_golang/prometheus/promhttp:go_default_library",
     ],
 )

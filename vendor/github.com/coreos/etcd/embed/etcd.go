@@ -27,7 +27,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/coreos/etcd/compactor"
 	"github.com/coreos/etcd/etcdserver"
 	"github.com/coreos/etcd/etcdserver/api/etcdhttp"
 	"github.com/coreos/etcd/etcdserver/api/v2http"
@@ -42,7 +41,7 @@ import (
 	"github.com/coreos/etcd/rafthttp"
 
 	"github.com/coreos/pkg/capnslog"
-	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	"github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/soheilhy/cmux"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
@@ -135,45 +134,53 @@ func StartEtcd(inCfg *Config) (e *Etcd, err error) {
 		}
 	}
 
+	var (
+		autoCompactionRetention time.Duration
+		h                       int
+	)
 	// AutoCompactionRetention defaults to "0" if not set.
 	if len(cfg.AutoCompactionRetention) == 0 {
 		cfg.AutoCompactionRetention = "0"
 	}
-	autoCompactionRetention, err := parseCompactionRetention(cfg.AutoCompactionMode, cfg.AutoCompactionRetention)
-	if err != nil {
-		return e, err
+	h, err = strconv.Atoi(cfg.AutoCompactionRetention)
+	if err == nil {
+		autoCompactionRetention = time.Duration(int64(h)) * time.Hour
+	} else {
+		autoCompactionRetention, err = time.ParseDuration(cfg.AutoCompactionRetention)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing AutoCompactionRetention: %v", err)
+		}
 	}
 
 	srvcfg := etcdserver.ServerConfig{
-		Name:                       cfg.Name,
-		ClientURLs:                 cfg.ACUrls,
-		PeerURLs:                   cfg.APUrls,
-		DataDir:                    cfg.Dir,
-		DedicatedWALDir:            cfg.WalDir,
-		SnapCount:                  cfg.SnapCount,
-		MaxSnapFiles:               cfg.MaxSnapFiles,
-		MaxWALFiles:                cfg.MaxWalFiles,
-		InitialPeerURLsMap:         urlsmap,
-		InitialClusterToken:        token,
-		DiscoveryURL:               cfg.Durl,
-		DiscoveryProxy:             cfg.Dproxy,
-		NewCluster:                 cfg.IsNewCluster(),
-		ForceNewCluster:            cfg.ForceNewCluster,
-		PeerTLSInfo:                cfg.PeerTLSInfo,
-		TickMs:                     cfg.TickMs,
-		ElectionTicks:              cfg.ElectionTicks(),
-		InitialElectionTickAdvance: cfg.InitialElectionTickAdvance,
-		AutoCompactionRetention:    autoCompactionRetention,
-		AutoCompactionMode:         cfg.AutoCompactionMode,
-		QuotaBackendBytes:          cfg.QuotaBackendBytes,
-		MaxTxnOps:                  cfg.MaxTxnOps,
-		MaxRequestBytes:            cfg.MaxRequestBytes,
-		StrictReconfigCheck:        cfg.StrictReconfigCheck,
-		ClientCertAuthEnabled:      cfg.ClientTLSInfo.ClientCertAuth,
-		AuthToken:                  cfg.AuthToken,
-		InitialCorruptCheck:        cfg.ExperimentalInitialCorruptCheck,
-		CorruptCheckTime:           cfg.ExperimentalCorruptCheckTime,
-		Debug:                      cfg.Debug,
+		Name:                    cfg.Name,
+		ClientURLs:              cfg.ACUrls,
+		PeerURLs:                cfg.APUrls,
+		DataDir:                 cfg.Dir,
+		DedicatedWALDir:         cfg.WalDir,
+		SnapCount:               cfg.SnapCount,
+		MaxSnapFiles:            cfg.MaxSnapFiles,
+		MaxWALFiles:             cfg.MaxWalFiles,
+		InitialPeerURLsMap:      urlsmap,
+		InitialClusterToken:     token,
+		DiscoveryURL:            cfg.Durl,
+		DiscoveryProxy:          cfg.Dproxy,
+		NewCluster:              cfg.IsNewCluster(),
+		ForceNewCluster:         cfg.ForceNewCluster,
+		PeerTLSInfo:             cfg.PeerTLSInfo,
+		TickMs:                  cfg.TickMs,
+		ElectionTicks:           cfg.ElectionTicks(),
+		AutoCompactionRetention: autoCompactionRetention,
+		AutoCompactionMode:      cfg.AutoCompactionMode,
+		QuotaBackendBytes:       cfg.QuotaBackendBytes,
+		MaxTxnOps:               cfg.MaxTxnOps,
+		MaxRequestBytes:         cfg.MaxRequestBytes,
+		StrictReconfigCheck:     cfg.StrictReconfigCheck,
+		ClientCertAuthEnabled:   cfg.ClientTLSInfo.ClientCertAuth,
+		AuthToken:               cfg.AuthToken,
+		InitialCorruptCheck:     cfg.ExperimentalInitialCorruptCheck,
+		CorruptCheckTime:        cfg.ExperimentalCorruptCheckTime,
+		Debug:                   cfg.Debug,
 	}
 
 	if e.Server, err = etcdserver.NewServer(srvcfg); err != nil {
@@ -302,9 +309,6 @@ func stopServers(ctx context.Context, ss *servers) {
 func (e *Etcd) Err() <-chan error { return e.errc }
 
 func startPeerListeners(cfg *Config) (peers []*peerListener, err error) {
-	if err = updateCipherSuites(&cfg.PeerTLSInfo, cfg.CipherSuites); err != nil {
-		return nil, err
-	}
 	if err = cfg.PeerSelfCert(); err != nil {
 		plog.Fatalf("could not get certs (%v)", err)
 	}
@@ -390,9 +394,6 @@ func (e *Etcd) servePeers() (err error) {
 }
 
 func startClientListeners(cfg *Config) (sctxs map[string]*serveCtx, err error) {
-	if err = updateCipherSuites(&cfg.ClientTLSInfo, cfg.CipherSuites); err != nil {
-		return nil, err
-	}
 	if err = cfg.ClientSelfCert(); err != nil {
 		plog.Fatalf("could not get certs (%v)", err)
 	}
@@ -560,23 +561,4 @@ func (e *Etcd) errHandler(err error) {
 	case <-e.stopc:
 	case e.errc <- err:
 	}
-}
-
-func parseCompactionRetention(mode, retention string) (ret time.Duration, err error) {
-	h, err := strconv.Atoi(retention)
-	if err == nil {
-		switch mode {
-		case compactor.ModeRevision:
-			ret = time.Duration(int64(h))
-		case compactor.ModePeriodic:
-			ret = time.Duration(int64(h)) * time.Hour
-		}
-	} else {
-		// periodic compaction
-		ret, err = time.ParseDuration(retention)
-		if err != nil {
-			return 0, fmt.Errorf("error parsing CompactionRetention: %v", err)
-		}
-	}
-	return ret, nil
 }

@@ -73,9 +73,6 @@ const (
 	rootUser = "root"
 	rootRole = "root"
 
-	tokenTypeSimple = "simple"
-	tokenTypeJWT    = "jwt"
-
 	revBytesLen = 8
 )
 
@@ -982,23 +979,10 @@ func (as *authStore) AuthInfoFromTLS(ctx context.Context) *AuthInfo {
 			cn := chain.Subject.CommonName
 			plog.Debugf("found common name %s", cn)
 
-			ai := &AuthInfo{
+			return &AuthInfo{
 				Username: cn,
 				Revision: as.Revision(),
 			}
-			md, ok := metadata.FromIncomingContext(ctx)
-			if !ok {
-				return nil
-			}
-
-			// gRPC-gateway proxy request to etcd server includes Grpcgateway-Accept
-			// header. The proxy uses etcd client server certificate. If the certificate
-			// has a CommonName we should never use this for authentication.
-			if gw := md["grpcgateway-accept"]; len(gw) > 0 {
-				plog.Warningf("ignoring common name in gRPC-gateway proxy request %s", ai.Username)
-				return nil
-			}
-			return ai
 		}
 	}
 
@@ -1066,15 +1050,11 @@ func NewTokenProvider(tokenOpts string, indexWaiter func(uint64) <-chan struct{}
 	}
 
 	switch tokenType {
-	case tokenTypeSimple:
+	case "simple":
 		plog.Warningf("simple token is not cryptographically signed")
 		return newTokenProviderSimple(indexWaiter), nil
-
-	case tokenTypeJWT:
+	case "jwt":
 		return newTokenProviderJWT(typeSpecificOpts)
-
-	case "":
-		return newTokenProviderNop()
 	default:
 		plog.Errorf("unknown token type: %s", tokenType)
 		return nil, ErrInvalidAuthOpts
@@ -1087,7 +1067,7 @@ func (as *authStore) WithRoot(ctx context.Context) context.Context {
 	}
 
 	var ctxForAssign context.Context
-	if ts, ok := as.tokenProvider.(*tokenSimple); ok && ts != nil {
+	if ts := as.tokenProvider.(*tokenSimple); ts != nil {
 		ctx1 := context.WithValue(ctx, AuthenticateParamIndex{}, uint64(0))
 		prefix, err := ts.genTokenPrefix()
 		if err != nil {

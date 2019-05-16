@@ -5,7 +5,6 @@ go_library(
     srcs = [
         "doc.go",
         "jwt.go",
-        "nop.go",
         "range_perm_cache.go",
         "simple_token.go",
         "store.go",
