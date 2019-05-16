@@ -5,7 +5,7 @@ RUN apk update && apk upgrade && \
 COPY ./cmd /usr/local/go/src/github.com/dotmesh-io/dotmesh/cmd
 COPY ./pkg /usr/local/go/src/github.com/dotmesh-io/dotmesh/pkg
 COPY ./vendor /usr/local/go/src/github.com/dotmesh-io/dotmesh/vendor
-RUN cd cmd/dynamic-provisioner && go install -ldflags '-linkmode external -extldflags "-static"'
+RUN cd cmd/dynamic-provisioner && go install -ldflags '-w -s'
 
 FROM scratch
 COPY --from=build-env /usr/local/go/bin/dynamic-provisioner /
