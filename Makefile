@@ -14,7 +14,6 @@ push_server:
     docker push ${REPOSITORY}/dind-dynamic-provisioner:${CI_COMMIT_TAG:-$CI_COMMIT_SHA}
 
 build_operator:
-    mkdir context && cp -r ./pkg ./context/pkg && cp -r ./vendor ./context/vendor && cp -r ./cmd ./context/cmd; \
     docker build -t ${REPOSITORY}/dotmesh-operator:${CI_COMMIT_TAG:-$CI_COMMIT_SHA} --build-arg VERSION=${CI_COMMIT_TAG:-CI_COMMIT_SHORT_SHA} --build-arg STABLE_DOTMESH_SERVER_IMAGE=quay.io/dotmesh/dotmesh-server:${CI_COMMIT_TAG:-$CI_COMMIT_SHA} ./context -f dockerfiles/operator.Dockerfile
 
 push_operator:
