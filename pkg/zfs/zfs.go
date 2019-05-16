@@ -996,7 +996,7 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 	}
 	out, err = exec.CommandContext(ctx, "umount", tmpMnt).CombinedOutput()
 	if err != nil {
-		log.WithError(err).Error("[diff] failed unmounting tmp: %s", string(out))
+		log.WithError(err).Errorf("[diff] failed unmounting tmp: %s", string(out))
 		return nil, err
 	}
 
