@@ -1,12 +1,14 @@
 FROM golang:1.12.5-alpine3.9 AS build-env
+ARG VERSION
+ARG STABLE_DOCKER_TAG
 WORKDIR /usr/local/go/src/github.com/dotmesh-io/dotmesh
 RUN apk update && apk upgrade && \
     apk add --no-cache bash git openssh
 COPY ./cmd /usr/local/go/src/github.com/dotmesh-io/dotmesh/cmd
 COPY ./pkg /usr/local/go/src/github.com/dotmesh-io/dotmesh/pkg
 COPY ./vendor /usr/local/go/src/github.com/dotmesh-io/dotmesh/vendor
-RUN cd cmd/dotmesh-server && go install -ldflags="-w -s"
-RUN cd cmd/dm && go install -ldflags="-w -s"
+RUN cd cmd/dotmesh-server && go install -ldflags="-w -s -X main.serverVersion=${VERSION}"
+RUN cd cmd/dm && go install -ldflags="-w -s -X main.clientVersion=${VERSION} -X main.stableDockerTag=${STABLE_DOCKER_TAG}"
 RUN cd cmd/flexvolume && go install -ldflags="-w -s"
 
 FROM ubuntu:bionic

@@ -85,21 +85,6 @@ build_yaml:
     except:
         - schedules
 
-.build_without_bazel:
-    retry: 2
-    stage: build
-    tags:
-        - fast
-    script:
-        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
-        - ./rebuild_in_container_without_bazel.sh --push Linux
-    artifacts:
-        paths:
-            - target
-        expire_in: 1 week
-    except:
-        - schedules
-
 build_operator:
     retry: 2
     stage: build
@@ -108,8 +93,8 @@ build_operator:
     script:
         # push to the CI registry
         - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
-        - (./rebuild_operator.sh) # also pushes
-        - echo "pushed $CI_DOCKER_OPERATOR_IMAGE"
+        - docker build -t quay.io/dotmesh/dotmesh-operator:${CI_COMMIT_TAG:-CI_COMMIT_SHA} --build-arg VERSION=${CI_COMMIT_TAG:-CI_COMMIT_SHORT_SHA} --build-arg STABLE_DOTMESH_SERVER_IMAGE=quay.io/dotmesh/dotmesh-server:${CI_COMMIT_TAG:-CI_COMMIT_SHA} . -f dockerfiles/operator.Dockerfile
+        - docker push quay.io/dotmesh/dotmesh-operator:${CI_COMMIT_TAG:-CI_COMMIT_SHA}
     artifacts:
         paths:
             - target
