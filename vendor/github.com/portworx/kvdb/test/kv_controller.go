@@ -54,6 +54,7 @@ func RunControllerTests(datastoreInit kvdb.DatastoreInit, t *testing.T) {
 	testUpdateMember(kv, t)
 	testMemberStatus(kv, t)
 	testDefrag(kv, t)
+	testGetSetEndpoints(kv, t)
 	controllerLog("Stopping all etcd processes")
 	for _, cmd := range cmds {
 		cmd.Process.Kill()
@@ -107,6 +108,12 @@ func testRemoveMember(kv kvdb.Kvdb, t *testing.T) {
 	list, err = kv.ListMembers()
 	require.NoError(t, err, "Error on ListMembers")
 	require.Equal(t, 2, len(list), "List returned different length of cluster")
+
+	// Remove an already removed node
+	index = 1
+	controllerLog("Removing node 1")
+	err = kv.RemoveMember(names[index], localhost)
+	require.NoError(t, err, "Error on RemoveMember")
 }
 
 func testReAdd(kv kvdb.Kvdb, t *testing.T) {
@@ -151,6 +158,10 @@ func testUpdateMember(kv kvdb.Kvdb, t *testing.T) {
 	list, err := kv.ListMembers()
 	require.NoError(t, err, "Error on ListMembers")
 	require.Equal(t, 3, len(list), "List returned different length of cluster")
+
+	// Update an invalid member
+	_, err = kv.UpdateMember(localhost, peerPorts[index], "foobar")
+	require.EqualError(t, kvdb.ErrMemberDoesNotExist, err.Error(), "Unexpected error on UpdateMember")
 }
 
 func testDefrag(kv kvdb.Kvdb, t *testing.T) {
@@ -251,6 +262,21 @@ func testMemberStatus(kv kvdb.Kvdb, t *testing.T) {
 	case <-time.After(5 * time.Minute):
 		t.Fatalf("testMemberStatus timeout")
 	}
+}
+
+func testGetSetEndpoints(kv kvdb.Kvdb, t *testing.T) {
+	err := kv.SetEndpoints(clientUrls)
+	require.NoError(t, err, "Unexpected error on SetEndpoints")
+	endpoints := kv.GetEndpoints()
+	require.Equal(t, len(endpoints), len(clientUrls), "Unexpected no. of endpoints")
+
+	subsetUrls := clientUrls[1:]
+
+	err = kv.SetEndpoints(subsetUrls)
+	require.NoError(t, err, "Unexpected error on SetEndpoints")
+	endpoints = kv.GetEndpoints()
+	require.Equal(t, len(endpoints), len(subsetUrls), "Unexpected no. of endpoints")
+
 }
 
 func startEtcd(index int, initCluster map[string][]string, initState string) (*exec.Cmd, error) {
