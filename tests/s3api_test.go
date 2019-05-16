@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -159,7 +160,7 @@ func TestS3Api(t *testing.T) {
 		}
 	})
 
-	t.Run("ReadFileAtSnapshot", func(t *testing.T) {
+	t.Run("ReadFileAtSnapshot", func(t *testing.T) { // FIX
 		dotName := citools.UniqName()
 		citools.RunOnNode(t, node1, "dm init "+dotName)
 		cmdFile1 := fmt.Sprintf("curl -T file.txt -u admin:%s 127.0.0.1:32607/s3/admin:%s/file.txt", host.Password, dotName)
@@ -175,17 +176,33 @@ func TestS3Api(t *testing.T) {
 		firstCommitId := commitIdsList[0]
 		secondCommitId := commitIdsList[1]
 
-		t.Logf("running (first commit): '%s'", fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", host.Password, dotName, firstCommitId))
-		respFirstCommit := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", host.Password, dotName, firstCommitId))
-		expected1 := "helloworld1"
-		if !strings.Contains(respFirstCommit, expected1) {
-			t.Errorf("The first commit did not contain the correct file data (expected '%s', got: '%s')", expected1, respFirstCommit)
+		t.Logf("running (first commit): '%s'", fmt.Sprintf("http://127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", dotName, firstCommitId))
+
+		respBody, status, err := call("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file.txt", dotName, firstCommitId), host, nil)
+		if err != nil {
+			t.Errorf("S3 request failed, error: %s", err)
 		}
-		t.Logf("running (second commit): '%s'", fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", host.Password, dotName, secondCommitId))
-		respSecondCommit := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", host.Password, dotName, secondCommitId))
+		if status != 200 {
+			t.Errorf("unexpected status code: %d", status)
+		}
+		// respFirstCommit := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", host.Password, dotName, firstCommitId))
+		expected1 := "helloworld1"
+		if !strings.Contains(respBody, expected1) {
+			t.Errorf("The first commit did not contain the correct file data (expected '%s', got: '%s')", expected1, respBody)
+		}
+
+		t.Logf("running (second commit): '%s'", fmt.Sprintf("http://127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", dotName, secondCommitId))
+		respBodySecond, statusSecond, err := call("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file.txt", dotName, secondCommitId), host, nil)
+		if err != nil {
+			t.Errorf("S3 request failed, error: %s", err)
+		}
+		if statusSecond != 200 {
+			t.Errorf("unexpected status code: %d", status)
+		}
+
 		expected2 := "helloworld2"
-		if !strings.Contains(respSecondCommit, expected2) {
-			t.Errorf("The second commit did not contain the correct file data (expected '%s', got: '%s')", expected2, respSecondCommit)
+		if !strings.Contains(respBodySecond, expected2) {
+			t.Errorf("The second commit did not contain the correct file data (expected '%s', got: '%s')", expected2, respBodySecond)
 		}
 	})
 
@@ -282,4 +299,31 @@ func OSReadDir(root string) ([]string, error) {
 		files = append(files, file.Name())
 	}
 	return files, nil
+}
+
+func call(method string, path string, node citools.Node, body io.Reader) (respBody string, statusCode int, err error) {
+	req, err := http.NewRequest(method, "http://"+node.IP+":32607/"+path, body)
+	if err != nil {
+		return
+	}
+	req.SetBasicAuth("admin", node.Password)
+
+	resp, err := http.DefaultClient.Do(req)
+	if resp.Body != nil {
+		defer resp.Body.Close()
+	}
+	if err != nil {
+		bts, newErr := ioutil.ReadAll(resp.Body)
+		if newErr != nil {
+			return
+		}
+		return string(bts), resp.StatusCode, err
+	}
+
+	bts, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
+
+	return string(bts), resp.StatusCode, nil
 }
