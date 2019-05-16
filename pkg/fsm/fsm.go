@@ -322,22 +322,15 @@ func (f *FsMachine) Run() {
 	// a new request before a response comes back, ie to serialize requests &
 	// responses per-statemachine (without blocking the entire etcd event loop,
 	// which asynchronously writes to the requests chan)
-	log.Debugf("[run:%s] reading from external requests", f.filesystemId)
 	for req := range f.requests {
-		log.Debugf("[run:%s] got req: %s", f.filesystemId, req)
-		log.Debugf("[run:%s] writing to internal requests", f.filesystemId)
 		f.innerRequests <- req
-		log.Debugf("[run:%s] reading from internal responses", f.filesystemId)
 		resp, more := <-f.innerResponses
 		if !more {
-			log.Debugf("[run:%s] statemachine is finished", f.filesystemId)
 			resp = &types.Event{
 				Name: "filesystem-gone",
 				Args: &types.EventArgs{},
 			}
 		}
-		log.Debugf("[run:%s] got resp: %s", f.filesystemId, resp)
-		log.Debugf("[run:%s] writing to external responses", f.filesystemId)
 		respChan, ok := func() (chan *types.Event, bool) {
 			f.responsesLock.Lock()
 			defer f.responsesLock.Unlock()
@@ -354,7 +347,6 @@ func (f *FsMachine) Run() {
 				resp,
 			)
 		}
-		log.Debugf("[run:%s] reading from external requests", f.filesystemId)
 	}
 }
 
