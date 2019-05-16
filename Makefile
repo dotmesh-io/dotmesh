@@ -35,4 +35,4 @@ push_provisioner: ; docker push ${REPOSITORY}/dotmesh-dynamic-provisioner:${DOCK
 gitlab_registry_login: ; docker login -u gitlab-ci-token -p ${CI_BUILD_TOKEN} ${CI_REGISTRY}
 
 .PHONY: release_all
-release_all: ; make build_server && make build_dind_prov && make build_operator && make build_provisioner && make push_provisioner && make push_server && make push_dind_prov && make push_operator
+release_all: ; make build_server && make build_operator && make build_provisioner && make push_provisioner && make push_server && make push_operator
