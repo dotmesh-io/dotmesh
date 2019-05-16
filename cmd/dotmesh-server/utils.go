@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -58,19 +57,6 @@ func toJsonString(value interface{}) string {
 	} else {
 		return string(bytes)
 	}
-}
-
-func encodePrelude(prelude Prelude) ([]byte, error) {
-	// encode a prelude as JSON wrapped up in base64. The reason for the base64
-	// is to avoid framing issues. This works because END_DOTMESH_PRELUDE has
-	// non-base64 characters in it.
-	preludeBytes, err := json.Marshal(prelude)
-	if err != nil {
-		return []byte{}, err
-	}
-	encoded := []byte(base64.StdEncoding.EncodeToString(preludeBytes))
-	encoded = append(encoded, END_DOTMESH_PRELUDE...)
-	return encoded, nil
 }
 
 func mnt(fs string) string {

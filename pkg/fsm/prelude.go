@@ -10,24 +10,12 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 )
 
-func calculatePrelude(snaps []types.Snapshot, toSnapshotId string) (types.Prelude, error) {
+func CalculatePrelude(snaps []types.Snapshot, toSnapshotId string) (types.Prelude, error) {
 	var prelude types.Prelude
-	// snaps, err := s.SnapshotsFor(s.zfs.GetPoolID(), toFilesystemId)
-	// if err != nil {
-	// 	return prelude, err
-	// }
-	pointerSnaps := []*types.Snapshot{}
-	for _, s := range snaps {
-		// Take a copy of s to take a pointer of, rather than getting
-		// lots of pointers to so in the pointerSnaps slice...
-		snapshots := s
-		pointerSnaps = append(pointerSnaps, &snapshots)
-	}
-	var err error
-	prelude.SnapshotProperties, err = restrictSnapshots(pointerSnaps, toSnapshotId)
-	if err != nil {
-		return prelude, err
-	}
+	// Intentionally empty prelude, as commit metadata is
+	// transmitted in a file in the dot now, and prelude
+	// performance suuuucks!
+	// https://github.com/dotmesh-io/dotmesh/issues/700
 	return prelude, nil
 }
 
@@ -67,7 +55,7 @@ func ConsumePrelude(r io.Reader) (types.Prelude, error) {
 	return types.Prelude{}, nil
 }
 
-func encodePrelude(prelude types.Prelude) ([]byte, error) {
+func EncodePrelude(prelude types.Prelude) ([]byte, error) {
 	// encode a prelude as JSON wrapped up in base64. The reason for the base64
 	// is to avoid framing issues. This works because END_DOTMESH_PRELUDE has
 	// non-base64 characters in it.

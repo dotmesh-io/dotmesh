@@ -134,7 +134,7 @@ func (z *ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prelude, err := calculatePrelude(snaps, z.toSnap)
+	prelude, err := fsm.CalculatePrelude(snaps, z.toSnap)
 	if err != nil {
 		log.Printf(
 			"[ZFSSender:ServeHTTP] Error calculating prelude in from zfs send of %s from %s => %s: %s",
@@ -175,7 +175,7 @@ func (z *ZFSSender) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer pipeWriter.Close()
 	defer pipeReader.Close()
 
-	preludeEncoded, err := encodePrelude(prelude)
+	preludeEncoded, err := fsm.EncodePrelude(prelude)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(fmt.Sprintf("Can't encode prelude: %s\n", err)))
