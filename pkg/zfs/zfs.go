@@ -671,7 +671,6 @@ func (z *zfs) Send(fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotI
 		"fromSnapshotId":   fromSnapshotId,
 		"toFilesystemId":   toFilesystemId,
 		"toSnapshotId":     toSnapshotId,
-		"prelude":          string(preludeEncoded),
 	}).Debug("zfs.Send() starting")
 	sendArgs := z.calculateSendArgs(
 		fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
