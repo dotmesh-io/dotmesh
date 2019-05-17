@@ -41,7 +41,7 @@ build_client_linux:
     - make build_client
     artifacts:
         paths:
-            - target
+            - binaries
         expire_in: 1 week
 
 build_client_macos:
@@ -50,7 +50,9 @@ build_client_macos:
     tags:
         - fast
     script:
-        - ./scripts/rebuild_client.sh Darwin
+        - export DOCKER_TAG=${CI_COMMIT_TAG:-${CI_COMMIT_SHA:-latest}}
+        - export VERSION=$DOCKER_TAG # todo could change this to a "short" sha if needed
+        - make build_client_mac
     artifacts:
         paths:
             - binaries

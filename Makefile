@@ -6,7 +6,10 @@ clear_context:
 	rm -rf context
 
 build_client:
-	mkdir -p target && CGO_ENABLED=0 go build -ldflags "-X main.clientVersion=${VERSION} -X main.dockerTag=${DOCKER_TAG} -s" -o target/dm ./cmd/dm
+	mkdir -p binaries/Linux && CGO_ENABLED=0 go build -ldflags "-X main.clientVersion=${VERSION} -X main.dockerTag=${DOCKER_TAG} -s" -o binaries/Linux/dm ./cmd/dm
+
+build_client_mac:
+	mkdir -p binaries/Darwin && CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.clientVersion=${VERSION} -X main.dockerTag=${DOCKER_TAG} -s" -o binaries/Darwin/dm ./cmd/dm
 
 build_server: 
 	docker build -t ${REPOSITORY}/dotmesh-server:${DOCKER_TAG} ./context --build-arg VERSION=${VERSION} --build-arg STABLE_DOCKER_TAG=${DOCKER_TAG} -f dockerfiles/dotmesh.Dockerfile
@@ -16,7 +19,6 @@ build_dind_prov:
 
 push_server: 
 	docker push ${REPOSITORY}/dotmesh-server:${DOCKER_TAG}
-
 
 push_dind_prov:
 	docker push ${REPOSITORY}/dind-dynamic-provisioner:${DOCKER_TAG}
