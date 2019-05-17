@@ -1,9 +1,0 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
-
-go_library(
-    name = "go_default_library",
-    srcs = ["messaging.go"],
-    importpath = "github.com/dotmesh-io/dotmesh/pkg/messaging",
-    visibility = ["//visibility:public"],
-    deps = ["//pkg/types:go_default_library"],
-)
