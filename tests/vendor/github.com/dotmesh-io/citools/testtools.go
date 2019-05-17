@@ -968,7 +968,14 @@ func LocalImage(service string) string {
 		registry = fmt.Sprintf("%s.local:80/dotmesh", hostname)
 	}
 
-	tag := os.Getenv("CI_DOCKER_TAG")
+	var tag string
+	tagPreference := []string{"CI_DOCKER_TAG", "CI_COMMIT_TAG", "CI_COMMIT_SHA"}
+	for _, tagVariable := range tagPreference {
+		tag = os.Getenv(tagVariable)
+		if tag != "" {
+			break
+		}
+	}
 	if tag == "" {
 		tag = "latest"
 	}
