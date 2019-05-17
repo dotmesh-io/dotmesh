@@ -878,8 +878,6 @@ func (dm *DotmeshAPI) UpdateBar(result TransferPollResult, err error, started bo
 
 func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer, callback func(result TransferPollResult, err error, started bool) bool) error {
 
-	fmt.Fprintf(out, "Calculating...\n")
-
 	logger := log.WithField("transferId", transferId)
 
 	started := false
