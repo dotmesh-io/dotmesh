@@ -160,7 +160,7 @@ func (f *FsMachine) push(
 			Args: &types.EventArgs{"err": err, "filesystemId": toFilesystemId},
 		}, backoffState
 	}
-	prelude, err := calculatePrelude(snaps, toSnapshotId)
+	prelude, err := CalculatePrelude(snaps, toSnapshotId)
 	if err != nil {
 		return &types.Event{
 			Name: "error-calculating-prelude",
@@ -189,7 +189,7 @@ func (f *FsMachine) push(
 		},
 	}
 	// we will write this to the pipe first, in the goroutine which writes
-	preludeEncoded, err := encodePrelude(prelude)
+	preludeEncoded, err := EncodePrelude(prelude)
 	if err != nil {
 		return &types.Event{
 			Name: "cant-encode-prelude",

@@ -200,24 +200,6 @@ func (s *InMemoryState) resetRegistry() {
 	s.registry = registry.NewRegistry(s.userManager, s.config.RegistryStore)
 }
 
-func calculatePrelude(snaps []Snapshot, toSnapshotId string) (Prelude, error) {
-	var prelude Prelude
-
-	pointerSnaps := []*Snapshot{}
-	for _, s := range snaps {
-		// Take a copy of s to take a pointer of, rather than getting
-		// lots of pointers to so in the pointerSnaps slice...
-		snapshots := s
-		pointerSnaps = append(pointerSnaps, &snapshots)
-	}
-	var err error
-	prelude.SnapshotProperties, err = restrictSnapshots(pointerSnaps, toSnapshotId)
-	if err != nil {
-		return prelude, err
-	}
-	return prelude, nil
-}
-
 func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, error) {
 	// TODO simplify this by refactoring it into multiple functions,
 	// simplifying locking in the process.

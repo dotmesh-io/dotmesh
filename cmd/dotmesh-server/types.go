@@ -105,10 +105,6 @@ type Config struct {
 	NatsConfig *nats.Config
 }
 
-type Prelude struct {
-	SnapshotProperties []*Snapshot
-}
-
 type containerInfo struct {
 	Server     string
 	Containers []container.DockerContainer
