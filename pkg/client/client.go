@@ -104,6 +104,8 @@ func (j *JsonRpcClient) reallyCallRemote(
 		return err
 	}
 
+	req = req.WithContext(ctx)
+
 	tracer := opentracing.GlobalTracer()
 	// use our middleware to propagate our trace
 	req = middleware.ToHTTPRequest(tracer)(req.WithContext(ctx))
@@ -181,7 +183,7 @@ func DeduceUrl(ctx context.Context, hostnames []string, mode, user, apiKey strin
 
 func (client *JsonRpcClient) Ping() (bool, error) {
 	var response bool
-	ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
+	ctx, cancel := context.WithTimeout(context.Background(), RPCTimeout)
 	defer cancel()
 	err := client.CallRemote(ctx, "DotmeshRPC.Ping", struct{}{}, &response)
 	if err != nil {
