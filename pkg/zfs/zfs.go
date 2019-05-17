@@ -49,6 +49,7 @@ type ZFS interface {
 	Mount(filesystemId, snapshotId string, options string, mountPath string) ([]byte, error)
 	Fork(filesystemId, latestSnapshot, forkFilesystemId string) error
 	Diff(filesystemId, snapshot, snapshotOrFilesystem string) ([]types.ZFSFileDiff, error)
+	DestroyTmpSnapIfExists(filesystemId string) error
 }
 
 var _ ZFS = &zfs{}
@@ -820,6 +821,19 @@ var diffSideCache = map[string]FilesystemDiffCache{}
 // zero size (no changes since last time it was run)
 var diffResultCache = map[string]FilesystemResultCache{}
 
+var tmpSnapshotName = "dotmesh-fastdiff"
+
+func (z *zfs) DestroyTmpSnapIfExists(filesystemID string) error {
+	// Don't accidentally include the dotmesh-fastdiff snapshot in a push stream.
+	tmp := z.FQ(FullIdWithSnapshot(filesystemID, tmpSnapshotName))
+
+	tmpExistsErr := exec.Command(z.zfsPath, "get", "name", tmp).Run()
+	if tmpExistsErr == nil {
+		return exec.Command(z.zfsPath, "destroy", tmp).Run()
+	}
+	return nil
+}
+
 func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types.ZFSFileDiff, error) {
 	/*
 		Diff the default subdot of a given dot.
@@ -833,8 +847,6 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Minute)
 	defer cancel()
-
-	tmpSnapshotName := "dotmesh-fastdiff"
 
 	// latest is the latest "dotmesh" snapshot
 	latest := z.fullZFSFilesystemPath(filesystemID, snapshot)

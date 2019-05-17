@@ -217,5 +217,16 @@ func receivingState(f *FsMachine) StateFn {
 	if err != nil {
 		return backoffStateWithReason(fmt.Sprintf("receivingState: Error applying prelude: %+v", err))
 	}
+
+	// Clear out any tmp diff snapshot that we received by mistake
+	err = f.zfs.DestroyTmpSnapIfExists(f.filesystemId)
+	if err != nil {
+		f.innerResponses <- &types.Event{
+			Name: "cant-destroy-tmp-snap-if-exists",
+			Args: &types.EventArgs{"err": err},
+		}
+		return backoffState
+	}
+
 	return discoveringState
 }
