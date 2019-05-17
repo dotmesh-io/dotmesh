@@ -130,7 +130,7 @@ linux_default_dot:
     tags:
         - fast
     script:
-        - ./scripts/test.sh -run TestDefaultDot
+        - bash ./scripts/test.sh -run TestDefaultDot
     artifacts:
         paths:
         - extracted_logs
@@ -146,7 +146,7 @@ linux_dot_diff:
     tags:
         - fast
     script:
-        - ./scripts/test.sh -run TestDotDiff
+        - bash ./scripts/test.sh -run TestDotDiff
     artifacts:
         paths:
         - extracted_logs
@@ -162,7 +162,7 @@ linux_boltdb:
     tags:
         - fast
     script:
-        - ./scripts/test.sh -run TestBoltDBStoreWithDefaultDot
+        - bash ./scripts/test.sh -run TestBoltDBStoreWithDefaultDot
     artifacts:
         paths:
         - extracted_logs
@@ -178,7 +178,7 @@ linux__restart_boltdb:
     tags:
         - fast
     script:
-        - ./scripts/test.sh -run TestRecoverFromUnmountedDotOnMasterBoltDB
+        - bash ./scripts/test.sh -run TestRecoverFromUnmountedDotOnMasterBoltDB
     artifacts:
         paths:
         - extracted_logs
@@ -194,7 +194,7 @@ linux_single_node:
     tags:
         - fast
     script:
-        - ./scripts/test.sh -run TestSingleNode
+        - bash ./scripts/test.sh -run TestSingleNode
     artifacts:
         paths:
         - extracted_logs
@@ -210,7 +210,7 @@ linux_recover_from_unmounted_dot_on_master:
     tags:
         - fast
     script:
-        - ./scripts/test.sh -run TestRecoverFromUnmountedDotOnMaster
+        - bash ./scripts/test.sh -run TestRecoverFromUnmountedDotOnMaster
     artifacts:
         paths:
         - extracted_logs
@@ -226,7 +226,7 @@ linux_two_nodes_same_cluster:
     tags:
         - fast
     script:
-        - ./scripts/test.sh -run TestTwoNodesSameCluster
+        - bash ./scripts/test.sh -run TestTwoNodesSameCluster
     artifacts:
         paths:
         - extracted_logs
@@ -242,7 +242,7 @@ linux_deletion_simple:
     tags:
         - fast
     script:
-        - ./scripts/test.sh -run TestDeletionSimple
+        - bash ./scripts/test.sh -run TestDeletionSimple
     artifacts:
         paths:
         - extracted_logs
@@ -258,7 +258,7 @@ linux_deletion_complex:
     tags:
         - fast
     script:
-        - ./scripts/test.sh -run TestDeletionComplex
+        - bash ./scripts/test.sh -run TestDeletionComplex
     artifacts:
         paths:
         - extracted_logs
@@ -274,7 +274,7 @@ linux_backup_and_restore_two_single_node_clusters:
     tags:
         - fast
     script:
-        - ./scripts/test.sh -run TestBackupAndRestoreTwoSingleNodeClusters
+        - bash ./scripts/test.sh -run TestBackupAndRestoreTwoSingleNodeClusters
     artifacts:
         paths:
         - extracted_logs
@@ -290,7 +290,7 @@ linux_two_single_node_clusters:
     tags:
         - fast
     script:
-        - ./scripts/test.sh -run TestTwoSingleNodeClusters
+        - bash ./scripts/test.sh -run TestTwoSingleNodeClusters
     artifacts:
         paths:
         - extracted_logs
@@ -306,7 +306,7 @@ linux_three_single_node_clusters:
     tags:
         - fast
     script:
-        - ./scripts/test.sh -run TestThreeSingleNodeClusters
+        - bash ./scripts/test.sh -run TestThreeSingleNodeClusters
     artifacts:
         paths:
         - extracted_logs
@@ -322,7 +322,7 @@ linux_two_double_node_clusters:
     tags:
         - fast
     script:
-        - ./scripts/test.sh -run TestTwoDoubleNodeClusters
+        - bash ./scripts/test.sh -run TestTwoDoubleNodeClusters
     artifacts:
         paths:
         - extracted_logs
@@ -338,7 +338,7 @@ linux_two_double_node_clusters:
     tags:
         - fast
     script:
-        - ./scripts/test.sh -run TestS3Remote
+        - bash ./scripts/test.sh -run TestS3Remote
     artifacts:
         paths:
         - extracted_logs
@@ -354,7 +354,7 @@ linux_s3api:
     tags:
         - fast
     script:
-        - ./scripts/test.sh -run TestS3Api
+        - bash ./scripts/test.sh -run TestS3Api
     artifacts:
         paths:
         - extracted_logs
@@ -370,7 +370,7 @@ linux_forks:
     tags:
         - fast
     script:
-        - ./scripts/test.sh -run TestForks
+        - bash ./scripts/test.sh -run TestForks
     artifacts:
         paths:
         - extracted_logs
@@ -386,7 +386,7 @@ linux_stress_lots_of_commits:
     tags:
         - fast
     script:
-        - DOTMESH_TEST_TIMEOUT=30m ./scripts/test.sh -timeout 30m -run TestStressLotsOfCommits
+        - DOTMESH_TEST_TIMEOUT=30m bash ./scripts/test.sh -timeout 30m -run TestStressLotsOfCommits
     artifacts:
         paths:
         - extracted_logs
@@ -404,7 +404,7 @@ linux_stress_large_files:
         - big-disk
         - fast
     script:
-        - DOTMESH_TEST_TIMEOUT=30m ./scripts/test.sh -timeout 30m -run TestStressLargeFiles
+        - DOTMESH_TEST_TIMEOUT=30m bash ./scripts/test.sh -timeout 30m -run TestStressLargeFiles
     artifacts:
         paths:
         - extracted_logs
@@ -421,7 +421,7 @@ linux_stress_handover:
     tags:
         - fast
     script:
-        - DOTMESH_TEST_TIMEOUT=30m ./scripts/test.sh -timeout 30m -run TestStressHandover
+        - DOTMESH_TEST_TIMEOUT=30m bash ./scripts/test.sh -timeout 30m -run TestStressHandover
     artifacts:
         paths:
         - extracted_logs
