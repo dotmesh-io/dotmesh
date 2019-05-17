@@ -1,7 +1,9 @@
 package types
 
 import (
+	"fmt"
 	"io"
+	"reflect"
 )
 
 // InputFile is used to write files to the disk on the local node.
@@ -89,4 +91,19 @@ type TransferPollResult struct {
 	Size               int64 // size of current segment in bytes
 	Sent               int64 // number of bytes of current segment sent so far
 	Message            string
+}
+
+func (t TransferPollResult) String() string {
+	v := reflect.ValueOf(t)
+	protectedValue := "****"
+	toString := "TransferPollResult : "
+	for i := 0; i < v.NumField(); i++ {
+		fieldName := v.Type().Field(i).Name
+		if fieldName == "ApiKey" {
+			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, protectedValue)
+		} else {
+			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, v.Field(i).Interface())
+		}
+	}
+	return toString
 }

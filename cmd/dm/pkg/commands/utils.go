@@ -63,7 +63,7 @@ func resolveTransferArgs(args []string) (returnPeer string, returnFilesystemName
 	} else if len(args) == 2 {
 		// dm clone foo
 		filesystemName = args[1]
-		branchName = client.DEFAULT_BRANCH
+		branchName = client.DefaultBranch
 	} else if len(args) == 3 {
 		// dm pull foo branch
 		filesystemName = args[1]

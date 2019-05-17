@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
-	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -21,8 +20,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const DEFAULT_BRANCH string = "master"
-const RPC_TIMEOUT time.Duration = 20 * time.Second
+const DefaultBranch string = "master"
+const RPCTimeout time.Duration = 20 * time.Second
+
+// TransferPollResult - an alias for dotmesh server type
+type TransferPollResult = types.TransferPollResult
 
 type VersionInfo struct {
 	InstalledVersion    string `json:"installed_version"`
@@ -307,7 +309,7 @@ func (dm *DotmeshAPI) CheckoutBranch(volumeName, from, to string, create bool) e
 		return err
 	}
 	// The DEFAULT_BRANCH always implicitly exists
-	exists = exists || to == DEFAULT_BRANCH
+	exists = exists || to == DefaultBranch
 	if create {
 		if exists {
 			return fmt.Errorf("Branch already exists: %s", to)
@@ -523,7 +525,7 @@ func (dm *DotmeshAPI) AllBranches(volumeName string) ([]string, error) {
 	)
 	// the "main" filesystem (topLevelFilesystemId) is the master branch
 	// (DEFAULT_BRANCH)
-	branches = append(branches, DEFAULT_BRANCH)
+	branches = append(branches, DefaultBranch)
 	sort.Strings(branches)
 	return branches, err
 }
@@ -613,7 +615,7 @@ func (dm *DotmeshAPI) AllVolumes() ([]types.DotmeshVolume, error) {
 
 func deMasterify(s string) string {
 	// use empty string to indicate "no clone"
-	if s == DEFAULT_BRANCH {
+	if s == DefaultBranch {
 		return ""
 	}
 	return s
@@ -809,56 +811,13 @@ func (dm *DotmeshAPI) RelatedContainers(volumeName types.VolumeName, branch stri
 	return result, nil
 }
 
-type TransferPollResult struct {
-	TransferRequestId string `json:"transfer_request_id,omitempty"`
-	Direction         string `json:"direction,omitempty"` // "push" or "pull"
-
-	// Same across both clusters
-	FilesystemId string `json:"filesystem_id,omitempty"`
-
-	// TODO add clusterIds? probably comes from etcd. in fact, could be the
-	// discovery id (although that is only for bootstrap... hmmm).
-	InitiatorNodeId string `json:"initiator_node_id,omitempty"`
-	PeerNodeId      string `json:"peer_node_id,omitempty"`
-
-	// XXX a Transfer that spans multiple filesystem ids won't have a unique
-	// starting/target snapshot, so this is in the wrong place right now.
-	// although maybe it makes sense to talk about a target *final* snapshot,
-	// with interim snapshots being an implementation detail.
-	StartingSnapshot string `json:"starting_snapshot,omitempty"`
-	TargetSnapshot   string `json:"target_snapshot,omitempty"`
-
-	Index              int    `json:"index,omitempty"`  // i.e. transfer 1/4 (Index=1)
-	Total              int    `json:"total,omitempty"`  //                   (Total=4)
-	Status             string `json:"status,omitempty"` // one of "starting", "running", "finished", "error"
-	NanosecondsElapsed int64  `json:"nanoseconds_elapsed,omitempty"`
-	Size               int64  `json:"size,omitempty"` // size of current segment in bytes
-	Sent               int64  `json:"sent,omitempty"` // number of bytes of current segment sent so far
-	Message            string `json:"message,omitempty"`
-}
-
-func (transferPollResult TransferPollResult) String() string {
-	v := reflect.ValueOf(transferPollResult)
-	protectedValue := "****"
-	toString := "TransferPollResult : "
-	for i := 0; i < v.NumField(); i++ {
-		fieldName := v.Type().Field(i).Name
-		if fieldName == "ApiKey" {
-			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, protectedValue)
-		} else {
-			toString = toString + fmt.Sprintf(" %v=%v,", fieldName, v.Field(i).Interface())
-		}
-	}
-	return toString
-}
-
 func (dm *DotmeshAPI) GetTransfer(transferId string) (TransferPollResult, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
-	return dm.GetTransferWithContext(transferId, ctx, cancel)
+	ctx, cancel := context.WithTimeout(context.Background(), RPCTimeout)
+	defer cancel()
+	return dm.GetTransferWithContext(ctx, transferId)
 }
 
-func (dm *DotmeshAPI) GetTransferWithContext(transferId string, ctx context.Context, cancel context.CancelFunc) (TransferPollResult, error) {
-	defer cancel()
+func (dm *DotmeshAPI) GetTransferWithContext(ctx context.Context, transferId string) (TransferPollResult, error) {
 	var result TransferPollResult
 	err := dm.CallRemote(
 		ctx, "DotmeshRPC.GetTransfer", transferId, &result,
@@ -919,60 +878,35 @@ func (dm *DotmeshAPI) UpdateBar(result TransferPollResult, err error, started bo
 
 func (dm *DotmeshAPI) PollTransfer(transferId string, out io.Writer, callback func(result TransferPollResult, err error, started bool) bool) error {
 
-	out.Write([]byte("Calculating...\n"))
-
-	log2 := log.WithField("transferId", transferId)
+	logger := log.WithField("transferId", transferId)
 
 	started := false
 
 	for {
-		log2.Debug("[PollTransfer] about to sleep for 1s...")
 		time.Sleep(time.Second)
 
-		rpcResult := make(chan PollTransferInternalResult, 1)
-
-		ctx, cancel := context.WithTimeout(context.Background(), RPC_TIMEOUT)
-		defer cancel()
-		go func() {
-			log2.Debug("[PollTransfer] about to call GetTransfer...")
-			var result PollTransferInternalResult
-			result.result, result.err = dm.GetTransferWithContext(transferId, ctx, cancel)
-			if result.err != nil {
-				log2.WithError(result.err).Debug("[PollTransfer] error from GetTransfer")
-			} else {
-				log2.WithField("result", result.result).Debug("[PollTransfer] result from GetTransfer")
-			}
-			rpcResult <- result
-			log2.Debug("[PollTransfer] rpcResult consumed")
-		}()
-
-		log2.Debug("[PollTransfer] Waiting for RPC result...")
 		var result PollTransferInternalResult
-		select {
-		case <-ctx.Done():
-			out.Write([]byte(fmt.Sprintf("Got timeout error from API, trying again: %s\n", ctx.Err())))
 
-			// Asynchronoulsy discard rpcResult's message when it arrives, so as to not leak the goroutine.
-			go func() {
-				<-rpcResult
-			}()
+		ctx, cancel := context.WithTimeout(context.Background(), RPCTimeout)
+		result.result, result.err = dm.GetTransferWithContext(ctx, transferId)
 
-			result.result.Status = "timeout-retry"
-		case result = <-rpcResult:
-			log2.Debug("[PollTransfer] Got RPC result.")
-			if result.err != nil {
-				// Suppress display of "No such intercluster transfer" errors,
-				// which we get at the start before the transfer has started.
-				if !strings.Contains(fmt.Sprintf("%s", result.err), "No such intercluster transfer") {
-					out.Write([]byte(fmt.Sprintf("Got error, trying again: %s\n", result.err)))
-				}
+		if result.err != nil {
+			logger.WithError(result.err).Debug("[PollTransfer] error from GetTransfer")
+			if ctx.Err() != nil && ctx.Err() == context.DeadlineExceeded {
+				fmt.Fprintf(out, "Got timeout error from API, trying again: %s\n", ctx.Err())
+			} else {
+				fmt.Fprintf(out, "Got error, trying again: %s\n", result.err)
 			}
+		} else {
+			// ok
+			logger.WithField("result", result.result).Debug("[PollTransfer] result from GetTransfer")
 		}
+		cancel()
 
 		// Numbers reported by data transferred thru dotmesh versus size
 		// of stream reported by 'zfs send -nP' are off by a few kilobytes,
 		// fudge it (maybe no one will notice).
-		log2.WithFields(log.Fields{
+		logger.WithFields(log.Fields{
 			"index":   result.result.Index,
 			"total":   result.result.Total,
 			"status":  result.result.Status,
