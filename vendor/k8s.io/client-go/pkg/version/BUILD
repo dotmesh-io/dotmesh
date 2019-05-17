@@ -14,8 +14,6 @@ go_library(
         "doc.go",
         "version.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/k8s.io/client-go/pkg/version",
-    importpath = "k8s.io/client-go/pkg/version",
     tags = ["automanaged"],
     deps = ["//vendor/k8s.io/apimachinery/pkg/version:go_default_library"],
 )

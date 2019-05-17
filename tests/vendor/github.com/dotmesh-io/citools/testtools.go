@@ -382,7 +382,7 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 							-v /var/lib/dotmesh-mounts:/var/lib/dotmesh-mounts:rshared \
 							-v /dotmesh-test-pools:/dotmesh-test-pools:rshared \
 							-v /var/run/docker.sock:/hostdocker.sock %s " \
-						DIND_SUBNET="192.168.0.0" \
+						DIND_SUBNET="10.200.0.0" \
 						DIND_SUBNET_SIZE="16" \
 						SERVICE_CIDR="%s" \
 						POD_NETWORK_CIDR="%s" \
@@ -954,7 +954,12 @@ func LocalImage(service string) string {
 	var registry string
 	// See .gitlab-ci.yml in the dotmesh repo for where these are set up
 	if reg := os.Getenv("CI_REGISTRY"); reg != "" {
-		registry = reg + "/" + os.Getenv("CI_REPOSITORY")
+		repo := os.Getenv("CI_PROJECT_PATH")
+		if repo == "" {
+			repo = os.Getenv("CI_REPOSITORY")
+		}
+		registry = reg + "/" + repo
+
 	} else {
 		hostname, err := os.Hostname()
 		if err != nil {
@@ -1236,9 +1241,9 @@ func NodeFromNodeName(t *testing.T, now int64, i, j int, clusterName string) Nod
 // Networking config helper functions
 
 func hostIpFromContainer(prefix int) string {
-	// This is just 0.1 because we're not actually allocating 192.168.$prefix
+	// This is just 0.1 because we're not actually allocating 10.200.$prefix
 	// addresses any more
-	return "192.168.0.1"
+	return "10.200.0.1"
 }
 
 func serviceCIDR(prefix int) string {

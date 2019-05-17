@@ -15,8 +15,6 @@ go_library(
         "networking_client.go",
         "networkpolicy.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/k8s.io/client-go/kubernetes/typed/networking/v1",
-    importpath = "k8s.io/client-go/kubernetes/typed/networking/v1",
     tags = ["automanaged"],
     deps = [
         "//vendor/k8s.io/apimachinery/pkg/apis/meta/v1:go_default_library",

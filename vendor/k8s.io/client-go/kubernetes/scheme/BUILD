@@ -13,8 +13,6 @@ go_library(
         "doc.go",
         "register.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/k8s.io/client-go/kubernetes/scheme",
-    importpath = "k8s.io/client-go/kubernetes/scheme",
     tags = ["automanaged"],
     deps = [
         "//vendor/k8s.io/apimachinery/pkg/apis/meta/v1:go_default_library",
