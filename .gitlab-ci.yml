@@ -112,15 +112,6 @@ dotmesh_unit_tests:
     except:
         - schedules
 
-versioner_unit_tests:
-    stage: test
-    tags:
-        - fast
-    script:
-        - cd cmd/versioner && go test
-    except:
-        - schedules
-
 # run full dind tests on linux
 linux_default_dot:
     retry: 2
