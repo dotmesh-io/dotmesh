@@ -31,6 +31,18 @@ func pushInitiatorState(f *FsMachine) StateFn {
 		transferRequestId,
 		transferRequest,
 	)
+
+	// Clear out any tmp diff snapshot that exists on the fs to avoid
+	// accidentally sending it somewhere.
+	err := f.zfs.DestroyTmpSnapIfExists(f.filesystemId)
+	if err != nil {
+		f.innerResponses <- &types.Event{
+			Name: "cant-destroy-tmp-snap-if-exists",
+			Args: &types.EventArgs{"err": err},
+		}
+		return backoffState
+	}
+
 	path, err := f.registry.DeducePathToTopLevelFilesystem(
 		types.VolumeName{transferRequest.LocalNamespace, transferRequest.LocalName},
 		transferRequest.LocalBranchName,
