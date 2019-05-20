@@ -435,7 +435,7 @@ publish_images:
         # push to quay.io, by re-tagging and pushing the images
         - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
         - docker login -u $QUAY_USER -p $QUAY_PASSWORD $RELEASE_DOCKER_REGISTRY
-        - export REPOSITORY=$RELEASE_DOCKER_REGISTRY/$RELEASE_DOCKER_REPOSITORY
+        - export REPOSITORY=$RELEASE_DOCKER_REGISTRY/$RELEASE_DOCKER_REPOSITORY/
         - export DOCKER_TAG=${CI_COMMIT_TAG:-$CI_COMMIT_SHA}
         - export VERSION=$DOCKER_TAG
         - make release_all
