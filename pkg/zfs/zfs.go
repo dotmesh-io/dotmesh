@@ -755,7 +755,7 @@ func (z *zfs) Fork(filesystemId, latestSnapshot, forkFilesystemId string) error 
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{
 			"command": sendCommand,
-			"output":  result,
+			"output":  string(result),
 		}).Error("Error running zfs receive command")
 		return err
 	}
