@@ -12,28 +12,28 @@ build_client_mac:
 	mkdir -p binaries/Darwin && CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags "-w -s -X main.clientVersion=${VERSION} -X main.dockerTag=${DOCKER_TAG}" -o binaries/Darwin/dm ./cmd/dm
 
 build_server: 
-	docker build -t ${REPOSITORY}/dotmesh-server:${DOCKER_TAG} ./context --build-arg VERSION=${VERSION} --build-arg STABLE_DOCKER_TAG=${DOCKER_TAG} -f dockerfiles/dotmesh.Dockerfile
+	docker build -t ${REPOSITORY}dotmesh-server:${DOCKER_TAG} ./context --build-arg VERSION=${VERSION} --build-arg STABLE_DOCKER_TAG=${DOCKER_TAG} -f dockerfiles/dotmesh.Dockerfile
 
 build_dind_prov: 
-	docker build -t ${REPOSITORY}/dind-dynamic-provisioner:${DOCKER_TAG} ./context -f dockerfiles/dind-provisioner.Dockerfile
+	docker build -t ${REPOSITORY}dind-dynamic-provisioner:${DOCKER_TAG} ./context -f dockerfiles/dind-provisioner.Dockerfile
 
 push_server: 
-	docker push ${REPOSITORY}/dotmesh-server:${DOCKER_TAG}
+	docker push ${REPOSITORY}dotmesh-server:${DOCKER_TAG}
 
 push_dind_prov:
-	docker push ${REPOSITORY}/dind-dynamic-provisioner:${DOCKER_TAG}
+	docker push ${REPOSITORY}dind-dynamic-provisioner:${DOCKER_TAG}
 
 build_operator:
-	docker build -t ${REPOSITORY}/dotmesh-operator:${DOCKER_TAG} --build-arg VERSION=${VERSION} --build-arg STABLE_DOTMESH_SERVER_IMAGE=${REPOSITORY}/dotmesh-server:${DOCKER_TAG} ./context -f dockerfiles/operator.Dockerfile
+	docker build -t ${REPOSITORY}dotmesh-operator:${DOCKER_TAG} --build-arg VERSION=${VERSION} --build-arg STABLE_DOTMESH_SERVER_IMAGE=${REPOSITORY}/dotmesh-server:${DOCKER_TAG} ./context -f dockerfiles/operator.Dockerfile
 
 push_operator:
-	docker push ${REPOSITORY}/dotmesh-operator:${DOCKER_TAG}
+	docker push ${REPOSITORY}dotmesh-operator:${DOCKER_TAG}
 
 build_provisioner: 
-	docker build -t ${REPOSITORY}/dotmesh-dynamic-provisioner:${DOCKER_TAG} ./context -f dockerfiles/provisioner.Dockerfile
+	docker build -t ${REPOSITORY}dotmesh-dynamic-provisioner:${DOCKER_TAG} ./context -f dockerfiles/provisioner.Dockerfile
 
 push_provisioner: 
-	docker push ${REPOSITORY}/dotmesh-dynamic-provisioner:${DOCKER_TAG}
+	docker push ${REPOSITORY}dotmesh-dynamic-provisioner:${DOCKER_TAG}
 
 gitlab_registry_login: 
 	docker login -u gitlab-ci-token -p ${CI_BUILD_TOKEN} ${CI_REGISTRY}
@@ -52,3 +52,6 @@ build_push_operator:
 
 build_push_provisioner:
 	make create_context && make gitlab_registry_login && make build_provisioner && make push_provisioner
+
+prep_tests:
+	./scripts/mark-cleanup.sh && make clear_context && make create_context && export DOCKER_TAG=latest && export VERSION=latest && make rebuild

@@ -959,13 +959,6 @@ func LocalImage(service string) string {
 			repo = os.Getenv("CI_REPOSITORY")
 		}
 		registry = reg + "/" + repo
-
-	} else {
-		hostname, err := os.Hostname()
-		if err != nil {
-			panic(err)
-		}
-		registry = fmt.Sprintf("%s.local:80/dotmesh", hostname)
 	}
 
 	var tag string
@@ -986,7 +979,11 @@ func LocalImage(service string) string {
 	if serviceBeingTested != "" && serviceBeingTested != "dotmesh-server" {
 		tag = "test-latest"
 	}
-	return fmt.Sprintf("%s/%s:%s", registry, service, tag)
+	img := fmt.Sprintf("%s:%s", service, tag)
+	if registry == "" {
+		return img + " --offline"
+	}
+	return fmt.Sprintf("%s/%s", registry, img)
 }
 
 func localEtcdImage() string {
