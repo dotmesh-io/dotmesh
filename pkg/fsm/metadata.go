@@ -107,12 +107,15 @@ func (f *FsMachine) getMetadata(commit *types.Snapshot) (map[string]string, erro
 		return nil, err
 	}
 	for key, value := range overrides {
-		decoded, err := base64.StdEncoding.DecodeString(value)
-		if err != nil {
-			return nil, err
+		if value == "." {
+			commit.Metadata[key] = ""
+		} else {
+			decoded, err := base64.StdEncoding.DecodeString(value)
+			if err != nil {
+				return nil, err
+			}
+			commit.Metadata[key] = string(decoded)
 		}
-		commit.Metadata[key] = string(decoded)
 	}
-	log.WithField("meta", commit.Metadata).WithField("fsId", f.filesystemId).Debug("[metadata.getMetadata] CRG DEBUG")
 	return commit.Metadata, nil
 }

@@ -10,6 +10,20 @@ func pullPeerState(f *FsMachine) StateFn {
 	// until our peer has what it needs. And maybe we want to block some other
 	// events while this is happening? (Although I think we want to do that for
 	// GETs in general?)
+
+	f.transitionedTo("pullPeerState", "cleaning-tmp")
+
+	// Clear out any tmp diff snapshot that exists on the fs to avoid
+	// accidentally sending it somewhere.
+	err := f.zfs.DestroyTmpSnapIfExists(f.filesystemId)
+	if err != nil {
+		f.innerResponses <- &types.Event{
+			Name: "cant-destroy-tmp-snap-if-exists",
+			Args: &types.EventArgs{"err": err},
+		}
+		return backoffState
+	}
+
 	f.transitionedTo("pullPeerState", "immediate-return")
 	f.innerResponses <- &types.Event{
 		Name: "awaiting-transfer",

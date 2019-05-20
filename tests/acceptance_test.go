@@ -1335,11 +1335,14 @@ func TestSingleNode(t *testing.T) {
 
 		citools.RunOnNode(t, node1, "dm init "+fsname)
 		citools.RunOnNode(t, node1, "dm switch "+fsname)
-		citools.RunOnNode(t, node1, "dm commit -m \"commit message\" --metadata apples=green")
+		citools.RunOnNode(t, node1, "dm commit -m \"commit message\" --metadata apples=green --metadata empty=")
 		st := citools.OutputFromRunOnNode(t, node1, "dm log")
 
 		if !strings.Contains(st, "apples: green") {
-			t.Error(fmt.Sprintf("We didn't get the metadata back from dm log: %+v", st))
+			t.Error(fmt.Sprintf("We didn't get the apples metadata back from dm log: %+v", st))
+		}
+		if !strings.Contains(st, "empty: ") {
+			t.Error(fmt.Sprintf("We didn't get the empty metadata back from dm log: %+v", st))
 		}
 	})
 

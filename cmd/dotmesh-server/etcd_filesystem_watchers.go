@@ -217,14 +217,8 @@ func (s *InMemoryState) processTransferPollResults(t *types.TransferPollResult) 
 
 	switch t.Meta.Action {
 	case types.KVDelete:
-		log.WithFields(log.Fields{
-			"t": fmt.Sprintf("%#v", t),
-		}).Debug("[ABS TEST processTransferPollResults] DELETE IS HAPPENING")
 		delete(s.interclusterTransfers, t.TransferRequestId)
 	case types.KVGet, types.KVCreate, types.KVSet:
-		log.WithFields(log.Fields{
-			"t": fmt.Sprintf("%#v", t),
-		}).Debug("[ABS TEST processTransferPollResults] SOMETHING ARRIVED")
 		s.interclusterTransfers[t.TransferRequestId] = *t
 	}
 	return

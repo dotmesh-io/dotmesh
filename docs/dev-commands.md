@@ -282,6 +282,12 @@ example.
 
 ## setting up CI runners
 
+### NEW: AUTOMATED CI SETUP
+
+This process is now automated here: [https://github.com/dotmesh-io/ops/blob/master/setup-gitlab-runner.sh](https://github.com/dotmesh-io/ops/blob/master/setup-gitlab-runner.sh)
+
+### OLD MANUAL SETUP FOLLOWS
+
 To set up a CI runner on Linux, follow the same instructions as to set up a
 development environment for a user named `gitlab-runner` on the machine that is
 to become the runner, and then [register a GitLab runner](https://docs.gitlab.com/runner/register/index.html).

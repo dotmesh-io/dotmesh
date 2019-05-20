@@ -49,6 +49,7 @@ type ZFS interface {
 	Mount(filesystemId, snapshotId string, options string, mountPath string) ([]byte, error)
 	Fork(filesystemId, latestSnapshot, forkFilesystemId string) error
 	Diff(filesystemId, snapshot, snapshotOrFilesystem string) ([]types.ZFSFileDiff, error)
+	DestroyTmpSnapIfExists(filesystemId string) error
 }
 
 var _ ZFS = &zfs{}
@@ -640,7 +641,6 @@ func (z *zfs) Recv(pipeReader *io.PipeReader, toFilesystemId string, errBuffer *
 
 func (z *zfs) ApplyPrelude(prelude types.Prelude, fs string) error {
 	// iterate over it setting zfs user properties accordingly.
-	log.Infof("[applyPrelude] Got prelude: %+v", prelude)
 	for _, j := range prelude.SnapshotProperties {
 		metadataEncoded, err := utils.EncodeMetadata(j.Metadata)
 		if err != nil {
@@ -672,7 +672,6 @@ func (z *zfs) Send(fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotI
 		"fromSnapshotId":   fromSnapshotId,
 		"toFilesystemId":   toFilesystemId,
 		"toSnapshotId":     toSnapshotId,
-		"prelude":          string(preludeEncoded),
 	}).Debug("zfs.Send() starting")
 	sendArgs := z.calculateSendArgs(
 		fromFilesystemId, fromSnapshotId, toFilesystemId, toSnapshotId,
@@ -756,7 +755,7 @@ func (z *zfs) Fork(filesystemId, latestSnapshot, forkFilesystemId string) error 
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{
 			"command": sendCommand,
-			"output":  result,
+			"output":  string(result),
 		}).Error("Error running zfs receive command")
 		return err
 	}
@@ -822,6 +821,19 @@ var diffSideCache = map[string]FilesystemDiffCache{}
 // zero size (no changes since last time it was run)
 var diffResultCache = map[string]FilesystemResultCache{}
 
+var tmpSnapshotName = "dotmesh-fastdiff"
+
+func (z *zfs) DestroyTmpSnapIfExists(filesystemID string) error {
+	// Don't accidentally include the dotmesh-fastdiff snapshot in a push stream.
+	tmp := z.FQ(FullIdWithSnapshot(filesystemID, tmpSnapshotName))
+
+	tmpExistsErr := exec.Command(z.zfsPath, "get", "name", tmp).Run()
+	if tmpExistsErr == nil {
+		return exec.Command(z.zfsPath, "destroy", tmp).Run()
+	}
+	return nil
+}
+
 func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types.ZFSFileDiff, error) {
 	/*
 		Diff the default subdot of a given dot.
@@ -835,8 +847,6 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Minute)
 	defer cancel()
-
-	tmpSnapshotName := "dotmesh-fastdiff"
 
 	// latest is the latest "dotmesh" snapshot
 	latest := z.fullZFSFilesystemPath(filesystemID, snapshot)
@@ -859,19 +869,14 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 			return nil, err
 		}
 
-		log.Infof("[diff] tmp %s dirty = %d", tmp, dirty)
 		if dirty == 0 {
 			// try to use the cache
-			log.Infof("[diff] checking diffResultCache[%s] for snap %s", filesystemID, snapshot)
 			if result, ok := diffResultCache[filesystemID]; ok {
 				if result.SnapshotID == snapshot {
-					log.Info("[diff] using cached result")
 					return result.Result, nil
 				}
 			}
 		}
-	} else {
-		log.Infof("[diff] tmp %s not exists", tmp)
 	}
 
 	err := os.MkdirAll(tmpMnt, 0775)
@@ -905,9 +910,7 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 	var mapLatest DiffSide
 	var mountedLatest bool = false
 
-	log.Infof("[diff] checking diffSideCache[%s] for snap %s", filesystemID, snapshot)
 	if latestCache, ok := diffSideCache[filesystemID]; ok && latestCache.SnapshotID == snapshot {
-		log.Info("[diff] using latest diffSide from cache")
 		mapLatest = latestCache.DiffSide
 	} else {
 		// do all setup for latestMnt only in the case that we actually need it
@@ -934,7 +937,6 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 			log.WithError(err).Error("[diff] parsing latest files")
 			return nil, err
 		}
-		log.Infof("[diff] setting diffSideCache[%s] -> (%s, %#v)", filesystemID, snapshot, mapLatest)
 		diffSideCache[filesystemID] = FilesystemDiffCache{
 			SnapshotID: snapshot,
 			DiffSide:   mapLatest,
@@ -1024,7 +1026,6 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 	}
 
 	// stash for later
-	log.Infof("[diff] setting diffResultCache[%s] -> (%s, %#v)", filesystemID, snapshot, sortedResult)
 	diffResultCache[filesystemID] = FilesystemResultCache{
 		SnapshotID: snapshot,
 		Result:     sortedResult,

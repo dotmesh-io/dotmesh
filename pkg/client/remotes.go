@@ -349,7 +349,7 @@ func (c *Configuration) CurrentBranchFor(volume string) (string, error) {
 	defer c.lock.Unlock()
 	currentBranch, ok := c.DMRemotes[c.CurrentRemote].CurrentBranches[volume]
 	if !ok {
-		return DEFAULT_BRANCH, nil
+		return DefaultBranch, nil
 	}
 	return currentBranch, nil
 }

@@ -31,6 +31,18 @@ func pushInitiatorState(f *FsMachine) StateFn {
 		transferRequestId,
 		transferRequest,
 	)
+
+	// Clear out any tmp diff snapshot that exists on the fs to avoid
+	// accidentally sending it somewhere.
+	err := f.zfs.DestroyTmpSnapIfExists(f.filesystemId)
+	if err != nil {
+		f.innerResponses <- &types.Event{
+			Name: "cant-destroy-tmp-snap-if-exists",
+			Args: &types.EventArgs{"err": err},
+		}
+		return backoffState
+	}
+
 	path, err := f.registry.DeducePathToTopLevelFilesystem(
 		types.VolumeName{transferRequest.LocalNamespace, transferRequest.LocalName},
 		transferRequest.LocalBranchName,
@@ -160,7 +172,7 @@ func (f *FsMachine) push(
 			Args: &types.EventArgs{"err": err, "filesystemId": toFilesystemId},
 		}, backoffState
 	}
-	prelude, err := calculatePrelude(snaps, toSnapshotId)
+	prelude, err := CalculatePrelude(snaps, toSnapshotId)
 	if err != nil {
 		return &types.Event{
 			Name: "error-calculating-prelude",
@@ -189,7 +201,7 @@ func (f *FsMachine) push(
 		},
 	}
 	// we will write this to the pipe first, in the goroutine which writes
-	preludeEncoded, err := encodePrelude(prelude)
+	preludeEncoded, err := EncodePrelude(prelude)
 	if err != nil {
 		return &types.Event{
 			Name: "cant-encode-prelude",
