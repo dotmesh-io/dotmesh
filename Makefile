@@ -41,6 +41,9 @@ gitlab_registry_login:
 release_all: 
 	make build_server && make build_operator && make build_provisioner && make push_provisioner && make push_server && make push_operator
 
+rebuild:
+	make build_server && make build_operator && make build_provisioner
+
 build_push_server:
 	make create_context && make gitlab_registry_login && make build_server && make build_dind_prov && make push_server && make push_dind_prov
 
