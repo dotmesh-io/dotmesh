@@ -40,7 +40,7 @@ gitlab_registry_login:
 	docker login -u gitlab-ci-token -p ${CI_BUILD_TOKEN} ${CI_REGISTRY}
 
 release_all: 
-	make build_server && make build_operator && make build_provisioner && make push_provisioner && make push_server && make push_operator
+	make create_context && make build_server && make build_operator && make build_provisioner && make push_provisioner && make push_server && make push_operator
 
 rebuild:
 	make build_server && make build_operator && make build_provisioner
