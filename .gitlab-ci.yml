@@ -76,7 +76,7 @@ build_operator:
     script:
     - export DOCKER_TAG=${CI_COMMIT_TAG:-${CI_COMMIT_SHA:-latest}}
     - export VERSION=$DOCKER_TAG # todo could change this to a "short" sha if needed
-    - export REPOSITORY=${CI_REGISTRY}/${CI_PROJECT_PATH}
+    - export REPOSITORY=${CI_REGISTRY}/${CI_PROJECT_PATH}/
     - make build_push_operator
 
 build_provisioner:
@@ -87,7 +87,7 @@ build_provisioner:
     script:
     - export DOCKER_TAG=${CI_COMMIT_TAG:-${CI_COMMIT_SHA:-latest}}
     - export VERSION=$DOCKER_TAG # todo could change this to a "short" sha if needed
-    - export REPOSITORY=${CI_REGISTRY}/${CI_PROJECT_PATH}
+    - export REPOSITORY=${CI_REGISTRY}/${CI_PROJECT_PATH}/
     - make build_push_provisioner
     except:
     - schedules
@@ -100,7 +100,7 @@ build_server:
     script:
     - export DOCKER_TAG=${CI_COMMIT_TAG:-${CI_COMMIT_SHA:-latest}}
     - export VERSION=$DOCKER_TAG # todo could change this to a "short" sha if needed
-    - export REPOSITORY=${CI_REGISTRY}/${CI_PROJECT_PATH}
+    - export REPOSITORY=${CI_REGISTRY}/${CI_PROJECT_PATH}/
     - make build_push_server
 
 dotmesh_unit_tests:

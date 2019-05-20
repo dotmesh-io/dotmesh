@@ -11,6 +11,7 @@ build_client:
 build_client_mac:
 	mkdir -p binaries/Darwin && CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags "-w -s -X main.clientVersion=${VERSION} -X main.dockerTag=${DOCKER_TAG}" -o binaries/Darwin/dm ./cmd/dm
 
+# if you want to use a repository, it must end in `/`
 build_server: 
 	docker build -t ${REPOSITORY}dotmesh-server:${DOCKER_TAG} ./context --build-arg VERSION=${VERSION} --build-arg STABLE_DOCKER_TAG=${DOCKER_TAG} -f dockerfiles/dotmesh.Dockerfile
 
