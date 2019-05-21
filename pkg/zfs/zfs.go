@@ -841,8 +841,6 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 		NB:
 		1. the snapshotOrFilesystem arg is ignored.
 		2. this function should not be run in parallel with itself.
-		3. this function assumes that 'snapshot' is the latest snapshot of the
-		   filesystem.
 	*/
 
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Minute)
