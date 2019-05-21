@@ -127,17 +127,20 @@ func (s *DiffHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	snapshots, err := s.state.SnapshotsForCurrentMaster(filesystemID)
-	if err != nil {
-		http.Error(resp, fmt.Sprintf("failed to retrieve snapshots: %s", err), http.StatusInternalServerError)
-		return
-	}
-	if len(snapshots) == 0 {
-		http.Error(resp, "no snapshots found", http.StatusBadRequest)
-		return
-	}
+	snapshotID, ok := vars["snapshotID"]
+	if !ok || snapshotID == "" {
+		snapshots, err := s.state.SnapshotsForCurrentMaster(filesystemID)
+		if err != nil {
+			http.Error(resp, fmt.Sprintf("failed to retrieve snapshots: %s", err), http.StatusInternalServerError)
+			return
+		}
+		if len(snapshots) == 0 {
+			http.Error(resp, "no snapshots found", http.StatusBadRequest)
+			return
+		}
 
-	snapshotID := snapshots[len(snapshots)-1].Id
+		snapshotID = snapshots[len(snapshots)-1].Id
+	}
 
 	// node is local, proceed with zfs diff
 	diff, err := s.getDiff(filesystemID, snapshotID)
