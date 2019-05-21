@@ -49,6 +49,7 @@ type Dotmesh interface {
 	ListCommits(activeVolumeName, activeBranch string) ([]types.Snapshot, error)
 	CommitsById(dotID string) ([]types.Snapshot, error)
 	Diff(namespace, name string) ([]types.ZFSFileDiff, error)
+	DiffFromCommit(namespace, name, commitID string) ([]types.ZFSFileDiff, error)
 	GetFsId(namespace, name, branch string) (string, error)
 	Get(fsId string) (types.DotmeshVolume, error)
 	Procure(data types.ProcureArgs) (string, error)
@@ -1196,7 +1197,10 @@ func ParseNamespacedVolume(name string) (string, string, error) {
 }
 
 func (dm *DotmeshAPI) Diff(namespace, name string) ([]types.ZFSFileDiff, error) {
+	return dm.DiffFromCommit(namespace, name, "")
+}
 
+func (dm *DotmeshAPI) DiffFromCommit(namespace, name, commitID string) ([]types.ZFSFileDiff, error) {
 	remoteCreds, err := dm.Configuration.CredsForRemote(dm.Configuration.CurrentRemote)
 	if err != nil {
 		return nil, err
@@ -1215,9 +1219,19 @@ func (dm *DotmeshAPI) Diff(namespace, name string) ([]types.ZFSFileDiff, error) 
 		url = "http://" + remoteCreds.Hostname + ":" + strconv.Itoa(remoteCreds.Port)
 	}
 
-	req, err := http.NewRequest(http.MethodGet, url+"/diff/"+namespace+":"+name, nil)
-	if err != nil {
-		return nil, err
+	// NB: commitID can be empty string, which means to diff from the latest
+	// commit in Dotmesh (as used by Diff API)
+	var req *http.Request
+	if commitID == "" {
+		req, err = http.NewRequest(http.MethodGet, url+"/diff/"+namespace+":"+name, nil)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		req, err = http.NewRequest(http.MethodGet, url+"/diff/"+namespace+":"+name+"/"+commitID, nil)
+		if err != nil {
+			return nil, err
+		}
 	}
 	req.SetBasicAuth(remoteCreds.User, remoteCreds.ApiKey)
 
