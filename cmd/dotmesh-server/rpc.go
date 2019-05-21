@@ -1147,8 +1147,6 @@ func (d *DotmeshRPC) registerFilesystemBecomeMaster(
 		return fmt.Errorf("Filesystem ID %s already exists", filesystemId)
 	}
 
-	log.Debugf("[registerFilesystemBecomeMaster] passed existence check")
-
 	// TODO handle the case where the registry entry exists but the filesystems
 	// (fsMachine map) entry doesn't.
 
