@@ -16,8 +16,6 @@ go_library(
         "generated_expansion.go",
         "initializerconfiguration.go",
     ],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/k8s.io/client-go/kubernetes/typed/admissionregistration/v1alpha1",
-    importpath = "k8s.io/client-go/kubernetes/typed/admissionregistration/v1alpha1",
     tags = ["automanaged"],
     deps = [
         "//vendor/k8s.io/apimachinery/pkg/apis/meta/v1:go_default_library",

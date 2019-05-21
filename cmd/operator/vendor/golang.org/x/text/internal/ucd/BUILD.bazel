@@ -1,9 +1,0 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
-
-go_library(
-    name = "go_default_library",
-    srcs = ["ucd.go"],
-    importmap = "github.com/dotmesh-io/dotmesh/cmd/operator/vendor/golang.org/x/text/internal/ucd",
-    importpath = "golang.org/x/text/internal/ucd",
-    visibility = ["//cmd/operator/vendor/golang.org/x/text:__subpackages__"],
-)

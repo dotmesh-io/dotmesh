@@ -5,22 +5,9 @@
 
 variables:
     SERVER_NAME: dotmesh-server
-    PROVISIONER_NAME: dotmesh-dynamic-provisioner
 
-    CI_REGISTRY: registry.gitlab.dotmesh.com
-    CI_REPOSITORY: dotmesh/dotmesh
     RELEASE_DOCKER_REGISTRY: quay.io
     RELEASE_DOCKER_REPOSITORY: dotmesh
-
-    CI_DOCKER_TAG: $CI_COMMIT_SHA
-
-    # PLEASE NOTE: If you change these, you also need to update the BUILD.bazel files in those projects
-    # to make their docker_push thingies match - they don't automatically remain in sync.
-    STABLE_CI_DOCKER_SERVER_IMAGE: $CI_REGISTRY/$CI_REPOSITORY/dotmesh-server:$CI_COMMIT_SHA
-    CI_DOCKER_PROVISIONER_IMAGE: $CI_REGISTRY/$CI_REPOSITORY/dotmesh-dynamic-provisioner:$CI_COMMIT_SHA
-    CI_DOCKER_OPERATOR_IMAGE: $CI_REGISTRY/$CI_REPOSITORY/dotmesh-operator:$CI_COMMIT_SHA
-    CI_DOCKER_DIND_PROVISIONER_IMAGE: $CI_REGISTRY/$CI_REPOSITORY/dind-dynamic-provisioner:$CI_COMMIT_SHA
-
     CI_SERVICE_BEING_TESTED: dotmesh-server
 
     DOTMESH_TEST_CLEANUP: always
@@ -49,56 +36,41 @@ build_client_linux:
     tags:
         - fast
     script:
-        - ./rebuild_client.sh Linux
+    - export DOCKER_TAG=${CI_COMMIT_TAG:-${CI_COMMIT_SHA:-latest}}
+    - export VERSION=$DOCKER_TAG # todo could change this to a "short" sha if needed
+    - make build_client
     artifacts:
         paths:
             - binaries
         expire_in: 1 week
-    except:
-        - schedules
 
 build_client_macos:
     retry: 2
     stage: build
     tags:
-        - fast
+    - fast
     script:
-        - ./rebuild_client.sh Darwin
+    - export DOCKER_TAG=${CI_COMMIT_TAG:-${CI_COMMIT_SHA:-latest}}
+    - export VERSION=$DOCKER_TAG # todo could change this to a "short" sha if needed
+    - make build_client_mac
     artifacts:
         paths:
-            - binaries
+        - binaries
         expire_in: 1 week
     except:
-        - schedules
+    - schedules
 
 build_yaml:
     retry: 2
     stage: build
     tags:
-        - fast
+    - fast
     script:
-        - (cd kubernetes && ./rebuild.sh)
+    - (cd kubernetes && ./rebuild.sh)
     artifacts:
         paths:
-            - yaml
+        - yaml
         expire_in: 1 week
-    except:
-        - schedules
-
-.build_without_bazel:
-    retry: 2
-    stage: build
-    tags:
-        - fast
-    script:
-        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
-        - ./rebuild_in_container_without_bazel.sh --push Linux
-    artifacts:
-        paths:
-            - target
-        expire_in: 1 week
-    except:
-        - schedules
 
 build_operator:
     retry: 2
@@ -106,16 +78,10 @@ build_operator:
     tags:
         - fast
     script:
-        # push to the CI registry
-        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
-        - (./rebuild_operator.sh) # also pushes
-        - echo "pushed $CI_DOCKER_OPERATOR_IMAGE"
-    artifacts:
-        paths:
-            - target
-        expire_in: 1 week
-    except:
-        - schedules
+    - export DOCKER_TAG=${CI_COMMIT_TAG:-${CI_COMMIT_SHA:-latest}}
+    - export VERSION=$DOCKER_TAG # todo could change this to a "short" sha if needed
+    - export REPOSITORY=${CI_REGISTRY}/${CI_PROJECT_PATH}/
+    - make build_push_operator
 
 build_provisioner:
     retry: 2
@@ -123,34 +89,23 @@ build_provisioner:
     tags:
         - fast
     script:
-        # push to the CI registry
-        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
-        - (./rebuild_provisioner.sh) # also pushes
-        - echo "pushed $CI_DOCKER_PROVISIONER_IMAGE"
-    artifacts:
-        paths:
-            - target
-        expire_in: 1 week
+    - export DOCKER_TAG=${CI_COMMIT_TAG:-${CI_COMMIT_SHA:-latest}}
+    - export VERSION=$DOCKER_TAG # todo could change this to a "short" sha if needed
+    - export REPOSITORY=${CI_REGISTRY}/${CI_PROJECT_PATH}/
+    - make build_push_provisioner
     except:
-        - schedules
+    - schedules
 
 build_server:
     retry: 2
     stage: build
     tags:
-        - fast
+    - fast
     script:
-        # push to the CI registry
-        - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
-        - (./rebuild_server.sh) # also pushes
-        - echo "pushed $CI_DOCKER_SERVER_IMAGE"
-        - echo "pushed $CI_DOCKER_DIND_PROVISIONER_IMAGE"
-    artifacts:
-        paths:
-            - target
-        expire_in: 1 week
-    except:
-        - schedules
+    - export DOCKER_TAG=${CI_COMMIT_TAG:-${CI_COMMIT_SHA:-latest}}
+    - export VERSION=$DOCKER_TAG # todo could change this to a "short" sha if needed
+    - export REPOSITORY=${CI_REGISTRY}/${CI_PROJECT_PATH}/
+    - make build_push_server
 
 dotmesh_unit_tests:
     stage: test
@@ -158,15 +113,6 @@ dotmesh_unit_tests:
         - fast
     script:
         - go test `go list ./... | egrep -v /tests`
-    except:
-        - schedules
-
-versioner_unit_tests:
-    stage: test
-    tags:
-        - fast
-    script:
-        - cd cmd/versioner && go test
     except:
         - schedules
 
@@ -179,7 +125,7 @@ linux_default_dot:
     tags:
         - fast
     script:
-        - ./test.sh -run TestDefaultDot
+        - bash ./scripts/test.sh -run TestDefaultDot
     artifacts:
         paths:
         - extracted_logs
@@ -195,7 +141,7 @@ linux_dot_diff:
     tags:
         - fast
     script:
-        - ./test.sh -run TestDotDiff
+        - bash ./scripts/test.sh -run TestDotDiff
     artifacts:
         paths:
         - extracted_logs
@@ -211,7 +157,7 @@ linux_boltdb:
     tags:
         - fast
     script:
-        - ./test.sh -run TestBoltDBStoreWithDefaultDot
+        - bash ./scripts/test.sh -run TestBoltDBStoreWithDefaultDot
     artifacts:
         paths:
         - extracted_logs
@@ -227,7 +173,7 @@ linux__restart_boltdb:
     tags:
         - fast
     script:
-        - ./test.sh -run TestRecoverFromUnmountedDotOnMasterBoltDB
+        - bash ./scripts/test.sh -run TestRecoverFromUnmountedDotOnMasterBoltDB
     artifacts:
         paths:
         - extracted_logs
@@ -243,7 +189,7 @@ linux_single_node:
     tags:
         - fast
     script:
-        - ./test.sh -run TestSingleNode
+        - bash ./scripts/test.sh -run TestSingleNode
     artifacts:
         paths:
         - extracted_logs
@@ -259,7 +205,7 @@ linux_recover_from_unmounted_dot_on_master:
     tags:
         - fast
     script:
-        - ./test.sh -run TestRecoverFromUnmountedDotOnMaster
+        - bash ./scripts/test.sh -run TestRecoverFromUnmountedDotOnMaster
     artifacts:
         paths:
         - extracted_logs
@@ -275,60 +221,7 @@ linux_two_nodes_same_cluster:
     tags:
         - fast
     script:
-        - ./test.sh -run TestTwoNodesSameCluster
-    artifacts:
-        paths:
-        - extracted_logs
-        when: always
-    except:
-        - schedules
-
-.linux_kubernetes_volumes:
-    retry: 2
-    stage: test
-    dependencies:
-        - build_yaml
-        - build_client_linux
-    tags:
-        - fast
-    script:
-        - ./test.sh -run TestKubernetesVolumes
-    artifacts:
-        paths:
-        - extracted_logs
-        when: always
-    except:
-        - schedules
-
-.linux_kubernetes_operator_dynamic_provisioning:
-    retry: 2
-    stage: test
-    dependencies:
-        - build_yaml
-        - build_client_linux
-        - build_server
-    tags:
-        - fast
-    script:
-        - DOTMESH_TEST_TIMEOUT=15m ./test.sh -run TestKubernetesOperator/DynamicProvisioning
-    artifacts:
-        paths:
-        - extracted_logs
-        when: always
-    except:
-        - schedules
-
-.linux_kubernetes_operator_PVC:
-    retry: 2
-    stage: test
-    dependencies:
-        - build_yaml
-        - build_client_linux
-        - build_server
-    tags:
-        - fast
-    script:
-        - ./test.sh -run TestKubernetesOperator/PVC*
+        - bash ./scripts/test.sh -run TestTwoNodesSameCluster
     artifacts:
         paths:
         - extracted_logs
@@ -344,7 +237,7 @@ linux_deletion_simple:
     tags:
         - fast
     script:
-        - ./test.sh -run TestDeletionSimple
+        - bash ./scripts/test.sh -run TestDeletionSimple
     artifacts:
         paths:
         - extracted_logs
@@ -360,7 +253,7 @@ linux_deletion_complex:
     tags:
         - fast
     script:
-        - ./test.sh -run TestDeletionComplex
+        - bash ./scripts/test.sh -run TestDeletionComplex
     artifacts:
         paths:
         - extracted_logs
@@ -376,7 +269,7 @@ linux_backup_and_restore_two_single_node_clusters:
     tags:
         - fast
     script:
-        - ./test.sh -run TestBackupAndRestoreTwoSingleNodeClusters
+        - bash ./scripts/test.sh -run TestBackupAndRestoreTwoSingleNodeClusters
     artifacts:
         paths:
         - extracted_logs
@@ -392,7 +285,7 @@ linux_two_single_node_clusters:
     tags:
         - fast
     script:
-        - ./test.sh -run TestTwoSingleNodeClusters
+        - bash ./scripts/test.sh -run TestTwoSingleNodeClusters
     artifacts:
         paths:
         - extracted_logs
@@ -408,7 +301,7 @@ linux_three_single_node_clusters:
     tags:
         - fast
     script:
-        - ./test.sh -run TestThreeSingleNodeClusters
+        - bash ./scripts/test.sh -run TestThreeSingleNodeClusters
     artifacts:
         paths:
         - extracted_logs
@@ -424,7 +317,7 @@ linux_two_double_node_clusters:
     tags:
         - fast
     script:
-        - ./test.sh -run TestTwoDoubleNodeClusters
+        - bash ./scripts/test.sh -run TestTwoDoubleNodeClusters
     artifacts:
         paths:
         - extracted_logs
@@ -440,7 +333,7 @@ linux_two_double_node_clusters:
     tags:
         - fast
     script:
-        - ./test.sh -run TestS3Remote
+        - bash ./scripts/test.sh -run TestS3Remote
     artifacts:
         paths:
         - extracted_logs
@@ -456,7 +349,7 @@ linux_s3api:
     tags:
         - fast
     script:
-        - ./test.sh -run TestS3Api
+        - bash ./scripts/test.sh -run TestS3Api
     artifacts:
         paths:
         - extracted_logs
@@ -472,25 +365,7 @@ linux_forks:
     tags:
         - fast
     script:
-        - ./test.sh -run TestForks
-    artifacts:
-        paths:
-        - extracted_logs
-        when: always
-    except:
-        - schedules
-
-# Test disabled while we rethink how it works (see comments in acceptance_test.go)
-.linux_kubernetes_test_tooling:
-    retry: 2
-    stage: test
-    dependencies:
-        - build_client_linux
-    tags:
-
-        - fast
-    script:
-        - ./test.sh -run TestKubernetesTestTooling
+        - bash ./scripts/test.sh -run TestForks
     artifacts:
         paths:
         - extracted_logs
@@ -506,7 +381,7 @@ linux_stress_lots_of_commits:
     tags:
         - fast
     script:
-        - DOTMESH_TEST_TIMEOUT=30m ./test.sh -timeout 30m -run TestStressLotsOfCommits
+        - DOTMESH_TEST_TIMEOUT=30m bash ./scripts/test.sh -timeout 30m -run TestStressLotsOfCommits
     artifacts:
         paths:
         - extracted_logs
@@ -524,7 +399,7 @@ linux_stress_large_files:
         - big-disk
         - fast
     script:
-        - DOTMESH_TEST_TIMEOUT=30m ./test.sh -timeout 30m -run TestStressLargeFiles
+        - DOTMESH_TEST_TIMEOUT=30m bash ./scripts/test.sh -timeout 30m -run TestStressLargeFiles
     artifacts:
         paths:
         - extracted_logs
@@ -541,7 +416,7 @@ linux_stress_handover:
     tags:
         - fast
     script:
-        - DOTMESH_TEST_TIMEOUT=30m ./test.sh -timeout 30m -run TestStressHandover
+        - DOTMESH_TEST_TIMEOUT=30m bash ./scripts/test.sh -timeout 30m -run TestStressHandover
     artifacts:
         paths:
         - extracted_logs
@@ -564,7 +439,10 @@ publish_images:
         # push to quay.io, by re-tagging and pushing the images
         - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
         - docker login -u $QUAY_USER -p $QUAY_PASSWORD $RELEASE_DOCKER_REGISTRY
-        - ./release-images.sh $RELEASE_DOCKER_REGISTRY $RELEASE_DOCKER_REPOSITORY
+        - export REPOSITORY=$RELEASE_DOCKER_REGISTRY/$RELEASE_DOCKER_REPOSITORY/
+        - export DOCKER_TAG=${CI_COMMIT_TAG:-$CI_COMMIT_SHA}
+        - export VERSION=$DOCKER_TAG
+        - make release_all
     except:
         - schedules
 

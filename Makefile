@@ -1,39 +1,58 @@
-.PHONY: build
-build: ; bash dev.sh build
+# create the context dir before running any of the commands below - ensures the smallest docker context to make builds faster
+create_context:
+	mkdir -p context && cp -r ./pkg ./context/pkg && cp -r ./vendor ./context/vendor && cp -r ./cmd ./context/cmd && cp -r ./scripts ./context/scripts
 
-.PHONY: cluster.build
-cluster.build: ; bash dev.sh cluster-build
+clear_context:
+	rm -rf context
 
-.PHONY: cluster.start
-cluster.start: ; bash dev.sh cluster-start
+build_client:
+	mkdir -p binaries/Linux && CGO_ENABLED=0 go build -ldflags "-w -s -X main.clientVersion=${VERSION} -X main.dockerTag=${DOCKER_TAG}" -o binaries/Linux/dm ./cmd/dm
 
-.PHONY: cluster.stop
-cluster.stop: ; bash dev.sh cluster-stop
+build_client_mac:
+	mkdir -p binaries/Darwin && CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags "-w -s -X main.clientVersion=${VERSION} -X main.dockerTag=${DOCKER_TAG}" -o binaries/Darwin/dm ./cmd/dm
 
-.PHONY: cluster.upgrade
-cluster.upgrade: ; bash dev.sh cluster-upgrade
+# if you want to use a repository, it must end in `/`
+build_server: 
+	docker build -t ${REPOSITORY}dotmesh-server:${DOCKER_TAG} ./context --build-arg VERSION=${VERSION} --build-arg STABLE_DOCKER_TAG=${DOCKER_TAG} -f dockerfiles/dotmesh.Dockerfile
 
-.PHONY: cli.build
-cli.build:
-	bash dev.sh cli-build
+build_dind_prov: 
+	docker build -t ${REPOSITORY}dind-dynamic-provisioner:${DOCKER_TAG} ./context -f dockerfiles/dind-provisioner.Dockerfile
 
-.PHONY: reset
-reset: ; bash dev.sh reset
+push_server: 
+	docker push ${REPOSITORY}dotmesh-server:${DOCKER_TAG}
 
-.PHONY: vagrant.sync
-vagrant.sync: ; bash dev.sh vagrant-sync
+push_dind_prov:
+	docker push ${REPOSITORY}dind-dynamic-provisioner:${DOCKER_TAG}
 
-.PHONY: vagrant.prepare
-vagrant.prepare: ; bash dev.sh vagrant-prepare
+build_operator:
+	docker build -t ${REPOSITORY}dotmesh-operator:${DOCKER_TAG} --build-arg VERSION=${VERSION} --build-arg STABLE_DOTMESH_SERVER_IMAGE=${REPOSITORY}/dotmesh-server:${DOCKER_TAG} ./context -f dockerfiles/operator.Dockerfile
 
-.PHONY: vagrant.test
-vagrant.test: ; bash dev.sh vagrant-test
+push_operator:
+	docker push ${REPOSITORY}dotmesh-operator:${DOCKER_TAG}
 
-.PHONY: vagrant.changed
-vagrant.changed:
-	bash dev.sh vagrant-list-changed-files
+build_provisioner: 
+	docker build -t ${REPOSITORY}dotmesh-dynamic-provisioner:${DOCKER_TAG} ./context -f dockerfiles/provisioner.Dockerfile
 
-.PHONY: vagrant.copy
-vagrant.copy:
-	bash dev.sh vagrant-copy-changed-files
+push_provisioner: 
+	docker push ${REPOSITORY}dotmesh-dynamic-provisioner:${DOCKER_TAG}
 
+gitlab_registry_login: 
+	docker login -u gitlab-ci-token -p ${CI_BUILD_TOKEN} ${CI_REGISTRY}
+
+release_all: 
+	make create_context && make build_server && make build_operator && make build_provisioner && make push_provisioner && make push_server && make push_operator
+
+rebuild:
+	make build_server && make build_operator && make build_provisioner
+
+build_push_server:
+	make create_context && make gitlab_registry_login && make build_server && make build_dind_prov && make push_server && make push_dind_prov
+
+build_push_operator:
+	make create_context && make gitlab_registry_login && make build_operator && make push_operator
+
+build_push_provisioner:
+	make create_context && make gitlab_registry_login && make build_provisioner && make push_provisioner
+
+prep_tests:
+	./scripts/mark-cleanup.sh && make clear_context && make create_context && export DOCKER_TAG=latest && export VERSION=latest && make rebuild

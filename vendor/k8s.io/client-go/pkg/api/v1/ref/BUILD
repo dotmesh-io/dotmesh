@@ -10,8 +10,6 @@ load(
 go_library(
     name = "go_default_library",
     srcs = ["ref.go"],
-    importmap = "github.com/dotmesh-io/dotmesh/vendor/k8s.io/client-go/pkg/api/v1/ref",
-    importpath = "k8s.io/client-go/pkg/api/v1/ref",
     tags = ["automanaged"],
     deps = [
         "//vendor/k8s.io/apimachinery/pkg/api/meta:go_default_library",
