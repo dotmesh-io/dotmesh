@@ -65,71 +65,32 @@ func (state *InMemoryState) runServer() {
 
 	router := mux.NewRouter()
 
-	// only use the zipkin middleware if we have a TRACE_ADDR
-	if os.Getenv("TRACE_ADDR") != "" {
-		tracer := opentracing.GlobalTracer()
+	router.Handle("/rpc", Instrument(state)(NewAuthHandler(r, state.userManager)))
 
-		router.Handle("/rpc",
-			middleware.FromHTTPRequest(tracer, "rpc")(Instrument(state)(NewAuthHandler(r, state.userManager))),
-		)
+	router.Handle(
+		"/filesystems/{filesystem}/{fromSnap}/{toSnap}",
+		Instrument(state)(NewAuthHandler(state.NewZFSSendingServer(), state.userManager)),
+	).Methods("GET")
 
-		router.Handle(
-			"/filesystems/{filesystem}/{fromSnap}/{toSnap}",
-			middleware.FromHTTPRequest(tracer, "zfs-sender")(
-				Instrument(state)(NewAuthHandler(state.NewZFSSendingServer(), state.userManager)),
-			),
-		).Methods("GET")
+	router.Handle(
+		"/filesystems/{filesystem}/{fromSnap}/{toSnap}",
+		Instrument(state)(NewAuthHandler(state.NewZFSReceivingServer(), state.userManager)),
+	).Methods("POST")
 
-		router.Handle(
-			"/filesystems/{filesystem}/{fromSnap}/{toSnap}",
-			middleware.FromHTTPRequest(tracer, "zfs-receiver")(
-				Instrument(state)(NewAuthHandler(state.NewZFSReceivingServer(), state.userManager)),
-			),
-		).Methods("POST")
+	// display diff since the last commit
+	router.Handle("/diff/{namespace}:{name}", Instrument(state)(NewAuthHandler(NewDiffHandler(state), state.userManager))).Methods("GET")
+	router.Handle("/diff/{namespace}:{name}/{snapshotID}", Instrument(state)(NewAuthHandler(NewDiffHandler(state), state.userManager))).Methods("GET")
 
-		// display diff since the last commit, or the latest named commit
-		router.Handle("/diff/{namespace}:{name}", Instrument(state)(NewAuthHandler(NewDiffHandler(state), state.userManager))).Methods("GET")
-		router.Handle("/diff/{namespace}:{name}/{snapshotID}", Instrument(state)(NewAuthHandler(NewDiffHandler(state), state.userManager))).Methods("GET")
-
-		// list files in the latest snapshot
-		router.Handle("/s3/{namespace}:{name}", middleware.FromHTTPRequest(tracer, "s3")(Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager)))).Methods("GET")
-		// list files in a specific snapshot
-		router.Handle("/s3/{namespace}:{name}/snapshot/{snapshotId}", middleware.FromHTTPRequest(tracer, "s3")(Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager)))).Methods("GET")
-		// download a file from a specific snapshot
-		router.Handle("/s3/{namespace}:{name}/snapshot/{snapshotId}/{key:.*}", middleware.FromHTTPRequest(tracer, "s3")(Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager)))).Methods("GET")
-
-		// put file into master
-		router.Handle("/s3/{namespace}:{name}/{key:.*}", middleware.FromHTTPRequest(tracer, "s3")(Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager)))).Methods("PUT")
-
-		// put file into other branch
-		router.Handle("/s3/{namespace}:{name}@{branch}/{key:.*}", middleware.FromHTTPRequest(tracer, "s3")(Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager)))).Methods("PUT")
-	} else {
-		router.Handle("/rpc", Instrument(state)(NewAuthHandler(r, state.userManager)))
-
-		router.Handle(
-			"/filesystems/{filesystem}/{fromSnap}/{toSnap}",
-			Instrument(state)(NewAuthHandler(state.NewZFSSendingServer(), state.userManager)),
-		).Methods("GET")
-
-		router.Handle(
-			"/filesystems/{filesystem}/{fromSnap}/{toSnap}",
-			Instrument(state)(NewAuthHandler(state.NewZFSReceivingServer(), state.userManager)),
-		).Methods("POST")
-
-		// display diff since the last commit
-		router.Handle("/diff/{namespace}:{name}", Instrument(state)(NewAuthHandler(NewDiffHandler(state), state.userManager))).Methods("GET")
-
-		// list files in the latest snapshot
-		router.Handle("/s3/{namespace}:{name}", Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager))).Methods("GET")
-		// list files in a specific snapshot
-		router.Handle("/s3/{namespace}:{name}/snapshot/{snapshotId}", Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager))).Methods("GET")
-		// download a file from a specific snapshot
-		router.Handle("/s3/{namespace}:{name}/snapshot/{snapshotId}/{key:.*}", Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager))).Methods("GET")
-		// put file into master
-		router.Handle("/s3/{namespace}:{name}/{key:.*}", Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager))).Methods("PUT")
-		// put file into other branch
-		router.Handle("/s3/{namespace}:{name}@{branch}/{key:.*}", Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager))).Methods("PUT")
-	}
+	// list files in the latest snapshot
+	router.Handle("/s3/{namespace}:{name}", Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager))).Methods("GET")
+	// list files in a specific snapshot
+	router.Handle("/s3/{namespace}:{name}/snapshot/{snapshotId}", Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager))).Methods("GET")
+	// download a file from a specific snapshot
+	router.Handle("/s3/{namespace}:{name}/snapshot/{snapshotId}/{key:.*}", Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager))).Methods("GET")
+	// put file into master
+	router.Handle("/s3/{namespace}:{name}/{key:.*}", Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager))).Methods("PUT")
+	// put file into other branch
+	router.Handle("/s3/{namespace}:{name}@{branch}/{key:.*}", Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager))).Methods("PUT")
 
 	router.HandleFunc("/check",
 		func(w http.ResponseWriter, r *http.Request) {
