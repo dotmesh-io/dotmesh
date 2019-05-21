@@ -15,8 +15,6 @@ import (
 	"github.com/gorilla/mux"
 	rpc "github.com/gorilla/rpc/v2"
 	rpcjson "github.com/gorilla/rpc/v2/json2"
-	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/openzipkin/zipkin-go-opentracing/examples/middleware"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	log "github.com/sirupsen/logrus"
