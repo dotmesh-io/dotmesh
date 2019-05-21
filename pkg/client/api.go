@@ -1221,9 +1221,17 @@ func (dm *DotmeshAPI) DiffFromCommit(namespace, name, commitID string) ([]types.
 
 	// NB: commitID can be empty string, which means to diff from the latest
 	// commit in Dotmesh (as used by Diff API)
-	req, err := http.NewRequest(http.MethodGet, url+"/diff/"+namespace+":"+name+"/"+commitID, nil)
-	if err != nil {
-		return nil, err
+	var req *http.Request
+	if commitID == "" {
+		req, err = http.NewRequest(http.MethodGet, url+"/diff/"+namespace+":"+name, nil)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		req, err = http.NewRequest(http.MethodGet, url+"/diff/"+namespace+":"+name+"/"+commitID, nil)
+		if err != nil {
+			return nil, err
+		}
 	}
 	req.SetBasicAuth(remoteCreds.User, remoteCreds.ApiKey)
 
