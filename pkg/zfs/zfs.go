@@ -1029,5 +1029,12 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 		Result:     sortedResult,
 	}
 
+	log.WithFields(log.Fields{
+		"result":               sortedResult,
+		"filesystemID":         filesystemID,
+		"snapshot":             snapshot,
+		"snapshotOrFilesystem": snapshotOrFilesystem,
+	}).Info("[Diff] result")
+
 	return sortedResult, nil
 }
