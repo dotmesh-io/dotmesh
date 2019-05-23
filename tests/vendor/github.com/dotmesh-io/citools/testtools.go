@@ -1245,9 +1245,9 @@ func NodeFromNodeName(t *testing.T, now int64, i, j int, clusterName string) Nod
 // Networking config helper functions
 
 func hostIpFromContainer(prefix int) string {
-	// This is just 0.1 because we're not actually allocating 10.200.$prefix
-	// addresses any more
-	return "192.168.0.1"
+	// Seems to somewhat reliably be the (default, at least) docker bridge IP
+	// on the host.
+	return "172.17.0.1"
 }
 
 func serviceCIDR(prefix int) string {
