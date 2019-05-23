@@ -462,14 +462,14 @@ func (f *FsMachine) updateEtcdAboutTransfers() error {
 			pollResult.Status = update.Changes.Status
 			pollResult.Total = update.Changes.Total
 			pollResult.Size = update.Changes.Size
-			if pollResult.Total > pollResult.Size {
-				// cap at 100%, so that all our clients don't have to
-				pollResult.Total = pollResult.Size
-			}
 		case types.TransferProgress:
 			// never update a transfer after it's finished
 			if pollResult.Status != "finished" {
 				pollResult.Sent = update.Changes.Sent
+				if pollResult.Sent > pollResult.Size {
+					// cap at 100%, so that all our clients don't have to
+					pollResult.Sent = pollResult.Size
+				}
 				pollResult.NanosecondsElapsed = update.Changes.NanosecondsElapsed
 				pollResult.Status = update.Changes.Status
 			}
