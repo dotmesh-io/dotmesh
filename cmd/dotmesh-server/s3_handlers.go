@@ -4,9 +4,13 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -271,11 +275,37 @@ func (s *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, files
 		return
 	}
 
-	defer req.Body.Close()
+	tDir, err := ioutil.TempDir(os.TempDir(), filesystemId)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"error":         err,
+			"filesystem_id": filesystemId,
+		}).Error("failed to create a temp dir for S3 file upload")
+		http.Error(resp, "failed to create staging directory for the upload", http.StatusServiceUnavailable)
+		return
+	}
+	defer os.RemoveAll(tDir)
+
+	tempFile, err := os.Create(filepath.Join(tDir, filename))
+	if err != nil {
+		resp.WriteHeader(500)
+		fmt.Fprintf(resp, "failed to create a temporary file for the upload, error: %s", err)
+		return
+	}
+	defer tempFile.Close()
+
+	_, err = io.Copy(tempFile, req.Body)
+	if err != nil {
+		resp.WriteHeader(500)
+		fmt.Fprintf(resp, "upload failed, error: %s", err)
+		return
+	}
+	req.Body.Close()
+
 	respCh := make(chan *Event)
 	fsm.WriteFile(&types.InputFile{
 		Filename: filename,
-		Contents: req.Body,
+		Contents: tempFile,
 		User:     user.Name,
 		Response: respCh,
 	})
