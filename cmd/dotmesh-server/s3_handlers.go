@@ -286,26 +286,31 @@ func (s *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, files
 	}
 	defer os.RemoveAll(tDir)
 
-	tempFile, err := os.Create(filepath.Join(tDir, filename))
+	fp := filepath.Join(tDir, filename)
+
+	tempFile, err := os.Create(fp)
 	if err != nil {
 		resp.WriteHeader(500)
 		fmt.Fprintf(resp, "failed to create a temporary file for the upload, error: %s", err)
 		return
 	}
-	defer tempFile.Close()
 
-	_, err = io.Copy(tempFile, req.Body)
+	size, err := io.Copy(tempFile, req.Body)
 	if err != nil {
+		tempFile.Close()
+
 		resp.WriteHeader(500)
 		fmt.Fprintf(resp, "upload failed, error: %s", err)
 		return
 	}
 	req.Body.Close()
+	tempFile.Close()
 
 	respCh := make(chan *Event)
 	fsm.WriteFile(&types.InputFile{
 		Filename: filename,
-		Contents: tempFile,
+		Filepath: fp,
+		Size:     size,
 		User:     user.Name,
 		Response: respCh,
 	})

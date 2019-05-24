@@ -9,7 +9,11 @@ import (
 // InputFile is used to write files to the disk on the local node.
 type InputFile struct {
 	Filename string
-	Contents io.Reader
+	// Filepath - full path to the temporary file,
+	// after the response is returned, file's directory
+	// will be destroyed
+	Filepath string
+	Size     int64
 	User     string
 	Response chan *Event
 }

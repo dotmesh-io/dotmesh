@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/dotmesh-io/dotmesh/pkg/archiver"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
@@ -16,10 +15,11 @@ import (
 
 func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 	// create the default paths
-	destPath := fmt.Sprintf("%s/%s/%s", utils.Mnt(f.filesystemId), "__default__", file.Filename)
+
+	destPath := filepath.Join(utils.Mnt(f.filesystemId), "__default__", file.Filename)
 	log.Printf("Saving file to %s", destPath)
-	directoryPath := destPath[:strings.LastIndex(destPath, "/")]
-	err := os.MkdirAll(directoryPath, 0775)
+
+	err := os.Rename(file.Filepath, destPath)
 	if err != nil {
 		file.Response <- &types.Event{
 			Name: types.EventNameSaveFailed,
@@ -27,41 +27,15 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 		}
 		return backoffState
 	}
-	out, err := os.Create(destPath)
-	if err != nil {
-		file.Response <- &types.Event{
-			Name: types.EventNameSaveFailed,
-			Args: &types.EventArgs{"err": fmt.Errorf("failed to create file, error: %s", err)},
-		}
-		return backoffState
-	}
 
-	defer func() {
-		err := out.Close()
-		if err != nil {
-			log.WithFields(log.Fields{
-				"error": err,
-				"file":  destPath,
-			}).Error("s3 saveFile: got error while closing output file")
-		}
-	}()
-
-	bytes, err := io.Copy(out, file.Contents)
-	if err != nil {
-		file.Response <- &types.Event{
-			Name: types.EventNameSaveFailed,
-			Args: &types.EventArgs{"err": fmt.Errorf("cannot to create a file, error: %s", err)},
-		}
-		return backoffState
-	}
 	response, _ := f.snapshot(&types.Event{Name: "snapshot",
 		Args: &types.EventArgs{"metadata": map[string]string{
-			"message":      "Uploaded " + file.Filename + " (" + formatBytes(bytes) + ")",
+			"message":      "Uploaded " + file.Filename + " (" + formatBytes(file.Size) + ")",
 			"author":       file.User,
 			"type":         "upload",
 			"upload.type":  "S3",
 			"upload.file":  file.Filename,
-			"upload.bytes": fmt.Sprintf("%d", bytes),
+			"upload.bytes": fmt.Sprintf("%d", file.Size),
 		}}})
 	if response.Name != "snapshotted" {
 		file.Response <- &types.Event{
