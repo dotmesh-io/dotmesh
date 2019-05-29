@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -101,7 +102,7 @@ func receivingState(f *FsMachine) StateFn {
 		// the log thrashing by just thrashing more slowly.
 		return backoffStateWithReasonCustomTimeout(
 			fmt.Sprintf("receivingState: No known address for current master of %s", f.filesystemId),
-			600,
+			time.Second*600,
 		)
 	}
 
