@@ -64,7 +64,7 @@ func TestS3Api(t *testing.T) {
 
 		body.WriteString(strings.Repeat("A", 20*1024*1024*1024))
 
-		respBody, status, err := call(http.MethodPut, fmt.Sprintf("s3/admin:%s/newfile", dotName), host, &body)
+		respBody, status, err := call(http.MethodPut, fmt.Sprintf("s3/admin:%s/largefile", dotName), host, &body)
 		if err != nil {
 			t.Errorf("S3 upload failed, error: %s", err)
 		}
@@ -73,7 +73,7 @@ func TestS3Api(t *testing.T) {
 		}
 
 		resp := citools.OutputFromRunOnNode(t, node1, citools.DockerRun(dotName)+" ls /foo/")
-		if !strings.Contains(resp, "newfile") {
+		if !strings.Contains(resp, "largefile") {
 			t.Error("failed to create file, cannot see 'newfile' in the directory")
 		}
 
