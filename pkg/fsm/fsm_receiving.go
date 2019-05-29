@@ -95,7 +95,14 @@ func receivingState(f *FsMachine) StateFn {
 
 	addresses := f.state.AddressesForServer(masterNode)
 	if len(addresses) == 0 {
-		return backoffStateWithReason(fmt.Sprintf("receivingState: No known address for current master of %s", f.filesystemId))
+		// This error happens when zpool is recreated, but etcd isn't. We
+		// shouldn't go into failed state here though because e.g. restarting a
+		// multi-node cluster might temporarily have this issue. So mitigate
+		// the log thrashing by just thrashing more slowly.
+		return backoffStateWithReasonCustomTimeout(
+			fmt.Sprintf("receivingState: No known address for current master of %s", f.filesystemId),
+			600,
+		)
 	}
 
 	admin, err := f.userManager.Get(&user.Query{Ref: "admin"})
