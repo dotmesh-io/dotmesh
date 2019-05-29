@@ -62,7 +62,7 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 			}).Warnf("file cleanup failed after unsuccessful upload")
 		}
 		logger.WithError(err).Errorf("failed to write file contents")
-		file.Response <- types.NewErrorEvent(types.EventNameSaveFailed, fmt.Errorf("cannot to create a file, error: %s", err))
+		file.Response <- types.NewErrorEvent(types.EventNameSaveFailed, fmt.Errorf("failing to write contents to the disk, error: %s", err))
 		return backoffState
 	}
 	logger.WithFields(log.Fields{
