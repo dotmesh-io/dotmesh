@@ -62,7 +62,7 @@ func TestS3Api(t *testing.T) {
 
 		var body bytes.Buffer
 
-		body.WriteString(strings.Repeat("A", 20*1024*1024*1024))
+		body.WriteString(strings.Repeat("A", 20000000))
 
 		respBody, status, err := call(http.MethodPut, fmt.Sprintf("s3/admin:%s/largefile", dotName), host, &body)
 		if err != nil {
