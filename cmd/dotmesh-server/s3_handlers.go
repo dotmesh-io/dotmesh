@@ -290,7 +290,7 @@ func (s *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, files
 
 	if result.Error() != nil {
 		resp.WriteHeader(500)
-		fmt.Fprintf(resp, "upload failed, error: %s", err)
+		fmt.Fprintf(resp, "upload failed, error: %s", result.Error())
 		return
 	}
 
