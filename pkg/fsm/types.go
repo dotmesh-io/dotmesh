@@ -107,11 +107,6 @@ type FsMachine struct {
 	// only to be accessed via the updateEtcdAboutTransfers goroutine!
 	currentPollResult types.TransferPollResult
 
-	// state machine metadata
-	// Moved from InMemoryState:
-	// server id => filesystem id => state machine metadata
-	//globalStateCache:     make(map[string]map[string]map[string]string),
-
 	// new structure: NodeID => State machine metadata
 	stateMachineMetadata   map[string]map[string]string
 	stateMachineMetadataMu *sync.RWMutex
