@@ -74,7 +74,6 @@ func activeState(f *FsMachine) StateFn {
 			}
 			f.lastTransferRequestId = transferRequestId
 
-			log.Printf("GOT TRANSFER REQUEST %+v", f.lastTransferRequest)
 			if f.lastTransferRequest.Direction == "push" {
 				return pushInitiatorState
 			} else if f.lastTransferRequest.Direction == "pull" {
