@@ -4,13 +4,9 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -275,60 +271,32 @@ func (s *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, files
 		return
 	}
 
-	tDir, err := ioutil.TempDir(os.TempDir(), filesystemId)
-	if err != nil {
-		log.WithFields(log.Fields{
-			"error":         err,
-			"filesystem_id": filesystemId,
-		}).Error("failed to create a temp dir for S3 file upload")
-		http.Error(resp, "failed to create staging directory for the upload", http.StatusServiceUnavailable)
-		return
-	}
-	defer os.RemoveAll(tDir)
-
-	fp := filepath.Join(tDir, filename)
-
-	tempFile, err := os.Create(fp)
-	if err != nil {
-		resp.WriteHeader(500)
-		fmt.Fprintf(resp, "failed to create a temporary file for the upload, error: %s", err)
-		return
-	}
-
-	size, err := io.Copy(tempFile, req.Body)
-	if err != nil {
-		tempFile.Close()
-
-		resp.WriteHeader(500)
-		fmt.Fprintf(resp, "upload failed, error: %s", err)
-		return
-	}
-	req.Body.Close()
-	tempFile.Close()
+	defer req.Body.Close()
 
 	respCh := make(chan *Event)
 	fsm.WriteFile(&types.InputFile{
 		Filename: filename,
-		Filepath: fp,
-		Size:     size,
+		Contents: req.Body,
 		User:     user.Name,
 		Response: respCh,
 	})
 
 	result := <-respCh
 
-	switch result.Name {
-	case types.EventNameSaveFailed:
-		e, ok := (*result.Args)["err"].(string)
-		if ok {
-			http.Error(resp, e, 500)
-			return
-		}
-		http.Error(resp, "upload failed", 500)
-	default:
-		resp.WriteHeader(200)
-		resp.Header().Set("Access-Control-Allow-Origin", "*")
+	log.WithFields(log.Fields{
+		"error": result.Error(),
+		"name":  result.Name,
+	}).Info("file upload finished (one way or another)")
+
+	if result.Error() != nil {
+		resp.WriteHeader(500)
+		fmt.Fprintf(resp, "upload failed, error: %s", err)
+		return
 	}
+
+	resp.WriteHeader(200)
+	resp.Header().Set("Access-Control-Allow-Origin", "*")
+
 }
 
 type ListBucketResult struct {
