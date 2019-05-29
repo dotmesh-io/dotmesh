@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -40,6 +41,37 @@ func TestS3Api(t *testing.T) {
 		cmd := fmt.Sprintf("curl -T newfile.txt -u admin:%s 127.0.0.1:32607/s3/admin:%s/newfile", host.Password, dotName)
 		citools.RunOnNode(t, node1, "echo helloworld > newfile.txt")
 		citools.RunOnNode(t, node1, cmd)
+		resp := citools.OutputFromRunOnNode(t, node1, citools.DockerRun(dotName)+" ls /foo/")
+		if !strings.Contains(resp, "newfile") {
+			t.Error("failed to create file")
+		}
+		resp = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(dotName)+" cat /foo/newfile")
+		if !strings.Contains(resp, "helloworld") {
+			t.Error("failed to upload file")
+		}
+		resp = citools.OutputFromRunOnNode(t, node1, "dm log")
+		if !strings.Contains(resp, "author: admin") {
+			t.Error("Did not set author correctly")
+		}
+	})
+
+	t.Run("PutLarge", func(t *testing.T) {
+		dotName := citools.UniqName()
+
+		citools.RunOnNode(t, node1, "dm init "+dotName)
+
+		var body bytes.Buffer
+
+		body.WriteString(strings.Repeat("A", 20*1024*1024*1024))
+
+		respBody, status, err := call("PUT", fmt.Sprintf("/s3/admin:%s/newfile", dotName), host, &body)
+		if err != nil {
+			t.Errorf("S3 upload failed, error: %s", err)
+		}
+		if status != 200 {
+			t.Errorf("unexpected status code: %d, body: %s", status, respBody)
+		}
+
 		resp := citools.OutputFromRunOnNode(t, node1, citools.DockerRun(dotName)+" ls /foo/")
 		if !strings.Contains(resp, "newfile") {
 			t.Error("failed to create file")
