@@ -146,12 +146,24 @@ func (z *zfs) Mount(filesystemId, snapshotId, options, mountPath string) ([]byte
 	err := os.MkdirAll(mountPath, 0775)
 	if err != nil {
 		log.Printf("[Mount:%s] %v while trying to create dir %s", fullFilesystemId, err, mountPath)
+		log.WithFields(log.Fields{
+			"error":         err,
+			"filesystem_id": fullFilesystemId,
+			"mountpath":     mountPath,
+		}).Error("error while trying to create a directory")
 		return nil, err
 	}
 	LogZFSCommand(filesystemId, fmt.Sprintf("%s -o %s %s %s", z.mountZFS, options, zfsFullId, mountPath))
 	output, err := exec.Command(z.mountZFS, "-o", options, zfsFullId, mountPath).CombinedOutput()
 	if err != nil {
-		log.Printf("[Mount:%s] %v while trying to mount %s", fullFilesystemId, err, zfsFullId)
+		log.WithFields(log.Fields{
+			"error":         err,
+			"filesystem_id": fullFilesystemId,
+			"mountpath":     mountPath,
+			"zfs_full_id":   zfsFullId,
+			"options":       options,
+			"output":        string(output),
+		}).Error("error while trying to mount")
 		return nil, err
 	}
 	return output, err
