@@ -2201,6 +2201,18 @@ func (c *BlankCluster) Start(t *testing.T, now int64, i int) error {
 
 		LogTiming("init_" + poolId(now, i, j))
 	}
+	RegisterCleanupAction(50, fmt.Sprintf(
+		`
+		curl -sSL -o /usr/local/bin/zumount.$$ https://get.dotmesh.io/zumount &&
+		mv /usr/local/bin/zumount.$$ /usr/local/bin/zumount &&
+		chmod +x /usr/local/bin/zumount &&
+		for POOL in $(zpool list -H | cut -f 1 | grep %d); do
+			zumount $POOL
+			zpool destroy -f $POOL
+		done`,
+		now,
+	))
+
 	return nil
 }
 
