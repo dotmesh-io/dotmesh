@@ -1883,7 +1883,9 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 
 	RegisterCleanupAction(50, fmt.Sprintf(
 		`
-		curl -sSL -o /usr/local/bin/zumount https://get.dotmesh.io/zumount && chmod +x /usr/local/bin/zumount &&
+		curl -sSL -o /usr/local/bin/zumount.$$ https://get.dotmesh.io/zumount &&
+		mv /usr/local/bin/zumount.$$ /usr/local/bin/zumount &&
+		chmod +x /usr/local/bin/zumount &&
 		for POOL in $(zpool list -H | cut -f 1 | grep %d); do
 			zumount $POOL
 			zpool destroy -f $POOL
@@ -2258,7 +2260,9 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 
 	RegisterCleanupAction(50, fmt.Sprintf(
 		`
-		curl -sSL -o /usr/local/bin/zumount https://get.dotmesh.io/zumount && chmod +x /usr/local/bin/zumount &&
+		curl -sSL -o /usr/local/bin/zumount.$$ https://get.dotmesh.io/zumount &&
+		mv /usr/local/bin/zumount.$$ /usr/local/bin/zumount &&
+		chmod +x /usr/local/bin/zumount &&
 		zumount %s &&
 		zpool destroy -f %s`,
 		poolId(now, i, 0),
@@ -2309,7 +2313,9 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 
 		RegisterCleanupAction(50, fmt.Sprintf(
 			`
-			curl -sSL -o /usr/local/bin/zumount https://get.dotmesh.io/zumount && chmod +x /usr/local/bin/zumount &&
+		curl -sSL -o /usr/local/bin/zumount.$$ https://get.dotmesh.io/zumount &&
+		mv /usr/local/bin/zumount.$$ /usr/local/bin/zumount &&
+		chmod +x /usr/local/bin/zumount &&
 		zumount %s &&
 		zpool destroy -f %s`,
 			poolId(now, i, j),
