@@ -1886,7 +1886,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		go get -u github.com/dotmesh-io/zumount &&
 		go install github.com/dotmesh-io/zumount &&
 		for POOL in $(zpool list -H | cut -f 1 | grep %d); do
-			/root/go/bin/zumount $POOL
+			zumount $POOL
 			zpool destroy -f $POOL
 		done`,
 		stamp,
@@ -2260,7 +2260,7 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 	RegisterCleanupAction(50, fmt.Sprintf(
 		`go get -u github.com/dotmesh-io/zumount &&
 		go install github.com/dotmesh-io/zumount &&
-		/root/go/bin/zumount %s &&
+		zumount %s &&
 		zpool destroy -f %s`,
 		poolId(now, i, 0),
 		poolId(now, i, 0),
@@ -2311,7 +2311,7 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 		RegisterCleanupAction(50, fmt.Sprintf(
 			`go get -u github.com/dotmesh-io/zumount &&
 		go install github.com/dotmesh-io/zumount &&
-		/root/go/bin/zumount %s &&
+		zumount %s &&
 		zpool destroy -f %s`,
 			poolId(now, i, j),
 			poolId(now, i, j),
