@@ -71,7 +71,7 @@
   branch = "master"
   name = "github.com/dotmesh-io/citools"
   packages = ["."]
-  revision = "58c133a103f57ecca9204c9e7ddae9a12222d1c3"
+  revision = "78157dec79b69c141f3f91c763a7e374d10fd330"
 
 [[projects]]
   name = "github.com/fsouza/go-dockerclient"
