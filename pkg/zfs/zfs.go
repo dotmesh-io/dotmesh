@@ -487,6 +487,9 @@ func (z *zfs) StashBranch(existingFs string, newFs string, rollbackTo string) er
 				fsType := parts[8]
 				mountpoint := parts[4]
 				mountedFS := parts[9]
+				// TODO: make this filter out only _our_ filesystem mounts (e.g. snapshot mounts)
+				// TODO: don't unmount the actual filesystem, seems like you
+				// don't need to... just unmount the snapshot
 				if fsType == "zfs" && strings.HasPrefix(mountpoint, mountPrefix) {
 					mounts = append(mounts, savedMount{
 						Mountpoint: mountpoint,

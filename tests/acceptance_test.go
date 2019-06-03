@@ -2087,6 +2087,7 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		t.Fatalf("failed to start cluster, error: %s", err)
 	}
 	node1 := f[0].GetNode(0).Container
+	node1node := f[0].GetNode(0)
 	node2 := f[1].GetNode(0).Container
 
 	t.Run("SpecifyPort", func(t *testing.T) {
@@ -2247,6 +2248,41 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 
 		// test incremental push
 		citools.RunOnNode(t, node2, "dm commit -m 'node2 commit'")
+		citools.RunOnNode(t, node2, "dm push --stash-on-divergence cluster_0")
+
+		output := citools.OutputFromRunOnNode(t, node1, "dm branch")
+		if !strings.Contains(output, "master-DIVERGED-") {
+			t.Error("Stashed push did not create divergent branch")
+		}
+	})
+	t.Run("PushStashSnapshotMount", func(t *testing.T) {
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node2, citools.DockerRun(fsname)+" touch /foo/X")
+		citools.RunOnNode(t, node2, "dm switch "+fsname)
+		citools.RunOnNode(t, node2, "dm commit -m 'hello'")
+		citools.RunOnNode(t, node2, "dm push cluster_0")
+
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+		resp := citools.OutputFromRunOnNode(t, node1, "dm log")
+
+		if !strings.Contains(resp, "hello") {
+			t.Error("unable to find commit message remote's log output")
+		}
+		// now make a commit that will diverge the filesystems
+		citools.RunOnNode(t, node1, "dm commit -m 'node1 commit'")
+
+		// test incremental push
+		citools.RunOnNode(t, node2, "dm commit -m 'node2 commit'")
+
+		// s3 read from node1, will cause a snapshot to be mounted
+		_, status, err := call("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file.txt", fsname, "latest"), node1node, nil)
+		if err != nil {
+			t.Errorf("S3 request failed, error: %s", err)
+		}
+		if status != 200 {
+			t.Errorf("unexpected status code: %d", status)
+		}
+
 		citools.RunOnNode(t, node2, "dm push --stash-on-divergence cluster_0")
 
 		output := citools.OutputFromRunOnNode(t, node1, "dm branch")
