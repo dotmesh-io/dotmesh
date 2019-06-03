@@ -28,7 +28,7 @@ func doSimpleZFSCommand(cmd *exec.Cmd, description string) error {
 }
 
 // zfsCommandWithRetries runs a given command, it will retry as long as ctx is not cancelled.
-func zfsCommandWithRetries(ctx context.Context, cmd *exec.Cmd, description string) error {
+func zfsCommandWithRetries(ctx context.Context, description, name string, arg ...string) error {
 	var err error
 	for {
 		select {
@@ -36,6 +36,7 @@ func zfsCommandWithRetries(ctx context.Context, cmd *exec.Cmd, description strin
 			return fmt.Errorf("deadline exceeded, last error: %s", err)
 		default:
 		}
+		cmd := exec.Command(name, arg...)
 		errBuffer := bytes.Buffer{}
 		cmd.Stderr = &errBuffer
 		cmdErr := cmd.Run()
