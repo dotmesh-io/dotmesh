@@ -2275,12 +2275,12 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		citools.RunOnNode(t, node2, "dm commit -m 'node2 commit'")
 
 		// s3 read from node1, will cause a snapshot to be mounted
-		_, status, err := call("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file.txt", fsname, "latest"), node1node, nil)
+		responseBody, status, err := call("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file.txt", fsname, "latest"), node1node, nil)
 		if err != nil {
 			t.Errorf("S3 request failed, error: %s", err)
 		}
 		if status != 200 {
-			t.Errorf("unexpected status code: %d", status)
+			t.Errorf("unexpected status code: %d, response body: %s", status, responseBody)
 		}
 
 		citools.RunOnNode(t, node2, "dm push --stash-on-divergence cluster_0")
