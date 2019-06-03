@@ -2257,7 +2257,7 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 	})
 	t.Run("PushStashSnapshotMount", func(t *testing.T) {
 		fsname := citools.UniqName()
-		citools.RunOnNode(t, node2, citools.DockerRun(fsname)+" touch /foo/X")
+		citools.RunOnNode(t, node2, citools.DockerRun(fsname)+" touch file.txt")
 		citools.RunOnNode(t, node2, "dm switch "+fsname)
 		citools.RunOnNode(t, node2, "dm commit -m 'hello'")
 		citools.RunOnNode(t, node2, "dm push cluster_0")
