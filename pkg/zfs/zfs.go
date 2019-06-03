@@ -521,9 +521,9 @@ func (z *zfs) StashBranch(existingFs string, newFs string, rollbackTo string) er
 	defer zfsCloneCancel()
 
 	LogZFSCommand(existingFs, fmt.Sprintf("%s clone %s@%s %s", z.zfsPath, z.FQ(newFs), rollbackTo, z.FQ(existingFs)))
-	desc = fmt.Sprintf("clone snapshot %s of filesystem %s (%s) to %s (%s) for retroBranch",
+	desc = fmt.Sprintf("clone snapshot %s of filesystem %s (%s) to %s (%s) for retroBranch %s",
 		rollbackTo, newFs, z.FQ(newFs)+"@"+rollbackTo,
-		existingFs, z.FQ(existingFs),
+		existingFs, z.FQ(existingFs), newFs,
 	)
 	err = zfsCommandWithRetries(zfsCloneCtx, desc, z.zfsPath, "clone", z.FQ(newFs)+"@"+rollbackTo, z.FQ(existingFs))
 	if err != nil {
@@ -534,7 +534,7 @@ func (z *zfs) StashBranch(existingFs string, newFs string, rollbackTo string) er
 	defer zfsPromoteCancel()
 
 	LogZFSCommand(existingFs, fmt.Sprintf("%s promote %s", z.zfsPath, z.FQ(existingFs)))
-	desc = fmt.Sprintf("promote filesystem %s (%s) for retroBranch", existingFs, z.FQ(existingFs))
+	desc = fmt.Sprintf("promote filesystem %s (%s) for retroBranch %s", existingFs, z.FQ(existingFs), newFs)
 	err = zfsCommandWithRetries(zfsPromoteCtx, desc, z.zfsPath, "promote", z.FQ(existingFs))
 	return err
 }
