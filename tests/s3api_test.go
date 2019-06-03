@@ -206,6 +206,52 @@ func TestS3Api(t *testing.T) {
 		}
 	})
 
+	t.Run("ReadFileAtSnapshotEmpty", func(t *testing.T) { // FIX
+		dotName := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm init "+dotName)
+		cmdFile1 := fmt.Sprintf("curl -T file.txt -u admin:%s 127.0.0.1:32607/s3/admin:%s/file.txt", host.Password, dotName)
+		citools.RunOnNode(t, node1, "touch file.txt")
+		citools.RunOnNode(t, node1, cmdFile1)
+		cmdFile2 := fmt.Sprintf("curl -T file.txt -u admin:%s 127.0.0.1:32607/s3/admin:%s/file.txt", host.Password, dotName)
+		citools.RunOnNode(t, node1, "touch file.txt")
+		citools.RunOnNode(t, node1, cmdFile2)
+
+		commitIdsString := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("dm log | grep commit | awk '{print $2}'"))
+		commitIdsList := strings.Split(commitIdsString, "\n")
+
+		firstCommitId := commitIdsList[0]
+		secondCommitId := commitIdsList[1]
+
+		t.Logf("running (first commit): '%s'", fmt.Sprintf("http://127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", dotName, firstCommitId))
+
+		respBody, status, err := call("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file.txt", dotName, firstCommitId), host, nil)
+		if err != nil {
+			t.Errorf("S3 request failed, error: %s", err)
+		}
+		if status != 200 {
+			t.Errorf("unexpected status code: %d", status)
+		}
+		// respFirstCommit := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", host.Password, dotName, firstCommitId))
+		expected1 := ""
+		if !strings.Contains(respBody, expected1) {
+			t.Errorf("The first commit did not contain the correct file data (expected '%s', got: '%s')", expected1, respBody)
+		}
+
+		t.Logf("running (second commit): '%s'", fmt.Sprintf("http://127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", dotName, secondCommitId))
+		respBodySecond, statusSecond, err := call("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file.txt", dotName, secondCommitId), host, nil)
+		if err != nil {
+			t.Errorf("S3 request failed, error: %s", err)
+		}
+		if statusSecond != 200 {
+			t.Errorf("unexpected status code: %d", status)
+		}
+
+		expected2 := ""
+		if !strings.Contains(respBodySecond, expected2) {
+			t.Errorf("The second commit did not contain the correct file data (expected '%s', got: '%s')", expected2, respBodySecond)
+		}
+	})
+
 	t.Run("ReadDirectoryAtSnapshot", func(t *testing.T) {
 
 		tempDir, err := ioutil.TempDir("", "test-ReadDirectoryAtSnapshot")
