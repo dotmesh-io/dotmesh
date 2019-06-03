@@ -2280,7 +2280,7 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 			t.Errorf("S3 request failed, error: %s", err)
 		}
 		if status != 200 {
-			t.Errorf("unexpected status code: %d, response body: %s", status, responseBody)
+			t.Errorf("unexpected status code: %d, response body: %s, filesystem: %s", status, responseBody, fsname)
 		}
 
 		citools.RunOnNode(t, node2, "dm push --stash-on-divergence cluster_0")
