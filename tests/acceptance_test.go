@@ -2138,8 +2138,9 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		t.Fatalf("failed to start cluster, error: %s", err)
 	}
 	node1 := f[0].GetNode(0).Container
-	node1node := f[0].GetNode(0)
+	// node1node := f[0].GetNode(0)
 	node2 := f[1].GetNode(0).Container
+	n2 := f[1].GetNode(0)
 
 	t.Run("SpecifyPort", func(t *testing.T) {
 		citools.RunOnNode(t, node1, "echo "+f[1].GetNode(0).ApiKey+" | dm remote add funny_port_remote admin@"+f[1].GetNode(0).IP+":"+strconv.Itoa(secondClusterPort))
@@ -2326,7 +2327,7 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		citools.RunOnNode(t, node2, "dm commit -m 'node2 commit'")
 
 		// s3 read from node1, will cause a snapshot to be mounted
-		responseBody, status, err := call("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/foo/file.txt", fsname, "latest"), node1node, nil)
+		responseBody, status, err := call("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/foo/file.txt", fsname, "latest"), n2, nil)
 		if err != nil {
 			t.Errorf("S3 request failed, error: %s", err)
 		}
