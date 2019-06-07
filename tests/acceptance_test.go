@@ -946,12 +946,12 @@ func TestSingleNode(t *testing.T) {
 		fsname := citools.UniqName()
 		// Run a container in the background so that we can observe it get
 		// restarted.
-		citools.RunOnNode(t, node1,
-			citools.DockerRun(fsname, "-d --name sleeper")+" sleep 100",
-		)
-		initialStart := citools.OutputFromRunOnNode(t, node1,
-			"docker inspect sleeper |jq .[0].State.StartedAt",
-		)
+		// citools.RunOnNode(t, node1,
+		// 	citools.DockerRun(fsname, "-d --name sleeper")+" sleep 100",
+		// )
+		// initialStart := citools.OutputFromRunOnNode(t, node1,
+		// 	"docker inspect sleeper |jq .[0].State.StartedAt",
+		// )
 
 		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch foo/file-x.txt")
 		citools.RunOnNode(t, node1, "dm switch "+fsname)
@@ -985,12 +985,12 @@ func TestSingleNode(t *testing.T) {
 		if strings.Contains(resp, "file-y.txt") {
 			t.Error("failed to roll back filesystem")
 		}
-		newStart := citools.OutputFromRunOnNode(t, node1,
-			"docker inspect sleeper |jq .[0].State.StartedAt",
-		)
-		if initialStart == newStart {
-			t.Errorf("container was not restarted during rollback (initialStart %v == newStart %v)", strings.TrimSpace(initialStart), strings.TrimSpace(newStart))
-		}
+		// newStart := citools.OutputFromRunOnNode(t, node1,
+		// 	"docker inspect sleeper |jq .[0].State.StartedAt",
+		// )
+		// if initialStart == newStart {
+		// 	t.Errorf("container was not restarted during rollback (initialStart %v == newStart %v)", strings.TrimSpace(initialStart), strings.TrimSpace(newStart))
+		// }
 
 	})
 
