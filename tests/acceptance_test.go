@@ -953,21 +953,21 @@ func TestSingleNode(t *testing.T) {
 			"docker inspect sleeper |jq .[0].State.StartedAt",
 		)
 
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch file-x.txt")
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch foo/file-x.txt")
 		citools.RunOnNode(t, node1, "dm switch "+fsname)
 		citools.RunOnNode(t, node1, "dm commit -m 'hello'")
 		resp := citools.OutputFromRunOnNode(t, node1, "dm log")
 		if !strings.Contains(resp, "hello") {
 			t.Error("unable to find commit message in log output")
 		}
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch file-y.txt")
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch foo/file-y.txt")
 		citools.RunOnNode(t, node1, "dm commit -m 'again'")
 		resp = citools.OutputFromRunOnNode(t, node1, "dm log")
 		if !strings.Contains(resp, "again") {
 			t.Error("unable to find commit message in log output")
 		}
 
-		responseBody, status, err := call("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file-x.txt", fsname, "latest"), f[0].GetNode(0), nil)
+		responseBody, status, err := call("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/foo/file-x.txt", fsname, "latest"), f[0].GetNode(0), nil)
 		if err != nil {
 			t.Errorf("S3 request failed, error: %s", err)
 		}
