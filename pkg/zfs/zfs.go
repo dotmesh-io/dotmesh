@@ -133,6 +133,12 @@ func (z *zfs) Create(filesystemId string) ([]byte, error) {
 }
 
 func (z *zfs) Rollback(filesystemId, snapshotId string) ([]byte, error) {
+
+	err := z.clearMounts(filesystemId)
+	if err != nil {
+		return nil, err
+	}
+
 	return z.runOnFilesystem(filesystemId, snapshotId, []string{"rollback", "-Rfr"})
 }
 
@@ -463,39 +469,12 @@ func intDiff(a, b int64) int64 {
 	}
 }
 
-type savedMount struct {
-	Mountpoint string // Actual filesystem mountpoint
-	MountedFS  string // ZFS pool location we mounted there
-}
-
 func (z *zfs) StashBranch(existingFs string, newFs string, rollbackTo string) error {
-	// mounts := []savedMount{}
 
-	f, err := os.Open("/proc/self/mountinfo")
+	err := z.clearMounts(existingFs)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	r := bufio.NewReader(f)
-	mountPrefix := os.Getenv("MOUNT_PREFIX")
-
-	mountpoints, err := filterMountpoints(mountPrefix, existingFs, r)
-	if err != nil {
-		return fmt.Errorf("failed to get filesystem %s mountpoints, error: %s", existingFs, err)
-	}
-
-	for _, m := range mountpoints {
-		err = zumount.UnmountAll(m)
-		if err != nil {
-			log.WithFields(log.Fields{
-				"error":      err,
-				"filesystem": existingFs,
-				"mountpoint": m,
-			}).Error("failed to clear mountpoint")
-			return fmt.Errorf("failed to clear filesystem %s mountpoint %s, error: %s", existingFs, m, err)
-		}
-	}
-	log.Debugf("ABS TEST: Got mountpoints: %#v\n", mountpoints)
 
 	zfsRenameCtx, zfsRenameCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer zfsRenameCancel()
@@ -1024,4 +1003,33 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 	}
 
 	return sortedResult, nil
+}
+
+func (z *zfs) clearMounts(filesystem string) error {
+	f, err := os.Open("/proc/self/mountinfo")
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	r := bufio.NewReader(f)
+	mountPrefix := os.Getenv("MOUNT_PREFIX")
+
+	mountpoints, err := filterMountpoints(mountPrefix, filesystem, r)
+	if err != nil {
+		return fmt.Errorf("failed to get filesystem %s mountpoints, error: %s", filesystem, err)
+	}
+
+	for _, m := range mountpoints {
+		err = zumount.UnmountAll(m)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":      err,
+				"filesystem": filesystem,
+				"mountpoint": m,
+			}).Error("failed to clear mountpoint")
+			return fmt.Errorf("failed to clear filesystem %s mountpoint %s, error: %s", filesystem, m, err)
+		}
+	}
+
+	return nil
 }
