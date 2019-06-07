@@ -942,7 +942,7 @@ func TestSingleNode(t *testing.T) {
 		}
 	})
 
-	t.Run("ResetAfterS3Call", func(t *testing.T) {
+	t.Run("ResetAfterS3Call", func(t *testing.T) { //
 		fsname := citools.UniqName()
 		// Run a container in the background so that we can observe it get
 		// restarted.
@@ -953,21 +953,34 @@ func TestSingleNode(t *testing.T) {
 		// 	"docker inspect sleeper |jq .[0].State.StartedAt",
 		// )
 
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch foo/file-x.txt")
-		citools.RunOnNode(t, node1, "dm switch "+fsname)
+		// citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch foo/file-x.txt")
+
+		host := f[0].GetNode(0)
+
+		citools.RunOnNode(t, node1, "dm init "+fsname)
+		citools.RunOnNode(t, node1, "echo helloworld1 > file-x.txt")
+		cmdFile1 := fmt.Sprintf("curl -T file-x.txt -u admin:%s 127.0.0.1:32607/s3/admin:%s/file-x.txt", host.Password, fsname)
+		citools.RunOnNode(t, node1, cmdFile1)
+
+		// citools.RunOnNode(t, node1, "dm switch "+fsname)
 		citools.RunOnNode(t, node1, "dm commit -m 'hello'")
 		resp := citools.OutputFromRunOnNode(t, node1, "dm log")
 		if !strings.Contains(resp, "hello") {
 			t.Error("unable to find commit message in log output")
 		}
-		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch foo/file-y.txt")
+		// citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch foo/file-y.txt")
+
+		citools.RunOnNode(t, node1, "echo helloworld2 > file-y.txt")
+		cmdFile2 := fmt.Sprintf("curl -T file-y.txt -u admin:%s 127.0.0.1:32607/s3/admin:%s/file-y.txt", host.Password, fsname)
+		citools.RunOnNode(t, node1, cmdFile2)
+
 		citools.RunOnNode(t, node1, "dm commit -m 'again'")
 		resp = citools.OutputFromRunOnNode(t, node1, "dm log")
 		if !strings.Contains(resp, "again") {
 			t.Error("unable to find commit message in log output")
 		}
 
-		responseBody, status, err := call("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/foo/file-x.txt", fsname, "latest"), f[0].GetNode(0), nil)
+		responseBody, status, err := call("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file-y.txt", fsname, "latest"), host, nil)
 		if err != nil {
 			t.Errorf("S3 request failed, error: %s", err)
 		}
@@ -981,7 +994,7 @@ func TestSingleNode(t *testing.T) {
 			t.Error("found 'again' in dm log when i shouldn't have")
 		}
 		// check filesystem got rolled back
-		resp = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" ls /foo/")
+		resp = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" ls /")
 		if strings.Contains(resp, "file-y.txt") {
 			t.Error("failed to roll back filesystem")
 		}
