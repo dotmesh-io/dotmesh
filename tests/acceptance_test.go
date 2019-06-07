@@ -2308,7 +2308,7 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 	})
 	t.Run("PushStashSnapshotMount", func(t *testing.T) {
 		fsname := citools.UniqName()
-		citools.RunOnNode(t, node2, citools.DockerRun(fsname)+" touch file.txt")
+		citools.RunOnNode(t, node2, citools.DockerRun(fsname)+" touch foo/file.txt")
 		citools.RunOnNode(t, node2, "dm switch "+fsname)
 		citools.RunOnNode(t, node2, "dm commit -m 'hello'")
 		citools.RunOnNode(t, node2, "dm push cluster_0")
@@ -2326,7 +2326,7 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		citools.RunOnNode(t, node2, "dm commit -m 'node2 commit'")
 
 		// s3 read from node1, will cause a snapshot to be mounted
-		responseBody, status, err := call("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file.txt", fsname, "latest"), node1node, nil)
+		responseBody, status, err := call("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/foo/file.txt", fsname, "latest"), node1node, nil)
 		if err != nil {
 			t.Errorf("S3 request failed, error: %s", err)
 		}
