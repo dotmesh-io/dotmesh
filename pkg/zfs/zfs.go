@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dotmesh-io/zumount/pkg/zumount"
 	log "github.com/sirupsen/logrus"
 
 	"encoding/base64"
@@ -468,7 +469,7 @@ type savedMount struct {
 }
 
 func (z *zfs) StashBranch(existingFs string, newFs string, rollbackTo string) error {
-	mounts := []savedMount{}
+	// mounts := []savedMount{}
 
 	f, err := os.Open("/proc/self/mountinfo")
 	if err != nil {
@@ -478,41 +479,23 @@ func (z *zfs) StashBranch(existingFs string, newFs string, rollbackTo string) er
 	r := bufio.NewReader(f)
 	mountPrefix := os.Getenv("MOUNT_PREFIX")
 
-	for {
-		line, err := r.ReadString('\n')
-
-		if line != "" {
-			parts := strings.Split(line, " ")
-			if len(parts) >= 11 {
-				fsType := parts[8]
-				mountpoint := parts[4]
-				mountedFS := parts[9]
-				// TODO: make this filter out only _our_ filesystem mounts (e.g. snapshot mounts)
-				// TODO: don't unmount the actual filesystem, seems like you
-				// don't need to... just unmount the snapshot
-				// "MOUNT_PREFIX=/var/lib/dotmesh/mnt",
-				// 811 1024 0:203 / /var/lib/dotmesh/mnt/dmfs/0a5bb16f-0e7c-456b-9487-823634d09f13 rw,noatime shared:334 - zfs pool/dmfs/0a5bb16f-0e7c-456b-9487-823634d09f13 rw,xattr,noacl
-				// 866 1024 0:204 / /var/lib/dotmesh/mnt/dmfs/8709de2a-f4c0-4d38-9241-61ca16c6764f rw,noatime shared:343 - zfs pool/dmfs/8709de2a-f4c0-4d38-9241-61ca16c6764f rw,xattr,noacl
-
-				if fsType == "zfs" && strings.HasPrefix(mountpoint, mountPrefix) {
-					mounts = append(mounts, savedMount{
-						Mountpoint: mountpoint,
-						MountedFS:  mountedFS,
-					})
-				}
-			}
-		}
-
-		if err != nil {
-			if err == io.EOF {
-				break
-			} else {
-				return err
-			}
-		}
+	mountpoints, err := filterMountpoints(mountPrefix, existingFs, r)
+	if err != nil {
+		return fmt.Errorf("failed to get filesystem %s mountpoints, error: %s", existingFs, err)
 	}
 
-	log.Debugf("ABS TEST: Got mountpoints: %#v\n", mounts)
+	for _, m := range mountpoints {
+		err = zumount.UnmountAll(m)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":      err,
+				"filesystem": existingFs,
+				"mountpoint": m,
+			}).Error("failed to clear mountpoint")
+			return fmt.Errorf("failed to clear filesystem %s mountpoint %s, error: %s", existingFs, m, err)
+		}
+	}
+	log.Debugf("ABS TEST: Got mountpoints: %#v\n", mountpoints)
 
 	zfsRenameCtx, zfsRenameCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer zfsRenameCancel()
