@@ -10,6 +10,7 @@ type DotmeshVolume struct {
 	SizeBytes            int64
 	DirtyBytes           int64
 	CommitCount          int64
+	ServerStates         map[string]string // serverId => state
 	ServerStatuses       map[string]string // serverId => status
 	ForkParentId         string
 	ForkParentSnapshotId string
