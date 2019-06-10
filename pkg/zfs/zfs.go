@@ -1011,11 +1011,6 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 
 func (z *zfs) clearMounts(filesystem string) error {
 
-	// disabling for a test
-	if true {
-		return nil
-	}
-
 	f, err := os.Open("/proc/self/mountinfo")
 	if err != nil {
 		return err
