@@ -348,7 +348,14 @@ func OSReadDir(root string) ([]string, error) {
 }
 
 func call(method string, path string, node citools.Node, body io.Reader) (respBody string, statusCode int, err error) {
-	req, err := http.NewRequest(method, "http://"+node.IP+":32607/"+path, body)
+
+	if node.Port == 0 {
+		node.Port = 32607
+	}
+
+	url := fmt.Sprintf("http://%s:%d/%s", node.IP, node.Port, path)
+
+	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		return
 	}
