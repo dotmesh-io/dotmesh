@@ -356,7 +356,7 @@ func call(method string, path string, node citools.Node, body io.Reader) (respBo
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return err.Error(), resp.StatusCode, err
+		return err.Error(), 0, err
 	}
 
 	defer resp.Body.Close()
