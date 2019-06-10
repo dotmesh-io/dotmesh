@@ -355,16 +355,11 @@ func call(method string, path string, node citools.Node, body io.Reader) (respBo
 	req.SetBasicAuth("admin", node.Password)
 
 	resp, err := http.DefaultClient.Do(req)
-	if resp.Body != nil {
-		defer resp.Body.Close()
-	}
 	if err != nil {
-		bts, newErr := ioutil.ReadAll(resp.Body)
-		if newErr != nil {
-			return
-		}
-		return string(bts), resp.StatusCode, err
+		return err.Error(), resp.StatusCode, err
 	}
+
+	defer resp.Body.Close()
 
 	bts, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
