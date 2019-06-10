@@ -1,6 +1,6 @@
 # create the context dir before running any of the commands below - ensures the smallest docker context to make builds faster
 create_context:
-	mkdir -p context && cp -r ./pkg ./context/pkg && cp -r ./vendor ./context/vendor && cp -r ./cmd ./context/cmd && cp -r ./scripts ./context/scripts
+	mkdir -p context && cp -r ./pkg ./context/ && cp -r ./vendor ./context/ && cp -r ./cmd ./context/ && cp -r ./scripts ./context/
 
 clear_context:
 	rm -rf context
