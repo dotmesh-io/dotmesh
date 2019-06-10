@@ -219,12 +219,6 @@
   revision = "edad9decbae8e2e2e58a64b18f7bd5efa76deb5a"
 
 [[projects]]
-  branch = "master"
-  name = "github.com/dotmesh-io/zumount"
-  packages = ["pkg/zumount"]
-  revision = "d3fe69ada005fb640c21bfd1681aa77186052777"
-
-[[projects]]
   name = "github.com/dustin/go-humanize"
   packages = ["."]
   revision = "9f541cc9db5d55bce703bd99987c9d5cb8eea45e"
@@ -1129,6 +1123,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "81ee28a836f624232907a7e77ab2f58b7286ed76a9038482db62a92c151042e4"
+  inputs-digest = "ead6dee2674ef39f87f6791f6407ea1024456cac3f13371473be2762c815d599"
   solver-name = "gps-cdcl"
   solver-version = 1
