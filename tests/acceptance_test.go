@@ -2340,7 +2340,7 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		citools.RunOnNode(t, node2, "dm commit -m 'node2 commit'")
 
 		// s3 read from node1, will cause a snapshot to be mounted
-		responseBody, status, err := call("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/foo/file.txt", fsname, "latest"), n2, nil)
+		responseBody, status, err := call("GET", fmt.Sprintf("s3/admin:%s/snapshot/%s/foo/file.txt", fsname, "latest"), n2, nil)
 		if err != nil {
 			t.Errorf("S3 request failed, error: %s", err)
 		}
