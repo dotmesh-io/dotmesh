@@ -470,7 +470,11 @@ func intDiff(a, b int64) int64 {
 }
 
 func (z *zfs) StashBranch(existingFs string, newFs string, rollbackTo string) error {
-
+	log.WithFields(log.Fields{
+		"existing_fs": existingFs,
+		"new_fs":      newFs,
+		"rollback_to": rollbackTo,
+	}).Info("stashing branch")
 	err := z.clearMounts(existingFs)
 	if err != nil {
 		return err
@@ -1006,6 +1010,12 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 }
 
 func (z *zfs) clearMounts(filesystem string) error {
+
+	// disabling for a test
+	if true {
+		return nil
+	}
+
 	f, err := os.Open("/proc/self/mountinfo")
 	if err != nil {
 		return err
