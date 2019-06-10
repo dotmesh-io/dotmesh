@@ -2151,9 +2151,10 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		t.Fatalf("failed to start cluster, error: %s", err)
 	}
 	node1 := f[0].GetNode(0).Container
-	n1 := f[0].GetNode(0)
+	// cluster1Node := f[0].GetNode(0)
 
 	node2 := f[1].GetNode(0).Container
+	cluster2Node := f[1].GetNode(0)
 
 	t.Run("SpecifyPort", func(t *testing.T) {
 		citools.RunOnNode(t, node1, "echo "+f[1].GetNode(0).ApiKey+" | dm remote add funny_port_remote admin@"+f[1].GetNode(0).IP+":"+strconv.Itoa(secondClusterPort))
@@ -2327,6 +2328,15 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		citools.RunOnNode(t, node2, "dm commit -m 'hello'")
 		citools.RunOnNode(t, node2, "dm push cluster_0")
 
+		// s3 read from node1, will cause a snapshot to be mounted
+		responseBody, status, err := call("GET", fmt.Sprintf("s3/admin:%s/snapshot/%s/foo/file.txt", fsname, "latest"), cluster2Node, nil)
+		if err != nil {
+			t.Errorf("S3 request failed, error: %s", err)
+		}
+		if status != 200 {
+			t.Errorf("unexpected status code: %d, response body: %s, filesystem: %s", status, responseBody, fsname)
+		}
+
 		citools.RunOnNode(t, node1, "dm switch "+fsname)
 		resp := citools.OutputFromRunOnNode(t, node1, "dm log")
 
@@ -2338,15 +2348,6 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 
 		// test incremental push
 		citools.RunOnNode(t, node2, "dm commit -m 'node2 commit'")
-
-		// s3 read from node1, will cause a snapshot to be mounted
-		responseBody, status, err := call("GET", fmt.Sprintf("s3/admin:%s/snapshot/%s/foo/file.txt", fsname, "latest"), n1, nil)
-		if err != nil {
-			t.Errorf("S3 request failed, error: %s", err)
-		}
-		if status != 200 {
-			t.Errorf("unexpected status code: %d, response body: %s, filesystem: %s", status, responseBody, fsname)
-		}
 
 		citools.RunOnNode(t, node2, "dm push --stash-on-divergence cluster_0")
 
