@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/dotmesh-io/zumount/pkg/zumount"
 	log "github.com/sirupsen/logrus"
 
 	"encoding/base64"
@@ -1025,16 +1025,70 @@ func (z *zfs) clearMounts(filesystem string) error {
 	}
 
 	for _, m := range mountpoints {
-		err = zumount.UnmountAll(m)
+
+		ns, err := namespaceForMount(m)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":         err,
+				"mountpoint":    m,
+				"filesystem_id": filesystem,
+			}).Error("clearMounts: failed to get namespace for mount")
+			continue
+		}
+
+		log.WithFields(log.Fields{
+			"filesystem": filesystem,
+			"mountpoint": m,
+			"namespace":  ns,
+		}).Info("clearMounts: unmounting..")
+
+		err = unmount(ns, m)
 		if err != nil {
 			log.WithFields(log.Fields{
 				"error":      err,
 				"filesystem": filesystem,
 				"mountpoint": m,
+				"namespace":  ns,
 			}).Error("failed to clear mountpoint")
 			return fmt.Errorf("failed to clear filesystem %s mountpoint %s, error: %s", filesystem, m, err)
 		}
 	}
 
 	return nil
+}
+
+func unmount(ns, mountpoint string) error {
+	out, err := exec.Command(
+		"nsenter", "-t", ns, "-a",
+		"umount", mountpoint,
+	).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed nsenter umount of %s in ns %s, err: %s, out: %s", mountpoint, ns, err, out)
+	}
+	return nil
+}
+
+func namespaceForMount(mountpoint string) (string, error) {
+	mountTables, err := filepath.Glob("/proc/*/mounts")
+	if err != nil {
+		return "", err
+	}
+	if mountTables == nil {
+		return "", fmt.Errorf("no mount tables in /proc/*/mounts")
+	}
+	for _, mountTable := range mountTables {
+		mounts, err := ioutil.ReadFile(mountTable)
+		if err != nil {
+			// pids can disappear between globbing and reading
+			continue
+		}
+		for _, line := range strings.Split(string(mounts), "\n") {
+			if strings.Contains(line, mountpoint) {
+				shrapnel := strings.Split(mountTable, "/")
+				// e.g. (0)/(1)proc/(2)X/(3)mounts
+				return shrapnel[2], nil
+			}
+		}
+	}
+	return "", nil
 }
