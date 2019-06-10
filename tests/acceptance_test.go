@@ -2326,8 +2326,8 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		// citools.RunOnNode(t, node2, citools.DockerRun(fsname)+" touch foo/file.txt")
 
 		citools.RunOnNode(t, node2, "dm init "+fsname)
-		citools.RunOnNode(t, node2, "echo helloworld > newfile.txt")
-		cmd := fmt.Sprintf("curl -T newfile.txt -u admin:%s 127.0.0.1:32607/s3/admin:%s/foo/file.txt", cluster2Node.Password, fsname)
+		citools.RunOnNode(t, node2, "echo helloworld > file.txt")
+		cmd := fmt.Sprintf("curl -T file.txt -u admin:%s 127.0.0.1:%d/s3/admin:%s/foo/file.txt", cluster2Node.Password, cluster2Node.Port, fsname)
 		citools.RunOnNode(t, node2, cmd)
 
 		citools.RunOnNode(t, node2, "dm switch "+fsname)
