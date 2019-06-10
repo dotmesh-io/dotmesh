@@ -2323,7 +2323,13 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 	})
 	t.Run("PushStashSnapshotMount", func(t *testing.T) {
 		fsname := citools.UniqName()
-		citools.RunOnNode(t, node2, citools.DockerRun(fsname)+" touch foo/file.txt")
+		// citools.RunOnNode(t, node2, citools.DockerRun(fsname)+" touch foo/file.txt")
+
+		citools.RunOnNode(t, node2, "dm init "+fsname)
+		citools.RunOnNode(t, node2, "echo helloworld > newfile.txt")
+		cmd := fmt.Sprintf("curl -T newfile.txt -u admin:%s 127.0.0.1:32607/s3/admin:%s/foo/file.txt", cluster2Node.Password, fsname)
+		citools.RunOnNode(t, node2, cmd)
+
 		citools.RunOnNode(t, node2, "dm switch "+fsname)
 		citools.RunOnNode(t, node2, "dm commit -m 'hello'")
 		citools.RunOnNode(t, node2, "dm push cluster_0")
