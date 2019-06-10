@@ -41,14 +41,6 @@ func filterMountpoints(mountPrefix string, filesystem string, r *bufio.Reader) (
 			if len(parts) >= 11 {
 				fsType := parts[8]
 				mountpoint := parts[4]
-				// mountedFS := parts[9]
-				// TODO: make this filter out only _our_ filesystem mounts (e.g. snapshot mounts)
-				// TODO: don't unmount the actual filesystem, seems like you
-				// don't need to... just unmount the snapshot
-				// "MOUNT_PREFIX=/var/lib/dotmesh/mnt",
-				// 811 1024 0:203 / /var/lib/dotmesh/mnt/dmfs/0a5bb16f-0e7c-456b-9487-823634d09f13 rw,noatime shared:334 - zfs pool/dmfs/0a5bb16f-0e7c-456b-9487-823634d09f13 rw,xattr,noacl
-				// 866 1024 0:204 / /var/lib/dotmesh/mnt/dmfs/8709de2a-f4c0-4d38-9241-61ca16c6764f rw,noatime shared:343 - zfs pool/dmfs/8709de2a-f4c0-4d38-9241-61ca16c6764f rw,xattr,noacl
-
 				if fsType == "zfs" && strings.HasPrefix(mountpoint, mountPrefix) {
 					mountpoints = append(mountpoints, mountpoint)
 				}
