@@ -253,7 +253,7 @@ tests will run:
 
 ```
 cd $GOPATH/src/github.com/dotmesh-io/dotmesh
-./prime.sh
+bash ./scripts/prime.sh
 ```
 
 ## running tests
@@ -265,7 +265,7 @@ To run the test suite, run:
 
 ```
 cd $GOPATH/src/github.com/dotmesh-io/dotmesh
-./prep-tests.sh && ./test.sh -short
+./scripts/prep-tests.sh && ./scripts/test.sh -short
 ```
 
 You can omit `-short` to `test.sh` if you want to run the stress
@@ -274,7 +274,7 @@ so as well...
 
 To run just an individual set of tests, run:
 ```
-./prep-tests.sh && ./test.sh -run TestTwoSingleNodeClusters
+./scripts/prep-tests.sh && ./scripts/test.sh -run TestTwoSingleNodeClusters
 ```
 
 To run an individual test, specify `TestTwoSingleNodeClusters/TestName` for
