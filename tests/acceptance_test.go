@@ -940,6 +940,70 @@ func TestSingleNode(t *testing.T) {
 		if initialStart == newStart {
 			t.Errorf("container was not restarted during rollback (initialStart %v == newStart %v)", strings.TrimSpace(initialStart), strings.TrimSpace(newStart))
 		}
+	})
+
+	t.Run("ResetAfterS3Call", func(t *testing.T) { //
+		fsname := citools.UniqName()
+		// Run a container in the background so that we can observe it get
+		// restarted.
+		// citools.RunOnNode(t, node1,
+		// 	citools.DockerRun(fsname, "-d --name sleeper")+" sleep 100",
+		// )
+		// initialStart := citools.OutputFromRunOnNode(t, node1,
+		// 	"docker inspect sleeper |jq .[0].State.StartedAt",
+		// )
+
+		// citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch foo/file-x.txt")
+
+		host := f[0].GetNode(0)
+
+		citools.RunOnNode(t, node1, "dm init "+fsname)
+		citools.RunOnNode(t, node1, "echo helloworld1 > file-x.txt")
+		cmdFile1 := fmt.Sprintf("curl -T file-x.txt -u admin:%s 127.0.0.1:32607/s3/admin:%s/file-x.txt", host.Password, fsname)
+		citools.RunOnNode(t, node1, cmdFile1)
+
+		// citools.RunOnNode(t, node1, "dm switch "+fsname)
+		citools.RunOnNode(t, node1, "dm commit -m 'hello'")
+		resp := citools.OutputFromRunOnNode(t, node1, "dm log")
+		if !strings.Contains(resp, "hello") {
+			t.Error("unable to find commit message in log output")
+		}
+		// citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch foo/file-y.txt")
+
+		citools.RunOnNode(t, node1, "echo helloworld2 > file-y.txt")
+		cmdFile2 := fmt.Sprintf("curl -T file-y.txt -u admin:%s 127.0.0.1:32607/s3/admin:%s/file-y.txt", host.Password, fsname)
+		citools.RunOnNode(t, node1, cmdFile2)
+
+		citools.RunOnNode(t, node1, "dm commit -m 'again'")
+		resp = citools.OutputFromRunOnNode(t, node1, "dm log")
+		if !strings.Contains(resp, "again") {
+			t.Error("unable to find commit message in log output")
+		}
+
+		responseBody, status, err := call("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file-y.txt", fsname, "latest"), host, nil)
+		if err != nil {
+			t.Errorf("S3 request failed, error: %s", err)
+		}
+		if status != 200 {
+			t.Errorf("unexpected status code: %d, response body: %s, filesystem: %s", status, responseBody, fsname)
+		}
+
+		citools.RunOnNode(t, node1, "dm reset --hard HEAD^")
+		resp = citools.OutputFromRunOnNode(t, node1, "dm log")
+		if strings.Contains(resp, "again") {
+			t.Error("found 'again' in dm log when i shouldn't have")
+		}
+		// check filesystem got rolled back
+		resp = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" ls /")
+		if strings.Contains(resp, "file-y.txt") {
+			t.Error("failed to roll back filesystem")
+		}
+		// newStart := citools.OutputFromRunOnNode(t, node1,
+		// 	"docker inspect sleeper |jq .[0].State.StartedAt",
+		// )
+		// if initialStart == newStart {
+		// 	t.Errorf("container was not restarted during rollback (initialStart %v == newStart %v)", strings.TrimSpace(initialStart), strings.TrimSpace(newStart))
+		// }
 
 	})
 
@@ -2087,7 +2151,10 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		t.Fatalf("failed to start cluster, error: %s", err)
 	}
 	node1 := f[0].GetNode(0).Container
+	// cluster1Node := f[0].GetNode(0)
+
 	node2 := f[1].GetNode(0).Container
+	cluster2Node := f[1].GetNode(0)
 
 	t.Run("SpecifyPort", func(t *testing.T) {
 		citools.RunOnNode(t, node1, "echo "+f[1].GetNode(0).ApiKey+" | dm remote add funny_port_remote admin@"+f[1].GetNode(0).IP+":"+strconv.Itoa(secondClusterPort))
@@ -2247,6 +2314,47 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 
 		// test incremental push
 		citools.RunOnNode(t, node2, "dm commit -m 'node2 commit'")
+		citools.RunOnNode(t, node2, "dm push --stash-on-divergence cluster_0")
+
+		output := citools.OutputFromRunOnNode(t, node1, "dm branch")
+		if !strings.Contains(output, "master-DIVERGED-") {
+			t.Error("Stashed push did not create divergent branch")
+		}
+	})
+	t.Run("PushStashSnapshotMount", func(t *testing.T) {
+		fsname := citools.UniqName()
+		// citools.RunOnNode(t, node2, citools.DockerRun(fsname)+" touch foo/file.txt")
+
+		citools.RunOnNode(t, node2, "dm init "+fsname)
+		citools.RunOnNode(t, node2, "echo helloworld > file.txt")
+		cmd := fmt.Sprintf("curl -T file.txt -u admin:%s 127.0.0.1:%d/s3/admin:%s/foo/file.txt", cluster2Node.Password, cluster2Node.Port, fsname)
+		citools.RunOnNode(t, node2, cmd)
+
+		citools.RunOnNode(t, node2, "dm switch "+fsname)
+		citools.RunOnNode(t, node2, "dm commit -m 'hello'")
+		citools.RunOnNode(t, node2, "dm push cluster_0")
+
+		// s3 read from node1, will cause a snapshot to be mounted
+		responseBody, status, err := call("GET", fmt.Sprintf("s3/admin:%s/snapshot/%s/foo/file.txt", fsname, "latest"), cluster2Node, nil)
+		if err != nil {
+			t.Errorf("S3 request failed, error: %s", err)
+		}
+		if status != 200 {
+			t.Errorf("unexpected status code: %d, response body: %s, filesystem: %s", status, responseBody, fsname)
+		}
+
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+		resp := citools.OutputFromRunOnNode(t, node1, "dm log")
+
+		if !strings.Contains(resp, "hello") {
+			t.Error("unable to find commit message remote's log output")
+		}
+		// now make a commit that will diverge the filesystems
+		citools.RunOnNode(t, node1, "dm commit -m 'node1 commit'")
+
+		// test incremental push
+		citools.RunOnNode(t, node2, "dm commit -m 'node2 commit'")
+
 		citools.RunOnNode(t, node2, "dm push --stash-on-divergence cluster_0")
 
 		output := citools.OutputFromRunOnNode(t, node1, "dm branch")

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -132,6 +133,12 @@ func (z *zfs) Create(filesystemId string) ([]byte, error) {
 }
 
 func (z *zfs) Rollback(filesystemId, snapshotId string) ([]byte, error) {
+
+	err := z.clearMounts(filesystemId)
+	if err != nil {
+		return nil, err
+	}
+
 	return z.runOnFilesystem(filesystemId, snapshotId, []string{"rollback", "-Rfr"})
 }
 
@@ -462,50 +469,16 @@ func intDiff(a, b int64) int64 {
 	}
 }
 
-type savedMount struct {
-	Mountpoint string // Actual filesystem mountpoint
-	MountedFS  string // ZFS pool location we mounted there
-}
-
 func (z *zfs) StashBranch(existingFs string, newFs string, rollbackTo string) error {
-	mounts := []savedMount{}
-
-	f, err := os.Open("/proc/self/mountinfo")
+	log.WithFields(log.Fields{
+		"existing_fs": existingFs,
+		"new_fs":      newFs,
+		"rollback_to": rollbackTo,
+	}).Info("stashing branch")
+	err := z.clearMounts(existingFs)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	r := bufio.NewReader(f)
-	mountPrefix := os.Getenv("MOUNT_PREFIX")
-
-	for {
-		line, err := r.ReadString('\n')
-
-		if line != "" {
-			parts := strings.Split(line, " ")
-			if len(parts) >= 11 {
-				fsType := parts[8]
-				mountpoint := parts[4]
-				mountedFS := parts[9]
-				if fsType == "zfs" && strings.HasPrefix(mountpoint, mountPrefix) {
-					mounts = append(mounts, savedMount{
-						Mountpoint: mountpoint,
-						MountedFS:  mountedFS,
-					})
-				}
-			}
-		}
-
-		if err != nil {
-			if err == io.EOF {
-				break
-			} else {
-				return err
-			}
-		}
-	}
-
-	log.Debugf("ABS TEST: Got mountpoints: %#v\n", mounts)
 
 	zfsRenameCtx, zfsRenameCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer zfsRenameCancel()
@@ -1034,4 +1007,88 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 	}
 
 	return sortedResult, nil
+}
+
+func (z *zfs) clearMounts(filesystem string) error {
+
+	f, err := os.Open("/proc/self/mountinfo")
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	r := bufio.NewReader(f)
+	mountPrefix := os.Getenv("MOUNT_PREFIX")
+
+	mountpoints, err := filterMountpoints(mountPrefix, filesystem, r)
+	if err != nil {
+		return fmt.Errorf("failed to get filesystem %s mountpoints, error: %s", filesystem, err)
+	}
+
+	for _, m := range mountpoints {
+
+		ns, err := namespaceForMount(m)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":         err,
+				"mountpoint":    m,
+				"filesystem_id": filesystem,
+			}).Error("clearMounts: failed to get namespace for mount")
+			continue
+		}
+
+		log.WithFields(log.Fields{
+			"filesystem": filesystem,
+			"mountpoint": m,
+			"namespace":  ns,
+		}).Info("clearMounts: unmounting..")
+
+		err = unmount(ns, m)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error":      err,
+				"filesystem": filesystem,
+				"mountpoint": m,
+				"namespace":  ns,
+			}).Error("failed to clear mountpoint")
+			return fmt.Errorf("failed to clear filesystem %s mountpoint %s, error: %s", filesystem, m, err)
+		}
+	}
+
+	return nil
+}
+
+func unmount(ns, mountpoint string) error {
+	out, err := exec.Command(
+		"nsenter", "-t", ns, "-a",
+		"umount", mountpoint,
+	).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed nsenter umount of %s in ns %s, err: %s, out: %s", mountpoint, ns, err, out)
+	}
+	return nil
+}
+
+func namespaceForMount(mountpoint string) (string, error) {
+	mountTables, err := filepath.Glob("/proc/*/mounts")
+	if err != nil {
+		return "", err
+	}
+	if mountTables == nil {
+		return "", fmt.Errorf("no mount tables in /proc/*/mounts")
+	}
+	for _, mountTable := range mountTables {
+		mounts, err := ioutil.ReadFile(mountTable)
+		if err != nil {
+			// pids can disappear between globbing and reading
+			continue
+		}
+		for _, line := range strings.Split(string(mounts), "\n") {
+			if strings.Contains(line, mountpoint) {
+				shrapnel := strings.Split(mountTable, "/")
+				// e.g. (0)/(1)proc/(2)X/(3)mounts
+				return shrapnel[2], nil
+			}
+		}
+	}
+	return "", nil
 }
