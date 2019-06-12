@@ -253,6 +253,7 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 			SizeBytes:            sizeBytes,
 			Id:                   fs,
 			CommitCount:          commitCount,
+			ServerStates:         map[string]string{},
 			ServerStatuses:       map[string]string{},
 			ForkParentId:         tlf.ForkParentId,
 			ForkParentSnapshotId: tlf.ForkParentSnapshotId,
@@ -269,19 +270,19 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 		sort.Sort(ByAddress(servers))
 
 		if ok {
-
 			for _, server := range servers {
 				numSnapshots := len(fsm.GetSnapshots(server.Id))
 				state := fsm.GetMetadata(server.Id)
 				status := ""
 				if len(state) == 0 {
 					status = fmt.Sprintf("unknown, %d snaps", numSnapshots)
+					d.ServerStates[server.Id] = "unknown"
 				} else {
 					status = fmt.Sprintf(
-						"%s: %s, %d snaps (v%s)",
-						state["state"], state["status"],
-						numSnapshots, state["version"],
+						"%s, %d commits",
+						state["status"], numSnapshots,
 					)
+					d.ServerStates[server.Id] = state["state"]
 				}
 				d.ServerStatuses[server.Id] = status
 			}
