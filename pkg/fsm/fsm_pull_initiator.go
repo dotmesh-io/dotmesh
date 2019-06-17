@@ -1,6 +1,7 @@
 package fsm
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -281,7 +282,8 @@ func (f *FsMachine) pull(
 		}, backoffState
 	}
 	log.Printf("[pull] Got prelude %v", prelude)
-	err = f.zfs.Recv(pipeReader, toFilesystemId, nil)
+	stdErrBuffer := &bytes.Buffer{}
+	err = f.zfs.Recv(pipeReader, toFilesystemId, stdErrBuffer)
 	pipeReader.Close()
 	pipeWriter.Close()
 	f.transitionedTo("receiving", "finished zfs recv")
@@ -294,8 +296,8 @@ func (f *FsMachine) pull(
 			err, toFilesystemId,
 		)
 		return &types.Event{
-			Name: "get-failed-pull",
-			Args: &types.EventArgs{"err": err, "filesystemId": toFilesystemId},
+			Name: "zfs-recv-failed",
+			Args: &types.EventArgs{"err": err, "filesystemId": toFilesystemId, "stderr": stdErrBuffer},
 		}, backoffState
 	}
 	log.Printf("[pull] about to start applying prelude on %v", pipeReader)
