@@ -28,7 +28,7 @@ func makeS3File(node, filename, contents, bucket string) {
 }
 
 func EmptyBucket(node string) {
-	citools.RunOnNodeErr(node, s3cmd("rm s3://dotmesh-transfer-test.empty/pushed-file.txt"))
+	citools.RunOnNodeErr(node, s3cmd("rm s3://dotmesh-transfer-test-empty/pushed-file.txt"))
 }
 
 func TestS3Remote(t *testing.T) {
@@ -271,9 +271,9 @@ func TestS3Remote(t *testing.T) {
 		citools.RunOnNode(t, node1, "dm switch "+fsname)
 		citools.RunOnNode(t, node1, "dm commit -m 'initial commit'")
 		// try pushing to s3
-		citools.RunOnNode(t, node1, "dm push test-real-s3 --remote-name=dotmesh-transfer-test.empty "+fsname)
+		citools.RunOnNode(t, node1, "dm push test-real-s3 --remote-name=dotmesh-transfer-test-empty "+fsname)
 		// check the file got created
-		resp := citools.OutputFromRunOnNode(t, node1, s3cmd("ls s3://dotmesh-transfer-test.empty"))
+		resp := citools.OutputFromRunOnNode(t, node1, s3cmd("ls s3://dotmesh-transfer-test-empty"))
 		if !strings.Contains(resp, "pushed-file.txt") {
 			t.Error("Did not push new file to S3")
 		}
