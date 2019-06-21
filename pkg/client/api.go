@@ -65,6 +65,7 @@ type Dotmesh interface {
 	GetTransfer(transferId string) (TransferPollResult, error)
 	Transfer(request types.TransferRequest) (string, error)
 	S3Transfer(request types.S3TransferRequest) (string, error)
+	CreateS3Dot(namespace, name, KeyID, secretKey, url string) (fsID string, err error)
 }
 
 var _ Dotmesh = &DotmeshAPI{}
@@ -108,6 +109,23 @@ func (dm *DotmeshAPI) openClient() error {
 	} else {
 		return nil
 	}
+}
+
+func (dm *DotmeshAPI) CreateS3Dot(namespace, name, KeyID, secretKey, url string) (fsID string, err error) {
+	request := types.S3TransferRequest{
+		KeyID:          KeyID,
+		SecretKey:      secretKey,
+		RemoteName:     url,
+		Direction:      "pull",
+		LocalNamespace: namespace,
+		LocalName:      name,
+	}
+	_, err = dm.S3Transfer(request)
+	if err != nil {
+		return "", err
+	}
+	fsID, err = dm.GetFsId(namespace, name, "")
+	return fsID, err
 }
 
 // proxy thru
