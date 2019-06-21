@@ -308,7 +308,7 @@ linux_two_double_node_clusters:
         - extracted_logs
         when: always
 
-.linux_s3remote:
+linux_s3remote:
     retry: 2
     stage: test
     dependencies:
