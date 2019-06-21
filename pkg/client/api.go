@@ -64,6 +64,7 @@ type Dotmesh interface {
 	GetVersion() (VersionInfo, error)
 	GetTransfer(transferId string) (TransferPollResult, error)
 	Transfer(request types.TransferRequest) (string, error)
+	S3Transfer(request types.S3TransferRequest) (string, error)
 }
 
 var _ Dotmesh = &DotmeshAPI{}
@@ -1155,6 +1156,12 @@ func (dm *DotmeshAPI) RequestTransfer(
 func (dm *DotmeshAPI) Transfer(request types.TransferRequest) (string, error) {
 	var transferId string
 	err := dm.CallRemote(context.Background(), "DotmeshRPC.Transfer", request, &transferId)
+	return transferId, err
+}
+
+func (dm *DotmeshAPI) S3Transfer(request types.S3TransferRequest) (string, error) {
+	var transferId string
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.S3Transfer", request, &transferId)
 	return transferId, err
 }
 
