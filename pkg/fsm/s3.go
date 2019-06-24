@@ -96,6 +96,9 @@ func GetKeysForDirLimit(parentPath string, subPath string, limit int64) (keys ma
 			// no point looking at more files when we're over the limit
 			break
 		}
+		if strings.HasPrefix(fileInfo.Name(), ".") {
+			continue
+		}
 		if fileInfo.IsDir() {
 			// save these for later, so that we're breadth first
 			dirsToTraverse = append(dirsToTraverse, fileInfo)
