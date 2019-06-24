@@ -365,6 +365,23 @@ linux_stress_lots_of_commits:
         when: always
     when: manual
 
+linux_stress_s3:
+    retry: 2
+    stage: test
+    dependencies:
+        - build_client_linux
+    tags:
+        - fast
+    script:
+        - DOTMESH_TEST_TIMEOUT=30m bash ./scripts/test.sh -timeout 30m -run TestS3Stress
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
+    when: manual
+    except:
+        - schedules
+
 linux_stress_large_files:
     retry: 2
     stage: test
