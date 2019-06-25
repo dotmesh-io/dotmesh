@@ -348,18 +348,5 @@ func TestS3Stress(t *testing.T) {
 		if smallFiles != 100000 {
 			t.Errorf("Expected 100000 small files, got %d", smallFiles)
 		}
-
-		t.Errorf("ABS TEST: files=%#v", files)
-
-		citools.RunOnNode(t, node1, "dm switch "+fsname)
-		resp = citools.OutputFromRunOnNode(t, node1, "dm log")
-
-		t.Errorf("ABS TEST: log=%s", resp)
-
-		/*
-			if !strings.Contains(resp, fsname) {
-				t.Error("unable to find volume name in ouput")
-			}
-		*/
 	})
 }
