@@ -56,10 +56,7 @@ cd $HOME/$DISCOVERY_REPO
 ./start-local.sh
 
 cd $GOPATH/src/$GITHUB_HOST/$GITHUB_ORG/$GITHUB_REPO
-./prime.sh
+./scripts/prime.sh
 
 # start samba for sharing between host and vm
 docker run -d -p 139:139 -p 445:445 --name samba --restart always -v $GOPATH/src/$GITHUB_HOST/$GITHUB_ORG:/mount dperson/samba -u "admin;password" -s "vagrantshare;/mount;yes;no;no;admin;admin;admin;comment"
-
-sudo curl -L -o bazel-installer.sh https://github.com/bazelbuild/bazel/releases/download/0.15.2/bazel-0.15.2-installer-linux-x86_64.sh
-sudo chmod +x bazel-installer.sh && ./bazel-installer.sh --user
