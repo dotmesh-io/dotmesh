@@ -115,6 +115,7 @@ const (
 	cleanupStrategyAlways
 	cleanupStrategyNever
 	cleanupStrategyOnSuccess
+	cleanupStrategyLater
 )
 
 var defaultCleanupStrategy = cleanupStrategyOnSuccess
@@ -128,6 +129,8 @@ func getCleanupStrategy() cleanupStrategy {
 		return cleanupStrategyNever
 	case "onsuccess":
 		return cleanupStrategyOnSuccess
+	case "later":
+		return cleanupStrategyLater
 	}
 
 	return defaultCleanupStrategy
@@ -443,11 +446,11 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 			}
 
 			RegisterCleanupAction(10, fmt.Sprintf(
-				"NODE=%s ; docker exec -i $NODE systemctl stop docker ; "+
-					"docker exec -i $NODE systemctl stop docker ; "+
-					"docker exec -i $NODE systemctl stop kubelet ; "+
-					"docker exec -i $NODE systemctl stop systemd-journald ; "+
-					"docker rm -f $NODE", node))
+				"NODE=%s ; docker exec -i $NODE systemctl stop docker || true; "+
+					"docker exec -i $NODE systemctl stop docker || true ; "+
+					"docker exec -i $NODE systemctl stop kubelet || true ; "+
+					"docker exec -i $NODE systemctl stop systemd-journald || true ; "+
+					"docker rm -f $NODE || true", node))
 
 			// as soon as this completes, add it to c.Nodes. more detail gets
 			// filled in later (eg dotmesh secrets), but it's important that
@@ -523,6 +526,13 @@ func FinalCleanup(retcode int) {
 		} else {
 			fmt.Printf("[Final Cleanup] skipping cleanup as tests didn't pass, return code: %d", retcode)
 		}
+	case cleanupStrategyLater:
+		fd, err := os.OpenFile(testDirName(stamp)+"/finished", os.O_RDWR|os.O_CREATE, 0600)
+		if err != nil {
+			fmt.Printf("[Final Cleanup] we failed to write the cleanup later file: %s", err.Error())
+			return
+		}
+		fd.Close()
 	case cleanupStrategyNever, cleanupStrategyNone:
 		// nothing to do
 	}
@@ -875,6 +885,12 @@ func dockerContext(ctx context.Context, node string, cmd string, env map[string]
 func RunOnNodeErr(node string, cmd string) (string, error) {
 	fmt.Printf("RUNNING on %s: %s\n", node, cmd)
 	return docker(node, cmd, nil)
+}
+
+// the same as RunOnNodeErr but will stream the outout to os.Stdout & os.Stderr
+func RunOnNodeErrDebug(node string, cmd string) (string, error) {
+	fmt.Printf("RUNNING on %s: %s\n", node, cmd)
+	return docker(node, cmd, DEBUG_ENV)
 }
 
 func dockerSystem(node string, cmd string) error {
@@ -1532,7 +1548,7 @@ func getUniqueIpPrefix() int {
 	}
 
 	// Make sure we clear up if the tests finish OK
-	RegisterCleanupAction(30, fmt.Sprintf("rm %s", prefixFileName))
+	RegisterCleanupAction(30, fmt.Sprintf("rm %s || true", prefixFileName))
 
 	return ipPrefix
 }
