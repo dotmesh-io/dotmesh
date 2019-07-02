@@ -25,3 +25,4 @@ tests/dind-cluster-*.sh
 bazel-*
 .vscode/*
 .gocache
+context

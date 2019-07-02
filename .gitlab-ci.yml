@@ -10,7 +10,7 @@ variables:
     RELEASE_DOCKER_REPOSITORY: dotmesh
     CI_SERVICE_BEING_TESTED: dotmesh-server
 
-    DOTMESH_TEST_CLEANUP: always
+    DOTMESH_TEST_CLEANUP: later
     DOTMESH_TEST_TIMEOUT: 10m
 
 stages:
