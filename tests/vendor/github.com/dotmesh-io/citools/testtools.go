@@ -1877,6 +1877,8 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		zfsVersionOverride = "--from-literal=kernel.zfsVersion=" + kzv + " "
 	}
 
+	workDir := filepath.Join(testDirName(now), "wd-#HOSTNAME#")
+
 	st, err = docker(
 		nodeName(now, i, 0),
 		fmt.Sprintf(
@@ -1889,7 +1891,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 				"--from-literal=pvcPerNode.storageClass=dind-pv "+
 				zfsVersionOverride+
 				"--from-literal=nodeSelector=clusterSize-%d=yes", // This needs to be in here so it can be replaced with sed
-			filepath.Join(testDirName(now), "wd-#HOSTNAME#"),
+			workDir,
 			logAddr,
 			c.StorageMode,
 			c.DesiredNodeCount,
@@ -1904,8 +1906,13 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		chmod +x /usr/local/bin/zumount &&
 		for POOL in $(zpool list -H | cut -f 1 | grep %d); do
 			zpool destroy -f $POOL || (zumount $POOL && zpool destroy -f $POOL)
-		done`,
+		done &&
+    for DIR in %s/wd-*
+    do
+       umount $DIR || true
+    done`,
 		stamp,
+		testDirName(now),
 	))
 
 	if err != nil {
@@ -2271,9 +2278,9 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 		panic("no such thing as a zero-node cluster")
 	}
 
+	workDir := filepath.Join(testDirName(now), fmt.Sprintf("wd-%d-0", i))
 	dmInitCommand := "EXTRA_HOST_COMMANDS='echo Testing EXTRA_HOST_COMMANDS' dm cluster init " + c.localImageArgs() +
-		" --use-pool-dir " +
-		filepath.Join(testDirName(now), fmt.Sprintf("wd-%d-0", i)) +
+		" --use-pool-dir " + workDir +
 		" --use-pool-name " + poolId(now, i, 0) +
 		" --dotmesh-upgrades-url ''" +
 		" --port " + strconv.Itoa(c.Port)
@@ -2289,11 +2296,13 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 		curl -sSL -o /usr/local/bin/zumount.$$ https://get.dotmesh.io/zumount &&
 		mv /usr/local/bin/zumount.$$ /usr/local/bin/zumount &&
 		chmod +x /usr/local/bin/zumount &&
-		zpool destroy -f %s || (zumount %s && zpool destroy -f %s)
+		zpool destroy -f %s || (zumount %s && zpool destroy -f %s) &&
+		umount %s
 		`,
 		poolId(now, i, 0),
 		poolId(now, i, 0),
 		poolId(now, i, 0),
+		workDir,
 	))
 
 	fmt.Printf("running dm cluster init with following command: %s\n", dmInitCommand)
@@ -2331,9 +2340,11 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 		// if c.Nodes is 3, this iterates over 1 and 2 (0 was the init'd
 		// node).
 
+		workDir := filepath.Join(testDirName(now), fmt.Sprintf("wd-%d-%d", i, j))
+
 		dmJoinCommand := fmt.Sprintf(
 			"dm cluster join %s %s %s",
-			c.localImageArgs()+" --use-pool-dir "+filepath.Join(testDirName(now), fmt.Sprintf("wd-%d-%d", i, j))+" ",
+			c.localImageArgs()+" --use-pool-dir "+workDir+" ",
 			joinUrl,
 			" --use-pool-name "+poolId(now, i, j),
 		)
@@ -2343,10 +2354,12 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 		curl -sSL -o /usr/local/bin/zumount.$$ https://get.dotmesh.io/zumount &&
 		mv /usr/local/bin/zumount.$$ /usr/local/bin/zumount &&
 		chmod +x /usr/local/bin/zumount &&
-		zpool destroy -f %s || (zumount %s && zpool destroy -f %s)`,
+		zpool destroy -f %s || (zumount %s && zpool destroy -f %s) &&
+		umount %s`,
 			poolId(now, i, j),
 			poolId(now, i, j),
 			poolId(now, i, j),
+			workDir,
 		))
 
 		if kzv := os.Getenv("KERNEL_ZFS_VERSION"); kzv != "" {
