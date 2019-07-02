@@ -1903,8 +1903,7 @@ func (c *Kubernetes) Start(t *testing.T, now int64, i int) error {
 		mv /usr/local/bin/zumount.$$ /usr/local/bin/zumount &&
 		chmod +x /usr/local/bin/zumount &&
 		for POOL in $(zpool list -H | cut -f 1 | grep %d); do
-			zumount $POOL
-			zpool destroy -f $POOL
+			zpool destroy -f $POOL || (zumount $POOL && zpool destroy -f $POOL)
 		done`,
 		stamp,
 	))
@@ -2223,8 +2222,7 @@ func (c *BlankCluster) Start(t *testing.T, now int64, i int) error {
 		mv /usr/local/bin/zumount.$$ /usr/local/bin/zumount &&
 		chmod +x /usr/local/bin/zumount &&
 		for POOL in $(zpool list -H | cut -f 1 | grep %d); do
-			zumount $POOL
-			zpool destroy -f $POOL
+			zpool destroy -f $POOL || (zumount $POOL && zpool destroy -f $POOL)
 		done`,
 		now,
 	))
@@ -2291,8 +2289,9 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 		curl -sSL -o /usr/local/bin/zumount.$$ https://get.dotmesh.io/zumount &&
 		mv /usr/local/bin/zumount.$$ /usr/local/bin/zumount &&
 		chmod +x /usr/local/bin/zumount &&
-		zumount %s &&
-		zpool destroy -f %s`,
+		zpool destroy -f %s || (zumount %s && zpool destroy -f %s)
+		`,
+		poolId(now, i, 0),
 		poolId(now, i, 0),
 		poolId(now, i, 0),
 	))
@@ -2344,8 +2343,8 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 		curl -sSL -o /usr/local/bin/zumount.$$ https://get.dotmesh.io/zumount &&
 		mv /usr/local/bin/zumount.$$ /usr/local/bin/zumount &&
 		chmod +x /usr/local/bin/zumount &&
-		zumount %s &&
-		zpool destroy -f %s`,
+		zpool destroy -f %s || (zumount %s && zpool destroy -f %s)`,
+			poolId(now, i, j),
 			poolId(now, i, j),
 			poolId(now, i, j),
 		))
