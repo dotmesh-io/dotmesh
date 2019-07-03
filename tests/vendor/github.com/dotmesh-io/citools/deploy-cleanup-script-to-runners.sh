@@ -2,7 +2,7 @@ for i in gitlab-jogger.dotmesh.io gitlab-runner.dotmesh.io gitlab-swimmer.dotmes
 do
     echo "Deploying cleanup-old-test-resources.go and cronjob to $i..."
     SSH_TARGET=gitlab-runner@$i
-    scp cleanup-old-test-resources.go $SSH_TARGET:cleanup-old-test-resources.go
+    scp cmd/cleanup-old-test-resources/main.go $SSH_TARGET:cleanup-old-test-resources.go
     ssh $SSH_TARGET 'sudo add-apt-repository ppa:hnakamur/golang-1.10 ; sudo apt-get -u update ; sudo apt-get install -y golang-go; sudo crontab -' <<EOF
 # Please don't hand-edit this crontab, use citools/deploy-cleanup-script-to-runners.sh to keep
 # all the runners in sync (and if that annoys you, then install chef/puppet/etc to manage them properly)
