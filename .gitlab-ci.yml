@@ -57,8 +57,6 @@ build_client_macos:
         paths:
         - binaries
         expire_in: 1 week
-    except:
-    - schedules
 
 build_yaml:
     retry: 2
@@ -93,8 +91,6 @@ build_provisioner:
     - export VERSION=$DOCKER_TAG # todo could change this to a "short" sha if needed
     - export REPOSITORY=${CI_REGISTRY}/${CI_PROJECT_PATH}/
     - make build_push_provisioner
-    except:
-    - schedules
 
 build_server:
     retry: 2
@@ -113,8 +109,6 @@ dotmesh_unit_tests:
         - fast
     script:
         - go test `go list ./... | egrep -v /tests`
-    except:
-        - schedules
 
 # run full dind tests on linux
 linux_default_dot:
@@ -130,8 +124,6 @@ linux_default_dot:
         paths:
         - extracted_logs
         when: always
-    except:
-        - schedules
 
 linux_dot_diff:
     retry: 2
@@ -146,8 +138,6 @@ linux_dot_diff:
         paths:
         - extracted_logs
         when: always
-    except:
-        - schedules
 
 linux_boltdb:
     retry: 2
@@ -162,8 +152,6 @@ linux_boltdb:
         paths:
         - extracted_logs
         when: always
-    except:
-        - schedules
 
 linux__restart_boltdb:
     retry: 2
@@ -178,8 +166,6 @@ linux__restart_boltdb:
         paths:
         - extracted_logs
         when: always
-    except:
-        - schedules
 
 linux_single_node:
     retry: 2
@@ -194,8 +180,6 @@ linux_single_node:
         paths:
         - extracted_logs
         when: always
-    except:
-        - schedules
 
 linux_recover_from_unmounted_dot_on_master:
     retry: 2
@@ -210,8 +194,6 @@ linux_recover_from_unmounted_dot_on_master:
         paths:
         - extracted_logs
         when: always
-    except:
-        - schedules
 
 linux_two_nodes_same_cluster:
     retry: 2
@@ -226,8 +208,6 @@ linux_two_nodes_same_cluster:
         paths:
         - extracted_logs
         when: always
-    except:
-        - schedules
 
 linux_deletion_simple:
     retry: 2
@@ -242,8 +222,6 @@ linux_deletion_simple:
         paths:
         - extracted_logs
         when: always
-    except:
-        - schedules
 
 linux_deletion_complex:
     retry: 2
@@ -258,8 +236,6 @@ linux_deletion_complex:
         paths:
         - extracted_logs
         when: always
-    except:
-        - schedules
 
 linux_backup_and_restore_two_single_node_clusters:
     retry: 2
@@ -274,8 +250,6 @@ linux_backup_and_restore_two_single_node_clusters:
         paths:
         - extracted_logs
         when: always
-    except:
-        - schedules
 
 linux_two_single_node_clusters:
     retry: 2
@@ -290,8 +264,6 @@ linux_two_single_node_clusters:
         paths:
         - extracted_logs
         when: always
-    except:
-        - schedules
 
 linux_three_single_node_clusters:
     retry: 2
@@ -306,8 +278,6 @@ linux_three_single_node_clusters:
         paths:
         - extracted_logs
         when: always
-    except:
-        - schedules
 
 linux_two_double_node_clusters:
     retry: 2
@@ -322,8 +292,6 @@ linux_two_double_node_clusters:
         paths:
         - extracted_logs
         when: always
-    except:
-        - schedules
 
 .linux_s3remote:
     retry: 2
@@ -338,8 +306,6 @@ linux_two_double_node_clusters:
         paths:
         - extracted_logs
         when: always
-    except:
-        - schedules
 
 linux_s3api:
     retry: 2
@@ -354,8 +320,6 @@ linux_s3api:
         paths:
         - extracted_logs
         when: always
-    except:
-        - schedules
 
 linux_forks:
     retry: 2
@@ -370,8 +334,6 @@ linux_forks:
         paths:
         - extracted_logs
         when: always
-    except:
-        - schedules
 
 linux_stress_lots_of_commits:
     retry: 2
@@ -387,8 +349,6 @@ linux_stress_lots_of_commits:
         - extracted_logs
         when: always
     when: manual
-    except:
-        - schedules
 
 linux_stress_large_files:
     retry: 2
@@ -405,8 +365,6 @@ linux_stress_large_files:
         - extracted_logs
         when: always
     when: manual
-    except:
-        - schedules
 
 linux_stress_handover:
     retry: 2
@@ -422,8 +380,6 @@ linux_stress_handover:
         - extracted_logs
         when: always
     when: manual
-    except:
-        - schedules
 
 publish_images:
     stage: deploy_images
@@ -443,8 +399,6 @@ publish_images:
         - export DOCKER_TAG=${CI_COMMIT_TAG:-$CI_COMMIT_SHA}
         - export VERSION=$DOCKER_TAG
         - make release_all
-    except:
-        - schedules
 
 trigger_e2e_test:
     stage: deploy
@@ -456,8 +410,6 @@ trigger_e2e_test:
         - curl -X POST -F "token=$CI_JOB_TOKEN" -F "ref=master" -F "variables[CI_SERVICE_BEING_TESTED]=$CI_SERVICE_BEING_TESTED" -F "variables[CI_DOCKER_TAG]=${CI_COMMIT_TAG:-${CI_COMMIT_SHA:-latest}}" -F "variables[DOTMESH_CI_BUILD_REF_NAME]=$CI_BUILD_REF_NAME" https://gitlab.dotmesh.com/api/v4/projects/dotmesh%2Fe2e-sync/trigger/pipeline
     only:
         - master
-    except:
-        - schedules
 
 deploy_unstable_build:
     stage: deploy
@@ -474,7 +426,6 @@ deploy_unstable_build:
         - "echo \"Deployed to https://get.dotmesh.io/unstable/$CI_COMMIT_REF_NAME\""
     except:
         - /^release-.*$/
-        - schedules
 
 deploy_release_build:
     stage: deploy
@@ -491,8 +442,6 @@ deploy_release_build:
         - "rsync -e 'ssh -o UserKnownHostsFile=./release-hosts' -avz binaries/{Linux,Darwin} yaml releases@get.dotmesh.io:/pool/releases/$VERSION"
     only:
         - /^release-.*$/
-    except:
-        - schedules
 
 mark_release_as_stable:
   stage: manual_deploy
@@ -502,5 +451,3 @@ mark_release_as_stable:
   only:
     - /^release-.*$/
   when: manual
-  except:
-    - schedules
