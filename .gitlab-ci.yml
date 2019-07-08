@@ -443,6 +443,9 @@ publish_images:
         - export DOCKER_TAG=${CI_COMMIT_TAG:-$CI_COMMIT_SHA}
         - export VERSION=$DOCKER_TAG
         - make release_all
+        - export DOCKER_TAG=$CI_BUILD_REF_NAME
+        - export VERSION=$DOCKER_TAG
+        - make release_all
     except:
         - schedules
 
