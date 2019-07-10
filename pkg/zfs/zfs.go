@@ -467,14 +467,6 @@ func (z *zfs) GetDirtyDelta(filesystemId, latestSnap string) (int64, int64, erro
 			}
 		}
 	}
-	// Dirty filesystems that have been rolled back to the latest snapshot
-	// sometimes exhibit 1024 bytes used.
-	if usedLatestSnap <= 1024 {
-		usedLatestSnap = 0
-	}
-	if usedTmpSnap <= 1024 {
-		usedTmpSnap = 0
-	}
 	//     deleted                                + added
 	return intDiff(referDataset, referLatestSnap) + usedLatestSnap +
 		// deleted                            added
