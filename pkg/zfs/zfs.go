@@ -423,6 +423,7 @@ func (z *zfs) GetDirtyDelta(filesystemId, latestSnap string) (int64, int64, erro
 	*/
 	var referDataset, referLatestSnap, usedLatestSnap, usedDataset int64
 	var referTmpSnap, usedTmpSnap int64
+	var foundTmpSnashot bool
 	lines := strings.Split(string(o), "\n")
 	for _, line := range lines {
 		shrap := strings.Fields(line)
@@ -467,10 +468,14 @@ func (z *zfs) GetDirtyDelta(filesystemId, latestSnap string) (int64, int64, erro
 			}
 		}
 	}
-	//     deleted                                + added
-	return intDiff(referDataset, referLatestSnap) + usedLatestSnap +
-		// deleted                            added
-		intDiff(referDataset, referTmpSnap) + usedTmpSnap, usedDataset, nil
+	//        deleted                                + added
+	result := intDiff(referDataset, referLatestSnap) + usedLatestSnap
+	if foundTmpSnashot {
+		//        deleted                            added
+		result += intDiff(referDataset, referTmpSnap) + usedTmpSnap
+	}
+	//     dwlta,  total size,  error
+	return result, usedDataset, nil
 }
 
 func intDiff(a, b int64) int64 {
