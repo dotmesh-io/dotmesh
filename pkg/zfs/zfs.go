@@ -422,6 +422,7 @@ func (z *zfs) GetDirtyDelta(filesystemId, latestSnap string) (int64, int64, erro
 		pool/y@now      used    104938496       -
 	*/
 	var referDataset, referLatestSnap, usedLatestSnap, usedDataset int64
+	var referTmpSnap, usedTmpSnap int64
 	lines := strings.Split(string(o), "\n")
 	for _, line := range lines {
 		shrap := strings.Fields(line)
@@ -450,6 +451,19 @@ func (z *zfs) GetDirtyDelta(filesystemId, latestSnap string) (int64, int64, erro
 						return 0, 0, err
 					}
 				}
+			} else if shrap[0] == FQ(z.poolName, filesystemId)+"@"+tmpSnapshotName {
+				// NB: tmpSnapshotName defined as package-level constant
+				if shrap[1] == "referenced" {
+					referTmpSnap, err = strconv.ParseInt(shrap[2], 10, 64)
+					if err != nil {
+						return 0, 0, err
+					}
+				} else if shrap[1] == "used" {
+					usedTmpSnap, err = strconv.ParseInt(shrap[2], 10, 64)
+					if err != nil {
+						return 0, 0, err
+					}
+				}
 			}
 		}
 	}
@@ -458,7 +472,13 @@ func (z *zfs) GetDirtyDelta(filesystemId, latestSnap string) (int64, int64, erro
 	if usedLatestSnap <= 1024 {
 		usedLatestSnap = 0
 	}
-	return intDiff(referDataset, referLatestSnap) + usedLatestSnap, usedDataset, nil
+	if usedTmpSnap <= 1024 {
+		usedTmpSnap = 0
+	}
+	//     deleted                                + added
+	return intDiff(referDataset, referLatestSnap) + usedLatestSnap +
+		// deleted                            added
+		intDiff(referDataset, referTmpSnap) + usedTmpSnap, usedDataset, nil
 }
 
 func intDiff(a, b int64) int64 {
