@@ -474,7 +474,21 @@ func (z *zfs) GetDirtyDelta(filesystemId, latestSnap string) (int64, int64, erro
 		//        deleted                               added
 		result += intDiff(referDataset, referTmpSnap) + usedTmpSnap
 	}
-	//     dwlta,  total size,  error
+
+	log.WithFields(log.Fields{
+		"filesystemId":    referDataset,
+		"referDataset":    referDataset,
+		"referLatestSnap": referLatestSnap,
+		"usedLatestSnap":  usedLatestSnap,
+		"foundTmpSnashot": foundTmpSnashot,
+		"latestSnap":      latestSnap,
+		"referTmpSnap":    referTmpSnap,
+		"usedTmpSnap":     usedTmpSnap,
+		"usedDataset":     usedDataset,
+		"result":          result,
+	}).Info("calculated dirty data")
+
+	//     delta,  total size,  error
 	return result, usedDataset, nil
 }
 
