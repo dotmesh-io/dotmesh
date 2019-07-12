@@ -476,7 +476,7 @@ func (z *zfs) GetDirtyDelta(filesystemId, latestSnap string) (int64, int64, erro
 	}
 
 	log.WithFields(log.Fields{
-		"filesystemId":    referDataset,
+		"filesystemId":    filesystemId,
 		"referDataset":    referDataset,
 		"referLatestSnap": referLatestSnap,
 		"usedLatestSnap":  usedLatestSnap,
