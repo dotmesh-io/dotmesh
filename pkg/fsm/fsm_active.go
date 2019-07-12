@@ -51,6 +51,7 @@ func activeState(f *FsMachine) StateFn {
 					Args: &types.EventArgs{"size": int64(size)},
 				}
 			}
+			f.transitionedTo("active", "predicted size")
 			return activeState
 		} else if e.Name == "transfer" {
 
@@ -271,6 +272,7 @@ func activeState(f *FsMachine) StateFn {
 			f.innerResponses <- &types.Event{
 				Name: "rolled-back",
 			}
+			f.transitionedTo("active", "rolled back")
 			return activeState
 		} else if e.Name == "clone" {
 			// clone a new filesystem from the given snapshot, then spin off a
@@ -310,12 +312,14 @@ func activeState(f *FsMachine) StateFn {
 				Name: "cloned",
 				Args: &types.EventArgs{"newFilesystemId": newCloneFilesystemId},
 			}
+			f.transitionedTo("active", "cloned")
 			return activeState
 		} else if e.Name == "mount" {
 			f.innerResponses <- &types.Event{
 				Name: "mounted",
 				Args: &types.EventArgs{},
 			}
+			f.transitionedTo("active", "mounted")
 			return activeState
 		} else if e.Name == "unmount" {
 			// fail if any containers running
