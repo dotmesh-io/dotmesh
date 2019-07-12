@@ -470,8 +470,8 @@ func (z *zfs) GetDirtyDelta(filesystemId, latestSnap string) (int64, int64, erro
 	}
 	//        deleted                                + added
 	result := intDiff(referDataset, referLatestSnap) + usedLatestSnap
-	if foundTmpSnashot {
-		//        deleted                            added
+	if foundTmpSnashot && lastestSnap != tmpSnapshotName {
+		//        deleted                               added
 		result += intDiff(referDataset, referTmpSnap) + usedTmpSnap
 	}
 	//     dwlta,  total size,  error
