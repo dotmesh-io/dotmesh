@@ -406,11 +406,11 @@ func (z *zfs) DeleteFilesystemInZFS(fs string) error {
 }
 
 func (z *zfs) GetDirtyDelta(filesystemId, latestSnap string) (int64, int64, error) {
-	dirty, total, _, err := z.getDirtyDeltaCheckLatestTmpSnapBothZeros(filesystemId, latestSnap)
+	dirty, total, _, err := z.getDirtyDeltaCheckLatestTmpSnapBothZeros(filesystemId, latestSnap, false)
 	return dirty, total, err
 }
 
-func (z *zfs) getDirtyDeltaCheckLatestTmpSnapBothZeros(filesystemId, latestSnap string) (
+func (z *zfs) getDirtyDeltaCheckLatestTmpSnapBothZeros(filesystemId, latestSnap string, dirtyFromTmpSnap bool) (
 	// the bool flag returned indicates whether the tmp snapshot and the latest
 	// snapshot both have zero "used", which is a hint that they might both be
 	// using the same blocks (i.e. are same snapshot logically); in this case,
@@ -484,13 +484,19 @@ func (z *zfs) getDirtyDeltaCheckLatestTmpSnapBothZeros(filesystemId, latestSnap 
 			}
 		}
 	}
-	//        deleted                                + added
-	result := intDiff(referDataset, referLatestSnap) + usedLatestSnap
+	var result int64 = 0
+	// if we're only counting dirty data from the tmp snapshot, don't count
+	// dirty data wrt the latest snapshot
+	if !dirtyFromTmpSnap {
+		//        deleted                                + added
+		result += intDiff(referDataset, referLatestSnap) + usedLatestSnap
+	}
 	var checkLatestTmpSnapBothZeros bool = false
 	if foundTmpSnashot && latestSnap != tmpSnapshotName {
 		//        deleted                               added
 		result += intDiff(referDataset, referTmpSnap) + usedTmpSnap
-
+		// are the last two snaps both zero "used"? if so, we might be falling foul
+		// of the zfs space accounting uniqueness rule.
 		checkLatestTmpSnapBothZeros = usedLatestSnap == 0 && usedTmpSnap == 0
 	}
 
@@ -506,6 +512,7 @@ func (z *zfs) getDirtyDeltaCheckLatestTmpSnapBothZeros(filesystemId, latestSnap 
 		"usedDataset":                 usedDataset,
 		"result":                      result,
 		"checkLatestTmpSnapBothZeros": checkLatestTmpSnapBothZeros,
+		"dirtyFromTmpSnap":            dirtyFromTmpSnap,
 	}).Info("calculated dirty data")
 
 	// dirty delta, total size, checkLatestTmpSnapBothZeros, error
@@ -891,7 +898,7 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 	// algorithm. in this case, we need to clean up the tmp snapshot before
 	// proceeding, otherwise we risk missing filesystem changes.
 
-	dirty, _, checkLatestTmpSnapBothZeros, err := z.getDirtyDeltaCheckLatestTmpSnapBothZeros(filesystemID, tmpSnapshotName)
+	dirty, _, checkLatestTmpSnapBothZeros, err := z.getDirtyDeltaCheckLatestTmpSnapBothZeros(filesystemID, latest, true)
 	if err != nil {
 		log.WithError(err).Error("[diff] error get dirty delta")
 		return nil, err
@@ -902,7 +909,7 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 		exec.CommandContext(ctx, "umount", tmpMnt).Run()
 		exec.CommandContext(ctx, z.zfsPath, "destroy", tmp).Run()
 
-		dirty, _, checkLatestTmpSnapBothZeros, err = z.getDirtyDeltaCheckLatestTmpSnapBothZeros(filesystemID, tmpSnapshotName)
+		dirty, _, checkLatestTmpSnapBothZeros, err = z.getDirtyDeltaCheckLatestTmpSnapBothZeros(filesystemID, latest, true)
 		if err != nil {
 			log.WithError(err).Error("[diff] error get dirty delta (second try after tmp cleanup)")
 			return nil, err
