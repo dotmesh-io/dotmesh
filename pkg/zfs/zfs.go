@@ -469,6 +469,7 @@ func (z *zfs) getDirtyDeltaCheckLatestTmpSnapBothZeros(filesystemId, latestSnap 
 					}
 				}
 			} else if shrap[0] == FQ(z.poolName, filesystemId)+"@"+tmpSnapshotName {
+				foundTmpSnashot = true
 				// NB: tmpSnapshotName defined as package-level constant
 				if shrap[1] == "referenced" {
 					referTmpSnap, err = strconv.ParseInt(shrap[2], 10, 64)
