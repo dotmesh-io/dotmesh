@@ -898,7 +898,7 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 	// algorithm. in this case, we need to clean up the tmp snapshot before
 	// proceeding, otherwise we risk missing filesystem changes.
 
-	dirty, _, checkLatestTmpSnapBothZeros, err := z.getDirtyDeltaCheckLatestTmpSnapBothZeros(filesystemID, latest, true)
+	dirty, _, checkLatestTmpSnapBothZeros, err := z.getDirtyDeltaCheckLatestTmpSnapBothZeros(filesystemID, snapshot, true)
 	if err != nil {
 		log.WithError(err).Error("[diff] error get dirty delta")
 		return nil, err
@@ -909,7 +909,7 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 		exec.CommandContext(ctx, "umount", tmpMnt).Run()
 		exec.CommandContext(ctx, z.zfsPath, "destroy", tmp).Run()
 
-		dirty, _, checkLatestTmpSnapBothZeros, err = z.getDirtyDeltaCheckLatestTmpSnapBothZeros(filesystemID, latest, true)
+		dirty, _, checkLatestTmpSnapBothZeros, err = z.getDirtyDeltaCheckLatestTmpSnapBothZeros(filesystemID, snapshot, true)
 		if err != nil {
 			log.WithError(err).Error("[diff] error get dirty delta (second try after tmp cleanup)")
 			return nil, err
@@ -1085,9 +1085,6 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 		SnapshotID: snapshot,
 		Result:     sortedResult,
 	}
-
-	// TODO delete this verbose logging
-	log.Printf("[diff] response for %s = %s", filesystemID, sortedResult)
 
 	return sortedResult, nil
 }
