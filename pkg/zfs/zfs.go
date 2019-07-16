@@ -1086,6 +1086,9 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 		Result:     sortedResult,
 	}
 
+	// TODO delete this verbose logging
+	log.Printf("[diff] response for %s = %s", filesystemID, sortedResult)
+
 	return sortedResult, nil
 }
 
