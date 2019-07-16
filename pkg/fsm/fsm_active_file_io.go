@@ -76,7 +76,6 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 		Args: &types.EventArgs{},
 	}
 
-	f.transitionedTo("active", "saved file")
 	return activeState
 }
 
@@ -129,7 +128,6 @@ func (f *FsMachine) readFile(file *types.OutputFile) StateFn {
 		Args: &types.EventArgs{},
 	}
 
-	f.transitionedTo("active", "read file")
 	return activeState
 }
 
@@ -159,7 +157,6 @@ func (f *FsMachine) readDirectory(file *types.OutputFile) StateFn {
 		Args: &types.EventArgs{},
 	}
 
-	f.transitionedTo("active", "read directory")
 	return activeState
 
 }
