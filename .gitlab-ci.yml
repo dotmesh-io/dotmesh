@@ -426,8 +426,8 @@ deploy_unstable_build:
     tags:
         - fast
     script:
-        - "ssh -o UserKnownHostsFile=./release-hosts releases@get.dotmesh.io mkdir -p /pool/releases/unstable/$CI_COMMIT_REF_NAME"
-        - "rsync -e 'ssh -o UserKnownHostsFile=./release-hosts' -avz binaries/{Linux,Darwin} yaml releases@get.dotmesh.io:/pool/releases/unstable/$CI_COMMIT_REF_NAME"
+        - "ssh -o UserKnownHostsFile=./release-hosts releases@get-discovery.dotmesh.io mkdir -p /pool/releases/unstable/$CI_COMMIT_REF_NAME"
+        - "rsync -e 'ssh -o UserKnownHostsFile=./release-hosts' -avz binaries/{Linux,Darwin} yaml releases@get-discovery.dotmesh.io:/pool/releases/unstable/$CI_COMMIT_REF_NAME"
         - "echo \"Deployed to https://get.dotmesh.io/unstable/$CI_COMMIT_REF_NAME\""
     except:
         - /^release-.*$/
@@ -443,8 +443,8 @@ deploy_release_build:
         - fast
     script:
         - VERSION=`cd cmd/versioner; go run versioner.go`; echo VERSION=$VERSION
-        - "ssh -o UserKnownHostsFile=./release-hosts releases@get.dotmesh.io mkdir -p /pool/releases/$VERSION"
-        - "rsync -e 'ssh -o UserKnownHostsFile=./release-hosts' -avz binaries/{Linux,Darwin} yaml releases@get.dotmesh.io:/pool/releases/$VERSION"
+        - "ssh -o UserKnownHostsFile=./release-hosts releases@get-discovery.dotmesh.io mkdir -p /pool/releases/$VERSION"
+        - "rsync -e 'ssh -o UserKnownHostsFile=./release-hosts' -avz binaries/{Linux,Darwin} yaml releases@get-discovery.dotmesh.io:/pool/releases/$VERSION"
     only:
         - /^release-.*$/
 
@@ -452,7 +452,7 @@ mark_release_as_stable:
   stage: manual_deploy
   script:
     - VERSION=`cd cmd/versioner; go run versioner.go`
-    - "ssh -o UserKnownHostsFile=./release-hosts releases@get.dotmesh.io sh -c \"true && rm -f /pool/releases/Linux && ln -s $VERSION/Linux /pool/releases && rm -f /pool/releases/Darwin && ln -s $VERSION/Darwin /pool/releases && rm -f /pool/releases/yaml && ln -fs $VERSION/yaml /pool/releases\""
+    - "ssh -o UserKnownHostsFile=./release-hosts releases@get-discovery.dotmesh.io sh -c \"true && rm -f /pool/releases/Linux && ln -s $VERSION/Linux /pool/releases && rm -f /pool/releases/Darwin && ln -s $VERSION/Darwin /pool/releases && rm -f /pool/releases/yaml && ln -fs $VERSION/yaml /pool/releases\""
   only:
     - /^release-.*$/
   when: manual
