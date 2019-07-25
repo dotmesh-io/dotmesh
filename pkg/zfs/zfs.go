@@ -501,20 +501,20 @@ func (z *zfs) getDirtyDeltaCheckLatestTmpSnapBothZeros(filesystemId, latestSnap 
 		checkLatestTmpSnapBothZeros = usedLatestSnap == 0 && usedTmpSnap == 0
 	}
 
-	log.WithFields(log.Fields{
-		"filesystemId":                filesystemId,
-		"referDataset":                referDataset,
-		"referLatestSnap":             referLatestSnap,
-		"usedLatestSnap":              usedLatestSnap,
-		"foundTmpSnashot":             foundTmpSnashot,
-		"latestSnap":                  latestSnap,
-		"referTmpSnap":                referTmpSnap,
-		"usedTmpSnap":                 usedTmpSnap,
-		"usedDataset":                 usedDataset,
-		"result":                      result,
-		"checkLatestTmpSnapBothZeros": checkLatestTmpSnapBothZeros,
-		"dirtyFromTmpSnap":            dirtyFromTmpSnap,
-	}).Info("calculated dirty data")
+	// log.WithFields(log.Fields{
+	// 	"filesystemId":                filesystemId,
+	// 	"referDataset":                referDataset,
+	// 	"referLatestSnap":             referLatestSnap,
+	// 	"usedLatestSnap":              usedLatestSnap,
+	// 	"foundTmpSnashot":             foundTmpSnashot,
+	// 	"latestSnap":                  latestSnap,
+	// 	"referTmpSnap":                referTmpSnap,
+	// 	"usedTmpSnap":                 usedTmpSnap,
+	// 	"usedDataset":                 usedDataset,
+	// 	"result":                      result,
+	// 	"checkLatestTmpSnapBothZeros": checkLatestTmpSnapBothZeros,
+	// 	"dirtyFromTmpSnap":            dirtyFromTmpSnap,
+	// }).Info("calculated dirty data")
 
 	// dirty delta, total size, checkLatestTmpSnapBothZeros, error
 	return result, usedDataset, checkLatestTmpSnapBothZeros, nil
