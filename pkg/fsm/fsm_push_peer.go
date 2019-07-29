@@ -99,8 +99,12 @@ func pushPeerState(f *FsMachine) StateFn {
 				now := time.Now()
 				seconds := now.Sub(start).Seconds()
 				mb := bytes / 1048576
-				mbPerSecond := (float64(bytes) / seconds) / 1048576
-				f.transitionedTo("pushPeerState", fmt.Sprintf("running: %d MiB so far, %.3f MiB/sec", mb, mbPerSecond))
+				if seconds > 0 {
+					mbPerSecond := (float64(bytes) / seconds) / 1048576
+					f.transitionedTo("pushPeerState", fmt.Sprintf("running: %d MiB so far, %.3f MiB/sec", mb, mbPerSecond))
+				} else {
+					f.transitionedTo("pushPeerState", fmt.Sprintf("running: %d MiB so far", mb))
+				}
 
 				reset()
 			case <-finished:
