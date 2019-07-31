@@ -56,3 +56,6 @@ build_push_provisioner:
 
 prep_tests:
 	./scripts/mark-cleanup.sh && make clear_context && make create_context && export DOCKER_TAG=latest && export VERSION=latest && make rebuild
+
+reset_bucket:
+	docker run -it --env S3_ACCESS_KEY=${S3_ACCESS_KEY} --env S3_SECRET_KEY=${S3_SECRET_KEY} -v $(dir $(realpath $(firstword $(MAKEFILE_LIST))))/scripts:/scripts garland/docker-s3cmd /scripts/create-s3-stress-test-bucket.sh
