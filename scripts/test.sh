@@ -42,6 +42,9 @@ shutdown() {
     cleanup "signal $SIGNAL"
 }
 
+export CI_REGISTRY=${CI_REGISTRY:-"$(hostname).local:80"}
+export CI_REPOSITORY=${CI_REPOSITORY:-"dotmesh"}
+
 trap 'shutdown SIGTERM' SIGTERM
 trap 'shutdown SIGINT' SIGINT
 trap 'shutdown SIGQUIT' SIGQUIT
