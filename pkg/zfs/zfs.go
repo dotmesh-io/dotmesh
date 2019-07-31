@@ -872,17 +872,32 @@ func (z *zfs) DestroyTmpSnapIfExists(filesystemID string) error {
 
 func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types.ZFSFileDiff, error) {
 	/*
-		Diff the default subdot of a given dot.
+		Diff the default subdot of a given dot against the latest commit on
+		that dot.
 
 		NB:
+		0. the snapshot arg is ignored. (in dotscience, the committer was
+		   sometimes giving us a commit id which doesn't exist on the dot --
+		   possibly it existed on a fork origin.)
 		1. the snapshotOrFilesystem arg is ignored.
 		2. this function should not be run in parallel with itself.
 	*/
 
+	// NB: DiscoverSystem ignores the tmpSnapshotName
+	filesystemInfo, err := z.DiscoverSystem(filesystemID)
+	if err != nil {
+		log.WithError(err).Error("[diff] error discover system to find latest snap")
+		return nil, err
+	}
+	if len(filesystemInfo.Snapshots) == 0 {
+		return nil, fmt.Errorf("cannot diff against a filesystem with no snapshots")
+	}
+	snapshot = filesystemInfo.Snapshots[len(filesystemInfo.Snapshots)-1].Id
+
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Minute)
 	defer cancel()
 
-	// latest is the latest "dotmesh" snapshot
+	// latest is the latest "dotmesh" commit
 	latest := z.fullZFSFilesystemPath(filesystemID, snapshot)
 
 	// tmp is a new, temporary snapshot which is newer than the "latest"
