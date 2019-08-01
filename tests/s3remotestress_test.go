@@ -36,7 +36,6 @@ func TestS3Stress(t *testing.T) {
 		start := time.Now()
 		fmt.Printf("Timing the clone command...\n")
 		command := "dm clone test-real-s3 dotmesh-transfer-stress-test --local-name=" + fsname
-		t.Fatalf("Failing here, run: %s", command)
 		citools.RunOnNode(t, node1, command)
 		elapsed := time.Since(start)
 		fmt.Printf("Clone took: %s", elapsed)
