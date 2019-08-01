@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dotmesh-io/citools"
 )
@@ -32,8 +33,16 @@ func TestS3Stress(t *testing.T) {
 
 	t.Run("Clone", func(t *testing.T) {
 		fsname := citools.UniqName()
-		citools.RunOnNode(t, node1, "dm clone test-real-s3 dotmesh-transfer-stress-test --local-name="+fsname)
-
+		start := time.Now()
+		fmt.Printf("Timing the clone command...\n")
+		command := "dm clone test-real-s3 dotmesh-transfer-stress-test --local-name=" + fsname
+		t.Fatalf("Failing here, run: %s", command)
+		citools.RunOnNode(t, node1, command)
+		elapsed := time.Since(start)
+		fmt.Printf("Clone took: %s", elapsed)
+		if elapsed.Minutes() > 20 {
+			t.Errorf("It took longer than 20 minutes to download the bucket. Total elapsed: %s\n", elapsed)
+		}
 		resp := citools.OutputFromRunOnNode(t, node1, "dm list")
 		if !strings.Contains(resp, fsname) {
 			t.Error("unable to find volume name in ouput")
