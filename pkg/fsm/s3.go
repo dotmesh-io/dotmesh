@@ -239,9 +239,11 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 		params.SetPrefix(prefix)
 	}
 	log.Debugf("[downloadPartialS3Bucket] params: %#v", *params)
+
 	downloader := s3manager.NewDownloaderWithClient(svc, func(d *s3manager.Downloader) {
 		d.Concurrency = 10
 	})
+
 	var innerError error
 	startTime := time.Now()
 	var sent int64
