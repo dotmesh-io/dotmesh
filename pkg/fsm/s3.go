@@ -3,9 +3,11 @@ package fsm
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"strings"
+	"sync/atomic"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -224,7 +226,7 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 						},
 					}
 					// ERROR CATCHING?
-					innerError = downloadS3Object(downloader, *item.Key, *item.VersionId, bucketName, destPath)
+					innerError = downloadS3Object(f.transferUpdates, downloader, *item.Key, *item.VersionId, bucketName, destPath)
 					if innerError != nil {
 						return false
 					}
@@ -252,7 +254,26 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 	return bucketChanged, currentKeyVersions, nil
 }
 
-func downloadS3Object(downloader *s3manager.Downloader, key, versionId, bucket, destPath string) error {
+type progressWriter struct {
+	written int64
+	writer  io.WriterAt
+	updates chan types.TransferUpdate
+}
+
+func (pw *progressWriter) WriteAt(p []byte, off int64) (int, error) {
+	atomic.AddInt64(&pw.written, int64(len(p)))
+	pw.updates <- types.TransferUpdate{
+		Kind: types.TransferProgress,
+		Changes: types.TransferPollResult{
+			Status: "pulling",
+			Sent:   pw.written,
+		},
+	}
+
+	return pw.writer.WriteAt(p, off)
+}
+
+func downloadS3Object(updates chan types.TransferUpdate, downloader *s3manager.Downloader, key, versionId, bucket, destPath string) error {
 	fpath := fmt.Sprintf("%s/%s", destPath, key)
 	directoryPath := fpath[:strings.LastIndex(fpath, "/")]
 	err := os.MkdirAll(directoryPath, 0666)
@@ -264,7 +285,8 @@ func downloadS3Object(downloader *s3manager.Downloader, key, versionId, bucket, 
 	if err != nil {
 		return err
 	}
-	_, err = downloader.Download(file, &s3.GetObjectInput{
+	writer := &progressWriter{writer: file, written: 0, updates: updates}
+	_, err = downloader.Download(writer, &s3.GetObjectInput{
 		Bucket:    &bucket,
 		Key:       &key,
 		VersionId: &versionId,
