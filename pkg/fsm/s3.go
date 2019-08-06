@@ -166,6 +166,7 @@ func downloadS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, transferRe
 	}
 	var changed bool
 	var err error
+
 	for _, prefix := range prefixes {
 		log.Debugf("[downloadS3Bucket] Pulling down objects prefixed %s", prefix)
 		changed, currentKeyVersions, err = downloadPartialS3Bucket(f, svc, bucketName, destPath, transferRequestId, prefix, currentKeyVersions)
@@ -209,6 +210,7 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 
 				}
 			}
+
 			for _, item := range page.Versions {
 				latestMeta := currentKeyVersions[*item.Key]
 				if *item.IsLatest && latestMeta != *item.VersionId {
@@ -227,7 +229,7 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 						return false
 					}
 					f.transferUpdates <- types.TransferUpdate{
-						Kind: types.TransferNextS3File,
+						Kind: types.TransferFinishedS3File,
 						Changes: types.TransferPollResult{
 							Status: "Pulled file successfully",
 							Sent:   *item.Size,
