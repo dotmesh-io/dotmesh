@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -193,8 +194,9 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 		params.SetPrefix(prefix)
 	}
 	log.Debugf("[downloadPartialS3Bucket] params: %#v", *params)
-	downloader := s3manager.NewDownloaderWithClient(svc)
+	downloader := s3manager.NewDownloaderWithClient(svc, func(d *s3manager.Downloader) { d.Concurrency = 20 })
 	var innerError error
+	startTime := time.Now()
 	err := svc.ListObjectVersionsPages(params,
 		func(page *s3.ListObjectVersionsOutput, lastPage bool) bool {
 			for _, item := range page.DeleteMarkers {
@@ -226,7 +228,7 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 						},
 					}
 					// ERROR CATCHING?
-					innerError = downloadS3Object(f.transferUpdates, downloader, *item.Key, *item.VersionId, bucketName, destPath)
+					innerError = downloadS3Object(f.transferUpdates, downloader, startTime, *item.Key, *item.VersionId, bucketName, destPath)
 					if innerError != nil {
 						return false
 					}
@@ -255,25 +257,28 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 }
 
 type progressWriter struct {
-	written int64
-	writer  io.WriterAt
-	updates chan types.TransferUpdate
+	written   int64
+	writer    io.WriterAt
+	startTime time.Time
+	updates   chan types.TransferUpdate
 }
 
 func (pw *progressWriter) WriteAt(p []byte, off int64) (int, error) {
 	atomic.AddInt64(&pw.written, int64(len(p)))
+	elapsed := time.Since(pw.startTime).Nanoseconds()
 	pw.updates <- types.TransferUpdate{
 		Kind: types.TransferProgress,
 		Changes: types.TransferPollResult{
-			Status: "pulling",
-			Sent:   pw.written,
+			Status:             "pulling",
+			Sent:               pw.written,
+			NanosecondsElapsed: elapsed,
 		},
 	}
 
 	return pw.writer.WriteAt(p, off)
 }
 
-func downloadS3Object(updates chan types.TransferUpdate, downloader *s3manager.Downloader, key, versionId, bucket, destPath string) error {
+func downloadS3Object(updates chan types.TransferUpdate, downloader *s3manager.Downloader, startTime time.Time, key, versionId, bucket, destPath string) error {
 	fpath := fmt.Sprintf("%s/%s", destPath, key)
 	directoryPath := fpath[:strings.LastIndex(fpath, "/")]
 	err := os.MkdirAll(directoryPath, 0666)
@@ -285,7 +290,7 @@ func downloadS3Object(updates chan types.TransferUpdate, downloader *s3manager.D
 	if err != nil {
 		return err
 	}
-	writer := &progressWriter{writer: file, written: 0, updates: updates}
+	writer := &progressWriter{writer: file, written: 0, updates: updates, startTime: startTime}
 	_, err = downloader.Download(writer, &s3.GetObjectInput{
 		Bucket:    &bucket,
 		Key:       &key,
