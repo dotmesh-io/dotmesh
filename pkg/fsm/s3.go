@@ -3,9 +3,12 @@ package fsm
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -166,6 +169,7 @@ func downloadS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, transferRe
 	}
 	var changed bool
 	var err error
+
 	for _, prefix := range prefixes {
 		log.Debugf("[downloadS3Bucket] Pulling down objects prefixed %s", prefix)
 		changed, currentKeyVersions, err = downloadPartialS3Bucket(f, svc, bucketName, destPath, transferRequestId, prefix, currentKeyVersions)
@@ -192,6 +196,8 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 	log.Debugf("[downloadPartialS3Bucket] params: %#v", *params)
 	downloader := s3manager.NewDownloaderWithClient(svc)
 	var innerError error
+	startTime := time.Now()
+	var sent int64
 	err := svc.ListObjectVersionsPages(params,
 		func(page *s3.ListObjectVersionsOutput, lastPage bool) bool {
 			for _, item := range page.DeleteMarkers {
@@ -209,6 +215,7 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 
 				}
 			}
+
 			for _, item := range page.Versions {
 				latestMeta := currentKeyVersions[*item.Key]
 				if *item.IsLatest && latestMeta != *item.VersionId {
@@ -222,17 +229,18 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 						},
 					}
 					// ERROR CATCHING?
-					innerError = downloadS3Object(downloader, *item.Key, *item.VersionId, bucketName, destPath)
+					innerError = downloadS3Object(f.transferUpdates, downloader, sent, startTime, *item.Key, *item.VersionId, bucketName, destPath)
 					if innerError != nil {
 						return false
 					}
 					f.transferUpdates <- types.TransferUpdate{
-						Kind: types.TransferNextS3File,
+						Kind: types.TransferFinishedS3File,
 						Changes: types.TransferPollResult{
 							Status: "Pulled file successfully",
 							Sent:   *item.Size,
 						},
 					}
+					sent += *item.Size
 					currentKeyVersions[*item.Key] = *item.VersionId
 					bucketChanged = true
 
@@ -250,7 +258,29 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 	return bucketChanged, currentKeyVersions, nil
 }
 
-func downloadS3Object(downloader *s3manager.Downloader, key, versionId, bucket, destPath string) error {
+type progressWriter struct {
+	written   int64
+	writer    io.WriterAt
+	startTime time.Time
+	updates   chan types.TransferUpdate
+}
+
+func (pw *progressWriter) WriteAt(p []byte, off int64) (int, error) {
+	atomic.AddInt64(&pw.written, int64(len(p)))
+	elapsed := time.Since(pw.startTime).Nanoseconds()
+	pw.updates <- types.TransferUpdate{
+		Kind: types.TransferProgress,
+		Changes: types.TransferPollResult{
+			Status:             "pulling",
+			Sent:               pw.written,
+			NanosecondsElapsed: elapsed,
+		},
+	}
+
+	return pw.writer.WriteAt(p, off)
+}
+
+func downloadS3Object(updates chan types.TransferUpdate, downloader *s3manager.Downloader, startSent int64, startTime time.Time, key, versionId, bucket, destPath string) error {
 	fpath := fmt.Sprintf("%s/%s", destPath, key)
 	directoryPath := fpath[:strings.LastIndex(fpath, "/")]
 	err := os.MkdirAll(directoryPath, 0666)
@@ -262,15 +292,48 @@ func downloadS3Object(downloader *s3manager.Downloader, key, versionId, bucket, 
 	if err != nil {
 		return err
 	}
-	_, err = downloader.Download(file, &s3.GetObjectInput{
-		Bucket:    &bucket,
-		Key:       &key,
-		VersionId: &versionId,
-	})
-	if err != nil {
-		return err
+	writer := &progressWriter{writer: file, written: startSent, updates: updates, startTime: startTime}
+	var size int64
+	context, cancel := context.WithCancel(context.Background())
+	done := make(chan error)
+	go func() {
+		_, err := downloader.DownloadWithContext(context, writer, &s3.GetObjectInput{
+			Bucket:    &bucket,
+			Key:       &key,
+			VersionId: &versionId,
+		})
+		done <- err
+	}()
+	for {
+		select {
+		case err := <-done:
+			return err
+		default:
+			time.Sleep(30 * time.Second)
+			info, err := file.Stat()
+			if err != nil {
+				cancel()
+				return err
+			}
+			if info.Size() == size {
+				log.WithFields(log.Fields{
+					"size":       size,
+					"key":        key,
+					"bucket":     bucket,
+					"version_id": versionId,
+				}).Error("The file hasn't grown in 30 seconds, the download might be stuck. Cancelling and deleting the file...")
+				cancel()
+				err = file.Close()
+				if err != nil {
+					return err
+				}
+				os.Remove(fpath)
+				return fmt.Errorf("Failed downloading file, download got stuck")
+			} else if info.Size() > size {
+				size = info.Size()
+			}
+		}
 	}
-	return nil
 }
 
 func removeOldS3Files(keyToVersionIds map[string]string, paths map[string]os.FileInfo, bucket string, prefixes []string, svc *s3.S3) (map[string]string, error) {

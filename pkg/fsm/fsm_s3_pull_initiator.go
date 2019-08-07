@@ -48,7 +48,7 @@ func s3PullInitiatorState(f *FsMachine) StateFn {
 			TransferRequestId: transferRequestId,
 			Direction:         transferRequest.Direction,
 			InitiatorNodeId:   f.state.NodeID(),
-			Index:             1,
+			Index:             0,
 			Status:            "starting",
 		},
 	}
