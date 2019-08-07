@@ -225,6 +225,11 @@ func missingState(f *FsMachine) StateFn {
 					return backoffState
 				} else {
 					f.innerResponses <- &types.Event{Name: "created"}
+					f.snapshot(&types.Event{Name: "snapshot",
+						Args: &types.EventArgs{"metadata": map[string]string{
+							"message": "Initial commit",
+							"author":  "admin",
+						}}})
 					return activeState
 				}
 			} else {
