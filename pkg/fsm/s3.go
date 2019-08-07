@@ -293,15 +293,47 @@ func downloadS3Object(updates chan types.TransferUpdate, downloader *s3manager.D
 		return err
 	}
 	writer := &progressWriter{writer: file, written: startSent, updates: updates, startTime: startTime}
-	_, err = downloader.Download(writer, &s3.GetObjectInput{
-		Bucket:    &bucket,
-		Key:       &key,
-		VersionId: &versionId,
-	})
-	if err != nil {
-		return err
+	var size int64
+	context, cancel := context.WithCancel(context.Background())
+	done := make(chan error)
+	go func() {
+		_, err := downloader.DownloadWithContext(context, writer, &s3.GetObjectInput{
+			Bucket:    &bucket,
+			Key:       &key,
+			VersionId: &versionId,
+		})
+		done <- err
+	}()
+	for {
+		time.Sleep(5 * time.Minute)
+		select {
+		case err := <-done:
+			return err
+		default:
+			info, err := file.Stat()
+			if err != nil {
+				cancel()
+				return err
+			}
+			if info.Size() == size {
+				log.WithFields(log.Fields{
+					"size":       size,
+					"key":        key,
+					"bucket":     bucket,
+					"version_id": versionId,
+				}).Error("The file hasn't grown in 5 minutes, the download might be stuck. Cancelling and deleting the file...")
+				cancel()
+				err = file.Close()
+				if err != nil {
+					return err
+				}
+				os.Remove(fpath)
+				return fmt.Errorf("Failed downloading file, download got stuck")
+			} else if info.Size() > size {
+				size = info.Size()
+			}
+		}
 	}
-	return nil
 }
 
 func removeOldS3Files(keyToVersionIds map[string]string, paths map[string]os.FileInfo, bucket string, prefixes []string, svc *s3.S3) (map[string]string, error) {
