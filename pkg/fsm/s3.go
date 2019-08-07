@@ -194,7 +194,7 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 		params.SetPrefix(prefix)
 	}
 	log.Debugf("[downloadPartialS3Bucket] params: %#v", *params)
-	downloader := s3manager.NewDownloaderWithClient(svc, func(d *s3manager.Downloader) { d.Concurrency = 10 })
+	downloader := s3manager.NewDownloaderWithClient(svc, func(d *s3manager.Downloader) { d.Concurrency = 20 })
 	var innerError error
 	startTime := time.Now()
 	var sent int64
@@ -229,7 +229,7 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 						},
 					}
 					// ERROR CATCHING?
-					innerError = downloadS3Object(f.transferUpdates, downloader, startTime, sent, *item.Key, *item.VersionId, bucketName, destPath)
+					innerError = downloadS3Object(f.transferUpdates, downloader, sent, startTime, *item.Key, *item.VersionId, bucketName, destPath)
 					if innerError != nil {
 						return false
 					}
@@ -305,11 +305,11 @@ func downloadS3Object(updates chan types.TransferUpdate, downloader *s3manager.D
 		done <- err
 	}()
 	for {
-		time.Sleep(5 * time.Minute)
 		select {
 		case err := <-done:
 			return err
 		default:
+			time.Sleep(30 * time.Second)
 			info, err := file.Stat()
 			if err != nil {
 				cancel()
@@ -321,7 +321,7 @@ func downloadS3Object(updates chan types.TransferUpdate, downloader *s3manager.D
 					"key":        key,
 					"bucket":     bucket,
 					"version_id": versionId,
-				}).Error("The file hasn't grown in 5 minutes, the download might be stuck. Cancelling and deleting the file...")
+				}).Error("The file hasn't grown in 30 seconds, the download might be stuck. Cancelling and deleting the file...")
 				cancel()
 				err = file.Close()
 				if err != nil {
