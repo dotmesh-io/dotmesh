@@ -88,12 +88,28 @@ func pushPeerState(f *FsMachine) StateFn {
 	}
 
 	go func() {
+		start := time.Now()
 		for {
 			select {
-			case <-receiveProgress:
+			case b := <-receiveProgress:
 				//log.Printf(
 				//	"[pushPeerState] resetting timer because some progress was made (%d bytes)", b,
 				//)
+				if b != nil {
+					bytes := b.(int64)
+					now := time.Now()
+					seconds := now.Sub(start).Seconds()
+					mb := float64(bytes) / 1048576
+					if seconds > 0 {
+						mbPerSecond := (float64(bytes) / seconds) / 1048576
+						f.transitionedTo("pushPeerState", fmt.Sprintf("running: %.3f MiB so far, %.3f MiB/sec", mb, mbPerSecond))
+					} else {
+						f.transitionedTo("pushPeerState", fmt.Sprintf("running: %.3f MiB so far", mb))
+					}
+				} else {
+					f.transitionedTo("pushPeerState", "running")
+				}
+
 				reset()
 			case <-finished:
 				return
