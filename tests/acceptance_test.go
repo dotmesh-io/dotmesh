@@ -1348,11 +1348,11 @@ func TestSingleNode(t *testing.T) {
 			t.Error(err)
 		}
 
-		if len(commitIds) != 2 {
-			t.Errorf("Expected 2 commit ids, got %d", len(commitIds))
+		if len(commitIds) != 3 {
+			t.Errorf("Expected 3 commit ids, got %d", len(commitIds))
 		}
 
-		commitToMountId := commitIds[1].Id
+		commitToMountId := commitIds[2].Id
 
 		// get the id of the dot
 		var filesystemId string
