@@ -173,8 +173,9 @@ func TestS3Api(t *testing.T) {
 		commitIdsString := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("dm log | grep commit | awk '{print $2}'"))
 		commitIdsList := strings.Split(commitIdsString, "\n")
 
-		firstCommitId := commitIdsList[0]
-		secondCommitId := commitIdsList[1]
+		// first commit (index 0) is always an "init" commit now
+		firstCommitId := commitIdsList[1]
+		secondCommitId := commitIdsList[2]
 
 		t.Logf("running (first commit): '%s'", fmt.Sprintf("http://127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", dotName, firstCommitId))
 
