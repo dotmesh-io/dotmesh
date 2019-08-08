@@ -1106,7 +1106,7 @@ func TestSingleNode(t *testing.T) {
 		citools.RunOnNode(t, node1, citools.DockerRun(fsname+".eat")+" touch /foo/HELLO-EAT")
 		citools.RunOnNode(t, node1, citools.DockerRun(fsname+".flies")+" touch /foo/HELLO-FLIES")
 		citools.RunOnNode(t, node1, citools.DockerRun(fsname+".__root__")+" touch /foo/HELLO-ROOT")
-		st := citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname+".__root__")+" find /foo -type f | sort")
+		st := citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname+".__root__")+" find /foo -type f | sort | grep -v /foo/dotmesh.metadata/")
 		if st != "/foo/HELLO-ROOT\n/foo/eat/HELLO-EAT\n/foo/flies/HELLO-FLIES\n/foo/frogs/HELLO-FROGS\n" {
 			t.Errorf("Subdots didn't work out: %s", st)
 		}
@@ -1116,7 +1116,7 @@ func TestSingleNode(t *testing.T) {
 		fsname := citools.UniqName()
 		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/HELLO-DEFAULT")
 		citools.RunOnNode(t, node1, citools.DockerRun(fsname+".__root__")+" touch /foo/HELLO-ROOT")
-		st := citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname+".__root__")+" find /foo -type f | sort")
+		st := citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname+".__root__")+" find /foo -type f | sort | grep -v /foo/dotmesh.metadata/")
 		if st != "/foo/HELLO-ROOT\n/foo/__default__/HELLO-DEFAULT\n" {
 			t.Errorf("Subdots didn't work out: %s", st)
 		}
@@ -1142,7 +1142,7 @@ func TestSingleNode(t *testing.T) {
 		}
 
 		// Check combined state
-		st = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname+".__root__")+" find /foo -type f | sort")
+		st = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname+".__root__")+" find /foo -type f | sort | grep -v /foo/dotmesh.metadata/")
 		if st != "/foo/HELLO-ROOT\n/foo/eat/HELLO-EAT\n/foo/flies/HELLO-FLIES\n/foo/frogs/HELLO-FROGS\n" {
 			t.Errorf("Subdots didn't work out: %s", st)
 		}
