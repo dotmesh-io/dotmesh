@@ -1,2 +1,11 @@
 **/node_modules
 **/dist
+tests
+scripts
+!scripts/dm-remote-add
+zfs-userland-builder
+kubernetes
+extracted_logs
+docs
+etcd-container-image
+binaries

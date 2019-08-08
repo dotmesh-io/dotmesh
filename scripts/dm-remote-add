@@ -1,2 +1,2 @@
 #!/bin/sh
-echo $INITIAL_ADMIN_API_KEY | base64 -d | dm remote add local admin@dotmesh-server-inner
+(echo $INITIAL_ADMIN_API_KEY | base64 -d; echo) | dm remote add local admin@dotmesh-server-inner

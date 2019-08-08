@@ -6,6 +6,5 @@ export DOCKER_TAG=latest
 export CI_REGISTRY="$(hostname).local:80"
 export CI_REPOSITORY="dotmesh"
 export REPOSITORY="${CI_REGISTRY}/${CI_REPOSITORY}/"
-make create_context
 make release_all
 make build_client

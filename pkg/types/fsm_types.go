@@ -35,6 +35,7 @@ const (
 	TransferProgress
 	TransferIncrementIndex
 	TransferNextS3File
+	TransferFinishedS3File
 	TransferSent
 	TransferFinished
 	TransferStatus
