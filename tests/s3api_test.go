@@ -140,8 +140,8 @@ func TestS3Api(t *testing.T) {
 			return
 		}
 
-		firstCommitId := commitIdsList[0]
-		secondCommitId := commitIdsList[1]
+		firstCommitId := commitIdsList[1]
+		secondCommitId := commitIdsList[2]
 
 		respFirstCommit := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s", host.Password, dotName, firstCommitId))
 		if !strings.Contains(respFirstCommit, "file1.txt") {
@@ -220,8 +220,8 @@ func TestS3Api(t *testing.T) {
 		commitIdsString := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("dm log | grep commit | awk '{print $2}'"))
 		commitIdsList := strings.Split(commitIdsString, "\n")
 
-		firstCommitId := commitIdsList[0]
-		secondCommitId := commitIdsList[1]
+		firstCommitId := commitIdsList[1]
+		secondCommitId := commitIdsList[2]
 
 		t.Logf("running (first commit): '%s'", fmt.Sprintf("http://127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", dotName, firstCommitId))
 
@@ -272,7 +272,7 @@ func TestS3Api(t *testing.T) {
 		commitIdsString := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("dm log | grep commit | awk '{print $2}'"))
 		commitIdsList := strings.Split(commitIdsString, "\n")
 
-		firstCommitId := commitIdsList[0]
+		firstCommitId := commitIdsList[1]
 
 		// t.Logf("running (first commit): '%s'", fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/subpath", host.Password, dotName, firstCommitId))
 		// respFirstCommit := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/subpath", host.Password, dotName, firstCommitId))
