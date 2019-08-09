@@ -30,6 +30,8 @@ func TestS3Api(t *testing.T) {
 	}
 	host := f[0].GetNode(0)
 	node1 := host.Container
+	dmClient := client.NewJsonRpcClient("admin", host.IP, host.Password, 0)
+	dm := client.NewDotmeshAPIFromClient(dmClient, true)
 	err = citools.RegisterUser(host, "bob", "bob@bob.com", "password")
 	if err != nil {
 		t.Errorf("failed to register user: %s", err)
@@ -132,9 +134,6 @@ func TestS3Api(t *testing.T) {
 		cmdFile2 := fmt.Sprintf("curl -T file2.txt -u admin:%s 127.0.0.1:32607/s3/admin:%s/file2.txt", host.Password, dotName)
 		citools.RunOnNode(t, node1, "echo helloworld2 > file2.txt")
 		citools.RunOnNode(t, node1, cmdFile2)
-
-		dmClient := client.NewJsonRpcClient("admin", host.IP, host.Password, 0)
-		dm := client.NewDotmeshAPIFromClient(dmClient, true)
 		commits, err := dm.ListCommits(fmt.Sprintf("admin/%s", dotName), "")
 		if err != nil {
 			t.Fatal(err)
@@ -171,12 +170,14 @@ func TestS3Api(t *testing.T) {
 		citools.RunOnNode(t, node1, "echo helloworld2 > file.txt")
 		citools.RunOnNode(t, node1, cmdFile2)
 
-		commitIdsString := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("dm log | grep commit | awk '{print $2}'"))
-		commitIdsList := strings.Split(commitIdsString, "\n")
+		commits, err := dm.ListCommits(fmt.Sprintf("admin/%s", dotName), "")
 
+		if err != nil {
+			t.Error(err.Error())
+		}
 		// first commit (index 0) is always an "init" commit now
-		firstCommitId := commitIdsList[1]
-		secondCommitId := commitIdsList[2]
+		firstCommitId := commits[1].Id
+		secondCommitId := commits[2].Id
 
 		t.Logf("running (first commit): '%s'", fmt.Sprintf("http://127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", dotName, firstCommitId))
 
@@ -218,11 +219,10 @@ func TestS3Api(t *testing.T) {
 		citools.RunOnNode(t, node1, "touch file.txt")
 		citools.RunOnNode(t, node1, cmdFile2)
 
-		commitIdsString := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("dm log | grep commit | awk '{print $2}'"))
-		commitIdsList := strings.Split(commitIdsString, "\n")
+		commits, err := dm.ListCommits(fmt.Sprintf("admin/%s", dotName), "")
 
-		firstCommitId := commitIdsList[1]
-		secondCommitId := commitIdsList[2]
+		firstCommitId := commits[1].Id
+		secondCommitId := commits[2].Id
 
 		t.Logf("running (first commit): '%s'", fmt.Sprintf("http://127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", dotName, firstCommitId))
 
