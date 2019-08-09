@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/dotmesh-io/dotmesh/pkg/archiver"
+	"github.com/dotmesh-io/dotmesh/pkg/client"
 
 	"github.com/dotmesh-io/citools"
 )
@@ -29,6 +30,8 @@ func TestS3Api(t *testing.T) {
 	}
 	host := f[0].GetNode(0)
 	node1 := host.Container
+	dmClient := client.NewJsonRpcClient("admin", host.IP, host.Password, 0)
+	dm := client.NewDotmeshAPIFromClient(dmClient, true)
 	err = citools.RegisterUser(host, "bob", "bob@bob.com", "password")
 	if err != nil {
 		t.Errorf("failed to register user: %s", err)
@@ -131,32 +134,29 @@ func TestS3Api(t *testing.T) {
 		cmdFile2 := fmt.Sprintf("curl -T file2.txt -u admin:%s 127.0.0.1:32607/s3/admin:%s/file2.txt", host.Password, dotName)
 		citools.RunOnNode(t, node1, "echo helloworld2 > file2.txt")
 		citools.RunOnNode(t, node1, cmdFile2)
-
-		commitIdsString := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("dm log | grep commit | awk '{print $2}'"))
-		commitIdsList := strings.Split(commitIdsString, "\n")
-
-		if len(commitIdsList) < 2 {
-			t.Errorf("expected to find at least 2 commits, got: %d", len(commitIdsList))
+		commits, err := dm.ListCommits(fmt.Sprintf("admin/%s", dotName), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(commits) < 2 {
+			t.Errorf("expected to find at least 2 commits, got: %d", len(commits))
 			return
 		}
 
-		firstCommitId := commitIdsList[0]
-		secondCommitId := commitIdsList[1]
+		firstCommitId := commits[1].Id
+		secondCommitId := commits[2].Id
 
 		respFirstCommit := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s", host.Password, dotName, firstCommitId))
 		if !strings.Contains(respFirstCommit, "file1.txt") {
-			fmt.Printf(respFirstCommit)
-			t.Error("The first commit did not contain the first file")
+			t.Errorf("The first commit did not contain the first file, resp: %s", respFirstCommit)
 		}
 		if strings.Contains(respFirstCommit, "file2.txt") {
-			fmt.Printf(respFirstCommit)
-			t.Error("The first commit contained the second file")
+			t.Errorf("The first commit contained the second file, resp: %s", respFirstCommit)
 		}
 
 		respSecondCommit := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s", host.Password, dotName, secondCommitId))
 		if !strings.Contains(respSecondCommit, "file2.txt") {
-			fmt.Printf(respSecondCommit)
-			t.Error("The second commit did not contain the second file")
+			t.Errorf("The second commit did not contain the second file, resp: %s", respSecondCommit)
 		}
 	})
 
@@ -170,11 +170,14 @@ func TestS3Api(t *testing.T) {
 		citools.RunOnNode(t, node1, "echo helloworld2 > file.txt")
 		citools.RunOnNode(t, node1, cmdFile2)
 
-		commitIdsString := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("dm log | grep commit | awk '{print $2}'"))
-		commitIdsList := strings.Split(commitIdsString, "\n")
+		commits, err := dm.ListCommits(fmt.Sprintf("admin/%s", dotName), "")
 
-		firstCommitId := commitIdsList[0]
-		secondCommitId := commitIdsList[1]
+		if err != nil {
+			t.Error(err.Error())
+		}
+		// first commit (index 0) is always an "init" commit now
+		firstCommitId := commits[1].Id
+		secondCommitId := commits[2].Id
 
 		t.Logf("running (first commit): '%s'", fmt.Sprintf("http://127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", dotName, firstCommitId))
 
@@ -216,11 +219,12 @@ func TestS3Api(t *testing.T) {
 		citools.RunOnNode(t, node1, "touch file.txt")
 		citools.RunOnNode(t, node1, cmdFile2)
 
-		commitIdsString := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("dm log | grep commit | awk '{print $2}'"))
-		commitIdsList := strings.Split(commitIdsString, "\n")
-
-		firstCommitId := commitIdsList[0]
-		secondCommitId := commitIdsList[1]
+		commits, err := dm.ListCommits(fmt.Sprintf("admin/%s", dotName), "")
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		firstCommitId := commits[1].Id
+		secondCommitId := commits[2].Id
 
 		t.Logf("running (first commit): '%s'", fmt.Sprintf("http://127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", dotName, firstCommitId))
 
@@ -268,10 +272,11 @@ func TestS3Api(t *testing.T) {
 		cmdFile1 := fmt.Sprintf("curl -T file.txt -u admin:%s 127.0.0.1:32607/s3/admin:%s/subpath/file.txt", host.Password, dotName)
 		citools.RunOnNode(t, node1, cmdFile1)
 
-		commitIdsString := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("dm log | grep commit | awk '{print $2}'"))
-		commitIdsList := strings.Split(commitIdsString, "\n")
-
-		firstCommitId := commitIdsList[0]
+		commits, err := dm.ListCommits(fmt.Sprintf("admin/%s", dotName), "")
+		if err != nil {
+			t.Errorf(err.Error())
+		}
+		firstCommitId := commits[1].Id
 
 		// t.Logf("running (first commit): '%s'", fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/subpath", host.Password, dotName, firstCommitId))
 		// respFirstCommit := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/subpath", host.Password, dotName, firstCommitId))

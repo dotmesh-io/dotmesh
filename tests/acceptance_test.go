@@ -1352,6 +1352,7 @@ func TestSingleNode(t *testing.T) {
 			t.Errorf("Expected 3 commit ids, got %d", len(commitIds))
 		}
 
+		// commit 0 is always an empty init commit
 		commitToMountId := commitIds[2].Id
 
 		// get the id of the dot
