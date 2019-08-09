@@ -1349,7 +1349,7 @@ func TestSingleNode(t *testing.T) {
 		}
 
 		if len(commitIds) != 3 {
-			t.Errorf("Expected 2 commit ids, got %d", len(commitIds))
+			t.Errorf("Expected 3 commit ids, got %d", len(commitIds))
 		}
 
 		// commit 0 is always an empty init commit
