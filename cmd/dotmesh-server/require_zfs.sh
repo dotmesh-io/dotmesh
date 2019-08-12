@@ -107,6 +107,9 @@ else
     echo "Using $OUTER_DIR as a mount workspace."
 fi
 
+# This path is also computed in cmd/dotmesh-server/utils.go and pkg/container/docker_container_client.go
+CONTAINER_MOUNT_PREFIX_WRITABLE=${CONTAINER_MOUNT_PREFIX}_writable
+
 # Set the shared flag on the working directory on the host. This is
 # essential; it, combined with the presence of the shared flag on the
 # bind-mount of this into the container namespace when we run the
@@ -138,7 +141,9 @@ nsenter -t 1 -m -u -n -i /bin/sh -c \
     fi
     mkdir -p /run/docker/plugins
     mkdir -p $MOUNTPOINT
-    mkdir -p $CONTAINER_MOUNT_PREFIX"
+    mkdir -p $CONTAINER_MOUNT_PREFIX
+    mkdir -p $CONTAINER_MOUNT_PREFIX_WRITABLE
+    mount --read-only --bind $CONTAINER_MOUNT_PREFIX_WRITABLE $CONTAINER_MOUNT_PREFIX"
 
 if [ ! -e /sys ]; then
     mount -t sysfs sys sys/

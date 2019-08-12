@@ -149,6 +149,14 @@ func (d *DockerClient) findDotRoot(path string) string {
 	}
 }
 
+func (d *DockerClient) findWritableDotRoot(path string) string {
+	dr := d.findDotRoot(path)
+	subpath := strings.TrimPrefix(dr, d.containerMountPrefix+"/")
+
+	// This path is also computed in cmd/dotmesh-server/require_zfs.sh and cmd/dotmesh-server/utils.go
+	return d.containerMountPrefix + "_writable/" + subpath
+}
+
 // Given a container, return a list of filesystem ids of dotmesh volumes that
 // are currently in-use by it (by resolving the symlinks of its mount sources).
 func (d *DockerClient) relatedFilesystems(container *docker.Container) ([]string, error) {
@@ -235,7 +243,7 @@ func (d *DockerClient) SwitchSymlinks(volumeName, toFilesystemIdPath string) err
 				// whether it's a symlink before trying os.Remove. maybe we can
 				// check whether it's a symlink with Stat instead.
 
-				mountPoint := d.findDotRoot(mount.Source)
+				mountPoint := d.findWritableDotRoot(mount.Source)
 
 				_, err := os.Readlink(mountPoint)
 				if err != nil {

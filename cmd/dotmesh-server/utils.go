@@ -94,12 +94,13 @@ func isFilesystemMounted(fs string) (bool, error) {
 	return code == 0, nil
 }
 
-func containerMntParent(id VolumeName) string {
-	return CONTAINER_MOUNT_PREFIX + "/" + id.Namespace
+func containerMnt(id VolumeName) string {
+	return CONTAINER_MOUNT_PREFIX + "/" + id.Namespace + "/" + id.Name
 }
 
-func containerMnt(id VolumeName) string {
-	return containerMntParent(id) + "/" + id.Name
+func containerMntWritable(id VolumeName) string {
+	// This path is also computed in cmd/dotmesh-server/require_zfs.sh and pkg/container/docker_container_client.go
+	return CONTAINER_MOUNT_PREFIX + "_writable/" + id.Namespace + "/" + id.Name
 }
 
 func containerMntSubvolume(id VolumeName, subvolume string) string {
@@ -111,7 +112,7 @@ func containerMntSubvolume(id VolumeName, subvolume string) string {
 }
 
 func deleteContainerMntSymlink(id VolumeName) error {
-	path := containerMnt(id)
+	path := containerMntWritable(id)
 	err := os.Remove(path)
 	if err != nil {
 		if os.IsNotExist(err) {

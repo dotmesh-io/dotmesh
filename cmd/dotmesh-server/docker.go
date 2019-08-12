@@ -87,50 +87,37 @@ type ResponseGet struct {
 // is a fine situation and we mustn't break it.
 
 // However, an existing symlink to a nonexistant target needs fixing.
+
+// This is complicated by the fact that CONTAINER_MOUNT_PREFIX is a
+// read-only bind mount of CONTAINER_MOUNT_PREFIX+"_writable", where
+// we can actually perform filesystem ops, but paths in that
+// filesystem must not leak outside of this function. This is to
+// ensure that attempts to write into mount paths when we've not made
+// a symlink yet (or have gotten rid of one) don't dump files in
+// CONTAINER_MOUNT_PREFIX.
 func newContainerMountSymlink(name VolumeName, filesystemId string, subvolume string) (string, error) {
 	containerMountDirLock.Lock()
 	defer containerMountDirLock.Unlock()
 
-	log.Printf("[newContainerMountSymlink] name=%+v, fsId=%s.%s", name, filesystemId, subvolume)
-	if _, err := os.Stat(CONTAINER_MOUNT_PREFIX); err != nil {
-		if os.IsNotExist(err) {
-			if err := os.MkdirAll(CONTAINER_MOUNT_PREFIX, 0700); err != nil {
-				log.Printf("[newContainerMountSymlink] error creating prefix %s: %+v", CONTAINER_MOUNT_PREFIX, err)
-				return "", err
-			}
-		} else {
-			log.Printf("[newContainerMountSymlink] error statting prefix %s: %+v", CONTAINER_MOUNT_PREFIX, err)
-			return "", err
-		}
+	symlink := containerMntWritable(name)
+	parent := filepath.Dir(symlink)
+	if err := os.MkdirAll(parent, 0700); err != nil {
+		log.Printf("[newContainerMountSymlink] error creating parent %s: %+v", parent, err)
+		return "", err
 	}
-	parent := containerMntParent(name)
-	if _, err := os.Stat(parent); err != nil {
-		if os.IsNotExist(err) {
-			if err := os.MkdirAll(parent, 0700); err != nil {
-				log.Printf("[newContainerMountSymlink] error creating parent %s: %+v", parent, err)
-				return "", err
-			}
-		} else {
-			log.Printf("[newContainerMountSymlink] error statting parent %s: %+v", parent, err)
-			return "", err
-		}
-	}
-
-	// Raw ZFS mountpoint
-	mountpoint := containerMnt(name)
 
 	// Only create symlink if it doesn't already exist. Otherwise just hand it back
 	// (the target of it may have been updated elsewhere).
-	if stat, err := os.Lstat(mountpoint); err != nil {
+	if stat, err := os.Lstat(symlink); err != nil {
 		if os.IsNotExist(err) {
-			log.Printf("[newContainerMountSymlink] Creating symlink %s -> %s", mountpoint, mnt(filesystemId))
-			err = os.Symlink(mnt(filesystemId), mountpoint)
+			log.Printf("[newContainerMountSymlink] Creating symlink %s -> %s", symlink, mnt(filesystemId))
+			err = os.Symlink(mnt(filesystemId), symlink)
 			if err != nil {
-				log.Printf("[newContainerMountSymlink] error symlinking mountpoint %s: %+v", mountpoint, err)
+				log.Printf("[newContainerMountSymlink] error symlinking %s: %+v", symlink, err)
 				return "", err
 			}
 		} else {
-			log.Printf("[newContainerMountSymlink] error statting mountpoint %s: %+v", mountpoint, err)
+			log.Printf("[newContainerMountSymlink] error statting symlink %s: %+v", symlink, err)
 			return "", err
 		}
 	} else {
@@ -146,46 +133,46 @@ func newContainerMountSymlink(name VolumeName, filesystemId string, subvolume st
 			// However, if it points to something that doesn't exist,
 			// then that's bad and we need to re-create it.
 
-			target, err := os.Readlink(mountpoint)
+			target, err := os.Readlink(symlink)
 			if err != nil {
-				log.Printf("[newContainerMountSymlink] error reading symlink %s: %+v", mountpoint, err)
+				log.Printf("[newContainerMountSymlink] error reading symlink %s: %+v", symlink, err)
 				return "", err
 			}
 
 			// Stat not Lstat, so we dereference the symlink
-			if _, err := os.Stat(mountpoint); err != nil {
+			if _, err := os.Stat(symlink); err != nil {
 				if os.IsNotExist(err) {
-					log.Printf("[newContainerMountSymlink] symlink %s already exists with missing target %s", mountpoint, target)
-					err = os.Remove(mountpoint)
+					log.Printf("[newContainerMountSymlink] symlink %s already exists with missing target %s", symlink, target)
+					err = os.Remove(symlink)
 					if err != nil {
-						log.Printf("[newContainerMountSymlink] error removing old symlink to %s at mountpoint %s: %+v", target, mountpoint, err)
+						log.Printf("[newContainerMountSymlink] error removing old symlink to %s at mountpoint %s: %+v", target, symlink, err)
 						return "", err
 					}
-					log.Printf("[newContainerMountSymlink] Recreating symlink %s -> %s", mountpoint, mnt(filesystemId))
-					err = os.Symlink(mnt(filesystemId), mountpoint)
+					log.Printf("[newContainerMountSymlink] Recreating symlink %s -> %s", symlink, mnt(filesystemId))
+					err = os.Symlink(mnt(filesystemId), symlink)
 					if err != nil {
-						log.Printf("[newContainerMountSymlink] error symlinking mountpoint %s: %+v", mountpoint, err)
+						log.Printf("[newContainerMountSymlink] error symlinking %s: %+v", symlink, err)
 						return "", err
 					}
 				} else {
-					log.Printf("[newContainerMountSymlink] error statting mountpoint target %s: %+v", mountpoint, err)
+					log.Printf("[newContainerMountSymlink] error statting symlink target %s: %+v", symlink, err)
 					return "", err
 				}
 			} else {
 				if target == mnt(filesystemId) {
-					log.Printf("[newContainerMountSymlink] symlink %s already exists with default target %s", mountpoint, target)
+					log.Printf("[newContainerMountSymlink] symlink %s already exists with default target %s", symlink, target)
 				} else {
-					log.Printf("[newContainerMountSymlink] symlink %s already exists with non-default target %s", mountpoint, target)
+					log.Printf("[newContainerMountSymlink] symlink %s already exists with non-default target %s", symlink, target)
 				}
 			}
 		} else {
 			// Already a directory there? :'-(
-			log.Printf("[newContainerMountSymlink] mountpoint %s contains something other than a symlink: %+v", mountpoint, stat)
-			return "", fmt.Errorf("mountpoint %s contains something other than a symlink: %+v", mountpoint, stat)
+			log.Printf("[newContainerMountSymlink] symlink location %s contains something other than a symlink: %+v", symlink, stat)
+			return "", fmt.Errorf("symlink location %s contains something other than a symlink: %+v", symlink, stat)
 		}
 	}
 
-	// ...and we return either that raw mountpoint, or a subvolume within
+	// ...and we return either the raw symlink (not via the writable path), or a subvolume within
 	result := containerMntSubvolume(name, subvolume)
 
 	// Do we need to create the subvolume directory?
