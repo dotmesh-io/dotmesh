@@ -198,60 +198,97 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 	var innerError error
 	startTime := time.Now()
 	var sent int64
+
+	// build up the full list of files we will download and delete
+	filesToDelete := make([]*s3.DeleteMarkerEntry, 0)
+	filesToDownload := make([]*s3.ObjectVersion, 0)
+
+	// loop over objects in the bucket and add them to the delete or download collection
 	err := svc.ListObjectVersionsPages(params,
 		func(page *s3.ListObjectVersionsOutput, lastPage bool) bool {
 			for _, item := range page.DeleteMarkers {
 				latestMeta := currentKeyVersions[*item.Key]
 				if *item.IsLatest && latestMeta != *item.VersionId {
-					deletePath := fmt.Sprintf("%s/%s", destPath, *item.Key)
-					log.Debugf("Got object for deletion: %#v, key: %s", item, *item.Key)
-					err := os.RemoveAll(deletePath)
-					if err != nil && !os.IsNotExist(err) {
-						innerError = err
-						return false
-					}
-					currentKeyVersions[*item.Key] = *item.VersionId
-					bucketChanged = true
-
+					filesToDelete = append(filesToDelete, item)
 				}
 			}
-
 			for _, item := range page.Versions {
 				latestMeta := currentKeyVersions[*item.Key]
 				if *item.IsLatest && latestMeta != *item.VersionId {
 					log.Debugf("Got object: %#v, key: %s", item, *item.Key)
-
-					f.transferUpdates <- types.TransferUpdate{
-						Kind: types.TransferNextS3File,
-						Changes: types.TransferPollResult{
-							Status: "Pulling",
-							Size:   *item.Size,
-						},
-					}
-					// ERROR CATCHING?
-					innerError = downloadS3Object(f.transferUpdates, downloader, sent, startTime, *item.Key, *item.VersionId, bucketName, destPath)
-					if innerError != nil {
-						return false
-					}
-					f.transferUpdates <- types.TransferUpdate{
-						Kind: types.TransferFinishedS3File,
-						Changes: types.TransferPollResult{
-							Status: "Pulled file successfully",
-							Sent:   *item.Size,
-						},
-					}
-					sent += *item.Size
-					currentKeyVersions[*item.Key] = *item.VersionId
-					bucketChanged = true
-
+					filesToDownload = append(filesToDownload, item)
 				}
 			}
 			return !lastPage
 		})
 
 	if err != nil {
-		return bucketChanged, nil, err
-	} else if innerError != nil {
+		return false, nil, err
+	}
+
+	// loop over the files marked for deletion and remove them from the file system
+	for _, item := range filesToDelete {
+		deletePath := fmt.Sprintf("%s/%s", destPath, *item.Key)
+		log.Debugf("Got object for deletion: %#v, key: %s", item, *item.Key)
+		err := os.RemoveAll(deletePath)
+		if err != nil && !os.IsNotExist(err) {
+			innerError = err
+			break
+		}
+		currentKeyVersions[*item.Key] = *item.VersionId
+		bucketChanged = true
+	}
+
+	if innerError == nil {
+
+		// work out how many objects we have and the total size of them all
+		var totalSize int64 = 0
+		totalObjects := len(filesToDownload)
+
+		for _, item := range filesToDownload {
+			totalSize += *item.Size
+		}
+
+		// pass this info off to the fsm
+		f.transferUpdates <- types.TransferUpdate{
+			Kind: types.TransferStartS3Bucket,
+			Changes: types.TransferPollResult{
+				Status:    "Initiating Bucket Download",
+				Message:   "Starting download",
+				Total:     totalObjects,
+				SizeTotal: totalSize,
+			},
+		}
+
+		// loop over the files marked for download
+		for _, item := range filesToDownload {
+			f.transferUpdates <- types.TransferUpdate{
+				Kind: types.TransferNextS3File,
+				Changes: types.TransferPollResult{
+					Status:  "Pulling",
+					Size:    *item.Size,
+					Message: "Downloading " + *item.Key,
+				},
+			}
+			// ERROR CATCHING?
+			innerError = downloadS3Object(f.transferUpdates, downloader, sent, startTime, *item.Key, *item.VersionId, bucketName, destPath)
+			if innerError != nil {
+				break
+			}
+			f.transferUpdates <- types.TransferUpdate{
+				Kind: types.TransferFinishedS3File,
+				Changes: types.TransferPollResult{
+					Status: "Pulled file successfully",
+					Size:   *item.Size,
+				},
+			}
+			sent += *item.Size
+			currentKeyVersions[*item.Key] = *item.VersionId
+			bucketChanged = true
+		}
+	}
+
+	if innerError != nil {
 		return bucketChanged, nil, innerError
 	}
 	log.Debugf("[downloadPartialS3Bucket] New key versions: %#v", currentKeyVersions)
@@ -259,6 +296,7 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 }
 
 type progressWriter struct {
+	key       string
 	written   int64
 	writer    io.WriterAt
 	startTime time.Time
@@ -274,6 +312,7 @@ func (pw *progressWriter) WriteAt(p []byte, off int64) (int, error) {
 			Status:             "pulling",
 			Sent:               pw.written,
 			NanosecondsElapsed: elapsed,
+			Message:            "Downloading " + pw.key,
 		},
 	}
 
@@ -292,7 +331,13 @@ func downloadS3Object(updates chan types.TransferUpdate, downloader *s3manager.D
 	if err != nil {
 		return err
 	}
-	writer := &progressWriter{writer: file, written: startSent, updates: updates, startTime: startTime}
+	writer := &progressWriter{
+		key:       key,
+		writer:    file,
+		written:   startSent,
+		updates:   updates,
+		startTime: startTime,
+	}
 	var size int64
 	context, cancel := context.WithCancel(context.Background())
 	done := make(chan error)

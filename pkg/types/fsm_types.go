@@ -34,6 +34,7 @@ const (
 	TransferTotalAndSize
 	TransferProgress
 	TransferIncrementIndex
+	TransferStartS3Bucket
 	TransferNextS3File
 	TransferFinishedS3File
 	TransferSent
@@ -92,6 +93,8 @@ type TransferPollResult struct {
 	Size               int64 // size of current segment in bytes
 	Sent               int64 // number of bytes of current segment sent so far
 	Message            string
+	SizeTotal          int64 // size of the total download in bytes
+	SentTotal          int64 // number of bytes of total sent so far
 }
 
 func (t TransferPollResult) String() string {

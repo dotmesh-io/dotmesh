@@ -478,13 +478,20 @@ func (f *FsMachine) updateEtcdAboutTransfers() error {
 				pollResult.Index++
 			}
 			pollResult.Sent += update.Changes.Size
+		case types.TransferStartS3Bucket:
+			pollResult.Index = 0
+			pollResult.Total = update.Changes.Total
+			pollResult.SizeTotal = update.Changes.Size
+			pollResult.SentTotal = 0
+			pollResult.Status = update.Changes.Status
 		case types.TransferNextS3File:
 			pollResult.Index += 1
-			pollResult.Total += 1
-			pollResult.Size += update.Changes.Size
 			pollResult.Status = update.Changes.Status
+			pollResult.Size = update.Changes.Size
+			pollResult.Sent = 0
 		case types.TransferFinishedS3File:
-			pollResult.Sent += update.Changes.Sent
+			pollResult.Status = update.Changes.Status
+			pollResult.SentTotal += update.Changes.Size
 		case types.TransferSent:
 			pollResult.Sent = update.Changes.Sent
 			pollResult.Status = update.Changes.Status
