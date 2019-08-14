@@ -253,10 +253,10 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 		f.transferUpdates <- types.TransferUpdate{
 			Kind: types.TransferStartS3Bucket,
 			Changes: types.TransferPollResult{
-				Status:    "Initiating Bucket Download",
-				Message:   "Starting download",
-				Total:     totalObjects,
-				SizeTotal: totalSize,
+				Status:  "Initiating Bucket Download",
+				Message: "Starting download",
+				Total:   totalObjects,
+				Size:    totalSize,
 			},
 		}
 
@@ -266,7 +266,6 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 				Kind: types.TransferNextS3File,
 				Changes: types.TransferPollResult{
 					Status:  "Pulling",
-					Size:    *item.Size,
 					Message: "Downloading " + *item.Key,
 				},
 			}
@@ -279,7 +278,6 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 				Kind: types.TransferFinishedS3File,
 				Changes: types.TransferPollResult{
 					Status: "Pulled file successfully",
-					Size:   *item.Size,
 				},
 			}
 			sent += *item.Size
