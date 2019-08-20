@@ -153,12 +153,26 @@ func missingState(f *FsMachine) StateFn {
 				}
 				responseEvent, _ := f.mount()
 				if responseEvent.Name == "mounted" {
-
-					return s3PullInitiatorState
+					subvolPath := fmt.Sprintf("%s/__default__", utils.Mnt(f.filesystemId))
+					if err := os.MkdirAll(subvolPath, 0777); err != nil {
+						f.innerResponses <- &types.Event{
+							Name: "failed-create-default-subdot",
+							Args: &types.EventArgs{"err": err},
+						}
+						return backoffState
+					} else {
+						f.snapshot(&types.Event{Name: "snapshot",
+							Args: &types.EventArgs{"metadata": map[string]string{
+								"message": "Initial commit",
+								"author":  "admin",
+							}}})
+						return s3PullInitiatorState
+					}
 				} else {
 					f.innerResponses <- responseEvent
 					return backoffState
 				}
+
 			} else {
 				log.Warnf("Unknown direction %s, going to backoff", f.lastS3TransferRequest.Direction)
 				f.innerResponses <- &types.Event{

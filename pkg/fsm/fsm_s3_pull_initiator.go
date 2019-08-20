@@ -23,13 +23,7 @@ func s3PullInitiatorState(f *FsMachine) StateFn {
 		return backoffState
 	}
 
-	// create the default paths
-	destPath := fmt.Sprintf("%s/%s", utils.Mnt(f.filesystemId), "__default__")
-	err = os.MkdirAll(destPath, 0775)
-	if err != nil {
-		f.errorDuringTransfer("cannot-create-default-dir", err)
-		return backoffState
-	}
+	// create the version info subdot
 	versionsPath := fmt.Sprintf("%s/%s", utils.Mnt(f.filesystemId), "dm.s3-versions")
 	err = os.MkdirAll(versionsPath, 0775)
 	if err != nil {
