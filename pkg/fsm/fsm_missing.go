@@ -163,6 +163,7 @@ func missingState(f *FsMachine) StateFn {
 					} else {
 						f.snapshot(&types.Event{Name: "snapshot",
 							Args: &types.EventArgs{"metadata": map[string]string{
+								"type":    "dotmesh.initial",
 								"message": "Initial commit",
 								"author":  "admin",
 							}}})
@@ -241,6 +242,7 @@ func missingState(f *FsMachine) StateFn {
 					f.innerResponses <- &types.Event{Name: "created"}
 					f.snapshot(&types.Event{Name: "snapshot",
 						Args: &types.EventArgs{"metadata": map[string]string{
+							"type":    "dotmesh.initial",
 							"message": "Initial commit",
 							"author":  "admin",
 						}}})

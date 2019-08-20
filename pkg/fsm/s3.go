@@ -44,7 +44,7 @@ func (f *FsMachine) getLastNonMetadataSnapshot() (*types.Snapshot, error) {
 	var latestSnap *types.Snapshot
 	for idx := len(snaps) - 1; idx > -1; idx-- {
 		commitType, ok := snaps[idx].Metadata["type"]
-		if !ok || commitType != "dotmesh.metadata_only" {
+		if !ok || commitType != "dotmesh.metadata_only" && commitType != "dotmesh.initial" {
 			latestSnap = &snaps[idx]
 			break
 		}

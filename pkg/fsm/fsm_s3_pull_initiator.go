@@ -54,9 +54,6 @@ func s3PullInitiatorState(f *FsMachine) StateFn {
 		return backoffState
 	}
 	if latestSnap != nil {
-		// todo:
-		// if "type" == "metadata-only" in commit ignore it
-		// go back to the one before it until we find one that isn't that type
 		err := loadS3Meta(f.filesystemId, latestSnap.Id, &latestMeta)
 
 		if err != nil {
