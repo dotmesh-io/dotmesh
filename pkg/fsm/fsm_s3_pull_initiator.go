@@ -69,6 +69,7 @@ func s3PullInitiatorState(f *FsMachine) StateFn {
 			}
 		}
 	}
+	destPath := fmt.Sprintf("%s/%s", utils.Mnt(f.filesystemId), "__default__")
 	bucketChanged, keyVersions, err := downloadS3Bucket(f, svc, transferRequest.RemoteName, destPath, transferRequestId, transferRequest.Prefixes, latestMeta)
 	if err != nil {
 		f.errorDuringTransfer("cant-pull-from-s3", err)
