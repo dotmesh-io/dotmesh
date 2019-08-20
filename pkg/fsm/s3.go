@@ -273,10 +273,21 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 					Message: "Downloading " + *item.Key,
 				},
 			}
-			// ERROR CATCHING?
-			innerError = downloadS3Object(f.transferUpdates, downloader, sent, startTime, *item.Key, *item.VersionId, bucketName, destPath)
+			for i := 0; i < 3; i++ {
+				innerError = downloadS3Object(f.transferUpdates, downloader, sent, startTime, *item.Key, *item.VersionId, bucketName, destPath)
+				if innerError == nil {
+					break
+				}
+			}
 			if innerError != nil {
-				break
+				f.transferUpdates <- types.TransferUpdate{
+					Kind: types.TransferS3Stuck,
+					Changes: types.TransferPollResult{
+						Status:  "S3 stuck!",
+						Message: innerError.Error(),
+					},
+				}
+				return true, nil, innerError
 			}
 			f.transferUpdates <- types.TransferUpdate{
 				Kind: types.TransferFinishedS3File,
