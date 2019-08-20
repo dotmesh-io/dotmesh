@@ -146,7 +146,10 @@ func GetKeysForDirLimit(parentPath string, subPath string, limit int64) (keys ma
 }
 
 func getS3Client(transferRequest types.S3TransferRequest) (*s3.S3, error) {
-	config := &aws.Config{Credentials: credentials.NewStaticCredentials(transferRequest.KeyID, transferRequest.SecretKey, "")}
+	config := &aws.Config{
+		Credentials: credentials.NewStaticCredentials(transferRequest.KeyID, transferRequest.SecretKey, ""),
+		MaxRetries:  aws.Int(5),
+	}
 	if transferRequest.Endpoint != "" {
 		config.Endpoint = &transferRequest.Endpoint
 	}
