@@ -1303,11 +1303,7 @@ func (d *DotmeshRPC) GetTransfer(
 	return nil
 }
 
-func (d *DotmeshRPC) S3Transfer(
-	r *http.Request,
-	args *types.S3TransferRequest,
-	result *string,
-) error {
+func (d *DotmeshRPC) S3Transfer(r *http.Request, args *types.S3TransferRequest, result *string) error {
 	localVolumeName := VolumeName{
 		Namespace: args.LocalNamespace,
 		Name:      args.LocalName,

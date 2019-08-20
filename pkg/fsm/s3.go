@@ -204,6 +204,7 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 	filesToDownload := make([]*s3.ObjectVersion, 0)
 
 	// loop over objects in the bucket and add them to the delete or download collection
+	log.Debugf("Started collecting files to download and delete...")
 	err := svc.ListObjectVersionsPages(params,
 		func(page *s3.ListObjectVersionsOutput, lastPage bool) bool {
 			for _, item := range page.DeleteMarkers {
@@ -215,7 +216,6 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 			for _, item := range page.Versions {
 				latestMeta := currentKeyVersions[*item.Key]
 				if *item.IsLatest && latestMeta != *item.VersionId {
-					log.Debugf("Got object: %#v, key: %s", item, *item.Key)
 					filesToDownload = append(filesToDownload, item)
 				}
 			}
@@ -225,11 +225,11 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 	if err != nil {
 		return false, nil, err
 	}
+	log.WithField("added", len(filesToDownload)).WithField("deleted", len(filesToDelete)).Debugf("[pkg/fsm/s3.go.downloadPartialS3Bucket] Ok, done. Will delete files now.")
 
 	// loop over the files marked for deletion and remove them from the file system
 	for _, item := range filesToDelete {
 		deletePath := fmt.Sprintf("%s/%s", destPath, *item.Key)
-		log.Debugf("Got object for deletion: %#v, key: %s", item, *item.Key)
 		err := os.RemoveAll(deletePath)
 		if err != nil && !os.IsNotExist(err) {
 			innerError = err
@@ -259,6 +259,7 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 				Size:    totalSize,
 			},
 		}
+		log.Debugf("[pkg/fsm/s3.go.downloadPartialS3Bucket] Ok, files deleted. Will download files now.")
 
 		// loop over the files marked for download
 		for _, item := range filesToDownload {
@@ -284,12 +285,12 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 			currentKeyVersions[*item.Key] = *item.VersionId
 			bucketChanged = true
 		}
+		log.Debugf("[pkg/fsm/s3.go.downloadPartialS3Bucket] Finished downloading!")
 	}
 
 	if innerError != nil {
 		return bucketChanged, nil, innerError
 	}
-	log.Debugf("[downloadPartialS3Bucket] New key versions: %#v", currentKeyVersions)
 	return bucketChanged, currentKeyVersions, nil
 }
 
