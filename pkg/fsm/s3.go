@@ -274,7 +274,7 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 				},
 			}
 			for i := 0; i < 3; i++ {
-				innerError = downloadS3Object(f.transferUpdates, downloader, sent, startTime, *item.Key, *item.VersionId, bucketName, destPath)
+				innerError = downloadS3Object(f.transferUpdates, downloader, sent, startTime, *item.Key, *item.VersionId, bucketName, destPath, *item.Size)
 				if innerError == nil {
 					break
 				}
@@ -332,7 +332,7 @@ func (pw *progressWriter) WriteAt(p []byte, off int64) (int, error) {
 	return pw.writer.WriteAt(p, off)
 }
 
-func downloadS3Object(updates chan types.TransferUpdate, downloader *s3manager.Downloader, startSent int64, startTime time.Time, key, versionId, bucket, destPath string) error {
+func downloadS3Object(updates chan types.TransferUpdate, downloader *s3manager.Downloader, startSent int64, startTime time.Time, key, versionId, bucket, destPath string, fileSize int64) error {
 	fpath := fmt.Sprintf("%s/%s", destPath, key)
 	directoryPath := fpath[:strings.LastIndex(fpath, "/")]
 	err := os.MkdirAll(directoryPath, 0666)
@@ -373,7 +373,7 @@ func downloadS3Object(updates chan types.TransferUpdate, downloader *s3manager.D
 				cancel()
 				return err
 			}
-			if info.Size() == size {
+			if info.Size() == size && size != fileSize {
 				log.WithFields(log.Fields{
 					"size":       size,
 					"key":        key,
