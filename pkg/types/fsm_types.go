@@ -34,6 +34,7 @@ const (
 	TransferTotalAndSize
 	TransferProgress
 	TransferIncrementIndex
+	TransferStartS3Bucket
 	TransferNextS3File
 	TransferFinishedS3File
 	TransferSent
