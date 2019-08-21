@@ -367,7 +367,9 @@ func downloadS3Object(updates chan types.TransferUpdate, downloader *s3manager.D
 		case err := <-done:
 			return err
 		default:
-			time.Sleep(30 * time.Second)
+			if fileSize != 0 {
+				time.Sleep(30 * time.Second)
+			}
 			info, err := file.Stat()
 			if err != nil {
 				cancel()
