@@ -1286,11 +1286,7 @@ func (d *DotmeshRPC) RegisterFilesystem(
 	return err
 }
 
-func (d *DotmeshRPC) GetTransfer(
-	r *http.Request,
-	args *string,
-	result *TransferPollResult,
-) error {
+func (d *DotmeshRPC) GetTransfer(r *http.Request, args *string, result *TransferPollResult) error {
 	// Poll the status of a transfer by fetching it from our local cache.
 	d.state.interclusterTransfersLock.Lock()
 	defer d.state.interclusterTransfersLock.Unlock()
@@ -1303,11 +1299,7 @@ func (d *DotmeshRPC) GetTransfer(
 	return nil
 }
 
-func (d *DotmeshRPC) S3Transfer(
-	r *http.Request,
-	args *types.S3TransferRequest,
-	result *string,
-) error {
+func (d *DotmeshRPC) S3Transfer(r *http.Request, args *types.S3TransferRequest, result *string) error {
 	localVolumeName := VolumeName{
 		Namespace: args.LocalNamespace,
 		Name:      args.LocalName,

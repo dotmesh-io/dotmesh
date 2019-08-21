@@ -23,13 +23,7 @@ func s3PullInitiatorState(f *FsMachine) StateFn {
 		return backoffState
 	}
 
-	// create the default paths
-	destPath := fmt.Sprintf("%s/%s", utils.Mnt(f.filesystemId), "__default__")
-	err = os.MkdirAll(destPath, 0775)
-	if err != nil {
-		f.errorDuringTransfer("cannot-create-default-dir", err)
-		return backoffState
-	}
+	// create the version info subdot
 	versionsPath := fmt.Sprintf("%s/%s", utils.Mnt(f.filesystemId), "dm.s3-versions")
 	err = os.MkdirAll(versionsPath, 0775)
 	if err != nil {
@@ -60,9 +54,6 @@ func s3PullInitiatorState(f *FsMachine) StateFn {
 		return backoffState
 	}
 	if latestSnap != nil {
-		// todo:
-		// if "type" == "metadata-only" in commit ignore it
-		// go back to the one before it until we find one that isn't that type
 		err := loadS3Meta(f.filesystemId, latestSnap.Id, &latestMeta)
 
 		if err != nil {
@@ -75,6 +66,7 @@ func s3PullInitiatorState(f *FsMachine) StateFn {
 			}
 		}
 	}
+	destPath := fmt.Sprintf("%s/%s", utils.Mnt(f.filesystemId), "__default__")
 	bucketChanged, keyVersions, err := downloadS3Bucket(f, svc, transferRequest.RemoteName, destPath, transferRequestId, transferRequest.Prefixes, latestMeta)
 	if err != nil {
 		f.errorDuringTransfer("cant-pull-from-s3", err)
