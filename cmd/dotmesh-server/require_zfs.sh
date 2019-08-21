@@ -143,7 +143,8 @@ nsenter -t 1 -m -u -n -i /bin/sh -c \
     mkdir -p $MOUNTPOINT
     mkdir -p $CONTAINER_MOUNT_PREFIX
     mkdir -p $CONTAINER_MOUNT_PREFIX_WRITABLE
-    mount --read-only --bind $CONTAINER_MOUNT_PREFIX_WRITABLE $CONTAINER_MOUNT_PREFIX"
+    mount --read-only --bind $CONTAINER_MOUNT_PREFIX_WRITABLE $CONTAINER_MOUNT_PREFIX
+    mount --make-rshared $CONTAINER_MOUNT_PREFIX"
 
 if [ ! -e /sys ]; then
     mount -t sysfs sys sys/
