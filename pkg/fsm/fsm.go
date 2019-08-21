@@ -489,6 +489,12 @@ func (f *FsMachine) updateEtcdAboutTransfers() error {
 			pollResult.Status = update.Changes.Status
 		case types.TransferFinishedS3File:
 			pollResult.Status = update.Changes.Status
+		case types.TransferS3Stuck:
+			pollResult.Status = update.Changes.Status
+			pollResult.Message = update.Changes.Message
+		case types.TransferS3Failed:
+			pollResult.Status = update.Changes.Status
+			pollResult.Message = update.Changes.Message
 		case types.TransferSent:
 			pollResult.Sent = update.Changes.Sent
 			pollResult.Status = update.Changes.Status

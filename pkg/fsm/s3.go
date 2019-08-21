@@ -278,10 +278,18 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 				if innerError == nil {
 					break
 				}
+				f.transferUpdates <- types.TransferUpdate{
+					Kind: types.TransferS3Stuck,
+					Changes: types.TransferPollResult{
+						Status:  fmt.Sprintf("S3 file %s got stuck, retrying...", *item.Key),
+						Message: innerError.Error(),
+					},
+				}
+				time.Sleep(10 * time.Second)
 			}
 			if innerError != nil {
 				f.transferUpdates <- types.TransferUpdate{
-					Kind: types.TransferS3Stuck,
+					Kind: types.TransferS3Failed,
 					Changes: types.TransferPollResult{
 						Status:  "S3 stuck!",
 						Message: innerError.Error(),

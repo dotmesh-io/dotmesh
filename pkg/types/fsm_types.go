@@ -38,6 +38,7 @@ const (
 	TransferNextS3File
 	TransferFinishedS3File
 	TransferS3Stuck
+	TransferS3Failed
 	TransferSent
 	TransferFinished
 	TransferStatus

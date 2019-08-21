@@ -1286,11 +1286,7 @@ func (d *DotmeshRPC) RegisterFilesystem(
 	return err
 }
 
-func (d *DotmeshRPC) GetTransfer(
-	r *http.Request,
-	args *string,
-	result *TransferPollResult,
-) error {
+func (d *DotmeshRPC) GetTransfer(r *http.Request, args *string, result *TransferPollResult) error {
 	// Poll the status of a transfer by fetching it from our local cache.
 	d.state.interclusterTransfersLock.Lock()
 	defer d.state.interclusterTransfersLock.Unlock()
