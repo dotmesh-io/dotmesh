@@ -209,6 +209,7 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 
 	// loop over objects in the bucket and add them to the delete or download collection
 	log.Debugf("Started collecting files to download and delete...")
+	var totalSize int64 = 0
 	err := svc.ListObjectVersionsPages(params,
 		func(page *s3.ListObjectVersionsOutput, lastPage bool) bool {
 			for _, item := range page.DeleteMarkers {
@@ -221,6 +222,7 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 				latestMeta := currentKeyVersions[*item.Key]
 				if *item.IsLatest && latestMeta != *item.VersionId {
 					filesToDownload = append(filesToDownload, item)
+					totalSize += *item.Size
 				}
 			}
 			return !lastPage
@@ -241,12 +243,8 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 		currentKeyVersions[*item.Key] = *item.VersionId
 	}
 	// work out how many objects we have and the total size of them all
-	var totalSize int64 = 0
-	totalObjects := len(filesToDownload)
 
-	for _, item := range filesToDownload {
-		totalSize += *item.Size
-	}
+	totalObjects := len(filesToDownload)
 
 	// pass this info off to the fsm
 	f.transferUpdates <- types.TransferUpdate{
