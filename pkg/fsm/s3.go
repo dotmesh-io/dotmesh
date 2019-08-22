@@ -283,7 +283,22 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 			for i := 0; i < 5; i++ {
 				innerError = downloadS3Object(f.transferUpdates, downloader, sent, startTime, *item.Key, *item.VersionId, bucketName, destPath, *item.Size)
 				if innerError == nil {
-					break
+					log.WithField("key", *item.Key).WithField("size", *item.Size).Debugf("[pkg/fsm/s3.go.downloadPartialS3Bucket] completed file")
+					f.transferUpdates <- types.TransferUpdate{
+						Kind: types.TransferFinishedS3File,
+						Changes: types.TransferPollResult{
+							Status: "Pulled file successfully",
+						},
+					}
+					completed <- ItemData{
+						name:      *item.Key,
+						versionId: *item.VersionId,
+						size:      *item.Size,
+						err:       nil,
+					}
+					<-sem
+					log.Debugf("Told outer thread")
+					return
 				}
 				f.transferUpdates <- types.TransferUpdate{
 					Kind: types.TransferS3Stuck,
@@ -311,20 +326,6 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 				<-sem
 				return
 			}
-			f.transferUpdates <- types.TransferUpdate{
-				Kind: types.TransferFinishedS3File,
-				Changes: types.TransferPollResult{
-					Status: "Pulled file successfully",
-				},
-			}
-			completed <- ItemData{
-				name:      *item.Key,
-				versionId: *item.VersionId,
-				size:      *item.Size,
-				err:       nil,
-			}
-			log.WithField("key", *item.Key).WithField("size", *item.Size).Debugf("[pkg/fsm/s3.go.downloadPartialS3Bucket] completed file")
-			<-sem
 		}(item)
 	}
 	fileCount := len(filesToDownload)
