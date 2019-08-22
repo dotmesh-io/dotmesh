@@ -266,7 +266,7 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 		versionId string
 		err       error
 	}
-	completed := make(chan ItemData)
+	completed := make(chan ItemData, len(filesToDownload))
 	sem := make(chan bool, 100)
 	// loop over the files marked for download
 	for _, item := range filesToDownload {
@@ -290,16 +290,13 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 							Status: "Pulled file successfully",
 						},
 					}
-					log.Debugf("Told etcd")
 					completed <- ItemData{
 						name:      *item.Key,
 						versionId: *item.VersionId,
 						size:      *item.Size,
 						err:       nil,
 					}
-					log.Debugf("sent item info")
 					<-sem
-					log.Debugf("Told outer thread")
 					return
 				}
 				f.transferUpdates <- types.TransferUpdate{
