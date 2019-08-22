@@ -361,10 +361,10 @@ func (pw *progressWriter) WriteAt(p []byte, off int64) (int, error) {
 	atomic.AddInt64(&pw.written, int64(len(p)))
 	elapsed := time.Since(pw.startTime).Nanoseconds()
 	pw.updates <- types.TransferUpdate{
-		Kind: types.TransferProgress,
+		Kind: types.TransferS3Progress,
 		Changes: types.TransferPollResult{
 			Status:             "pulling",
-			Sent:               pw.written,
+			Sent:               int64(len(p)),
 			NanosecondsElapsed: elapsed,
 			Message:            "Downloading " + pw.key,
 		},
@@ -388,7 +388,6 @@ func downloadS3Object(updates chan types.TransferUpdate, downloader *s3manager.D
 	writer := &progressWriter{
 		key:       key,
 		writer:    file,
-		written:   startSent,
 		updates:   updates,
 		startTime: startTime,
 	}

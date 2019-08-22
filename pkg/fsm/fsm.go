@@ -473,6 +473,8 @@ func (f *FsMachine) updateEtcdAboutTransfers() error {
 				pollResult.NanosecondsElapsed = update.Changes.NanosecondsElapsed
 				pollResult.Status = update.Changes.Status
 			}
+		case types.TransferS3Progress:
+			pollResult.Sent += update.Changes.Sent
 		case types.TransferIncrementIndex:
 			if pollResult.Index < pollResult.Total {
 				pollResult.Index++
