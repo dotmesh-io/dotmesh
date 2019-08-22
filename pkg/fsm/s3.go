@@ -290,12 +290,14 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 							Status: "Pulled file successfully",
 						},
 					}
+					log.Debugf("Told etcd")
 					completed <- ItemData{
 						name:      *item.Key,
 						versionId: *item.VersionId,
 						size:      *item.Size,
 						err:       nil,
 					}
+					log.Debugf("sent item info")
 					<-sem
 					log.Debugf("Told outer thread")
 					return
