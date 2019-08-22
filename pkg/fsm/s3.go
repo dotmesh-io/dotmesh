@@ -268,7 +268,7 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 		versionId string
 		err       error
 	}
-	completed := make(chan ItemData, 100)
+	completed := make(chan ItemData)
 	sem := make(chan bool, 100)
 	// loop over the files marked for download
 	for _, item := range filesToDownload {
@@ -310,6 +310,7 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 					size:      *item.Size,
 					err:       innerError,
 				}
+				<-sem
 				return
 			}
 			f.transferUpdates <- types.TransferUpdate{
