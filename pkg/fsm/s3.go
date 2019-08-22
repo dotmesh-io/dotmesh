@@ -266,6 +266,12 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 		}
 		log.Debugf("[pkg/fsm/s3.go.downloadPartialS3Bucket] Ok, files deleted. Will download files now.")
 
+		type ItemData struct {
+			size      int64
+			versionId string
+			errors    chan error
+		}
+		completed := make(map[string]ItemData)
 		// loop over the files marked for download
 		for _, item := range filesToDownload {
 			log.WithField("key", *item.Key).WithField("size", *item.Size).Debugf("[pkg/fsm/s3.go.downloadPartialS3Bucket] new file download starting")
@@ -276,39 +282,61 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 					Message: "Downloading " + *item.Key,
 				},
 			}
-			for i := 0; i < 5; i++ {
-				innerError = downloadS3Object(f.transferUpdates, downloader, sent, startTime, *item.Key, *item.VersionId, bucketName, destPath, *item.Size)
-				if innerError == nil {
-					break
+			channel := make(chan error, 1)
+			completed[*item.Key] = ItemData{
+				size:      *item.Size,
+				versionId: *item.VersionId,
+				errors:    channel,
+			}
+			go func(item *s3.ObjectVersion) {
+				for i := 0; i < 5; i++ {
+					innerError = downloadS3Object(f.transferUpdates, downloader, sent, startTime, *item.Key, *item.VersionId, bucketName, destPath, *item.Size)
+					if innerError == nil {
+						break
+					}
+					f.transferUpdates <- types.TransferUpdate{
+						Kind: types.TransferS3Stuck,
+						Changes: types.TransferPollResult{
+							Status:  "stuck",
+							Message: fmt.Sprintf("S3 file %s got stuck, retrying in 10 seconds...", *item.Key),
+						},
+					}
+					time.Sleep(10 * time.Second)
+				}
+				if innerError != nil {
+					f.transferUpdates <- types.TransferUpdate{
+						Kind: types.TransferS3Failed,
+						Changes: types.TransferPollResult{
+							Status:  "S3 stuck!",
+							Message: innerError.Error(),
+						},
+					}
+					channel <- innerError
+					return
 				}
 				f.transferUpdates <- types.TransferUpdate{
-					Kind: types.TransferS3Stuck,
+					Kind: types.TransferFinishedS3File,
 					Changes: types.TransferPollResult{
-						Status:  "stuck",
-						Message: fmt.Sprintf("S3 file %s got stuck, retrying in 10 seconds...", *item.Key),
+						Status: "Pulled file successfully",
 					},
 				}
-				time.Sleep(10 * time.Second)
-			}
-			if innerError != nil {
-				f.transferUpdates <- types.TransferUpdate{
-					Kind: types.TransferS3Failed,
-					Changes: types.TransferPollResult{
-						Status:  "S3 stuck!",
-						Message: innerError.Error(),
-					},
+				channel <- nil
+			}(item)
+		}
+		fileCount := len(filesToDownload)
+		log.Debugf("[pkg/fsm/s3.go.downloadPartialS3Bucket] %d files started downloading, waiting for completion...", fileCount)
+		for key, itemData := range completed {
+			select {
+			case err := <-itemData.errors:
+				if err != nil {
+					return false, nil, err
 				}
-				return true, nil, innerError
+				sent += itemData.size
+				currentKeyVersions[key] = itemData.versionId
+				bucketChanged = true
+				delete(completed, key)
+				log.Debugf("[pkg/fsm/s3.go.downloadPartialS3Bucket] %d files remaining, %d files completed", len(completed), fileCount-len(completed))
 			}
-			f.transferUpdates <- types.TransferUpdate{
-				Kind: types.TransferFinishedS3File,
-				Changes: types.TransferPollResult{
-					Status: "Pulled file successfully",
-				},
-			}
-			sent += *item.Size
-			currentKeyVersions[*item.Key] = *item.VersionId
-			bucketChanged = true
 		}
 		log.Debugf("[pkg/fsm/s3.go.downloadPartialS3Bucket] Finished downloading!")
 	}
