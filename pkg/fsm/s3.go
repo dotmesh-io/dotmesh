@@ -323,6 +323,8 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 				size:      *item.Size,
 				err:       nil,
 			}
+			log.WithField("key", *item.Key).WithField("size", *item.Size).Debugf("[pkg/fsm/s3.go.downloadPartialS3Bucket] completed file")
+			<-sem
 		}(item)
 	}
 	fileCount := len(filesToDownload)
