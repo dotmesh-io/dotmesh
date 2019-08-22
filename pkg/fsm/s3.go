@@ -189,7 +189,6 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 	// 1. Delete anything locally that's been deleted in S3.
 	// 2. Download new versions of things that have changed
 	// 3. Return a map of object key -> s3 version id, plus an indicator of whether anything actually changed during this process so we know whether to make a snapshot.
-	var bucketChanged bool
 	params := &s3.ListObjectVersionsInput{
 		Bucket: aws.String(bucketName),
 	}
@@ -240,7 +239,6 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 			return false, nil, err
 		}
 		currentKeyVersions[*item.Key] = *item.VersionId
-		bucketChanged = true
 	}
 	// work out how many objects we have and the total size of them all
 	var totalSize int64 = 0
@@ -335,7 +333,7 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 		default:
 			if counter == fileCount {
 				log.Debugf("[pkg/fsm/s3.go.downloadPartialS3Bucket] Finished downloading!")
-				return true, currentKeyVersions, nil
+				return len(filesToDelete) > 0 || fileCount > 0, currentKeyVersions, nil
 			}
 		case item := <-completed:
 			if item.err != nil {
