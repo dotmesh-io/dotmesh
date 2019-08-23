@@ -257,14 +257,7 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 		},
 	}
 	log.Debugf("[pkg/fsm/s3.go.downloadPartialS3Bucket] Ok, files deleted. Will download files now.")
-
-	type ItemData struct {
-		name      string
-		size      int64
-		versionId string
-		err       error
-	}
-	completed := make(chan ItemData, len(filesToDownload))
+	completed := make(chan types.ItemData, len(filesToDownload))
 	sem := make(chan bool, 100)
 	// loop over the files marked for download
 	for _, item := range filesToDownload {
