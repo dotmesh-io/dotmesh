@@ -33,6 +33,7 @@ const (
 	TransferCalculatedSize
 	TransferTotalAndSize
 	TransferProgress
+	TransferS3Progress
 	TransferIncrementIndex
 	TransferStartS3Bucket
 	TransferNextS3File

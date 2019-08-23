@@ -255,3 +255,11 @@ type MountCommitRequest struct {
 	FilesystemId string
 	CommitId     string
 }
+
+// used by pkg/fsm/s3.go to communicate completed file info
+type ItemData struct {
+	name      string
+	size      int64
+	versionId string
+	err       error
+}
