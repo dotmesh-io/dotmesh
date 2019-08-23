@@ -81,7 +81,7 @@ func writeS3Metadata(path string, versions map[string]string) error {
 
 //GetKeysForDirLimit - recurse it creating s3 style keys for all the files in it (aka relative paths from that directory)
 // send back a map of keys -> file sizes, and the whole directory's size
-func GetKeysForDirLimit(parentPath string, subPath string, limit int64) (keys map[string]os.FileInfo, dirSize int64, used int64, err error) {
+func GetKeysForDirLimit(parentPath string, subPath string, query types.ListFileQuery) (keys map[string]os.FileInfo, dirSize int64, used int64, err error) {
 	path := parentPath
 	if subPath != "" {
 		path += "/" + subPath
@@ -93,6 +93,8 @@ func GetKeysForDirLimit(parentPath string, subPath string, limit int64) (keys ma
 
 	keys = make(map[string]os.FileInfo)
 	dirsToTraverse := make([]os.FileInfo, 0)
+
+	limit := query.Limit
 
 	for _, fileInfo := range files {
 		if limit != 0 && limit-used <= 0 {
@@ -116,30 +118,41 @@ func GetKeysForDirLimit(parentPath string, subPath string, limit int64) (keys ma
 		}
 	}
 
-	for _, dirInfo := range dirsToTraverse {
-		// no point recursing into more directories when we're over the limit
-		if limit != 0 && limit-used <= 0 {
-			break
-		}
-
-		var currentLimit int64
-		if limit != 0 {
-			currentLimit = limit - used
-		}
-
-		paths, size, recursiveUsed, err := GetKeysForDirLimit(path, dirInfo.Name(), currentLimit)
-		used = used + recursiveUsed
-		if err != nil {
-			return nil, 0, 0, err
-		}
-		for k, v := range paths {
-			if subPath == "" {
-				keys[k] = v
-			} else {
-				keys[subPath+"/"+k] = v
+	// if we are in recursive mode (i.e. list all files in the bucket at once)
+	// then start looping into the folders to see what is inside them
+	// if are are in non-recursive mode - the above section will have already
+	// gathered the results
+	if !query.NonRecursive {
+		for _, dirInfo := range dirsToTraverse {
+			// no point recursing into more directories when we're over the limit
+			if limit != 0 && limit-used <= 0 {
+				break
 			}
+
+			var currentLimit int64
+			if limit != 0 {
+				currentLimit = limit - used
+			}
+
+			recurselistKeysQuery := types.ListFileQuery{
+				Limit:        currentLimit,
+				Offset:       0,
+				NonRecursive: false,
+			}
+			paths, size, recursiveUsed, err := GetKeysForDirLimit(path, dirInfo.Name(), recurselistKeysQuery)
+			used = used + recursiveUsed
+			if err != nil {
+				return nil, 0, 0, err
+			}
+			for k, v := range paths {
+				if subPath == "" {
+					keys[k] = v
+				} else {
+					keys[subPath+"/"+k] = v
+				}
+			}
+			dirSize += size
 		}
-		dirSize += size
 	}
 
 	return keys, dirSize, used, nil

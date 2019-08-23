@@ -25,6 +25,15 @@ type OutputFile struct {
 	Response          chan *Event
 }
 
+// Use to specify the limit and path
+// for a GetKeysForDirLimit query in fsm/s3
+// this means we can support paging in the list of files
+type ListFileQuery struct {
+	Limit        int64 // how many files per page
+	Offset       int64 // what page we are viewing - we start listing at Offset * Limit
+	NonRecursive bool  // meaning we only want to list files at the given subpath and not recurse
+}
+
 type TransferUpdateKind int
 
 const (

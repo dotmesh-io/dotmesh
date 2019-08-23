@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 )
 
 func TestgetKeysForDirLimit3(t *testing.T) {
@@ -22,7 +24,12 @@ func TestgetKeysForDirLimit3(t *testing.T) {
 	ioutil.WriteFile(filepath.Join(tDir, "/dir/level-1-2.txt"), []byte("X"), os.ModePerm)
 	ioutil.WriteFile(filepath.Join(tDir, "/dir/level-1-3.txt"), []byte("X"), os.ModePerm)
 
-	files, dirFilesCount, size, err := GetKeysForDirLimit(tDir, "/", 3)
+	listKeysQuery := types.ListFileQuery{
+		Limit:        3,
+		Offset:       0,
+		NonRecursive: false,
+	}
+	files, dirFilesCount, size, err := GetKeysForDirLimit(tDir, "/", listKeysQuery)
 	if err != nil {
 		t.Fatalf("failed to get dir limit: %s", err)
 	}
@@ -47,7 +54,12 @@ func TestgetKeysForDirLimitNoLimit(t *testing.T) {
 	ioutil.WriteFile(filepath.Join(tDir, "/dir/level-1-2.txt"), []byte("X"), os.ModePerm)
 	ioutil.WriteFile(filepath.Join(tDir, "/dir/level-1-3.txt"), []byte("X"), os.ModePerm)
 
-	files, dirFilesCount, size, err := GetKeysForDirLimit(tDir, "/", 0)
+	listKeysQuery := types.ListFileQuery{
+		Limit:        0,
+		Offset:       0,
+		NonRecursive: false,
+	}
+	files, dirFilesCount, size, err := GetKeysForDirLimit(tDir, "/", listKeysQuery)
 	if err != nil {
 		t.Fatalf("failed to get dir limit: %s", err)
 	}

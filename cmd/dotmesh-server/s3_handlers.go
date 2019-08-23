@@ -307,6 +307,7 @@ type BucketObject struct {
 	Key          string
 	LastModified time.Time
 	Size         int64
+	Directory    bool
 }
 
 func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name string, filesystemId string, snapshotId string) {
@@ -325,6 +326,9 @@ func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name
 	case "mounted":
 		result := (*e.Args)["mount-path"].(string)
 
+		nonRecursive := req.URL.Query().Get("nonRecursive")
+		subPath := req.URL.Query().Get("subpath")
+
 		// setting default limit to 100 files
 		var limit int64 = 100
 
@@ -336,7 +340,24 @@ func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name
 			}
 		}
 
-		keys, _, _, err := fsm.GetKeysForDirLimit(result+"/__default__", "", limit)
+		// defalt
+		var offset int64 = 0
+
+		offsetStr := req.URL.Query().Get("offset")
+		if offsetStr != "" {
+			newOffset, err := strconv.Atoi(offsetStr)
+			if err == nil {
+				offset = int64(newOffset)
+			}
+		}
+
+		listFileQuery := types.ListFileQuery{
+			Limit:        limit,
+			Offset:       offset,
+			NonRecursive: nonRecursive != "",
+		}
+
+		keys, _, _, err := fsm.GetKeysForDirLimit(result+"/__default__", subPath, listFileQuery)
 		if err != nil {
 			http.Error(resp, "failed to get keys for dir: "+err.Error(), 500)
 			return
@@ -351,6 +372,7 @@ func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name
 				Key:          key,
 				Size:         info.Size(),
 				LastModified: info.ModTime(),
+				Directory:    info.IsDir(),
 			}
 			bucket.Contents = append(bucket.Contents, object)
 		}

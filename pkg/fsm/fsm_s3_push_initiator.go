@@ -69,7 +69,13 @@ func s3PushInitiatorState(f *FsMachine) StateFn {
 		}
 		// list everything in the main directory
 		pathToMount := fmt.Sprintf("%s/__default__", mountPoint)
-		paths, dirSize, _, err := GetKeysForDirLimit(pathToMount, "", 0)
+
+		listKeysQuery := types.ListFileQuery{
+			Limit:        0,
+			Offset:       0,
+			NonRecursive: false,
+		}
+		paths, dirSize, _, err := GetKeysForDirLimit(pathToMount, "", listKeysQuery)
 		if err != nil {
 			f.sendEvent(&types.EventArgs{"err": err, "path": pathToMount}, "cant-get-keys-for-directory", "")
 			return backoffState
