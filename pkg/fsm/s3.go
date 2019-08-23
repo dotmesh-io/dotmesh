@@ -279,7 +279,7 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 							Status: "Pulled file successfully",
 						},
 					}
-					completed <- ItemData{
+					completed <- types.ItemData{
 						Name:      *item.Key,
 						VersionId: *item.VersionId,
 						Size:      *item.Size,
@@ -305,7 +305,7 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 						Message: innerError.Error(),
 					},
 				}
-				completed <- ItemData{
+				completed <- types.ItemData{
 					Name:      *item.Key,
 					VersionId: *item.VersionId,
 					Size:      *item.Size,
@@ -331,7 +331,7 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 				return false, nil, item.Err
 			}
 			sent += item.Size
-			currentKeyVersions[item.Name] = Item.VersionId
+			currentKeyVersions[item.Name] = item.VersionId
 			counter += 1
 		}
 	}
