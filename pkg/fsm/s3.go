@@ -269,7 +269,6 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 	// loop over the files marked for download
 	for _, item := range filesToDownload {
 		sem <- true
-		log.WithField("key", *item.Key).WithField("size", *item.Size).Debugf("[pkg/fsm/s3.go.downloadPartialS3Bucket] new file download starting")
 		f.transferUpdates <- types.TransferUpdate{
 			Kind: types.TransferNextS3File,
 			Changes: types.TransferPollResult{
@@ -281,7 +280,6 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 			for i := 0; i < 5; i++ {
 				innerError = downloadS3Object(f.transferUpdates, downloader, sent, startTime, *item.Key, *item.VersionId, bucketName, destPath, *item.Size)
 				if innerError == nil {
-					log.WithField("key", *item.Key).WithField("size", *item.Size).Debugf("[pkg/fsm/s3.go.downloadPartialS3Bucket] completed file")
 					f.transferUpdates <- types.TransferUpdate{
 						Kind: types.TransferFinishedS3File,
 						Changes: types.TransferPollResult{
@@ -339,7 +337,6 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 			if item.err != nil {
 				return false, nil, item.err
 			}
-			log.WithField("key", item.name).Debugf("[pkg/fsm/s3.go.downloadPartialS3Bucket] finished downloading file, %d left to go", fileCount-counter)
 			sent += item.size
 			currentKeyVersions[item.name] = item.versionId
 			counter += 1
