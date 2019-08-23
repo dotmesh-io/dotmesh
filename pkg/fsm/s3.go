@@ -279,11 +279,11 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 							Status: "Pulled file successfully",
 						},
 					}
-					completed <- ItemData{
-						name:      *item.Key,
-						versionId: *item.VersionId,
-						size:      *item.Size,
-						err:       nil,
+					completed <- types.ItemData{
+						Name:      *item.Key,
+						VersionId: *item.VersionId,
+						Size:      *item.Size,
+						Err:       nil,
 					}
 					<-sem
 					return
@@ -305,11 +305,11 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 						Message: innerError.Error(),
 					},
 				}
-				completed <- ItemData{
-					name:      *item.Key,
-					versionId: *item.VersionId,
-					size:      *item.Size,
-					err:       innerError,
+				completed <- types.ItemData{
+					Name:      *item.Key,
+					VersionId: *item.VersionId,
+					Size:      *item.Size,
+					Err:       innerError,
 				}
 				<-sem
 				return
@@ -327,11 +327,11 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 				return len(filesToDelete) > 0 || fileCount > 0, currentKeyVersions, nil
 			}
 		case item := <-completed:
-			if item.err != nil {
-				return false, nil, item.err
+			if item.Err != nil {
+				return false, nil, item.Err
 			}
-			sent += item.size
-			currentKeyVersions[item.name] = item.versionId
+			sent += item.Size
+			currentKeyVersions[item.Name] = item.VersionId
 			counter += 1
 		}
 	}
