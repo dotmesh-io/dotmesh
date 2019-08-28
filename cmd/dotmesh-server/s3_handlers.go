@@ -321,11 +321,8 @@ func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name
 		mountPath := (*e.Args)["mount-path"].(string)
 
 		// what path are we starting at
-		subPath := req.URL.Query().Get("path")
-		path := mountPath + "/__default__"
-		if subPath != "" {
-			path += "/" + subPath
-		}
+		path := req.URL.Query().Get("path")
+		base := mountPath + "/__default__"
 
 		// setting default limit to 100 files
 		var limit int64 = 100
@@ -362,6 +359,7 @@ func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name
 		}
 
 		listFileRequest := types.ListFileRequest{
+			Base:               base,
 			Path:               path,
 			Limit:              limit,
 			Page:               page,

@@ -71,7 +71,8 @@ func s3PushInitiatorState(f *FsMachine) StateFn {
 		pathToMount := fmt.Sprintf("%s/__default__", mountPoint)
 
 		listKeysRequest := types.ListFileRequest{
-			Path:               pathToMount,
+			Base:               pathToMount,
+			Path:               "",
 			Limit:              0,
 			Page:               0,
 			Recursive:          true,

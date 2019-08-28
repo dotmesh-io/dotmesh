@@ -28,7 +28,8 @@ type OutputFile struct {
 
 // request when calling s3.GetKeysForDirLimit
 type ListFileRequest struct {
-	Path               string // what is the path we are listing
+	Base               string // the root of the dot we are listing
+	Path               string // the sub path we are listing
 	Limit              int64  // limit the number of files we get in the response
 	Page               int64  // what page we are viewing - we start listing at Page * Limit
 	Recursive          bool   // do we want to recurse into folders or just look at the given path

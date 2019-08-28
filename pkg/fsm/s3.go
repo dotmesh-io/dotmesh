@@ -83,10 +83,16 @@ func writeS3Metadata(path string, versions map[string]string) error {
 // we do this so we can pick the correct page of results
 // based on the limit and page query params for a recursive request
 func GetAllKeysForDir(query types.ListFileRequest) (results []types.ListFileItem, err error) {
-	path := query.Path
-	fileNames, err := ioutil.ReadDir(path)
+	readDirectoryPath := query.Base + "/" + query.Path
+	fileNames, err := ioutil.ReadDir(readDirectoryPath)
 	if err != nil {
 		return nil, err
+	}
+
+	prependPath := query.Path
+
+	if query.Path != "" {
+		prependPath = prependPath + "/"
 	}
 
 	var directories []os.FileInfo
@@ -108,7 +114,7 @@ func GetAllKeysForDir(query types.ListFileRequest) (results []types.ListFileItem
 	if query.IncludeDirectories {
 		for _, directoryInfo := range directories {
 			results = append(results, types.ListFileItem{
-				Key:          query.Path + "/" + directoryInfo.Name(),
+				Key:          prependPath + directoryInfo.Name(),
 				Size:         directoryInfo.Size(),
 				LastModified: directoryInfo.ModTime(),
 				Directory:    true,
@@ -118,7 +124,7 @@ func GetAllKeysForDir(query types.ListFileRequest) (results []types.ListFileItem
 
 	for _, fileInfo := range files {
 		results = append(results, types.ListFileItem{
-			Key:          query.Path + "/" + fileInfo.Name(),
+			Key:          prependPath + fileInfo.Name(),
 			Size:         fileInfo.Size(),
 			LastModified: fileInfo.ModTime(),
 			Directory:    false,
@@ -128,7 +134,8 @@ func GetAllKeysForDir(query types.ListFileRequest) (results []types.ListFileItem
 	if query.Recursive {
 		for _, directoryInfo := range directories {
 			directoryListRequest := types.ListFileRequest{
-				Path:               query.Path + "/" + directoryInfo.Name(),
+				Base:               query.Base,
+				Path:               prependPath + directoryInfo.Name(),
 				Limit:              0,
 				Page:               0,
 				Recursive:          true,
