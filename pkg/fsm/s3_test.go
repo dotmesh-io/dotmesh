@@ -14,10 +14,10 @@ func setupTestFiles() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	for x := 1; x <= 10; x++ {
+	for x := 0; x < 10; x++ {
 		dir := fmt.Sprintf("%s/%d", tDir, x)
 		os.Mkdir(dir, os.ModePerm)
-		for y := 1; y <= 10; y++ {
+		for y := 0; y < 10; y++ {
 			file := fmt.Sprintf("%s/%d.txt", dir, y)
 			ioutil.WriteFile(file, []byte("X"), os.ModePerm)
 		}
@@ -131,8 +131,8 @@ func TestGetKeysForDirLimitSubPath(t *testing.T) {
 	if len(listKeysResponse.Items) != 10 {
 		t.Errorf("expected to get 10 files returned, got: %d", len(listKeysResponse.Items))
 	}
-	if listKeysResponse.Items[0].Key != "2/1.txt" {
-		t.Errorf("expected first item to be 2/1.txt: %s", listKeysResponse.Items[0].Key)
+	if listKeysResponse.Items[0].Key != "2/0.txt" {
+		t.Errorf("expected first item to be 2/0.txt: %s", listKeysResponse.Items[0].Key)
 	}
 	if listKeysResponse.TotalCount != 10 {
 		t.Errorf("expected total items to be 10: %d", listKeysResponse.TotalCount)
@@ -161,8 +161,8 @@ func TestGetKeysForDirLimitSubPathLimit2Page2(t *testing.T) {
 	if len(listKeysResponse.Items) != 2 {
 		t.Errorf("expected to get 2 files returned, got: %d", len(listKeysResponse.Items))
 	}
-	if listKeysResponse.Items[0].Key != "2/5.txt" {
-		t.Errorf("expected first item to be 2/5.txt: %s", listKeysResponse.Items[0].Key)
+	if listKeysResponse.Items[0].Key != "2/4.txt" {
+		t.Errorf("expected first item to be 2/4.txt: %s", listKeysResponse.Items[0].Key)
 	}
 	if listKeysResponse.TotalCount != 10 {
 		t.Errorf("expected total items to be 10: %d", listKeysResponse.TotalCount)

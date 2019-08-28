@@ -162,7 +162,24 @@ func GetKeysForDirLimit(query types.ListFileRequest) (results types.ListFileResp
 	}
 
 	results.TotalCount = int64(len(items))
-	results.Items = items
+	var page []types.ListFileItem
+
+	if query.Limit > 0 {
+		startIndex := query.Page * query.Limit
+		endIndex := startIndex + query.Limit
+
+		if endIndex > results.TotalCount {
+			endIndex = results.TotalCount
+		}
+
+		for i := startIndex; i < endIndex; i++ {
+			page = append(page, items[i])
+		}
+
+		results.Items = page
+	} else {
+		results.Items = items
+	}
 
 	return results, nil
 }
