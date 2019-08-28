@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"time"
 )
 
 // InputFile is used to write files to the disk on the local node.
@@ -25,13 +26,26 @@ type OutputFile struct {
 	Response          chan *Event
 }
 
-// Use to specify the limit and path
-// for a GetKeysForDirLimit query in fsm/s3
-// this means we can support paging in the list of files
-type ListFileQuery struct {
-	Limit        int64 // how many files per page
-	Offset       int64 // what page we are viewing - we start listing at Offset * Limit
-	NonRecursive bool  // meaning we only want to list files at the given subpath and not recurse
+// request when calling s3.GetKeysForDirLimit
+type ListFileRequest struct {
+	Path               string // what is the path we are listing
+	Limit              int64  // limit the number of files we get in the response
+	Page               int64  // what page we are viewing - we start listing at Page * Limit
+	Recursive          bool   // do we want to recurse into folders or just look at the given path
+	IncludeDirectories bool   // do we want directories to be included in the result or just files?
+}
+
+type ListFileResponse struct {
+	Items      []ListFileItem
+	TotalCount int64
+}
+
+// a single item in the results from s3.GetKeysForDirLimit
+type ListFileItem struct {
+	Key          string // the full path to the item (including folders)
+	LastModified time.Time
+	Size         int64
+	Directory    bool // is this item a directory or a file
 }
 
 type TransferUpdateKind int

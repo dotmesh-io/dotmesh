@@ -298,16 +298,10 @@ func (s *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, files
 }
 
 type ListBucketResult struct {
-	Name     string
-	Prefix   string
-	Contents []BucketObject
-}
-
-type BucketObject struct {
-	Key          string
-	LastModified time.Time
-	Size         int64
-	Directory    bool
+	Name         string
+	Prefix       string
+	Contents     []types.ListFileItem
+	TotalResults int64
 }
 
 func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name string, filesystemId string, snapshotId string) {
@@ -324,14 +318,17 @@ func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name
 
 	switch e.Name {
 	case "mounted":
-		result := (*e.Args)["mount-path"].(string)
+		mountPath := (*e.Args)["mount-path"].(string)
 
-		nonRecursive := req.URL.Query().Get("nonRecursive")
-		subPath := req.URL.Query().Get("subpath")
+		// what path are we starting at
+		subPath := req.URL.Query().Get("path")
+		path := mountPath + "/__default__"
+		if subPath != "" {
+			path += "/" + subPath
+		}
 
 		// setting default limit to 100 files
 		var limit int64 = 100
-
 		limitStr := req.URL.Query().Get("limit")
 		if limitStr != "" {
 			newLimit, err := strconv.Atoi(limitStr)
@@ -340,41 +337,49 @@ func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name
 			}
 		}
 
-		// defalt
-		var offset int64 = 0
-
-		offsetStr := req.URL.Query().Get("offset")
-		if offsetStr != "" {
-			newOffset, err := strconv.Atoi(offsetStr)
+		// default the page offset to 9
+		var page int64 = 0
+		pageStr := req.URL.Query().Get("page")
+		if pageStr != "" {
+			newPage, err := strconv.Atoi(pageStr)
 			if err == nil {
-				offset = int64(newOffset)
+				page = int64(newPage)
 			}
 		}
 
-		listFileQuery := types.ListFileQuery{
-			Limit:        limit,
-			Offset:       offset,
-			NonRecursive: nonRecursive != "",
+		// default to recursive mode
+		var recursive = true
+		nonRecursiveStr := req.URL.Query().Get("nonRecursive")
+		if nonRecursiveStr != "" {
+			recursive = false
 		}
 
-		keys, _, _, err := fsm.GetKeysForDirLimit(result+"/__default__", subPath, listFileQuery)
+		// default to not showing directories in the results
+		var includeDirectories = false
+		includeDirectoriesStr := req.URL.Query().Get("includeDirectories")
+		if includeDirectoriesStr != "" {
+			includeDirectories = true
+		}
+
+		listFileRequest := types.ListFileRequest{
+			Path:               path,
+			Limit:              limit,
+			Page:               page,
+			Recursive:          recursive,
+			IncludeDirectories: includeDirectories,
+		}
+
+		listFilesResponse, err := fsm.GetKeysForDirLimit(listFileRequest)
 		if err != nil {
 			http.Error(resp, "failed to get keys for dir: "+err.Error(), 500)
 			return
 		}
 
 		bucket := ListBucketResult{
-			Name:     name,
-			Contents: []BucketObject{},
-		}
-		for key, info := range keys {
-			object := BucketObject{
-				Key:          key,
-				Size:         info.Size(),
-				LastModified: info.ModTime(),
-				Directory:    info.IsDir(),
-			}
-			bucket.Contents = append(bucket.Contents, object)
+			Name:         name,
+			Prefix:       path,
+			Contents:     listFilesResponse.Items,
+			TotalResults: listFilesResponse.TotalCount,
 		}
 
 		enc := xml.NewEncoder(resp)

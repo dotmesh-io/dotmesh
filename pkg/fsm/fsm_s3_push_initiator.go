@@ -70,33 +70,39 @@ func s3PushInitiatorState(f *FsMachine) StateFn {
 		// list everything in the main directory
 		pathToMount := fmt.Sprintf("%s/__default__", mountPoint)
 
-		listKeysQuery := types.ListFileQuery{
-			Limit:        0,
-			Offset:       0,
-			NonRecursive: false,
+		listKeysRequest := types.ListFileRequest{
+			Path:               pathToMount,
+			Limit:              0,
+			Page:               0,
+			Recursive:          true,
+			IncludeDirectories: false,
 		}
-		paths, dirSize, _, err := GetKeysForDirLimit(pathToMount, "", listKeysQuery)
+		fileItemsResponse, err := GetKeysForDirLimit(listKeysRequest)
 		if err != nil {
 			f.sendEvent(&types.EventArgs{"err": err, "path": pathToMount}, "cant-get-keys-for-directory", "")
 			return backoffState
+		}
+		var dirSize int64 = 0
+		for _, fileItem := range fileItemsResponse.Items {
+			dirSize += fileItem.Size
 		}
 		// push everything to s3
 		f.transferUpdates <- types.TransferUpdate{
 			Kind: types.TransferTotalAndSize,
 			Changes: types.TransferPollResult{
 				Status: "beginning upload",
-				Total:  len(paths),
+				Total:  len(fileItemsResponse.Items),
 				Size:   dirSize,
 			},
 		}
 
 		keyToVersionIds := make(map[string]string)
-		keyToVersionIds, err = updateS3Files(f, keyToVersionIds, paths, pathToMount, transferRequestId, transferRequest.RemoteName, transferRequest.Prefixes, svc)
+		keyToVersionIds, err = updateS3Files(f, keyToVersionIds, fileItemsResponse.Items, pathToMount, transferRequestId, transferRequest.RemoteName, transferRequest.Prefixes, svc)
 		if err != nil {
 			f.errorDuringTransfer("error-updating-s3-objects", err)
 			return backoffState
 		}
-		keyToVersionIds, err = removeOldS3Files(keyToVersionIds, paths, transferRequest.RemoteName, transferRequest.Prefixes, svc)
+		keyToVersionIds, err = removeOldS3Files(keyToVersionIds, fileItemsResponse.Items, transferRequest.RemoteName, transferRequest.Prefixes, svc)
 		if err != nil {
 			f.errorDuringTransfer("error-during-object-pagination", err)
 			return backoffState

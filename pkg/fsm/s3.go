@@ -79,83 +79,85 @@ func writeS3Metadata(path string, versions map[string]string) error {
 	return nil
 }
 
-//GetKeysForDirLimit - recurse it creating s3 style keys for all the files in it (aka relative paths from that directory)
-// send back a map of keys -> file sizes, and the whole directory's size
-func GetKeysForDirLimit(parentPath string, subPath string, query types.ListFileQuery) (keys map[string]os.FileInfo, dirSize int64, used int64, err error) {
-	path := parentPath
-	if subPath != "" {
-		path += "/" + subPath
-	}
-	files, err := ioutil.ReadDir(path)
+// get a recursive list of all file keys
+// we do this so we can pick the correct page of results
+// based on the limit and page query params for a recursive request
+func GetAllKeysForDir(query types.ListFileRequest) (results []types.ListFileItem, err error) {
+	path := query.Path
+	fileNames, err := ioutil.ReadDir(path)
 	if err != nil {
-		return nil, 0, 0, err
+		return nil, err
 	}
 
-	keys = make(map[string]os.FileInfo)
-	dirsToTraverse := make([]os.FileInfo, 0)
+	var directories []os.FileInfo
+	var files []os.FileInfo
 
-	limit := query.Limit
-
-	for _, fileInfo := range files {
-		if limit != 0 && limit-used <= 0 {
-			// no point looking at more files when we're over the limit
-			break
-		}
+	for _, fileInfo := range fileNames {
 		if strings.HasPrefix(fileInfo.Name(), ".") {
+			// don't include dotfiles
 			continue
 		}
 		if fileInfo.IsDir() {
-			// save these for later, so that we're breadth first
-			dirsToTraverse = append(dirsToTraverse, fileInfo)
+			directories = append(directories, fileInfo)
 		} else {
-			used = used + 1
-			keyPath := fileInfo.Name()
-			if subPath != "" {
-				keyPath = subPath + "/" + keyPath
-			}
-			keys[keyPath] = fileInfo
-			dirSize += fileInfo.Size()
+			files = append(files, fileInfo)
 		}
 	}
 
-	// if we are in recursive mode (i.e. list all files in the bucket at once)
-	// then start looping into the folders to see what is inside them
-	// if are are in non-recursive mode - the above section will have already
-	// gathered the results
-	if !query.NonRecursive {
-		for _, dirInfo := range dirsToTraverse {
-			// no point recursing into more directories when we're over the limit
-			if limit != 0 && limit-used <= 0 {
-				break
-			}
+	// if we are including directories in the results then do so first
+	if query.IncludeDirectories {
+		for _, directoryInfo := range directories {
+			results = append(results, types.ListFileItem{
+				Key:          query.Path + "/" + directoryInfo.Name(),
+				Size:         directoryInfo.Size(),
+				LastModified: directoryInfo.ModTime(),
+				Directory:    true,
+			})
+		}
+	}
 
-			var currentLimit int64
-			if limit != 0 {
-				currentLimit = limit - used
-			}
+	for _, fileInfo := range files {
+		results = append(results, types.ListFileItem{
+			Key:          query.Path + "/" + fileInfo.Name(),
+			Size:         fileInfo.Size(),
+			LastModified: fileInfo.ModTime(),
+			Directory:    false,
+		})
+	}
 
-			recurselistKeysQuery := types.ListFileQuery{
-				Limit:        currentLimit,
-				Offset:       0,
-				NonRecursive: false,
+	if query.Recursive {
+		for _, directoryInfo := range directories {
+			directoryListRequest := types.ListFileRequest{
+				Path:               query.Path + "/" + directoryInfo.Name(),
+				Limit:              0,
+				Page:               0,
+				Recursive:          true,
+				IncludeDirectories: query.IncludeDirectories,
 			}
-			paths, size, recursiveUsed, err := GetKeysForDirLimit(path, dirInfo.Name(), recurselistKeysQuery)
-			used = used + recursiveUsed
+			directoryListResponse, err := GetAllKeysForDir(directoryListRequest)
 			if err != nil {
-				return nil, 0, 0, err
+				return results, err
 			}
-			for k, v := range paths {
-				if subPath == "" {
-					keys[k] = v
-				} else {
-					keys[subPath+"/"+k] = v
-				}
-			}
-			dirSize += size
+			results = append(results, directoryListResponse...)
 		}
 	}
 
-	return keys, dirSize, used, nil
+	return results, nil
+}
+
+//GetKeysForDirLimit - recurse it creating s3 style keys for all the files in it (aka relative paths from that directory)
+// send back a map of keys -> file sizes, and the whole directory's size
+func GetKeysForDirLimit(query types.ListFileRequest) (results types.ListFileResponse, err error) {
+	items, err := GetAllKeysForDir(query)
+
+	if err != nil {
+		return results, err
+	}
+
+	results.TotalCount = int64(len(items))
+	results.Items = items
+
+	return results, nil
 }
 
 func getS3Client(transferRequest types.S3TransferRequest) (*s3.S3, error) {
@@ -437,24 +439,28 @@ func downloadS3Object(updates chan types.TransferUpdate, downloader *s3manager.D
 	}
 }
 
-func removeOldS3Files(keyToVersionIds map[string]string, paths map[string]os.FileInfo, bucket string, prefixes []string, svc *s3.S3) (map[string]string, error) {
+func removeOldS3Files(keyToVersionIds map[string]string, files []types.ListFileItem, bucket string, prefixes []string, svc *s3.S3) (map[string]string, error) {
 	if len(prefixes) == 0 {
-		return removeOldPrefixedS3Files(keyToVersionIds, paths, bucket, "", svc)
+		return removeOldPrefixedS3Files(keyToVersionIds, files, bucket, "", svc)
 	}
 	var err error
 	for _, prefix := range prefixes {
-		keyToVersionIds, err = removeOldPrefixedS3Files(keyToVersionIds, paths, bucket, prefix, svc)
+		keyToVersionIds, err = removeOldPrefixedS3Files(keyToVersionIds, files, bucket, prefix, svc)
 		if err != nil {
 			return nil, err
 		}
 	}
 	return keyToVersionIds, nil
 }
-func removeOldPrefixedS3Files(keyToVersionIds map[string]string, paths map[string]os.FileInfo, bucket, prefix string, svc *s3.S3) (map[string]string, error) {
+func removeOldPrefixedS3Files(keyToVersionIds map[string]string, files []types.ListFileItem, bucket, prefix string, svc *s3.S3) (map[string]string, error) {
 	// get a list of the objects in s3, if there's anything there that isn't in our list of files in dotmesh, delete it.
 	params := &s3.ListObjectsV2Input{Bucket: aws.String(bucket)}
 	if prefix != "" {
 		params.SetPrefix(prefix)
+	}
+	paths := make(map[string]types.ListFileItem)
+	for _, file := range files {
+		paths[file.Key] = file
 	}
 	var innerError error
 	err := svc.ListObjectsV2Pages(params, func(output *s3.ListObjectsV2Output, lastPage bool) bool {
@@ -481,34 +487,35 @@ func removeOldPrefixedS3Files(keyToVersionIds map[string]string, paths map[strin
 	return keyToVersionIds, nil
 }
 
-func updateS3Files(f *FsMachine, keyToVersionIds map[string]string, paths map[string]os.FileInfo, pathToMount, transferRequestId, bucket string, prefixes []string, svc *s3.S3) (map[string]string, error) {
+func updateS3Files(f *FsMachine, keyToVersionIds map[string]string, files []types.ListFileItem, pathToMount, transferRequestId, bucket string, prefixes []string, svc *s3.S3) (map[string]string, error) {
 	// push every key up to s3 and then send back a map of object key -> s3 version id
 	uploader := s3manager.NewUploaderWithClient(svc)
 	// filter out any paths we don't care about in an S3 remote
-	filtered := make(map[string]os.FileInfo)
+	//filtered := make(map[string]os.FileInfo)
+	var filtered []types.ListFileItem
 	if len(prefixes) == 0 {
-		filtered = paths
+		filtered = files
 		log.Debugf("[updateS3Files] files: %#v", filtered)
 	}
 	for _, elem := range prefixes {
-		for key, size := range paths {
-			if strings.HasPrefix(key, elem) {
-				filtered[key] = size
+		for _, file := range files {
+			if strings.HasPrefix(file.Key, elem) {
+				filtered = append(filtered, file)
 			}
 		}
 	}
-	for key, fileInfo := range filtered {
-		path := fmt.Sprintf("%s/%s", pathToMount, key)
-		versionId, err := uploadFileToS3(path, key, bucket, uploader)
+	for _, file := range filtered {
+		path := fmt.Sprintf("%s/%s", pathToMount, file.Key)
+		versionId, err := uploadFileToS3(path, file.Key, bucket, uploader)
 		if err != nil {
 			return nil, err
 		}
-		keyToVersionIds[key] = versionId
+		keyToVersionIds[file.Key] = versionId
 
 		f.transferUpdates <- types.TransferUpdate{
 			Kind: types.TransferIncrementIndex,
 			Changes: types.TransferPollResult{
-				Sent: fileInfo.Size(),
+				Sent: file.Size,
 			},
 		}
 	}
