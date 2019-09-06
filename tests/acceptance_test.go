@@ -854,6 +854,30 @@ func TestSingleNode(t *testing.T) {
 		}
 	})
 
+	t.Run("ReadOnlyMountDirectory", func(t *testing.T) {
+		// Ensure that mount paths aren't writable UNTIL dotmesh has put a mount there
+		fsname := citools.UniqName()
+
+		// Try to make things
+		citools.RunOnNode(t, node1, "if mkdir -p "+f[0].GetNode(0).PoolDir+"/container_mnt/admin/"+fsname+"/__default__; then false; else true")
+		citools.RunOnNode(t, node1, "if touch "+f[0].GetNode(0).PoolDir+"/container_mnt/admin/"+fsname+"/__default__/somefile.txt; then false; else true")
+
+		// Check that the dot was mounted there and the file didn't somehow persist
+		resp := citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" ls /foo")
+		if strings.Contains(resp, "somefile.txt") {
+			t.Error("A file made before creating the dot turned up in the dot, which is just weird")
+		}
+
+		// Now touch the file in place, should succeed
+		citools.RunOnNode(t, node1, "touch "+f[0].GetNode(0).PoolDir+"/container_mnt/admin/"+fsname+"/__default__/somefile.txt")
+
+		// Check that worked, thereby validating the failure of the first attempt
+		resp = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" ls /foo")
+		if !strings.Contains(resp, "somefile.txt") {
+			t.Error("A file made via the docker volume plugin didn't appear where we think it did - this test isn't testing what it should")
+		}
+	})
+
 	t.Run("Branch", func(t *testing.T) {
 		fsname := citools.UniqName()
 		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/X")
