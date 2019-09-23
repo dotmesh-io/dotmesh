@@ -1757,7 +1757,7 @@ func TestDeletionSimple(t *testing.T) {
 		// configured above; the system should be in the process of
 		// cleaning up after the volume, but it should be fine to reuse
 		// the name by now.
-		checkDeletionWorkedWithRetries(t, fsname, 10*time.Second, node1, node2)
+		checkDeletionWorkedWithRetries(t, fsname, 20*time.Second, node1, node2)
 	})
 
 	t.Run("DeleteQuickly", func(t *testing.T) {
