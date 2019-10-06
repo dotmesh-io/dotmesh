@@ -211,8 +211,9 @@ func (s *S3Handler) readFile(resp http.ResponseWriter, req *http.Request, filesy
 		return
 	}
 
-	if fsm.GetCurrentState() != "active" {
-		http.Error(resp, "please try again later", http.StatusServiceUnavailable)
+	state := fsm.GetCurrentState()
+	if state != "active" {
+		http.Error(resp, fmt.Sprintf("please try again later, state was %s", state), http.StatusServiceUnavailable)
 		return
 	}
 
@@ -267,8 +268,9 @@ func (s *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, files
 		return
 	}
 
-	if fsm.GetCurrentState() != "active" {
-		http.Error(resp, "please try again later", http.StatusServiceUnavailable)
+	state := fsm.GetCurrentState()
+	if state != "active" {
+		http.Error(resp, fmt.Sprintf("please try again later, state was %s", state), http.StatusServiceUnavailable)
 		return
 	}
 
