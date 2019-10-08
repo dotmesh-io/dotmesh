@@ -1581,6 +1581,68 @@ func checkDeletionWorked(t *testing.T, fsname string, delay time.Duration, node1
 	}
 }
 
+func checkDeletionWorkedWithRetries(t *testing.T, fsname string, deadline time.Duration, node1 string, node2 string) {
+	ctx, cancel := context.WithTimeout(context.Background(), deadline)
+	defer cancel()
+
+	var errStr string
+
+	for {
+		select {
+		case <-ctx.Done():
+			// deadline reached
+			t.Error(errStr)
+			return
+		default:
+			st := citools.OutputFromRunOnNode(t, node1, "dm list")
+			if strings.Contains(st, fsname) {
+				errStr = fmt.Sprintf("The volume is still in 'dm list' on node1 (after %d seconds)", deadline/time.Second)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
+			st = citools.OutputFromRunOnNode(t, node2, "dm list")
+			if strings.Contains(st, fsname) {
+				errStr = fmt.Sprintf("The volume is still in 'dm list' on node2 (after %d seconds)", deadline/time.Second)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
+			st = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" cat /foo/HELLO || true")
+			if strings.Contains(st, "WORLD") {
+				errStr = fmt.Sprintf("The volume name wasn't reusable %d seconds after delete on node 1...", deadline/time.Second)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
+			st = citools.OutputFromRunOnNode(t, node2, citools.DockerRun(fsname)+" cat /foo/HELLO || true")
+			if strings.Contains(st, "WORLD") {
+				errStr = fmt.Sprintf("The volume name wasn't reusable %d seconds after delete on node 2...", deadline/time.Second)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
+			st = citools.OutputFromRunOnNode(t, node1, "dm list")
+			if !strings.Contains(st, fsname) {
+				errStr = fmt.Sprintf("The re-use of the deleted volume name failed in 'dm list' on node1 (after %d seconds)", deadline/time.Second)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
+			st = citools.OutputFromRunOnNode(t, node2, "dm list")
+			if !strings.Contains(st, fsname) {
+				errStr = fmt.Sprintf("The re-use of the deleted volume name failed in 'dm list' on node2 (after %d seconds)", deadline/time.Second)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
+			// success!
+			return
+		}
+	}
+
+}
+
 func TestDeletionSimple(t *testing.T) {
 	citools.TeardownFinishedTestRuns()
 
@@ -1695,8 +1757,7 @@ func TestDeletionSimple(t *testing.T) {
 		// configured above; the system should be in the process of
 		// cleaning up after the volume, but it should be fine to reuse
 		// the name by now.
-
-		checkDeletionWorked(t, fsname, 2*time.Second, node1, node2)
+		checkDeletionWorkedWithRetries(t, fsname, 20*time.Second, node1, node2)
 	})
 
 	t.Run("DeleteQuickly", func(t *testing.T) {

@@ -21,18 +21,22 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 	directoryPath := destPath[:strings.LastIndex(destPath, "/")]
 	err := os.MkdirAll(directoryPath, 0775)
 	if err != nil {
-		file.Response <- &types.Event{
+		e := types.Event{
 			Name: types.EventNameSaveFailed,
 			Args: &types.EventArgs{"err": fmt.Errorf("failed to create directory, error: %s", err)},
 		}
+		file.Response <- &e
+		log.WithFields(log.Fields{"event": e}).Error("s3 saveFile: backing off with error making directory")
 		return backoffState
 	}
 	out, err := os.Create(destPath)
 	if err != nil {
-		file.Response <- &types.Event{
+		e := types.Event{
 			Name: types.EventNameSaveFailed,
 			Args: &types.EventArgs{"err": fmt.Errorf("failed to create file, error: %s", err)},
 		}
+		file.Response <- &e
+		log.WithFields(log.Fields{"event": e}).Error("s3 saveFile: backing off with error creating file")
 		return backoffState
 	}
 
@@ -48,10 +52,12 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 
 	bytes, err := io.Copy(out, file.Contents)
 	if err != nil {
-		file.Response <- &types.Event{
+		e := types.Event{
 			Name: types.EventNameSaveFailed,
 			Args: &types.EventArgs{"err": fmt.Errorf("cannot to create a file, error: %s", err)},
 		}
+		file.Response <- &e
+		log.WithFields(log.Fields{"event": e}).Error("s3 saveFile: backing off with error writing file")
 		return backoffState
 	}
 	response, _ := f.snapshot(&types.Event{Name: "snapshot",
@@ -64,10 +70,12 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 			"upload.bytes": fmt.Sprintf("%d", bytes),
 		}}})
 	if response.Name != "snapshotted" {
-		file.Response <- &types.Event{
+		e := types.Event{
 			Name: types.EventNameSaveFailed,
 			Args: &types.EventArgs{"err": "file snapshot failed"},
 		}
+		file.Response <- &e
+		log.WithFields(log.Fields{"event": e}).Error("s3 saveFile: backing off with error snapshotting")
 		return backoffState
 	}
 
