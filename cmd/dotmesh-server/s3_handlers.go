@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -300,10 +302,10 @@ func (s *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, files
 }
 
 type ListBucketResult struct {
-	Name         string
-	Prefix       string
-	Contents     []types.ListFileItem
-	TotalResults int64
+	Name         string               `json:"name"`
+	Prefix       string               `json:"prefix"`
+	Contents     []types.ListFileItem `json:"contents"`
+	TotalResults int64                `json:"total_results"`
 }
 
 func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name string, filesystemId string, snapshotId string) {
@@ -323,22 +325,22 @@ func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name
 		mountPath := (*e.Args)["mount-path"].(string)
 
 		// what path are we starting at
-		path := req.URL.Query().Get("path")
+		prefix := req.URL.Query().Get("Prefix")
 		base := mountPath + "/__default__"
 
 		// setting default limit to 100 files
-		var limit int64 = 100
-		limitStr := req.URL.Query().Get("limit")
-		if limitStr != "" {
-			newLimit, err := strconv.Atoi(limitStr)
+		var maxKeys int64 = 100
+		maxKeysStr := req.URL.Query().Get("MaxKeys")
+		if maxKeysStr != "" {
+			newLimit, err := strconv.Atoi(maxKeysStr)
 			if err == nil {
-				limit = int64(newLimit)
+				maxKeys = int64(newLimit)
 			}
 		}
 
 		// default the page offset to 9
 		var page int64 = 0
-		pageStr := req.URL.Query().Get("page")
+		pageStr := req.URL.Query().Get("Page")
 		if pageStr != "" {
 			newPage, err := strconv.Atoi(pageStr)
 			if err == nil {
@@ -348,22 +350,26 @@ func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name
 
 		// default to recursive mode
 		var recursive = true
-		nonRecursiveStr := req.URL.Query().Get("nonRecursive")
+		nonRecursiveStr := req.URL.Query().Get("NonRecursive")
 		if nonRecursiveStr != "" {
 			recursive = false
 		}
 
 		// default to not showing directories in the results
 		var includeDirectories = false
-		includeDirectoriesStr := req.URL.Query().Get("includeDirectories")
+		includeDirectoriesStr := req.URL.Query().Get("IncludeDirectories")
 		if includeDirectoriesStr != "" {
 			includeDirectories = true
 		}
 
+		// default to returning the results as XML
+		// unless we ask for the format to be JSON
+		var format = req.URL.Query().Get("Format")
+
 		listFileRequest := types.ListFileRequest{
 			Base:               base,
-			Path:               path,
-			Limit:              limit,
+			Prefix:             prefix,
+			MaxKeys:            maxKeys,
 			Page:               page,
 			Recursive:          recursive,
 			IncludeDirectories: includeDirectories,
@@ -377,16 +383,35 @@ func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name
 
 		bucket := ListBucketResult{
 			Name:         name,
-			Prefix:       path,
+			Prefix:       prefix,
 			Contents:     listFilesResponse.Items,
 			TotalResults: listFilesResponse.TotalCount,
 		}
 
-		enc := xml.NewEncoder(resp)
-		err = enc.Encode(&bucket)
-		if err != nil {
-			http.Error(resp, fmt.Sprintf("failed to marshal response body: %s", err), 500)
+		if format == "json" {
+			resp.Header().Set("Content-Type", "application/json")
+			resp.WriteHeader(200)
+
+			// Set up the pipe to write data directly into the Reader.
+			pr, pw := io.Pipe()
+
+			// Write JSON-encoded data to the Writer end of the pipe.
+			// Write in a separate concurrent goroutine, and remember
+			// to Close the PipeWriter, to signal to the paired PipeReader
+			// that we’re done writing.
+			go func() {
+				pw.CloseWithError(json.NewEncoder(pw).Encode(bucket))
+			}()
+
+			io.Copy(resp, pr)
+		} else {
+			enc := xml.NewEncoder(resp)
+			err = enc.Encode(&bucket)
+			if err != nil {
+				http.Error(resp, fmt.Sprintf("failed to marshal response body: %s", err), 500)
+			}
 		}
+
 		return
 
 	case "no-snapshots-found":

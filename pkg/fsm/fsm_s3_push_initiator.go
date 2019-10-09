@@ -72,8 +72,8 @@ func s3PushInitiatorState(f *FsMachine) StateFn {
 
 		listKeysRequest := types.ListFileRequest{
 			Base:               pathToMount,
-			Path:               "",
-			Limit:              0,
+			Prefix:             "",
+			MaxKeys:            0,
 			Page:               0,
 			Recursive:          true,
 			IncludeDirectories: false,

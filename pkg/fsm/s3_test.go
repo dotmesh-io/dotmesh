@@ -34,8 +34,8 @@ func TestGetKeysForDirLimitRecursiveLimit3(t *testing.T) {
 
 	listKeysRequest := types.ListFileRequest{
 		Base:               tDir,
-		Path:               "",
-		Limit:              3,
+		Prefix:             "",
+		MaxKeys:            3,
 		Page:               0,
 		Recursive:          true,
 		IncludeDirectories: false,
@@ -61,8 +61,8 @@ func TestGetKeysForDirLimitRecursiveLimitNone(t *testing.T) {
 	defer os.RemoveAll(tDir)
 	listKeysRequest := types.ListFileRequest{
 		Base:               tDir,
-		Path:               "",
-		Limit:              0,
+		Prefix:             "",
+		MaxKeys:            0,
 		Page:               0,
 		Recursive:          true,
 		IncludeDirectories: false,
@@ -88,8 +88,8 @@ func TestGetKeysForDirLimitNotRecursiveLimitNone(t *testing.T) {
 	defer os.RemoveAll(tDir)
 	listKeysRequest := types.ListFileRequest{
 		Base:               tDir,
-		Path:               "",
-		Limit:              0,
+		Prefix:             "",
+		MaxKeys:            0,
 		Page:               0,
 		Recursive:          false,
 		IncludeDirectories: true,
@@ -118,8 +118,8 @@ func TestGetKeysForDirLimitSubPath(t *testing.T) {
 	//defer os.RemoveAll(tDir)
 	listKeysRequest := types.ListFileRequest{
 		Base:               tDir,
-		Path:               "2",
-		Limit:              0,
+		Prefix:             "2",
+		MaxKeys:            0,
 		Page:               0,
 		Recursive:          false,
 		IncludeDirectories: false,
@@ -148,8 +148,8 @@ func TestGetKeysForDirLimitSubPathLimit2Page2(t *testing.T) {
 	//defer os.RemoveAll(tDir)
 	listKeysRequest := types.ListFileRequest{
 		Base:               tDir,
-		Path:               "2",
-		Limit:              2,
+		Prefix:             "2",
+		MaxKeys:            2,
 		Page:               2,
 		Recursive:          false,
 		IncludeDirectories: false,

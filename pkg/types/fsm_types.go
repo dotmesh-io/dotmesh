@@ -29,8 +29,8 @@ type OutputFile struct {
 // request when calling s3.GetKeysForDirLimit
 type ListFileRequest struct {
 	Base               string // the root of the dot we are listing
-	Path               string // the sub path we are listing
-	Limit              int64  // limit the number of files we get in the response
+	Prefix             string // the sub path we are listing
+	MaxKeys            int64  // limit the number of files we get in the response
 	Page               int64  // what page we are viewing - we start listing at Page * Limit
 	Recursive          bool   // do we want to recurse into folders or just look at the given path
 	IncludeDirectories bool   // do we want directories to be included in the result or just files?
@@ -43,10 +43,10 @@ type ListFileResponse struct {
 
 // a single item in the results from s3.GetKeysForDirLimit
 type ListFileItem struct {
-	Key          string // the full path to the item (including folders)
-	LastModified time.Time
-	Size         int64
-	Directory    bool // is this item a directory or a file
+	Key          string    `json:"key"` // the full path to the item (including folders)
+	LastModified time.Time `json:"last_modified"`
+	Size         int64     `json:"size"`
+	Directory    bool      `json:"directory"` // is this item a directory or a file
 }
 
 type TransferUpdateKind int
