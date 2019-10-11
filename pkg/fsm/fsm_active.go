@@ -7,14 +7,22 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+func logNextState(from string) {
+	log.WithField("from", from).Debug("[activeState] moving to next state")
+}
+
 func activeState(f *FsMachine) StateFn {
 	f.transitionedTo("active", "waiting")
 	log.Printf("entering active state for %s", f.filesystemId)
 	select {
 	case file := <-f.fileInputIO:
-		return f.saveFile(file)
+		r := f.saveFile(file)
+		logNextState("fileInputIO")
+		return r
 	case file := <-f.fileOutputIO:
-		return f.readFile(file)
+		r := f.readFile(file)
+		logNextState("fileOutputIO")
+		return r
 	case e := <-f.innerRequests:
 		if e.Name == "delete" {
 			err := f.state.DeleteFilesystem(f.filesystemId)
@@ -28,6 +36,7 @@ func activeState(f *FsMachine) StateFn {
 					Name: "deleted",
 				}
 			}
+			logNextState("delete")
 			return nil
 		} else if e.Name == "predictSize" {
 
@@ -52,6 +61,7 @@ func activeState(f *FsMachine) StateFn {
 				}
 			}
 			f.transitionedTo("active", "predicted size")
+			logNextState("predictSize")
 			return activeState
 		} else if e.Name == "transfer" {
 
@@ -62,6 +72,7 @@ func activeState(f *FsMachine) StateFn {
 					Name: "cant-cast-transfer-request",
 					Args: &types.EventArgs{"err": err},
 				}
+				logNextState("transfer 1")
 				return backoffState
 			}
 			f.lastTransferRequest = transferRequest
@@ -71,14 +82,17 @@ func activeState(f *FsMachine) StateFn {
 					Name: "cant-cast-transfer-requestid",
 					Args: &types.EventArgs{"err": err},
 				}
+				logNextState("transfer 2")
 				return backoffState
 			}
 			f.lastTransferRequestId = transferRequestId
 
 			log.Printf("GOT TRANSFER REQUEST %+v", f.lastTransferRequest)
 			if f.lastTransferRequest.Direction == "push" {
+				logNextState("transfer push")
 				return pushInitiatorState
 			} else if f.lastTransferRequest.Direction == "pull" {
+				logNextState("transfer pull")
 				return pullInitiatorState
 			}
 		} else if e.Name == "s3-transfer" {
@@ -90,6 +104,7 @@ func activeState(f *FsMachine) StateFn {
 					Name: "s3-cant-cast-transfer-request",
 					Args: &types.EventArgs{"err": err},
 				}
+				logNextState("s3-transfer 1")
 				return backoffState
 			}
 			f.lastS3TransferRequest = transferRequest
@@ -99,14 +114,17 @@ func activeState(f *FsMachine) StateFn {
 					Name: "s3-cant-cast-transfer-requestid",
 					Args: &types.EventArgs{"err": err},
 				}
+				logNextState("s3-transfer 2")
 				return backoffState
 			}
 			f.lastTransferRequestId = transferRequestId
 
 			log.Printf("GOT S3 TRANSFER REQUEST %+v", f.lastS3TransferRequest)
 			if f.lastS3TransferRequest.Direction == "push" {
+				logNextState("s3-transfer push")
 				return s3PushInitiatorState
 			} else if f.lastS3TransferRequest.Direction == "pull" {
+				logNextState("s3-transfer pull")
 				return s3PullInitiatorState
 			}
 		} else if e.Name == "peer-transfer" {
@@ -118,6 +136,7 @@ func activeState(f *FsMachine) StateFn {
 					Name: "cant-cast-transfer-request",
 					Args: &types.EventArgs{"err": err},
 				}
+				logNextState("peer-transfer 1")
 				return backoffState
 			}
 			f.lastTransferRequest = transferRequest
@@ -127,14 +146,17 @@ func activeState(f *FsMachine) StateFn {
 					Name: "cant-cast-transfer-requestid",
 					Args: &types.EventArgs{"err": err},
 				}
+				logNextState("peer-transfer 2")
 				return backoffState
 			}
 			f.lastTransferRequestId = transferRequestId
 
 			log.Printf("GOT PEER TRANSFER REQUEST %+v", f.lastTransferRequest)
 			if f.lastTransferRequest.Direction == "push" {
+				logNextState("peer-transfer push")
 				return pushPeerState
 			} else if f.lastTransferRequest.Direction == "pull" {
+				logNextState("peer-transfer pull")
 				return pullPeerState
 			}
 		} else if e.Name == "move" {
@@ -148,6 +170,7 @@ func activeState(f *FsMachine) StateFn {
 					Name: "error-listing-containers-during-move",
 					Args: &types.EventArgs{"err": err},
 				}
+				logNextState("move 1")
 				return backoffState
 			}
 			if len(containers) > 0 {
@@ -156,26 +179,32 @@ func activeState(f *FsMachine) StateFn {
 					Name: "cannot-move-while-containers-running",
 					Args: &types.EventArgs{"containers": containers},
 				}
+				logNextState("move 2")
 				return backoffState
 			}
 			f.handoffRequest = e
+			logNextState("move")
 			return handoffState
 		} else if e.Name == "fork" {
 			response, state := f.fork(e)
 			f.innerResponses <- response
+			logNextState("fork")
 			return state
 		} else if e.Name == "diff" {
 			response, state := f.diff(e)
 			f.innerResponses <- response
+			logNextState("diff")
 			return state
 		} else if e.Name == "snapshot" {
 			response, state := f.snapshot(e)
 			f.innerResponses <- response
+			logNextState("snapshot")
 			return state
 		} else if e.Name == "mount-snapshot" {
 			snapId := (*e.Args)["snapId"].(string)
 			response, state := f.mountSnap(snapId, true)
 			f.innerResponses <- response
+			logNextState("mount-snapshot")
 			return state
 		} else if e.Name == "stash" {
 			snapshotId := (*e.Args)["snapshotId"].(string)
@@ -185,12 +214,14 @@ func activeState(f *FsMachine) StateFn {
 					Name: "failed-stash",
 					Args: &types.EventArgs{"err": err},
 				}
+				logNextState("stash 1")
 				return backoffState
 			}
 			f.innerResponses <- &types.Event{
 				Name: "stashed",
 				Args: &types.EventArgs{"NewBranchName": "TODO"},
 			}
+			logNextState("stash")
 			return discoveringState
 		} else if e.Name == "rollback" {
 			// roll back to given snapshot
@@ -224,6 +255,7 @@ func activeState(f *FsMachine) StateFn {
 					Name: "failed-stop-containers-during-rollback",
 					Args: &types.EventArgs{"err": err},
 				}
+				logNextState("rollback 1")
 				return backoffState
 			}
 			output, err := f.zfs.Rollback(f.filesystemId, rollbackTo)
@@ -232,6 +264,7 @@ func activeState(f *FsMachine) StateFn {
 					Name: "failed-rollback",
 					Args: &types.EventArgs{"err": err, "combined-output": string(output)},
 				}
+				logNextState("rollback 2")
 				return backoffState
 			}
 			if sliceIndex > 0 {
@@ -249,6 +282,7 @@ func activeState(f *FsMachine) StateFn {
 						Name: "failed-rollback-snapshots-changed",
 						Args: &types.EventArgs{"err": err},
 					}
+					logNextState("rollback 3")
 					return backoffState
 				}
 				log.Printf("snapshots after %+v", f.filesystem.Snapshots)
@@ -267,12 +301,14 @@ func activeState(f *FsMachine) StateFn {
 					Name: "failed-start-containers-during-rollback",
 					Args: &types.EventArgs{"err": err},
 				}
+				logNextState("rollback 4")
 				return backoffState
 			}
 			f.innerResponses <- &types.Event{
 				Name: "rolled-back",
 			}
 			f.transitionedTo("active", "rolled back")
+			logNextState("rollback")
 			return activeState
 		} else if e.Name == "clone" {
 			// clone a new filesystem from the given snapshot, then spin off a
@@ -297,6 +333,7 @@ func activeState(f *FsMachine) StateFn {
 					Name: "failed-clone",
 					Args: &types.EventArgs{"err": err, "combined-output": string(output)},
 				}
+				logNextState("clone 1")
 				return backoffState
 			}
 
@@ -305,6 +342,7 @@ func activeState(f *FsMachine) StateFn {
 				f.innerResponses <- &types.Event{
 					Name: errorName, Args: &types.EventArgs{"err": err},
 				}
+				logNextState("clone 2")
 				return backoffState
 			}
 
@@ -313,6 +351,7 @@ func activeState(f *FsMachine) StateFn {
 				Args: &types.EventArgs{"newFilesystemId": newCloneFilesystemId},
 			}
 			f.transitionedTo("active", "cloned")
+			logNextState("clone")
 			return activeState
 		} else if e.Name == "mount" {
 			f.innerResponses <- &types.Event{
@@ -320,6 +359,7 @@ func activeState(f *FsMachine) StateFn {
 				Args: &types.EventArgs{},
 			}
 			f.transitionedTo("active", "mounted")
+			logNextState("mount")
 			return activeState
 		} else if e.Name == "unmount" {
 			// fail if any containers running
@@ -330,6 +370,7 @@ func activeState(f *FsMachine) StateFn {
 					Name: "error-listing-containers-during-unmount",
 					Args: &types.EventArgs{"err": err},
 				}
+				logNextState("unmount 1")
 				return backoffState
 			}
 			if len(containers) > 0 {
@@ -338,10 +379,12 @@ func activeState(f *FsMachine) StateFn {
 					Name: "cannot-unmount-while-running-containers",
 					Args: &types.EventArgs{"containers": containers},
 				}
+				logNextState("unmount 2")
 				return backoffState
 			}
 			response, state := f.unmount()
 			f.innerResponses <- response
+			logNextState("unmount")
 			return state
 		} else {
 			f.innerResponses <- &types.Event{
@@ -353,5 +396,6 @@ func activeState(f *FsMachine) StateFn {
 	}
 	// something unknown happened, go and check the state of the system after a
 	// short timeout to avoid busylooping
+	logNextState("fallthrough")
 	return backoffState
 }
