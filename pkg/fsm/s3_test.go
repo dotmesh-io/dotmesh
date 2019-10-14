@@ -1,58 +1,171 @@
 package fsm
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
-	"path/filepath"
 	"testing"
+
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 )
 
-func TestgetKeysForDirLimit3(t *testing.T) {
+func setupTestFiles() (string, error) {
 	tDir, err := ioutil.TempDir(os.TempDir(), "")
 	if err != nil {
-		t.Fatalf("failed to create dir: %s", err)
+		return "", err
 	}
-	defer os.RemoveAll(tDir)
-
-	ioutil.WriteFile(filepath.Join(tDir, "root-1.txt"), []byte("X"), os.ModePerm)
-	ioutil.WriteFile(filepath.Join(tDir, "root-2.txt"), []byte("X"), os.ModePerm)
-	ioutil.WriteFile(filepath.Join(tDir, "root-3.txt"), []byte("X"), os.ModePerm)
-	ioutil.WriteFile(filepath.Join(tDir, "root-4.txt"), []byte("X"), os.ModePerm)
-	ioutil.WriteFile(filepath.Join(tDir, "/dir/level-1-1.txt"), []byte("X"), os.ModePerm)
-	ioutil.WriteFile(filepath.Join(tDir, "/dir/level-1-2.txt"), []byte("X"), os.ModePerm)
-	ioutil.WriteFile(filepath.Join(tDir, "/dir/level-1-3.txt"), []byte("X"), os.ModePerm)
-
-	files, dirFilesCount, size, err := GetKeysForDirLimit(tDir, "/", 3)
-	if err != nil {
-		t.Fatalf("failed to get dir limit: %s", err)
+	for x := 0; x < 10; x++ {
+		dir := fmt.Sprintf("%s/%d", tDir, x)
+		os.Mkdir(dir, os.ModePerm)
+		for y := 0; y < 10; y++ {
+			file := fmt.Sprintf("%s/%d.txt", dir, y)
+			ioutil.WriteFile(file, []byte("X"), os.ModePerm)
+		}
 	}
-	if len(files) != 3 {
-		t.Errorf("expected to get 3 files returned, got: %d", len(files))
-	}
-	t.Logf("files: %d, files count: %d, size: %d", len(files), dirFilesCount, size)
+	return tDir, nil
 }
 
-func TestgetKeysForDirLimitNoLimit(t *testing.T) {
-	tDir, err := ioutil.TempDir(os.TempDir(), "")
+func TestGetKeysForDirLimitRecursiveLimit3(t *testing.T) {
+	tDir, err := setupTestFiles()
 	if err != nil {
 		t.Fatalf("failed to create dir: %s", err)
 	}
 	defer os.RemoveAll(tDir)
 
-	ioutil.WriteFile(filepath.Join(tDir, "root-1.txt"), []byte("X"), os.ModePerm)
-	ioutil.WriteFile(filepath.Join(tDir, "root-2.txt"), []byte("X"), os.ModePerm)
-	ioutil.WriteFile(filepath.Join(tDir, "root-3.txt"), []byte("X"), os.ModePerm)
-	ioutil.WriteFile(filepath.Join(tDir, "root-4.txt"), []byte("X"), os.ModePerm)
-	ioutil.WriteFile(filepath.Join(tDir, "/dir/level-1-1.txt"), []byte("X"), os.ModePerm)
-	ioutil.WriteFile(filepath.Join(tDir, "/dir/level-1-2.txt"), []byte("X"), os.ModePerm)
-	ioutil.WriteFile(filepath.Join(tDir, "/dir/level-1-3.txt"), []byte("X"), os.ModePerm)
-
-	files, dirFilesCount, size, err := GetKeysForDirLimit(tDir, "/", 0)
+	listKeysRequest := types.ListFileRequest{
+		Base:               tDir,
+		Prefix:             "",
+		MaxKeys:            3,
+		Page:               0,
+		Recursive:          true,
+		IncludeDirectories: false,
+	}
+	listKeysResponse, err := GetKeysForDirLimit(listKeysRequest)
 	if err != nil {
 		t.Fatalf("failed to get dir limit: %s", err)
 	}
-	if len(files) != 7 {
-		t.Errorf("expected to get 7 files returned, got: %d", len(files))
+	if len(listKeysResponse.Items) != 3 {
+		t.Errorf("expected to get 3 files returned, got: %d", len(listKeysResponse.Items))
 	}
-	t.Logf("files: %d, files count: %d, size: %d", len(files), dirFilesCount, size)
+	if listKeysResponse.TotalCount != 100 {
+		t.Errorf("expected total items to be 100: %d", listKeysResponse.TotalCount)
+	}
+	t.Logf("files: %d, total files count: %d", len(listKeysResponse.Items), listKeysResponse.TotalCount)
+}
+
+func TestGetKeysForDirLimitRecursiveLimitNone(t *testing.T) {
+	tDir, err := setupTestFiles()
+	if err != nil {
+		t.Fatalf("failed to create dir: %s", err)
+	}
+	defer os.RemoveAll(tDir)
+	listKeysRequest := types.ListFileRequest{
+		Base:               tDir,
+		Prefix:             "",
+		MaxKeys:            0,
+		Page:               0,
+		Recursive:          true,
+		IncludeDirectories: false,
+	}
+	listKeysResponse, err := GetKeysForDirLimit(listKeysRequest)
+	if err != nil {
+		t.Fatalf("failed to get dir limit: %s", err)
+	}
+	if len(listKeysResponse.Items) != 100 {
+		t.Errorf("expected to get 100 files returned, got: %d", len(listKeysResponse.Items))
+	}
+	if listKeysResponse.TotalCount != 100 {
+		t.Errorf("expected total items to be 100: %d", listKeysResponse.TotalCount)
+	}
+	t.Logf("files: %d, total files count: %d", len(listKeysResponse.Items), listKeysResponse.TotalCount)
+}
+
+func TestGetKeysForDirLimitNotRecursiveLimitNone(t *testing.T) {
+	tDir, err := setupTestFiles()
+	if err != nil {
+		t.Fatalf("failed to create dir: %s", err)
+	}
+	defer os.RemoveAll(tDir)
+	listKeysRequest := types.ListFileRequest{
+		Base:               tDir,
+		Prefix:             "",
+		MaxKeys:            0,
+		Page:               0,
+		Recursive:          false,
+		IncludeDirectories: true,
+	}
+	listKeysResponse, err := GetKeysForDirLimit(listKeysRequest)
+	if err != nil {
+		t.Fatalf("failed to get dir limit: %s", err)
+	}
+	if len(listKeysResponse.Items) != 10 {
+		t.Errorf("expected to get 10 folders returned, got: %d", len(listKeysResponse.Items))
+	}
+	if listKeysResponse.Items[0].Directory != true {
+		t.Errorf("expected first item to be a directory")
+	}
+	if listKeysResponse.TotalCount != 10 {
+		t.Errorf("expected total items to be 10: %d", listKeysResponse.TotalCount)
+	}
+	t.Logf("files: %d, total files count: %d", len(listKeysResponse.Items), listKeysResponse.TotalCount)
+}
+
+func TestGetKeysForDirLimitSubPath(t *testing.T) {
+	tDir, err := setupTestFiles()
+	if err != nil {
+		t.Fatalf("failed to create dir: %s", err)
+	}
+	//defer os.RemoveAll(tDir)
+	listKeysRequest := types.ListFileRequest{
+		Base:               tDir,
+		Prefix:             "2",
+		MaxKeys:            0,
+		Page:               0,
+		Recursive:          false,
+		IncludeDirectories: false,
+	}
+	listKeysResponse, err := GetKeysForDirLimit(listKeysRequest)
+	if err != nil {
+		t.Fatalf("failed to get dir limit: %s", err)
+	}
+	if len(listKeysResponse.Items) != 10 {
+		t.Errorf("expected to get 10 files returned, got: %d", len(listKeysResponse.Items))
+	}
+	if listKeysResponse.Items[0].Key != "2/0.txt" {
+		t.Errorf("expected first item to be 2/0.txt: %s", listKeysResponse.Items[0].Key)
+	}
+	if listKeysResponse.TotalCount != 10 {
+		t.Errorf("expected total items to be 10: %d", listKeysResponse.TotalCount)
+	}
+	t.Logf("files: %d, total files count: %d", len(listKeysResponse.Items), listKeysResponse.TotalCount)
+}
+
+func TestGetKeysForDirLimitSubPathLimit2Page2(t *testing.T) {
+	tDir, err := setupTestFiles()
+	if err != nil {
+		t.Fatalf("failed to create dir: %s", err)
+	}
+	//defer os.RemoveAll(tDir)
+	listKeysRequest := types.ListFileRequest{
+		Base:               tDir,
+		Prefix:             "2",
+		MaxKeys:            2,
+		Page:               2,
+		Recursive:          false,
+		IncludeDirectories: false,
+	}
+	listKeysResponse, err := GetKeysForDirLimit(listKeysRequest)
+	if err != nil {
+		t.Fatalf("failed to get dir limit: %s", err)
+	}
+	if len(listKeysResponse.Items) != 2 {
+		t.Errorf("expected to get 2 files returned, got: %d", len(listKeysResponse.Items))
+	}
+	if listKeysResponse.Items[0].Key != "2/4.txt" {
+		t.Errorf("expected first item to be 2/4.txt: %s", listKeysResponse.Items[0].Key)
+	}
+	if listKeysResponse.TotalCount != 10 {
+		t.Errorf("expected total items to be 10: %d", listKeysResponse.TotalCount)
+	}
+	t.Logf("files: %d, total files count: %d", len(listKeysResponse.Items), listKeysResponse.TotalCount)
 }

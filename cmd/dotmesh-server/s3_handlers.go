@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -211,8 +213,9 @@ func (s *S3Handler) readFile(resp http.ResponseWriter, req *http.Request, filesy
 		return
 	}
 
-	if fsm.GetCurrentState() != "active" {
-		http.Error(resp, "please try again later", http.StatusServiceUnavailable)
+	state := fsm.GetCurrentState()
+	if state != "active" {
+		http.Error(resp, fmt.Sprintf("please try again later, state was %s", state), http.StatusServiceUnavailable)
 		return
 	}
 
@@ -267,8 +270,9 @@ func (s *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, files
 		return
 	}
 
-	if fsm.GetCurrentState() != "active" {
-		http.Error(resp, "please try again later", http.StatusServiceUnavailable)
+	state := fsm.GetCurrentState()
+	if state != "active" {
+		http.Error(resp, fmt.Sprintf("please try again later, state was %s", state), http.StatusServiceUnavailable)
 		return
 	}
 
@@ -298,15 +302,10 @@ func (s *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, files
 }
 
 type ListBucketResult struct {
-	Name     string
-	Prefix   string
-	Contents []BucketObject
-}
-
-type BucketObject struct {
-	Key          string
-	LastModified time.Time
-	Size         int64
+	Name         string               `json:"name"`
+	Prefix       string               `json:"prefix"`
+	Contents     []types.ListFileItem `json:"contents"`
+	TotalResults int64                `json:"total_results"`
 }
 
 func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name string, filesystemId string, snapshotId string) {
@@ -323,43 +322,96 @@ func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name
 
 	switch e.Name {
 	case "mounted":
-		result := (*e.Args)["mount-path"].(string)
+		mountPath := (*e.Args)["mount-path"].(string)
+
+		// what path are we starting at
+		prefix := req.URL.Query().Get("Prefix")
+		base := mountPath + "/__default__"
 
 		// setting default limit to 100 files
-		var limit int64 = 100
-
-		limitStr := req.URL.Query().Get("limit")
-		if limitStr != "" {
-			newLimit, err := strconv.Atoi(limitStr)
+		var maxKeys int64 = 100
+		maxKeysStr := req.URL.Query().Get("MaxKeys")
+		if maxKeysStr != "" {
+			newLimit, err := strconv.Atoi(maxKeysStr)
 			if err == nil {
-				limit = int64(newLimit)
+				maxKeys = int64(newLimit)
 			}
 		}
 
-		keys, _, _, err := fsm.GetKeysForDirLimit(result+"/__default__", "", limit)
+		// default the page offset to 9
+		var page int64 = 0
+		pageStr := req.URL.Query().Get("Page")
+		if pageStr != "" {
+			newPage, err := strconv.Atoi(pageStr)
+			if err == nil {
+				page = int64(newPage)
+			}
+		}
+
+		// default to recursive mode
+		var recursive = true
+		nonRecursiveStr := req.URL.Query().Get("NonRecursive")
+		if nonRecursiveStr != "" {
+			recursive = false
+		}
+
+		// default to not showing directories in the results
+		var includeDirectories = false
+		includeDirectoriesStr := req.URL.Query().Get("IncludeDirectories")
+		if includeDirectoriesStr != "" {
+			includeDirectories = true
+		}
+
+		// default to returning the results as XML
+		// unless we ask for the format to be JSON
+		var format = req.URL.Query().Get("Format")
+
+		listFileRequest := types.ListFileRequest{
+			Base:               base,
+			Prefix:             prefix,
+			MaxKeys:            maxKeys,
+			Page:               page,
+			Recursive:          recursive,
+			IncludeDirectories: includeDirectories,
+		}
+
+		listFilesResponse, err := fsm.GetKeysForDirLimit(listFileRequest)
 		if err != nil {
 			http.Error(resp, "failed to get keys for dir: "+err.Error(), 500)
 			return
 		}
 
 		bucket := ListBucketResult{
-			Name:     name,
-			Contents: []BucketObject{},
-		}
-		for key, info := range keys {
-			object := BucketObject{
-				Key:          key,
-				Size:         info.Size(),
-				LastModified: info.ModTime(),
-			}
-			bucket.Contents = append(bucket.Contents, object)
+			Name:         name,
+			Prefix:       prefix,
+			Contents:     listFilesResponse.Items,
+			TotalResults: listFilesResponse.TotalCount,
 		}
 
-		enc := xml.NewEncoder(resp)
-		err = enc.Encode(&bucket)
-		if err != nil {
-			http.Error(resp, fmt.Sprintf("failed to marshal response body: %s", err), 500)
+		if format == "json" {
+			resp.Header().Set("Content-Type", "application/json")
+			resp.WriteHeader(200)
+
+			// Set up the pipe to write data directly into the Reader.
+			pr, pw := io.Pipe()
+
+			// Write JSON-encoded data to the Writer end of the pipe.
+			// Write in a separate concurrent goroutine, and remember
+			// to Close the PipeWriter, to signal to the paired PipeReader
+			// that we’re done writing.
+			go func() {
+				pw.CloseWithError(json.NewEncoder(pw).Encode(bucket))
+			}()
+
+			io.Copy(resp, pr)
+		} else {
+			enc := xml.NewEncoder(resp)
+			err = enc.Encode(&bucket)
+			if err != nil {
+				http.Error(resp, fmt.Sprintf("failed to marshal response body: %s", err), 500)
+			}
 		}
+
 		return
 
 	case "no-snapshots-found":
