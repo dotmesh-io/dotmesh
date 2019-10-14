@@ -84,12 +84,18 @@ func (f *FsMachine) readFile(file *types.OutputFile) StateFn {
 	// create the default paths
 	sourcePath := fmt.Sprintf("%s/%s/%s", file.SnapshotMountPath, "__default__", file.Filename)
 
+	l := log.WithFields(log.Fields{
+		"filename":   file.Filename,
+		"sourcePath": sourcePath,
+	})
+
 	fi, err := os.Stat(sourcePath)
 	if err != nil {
 		file.Response <- &types.Event{
 			Name: types.EventNameReadFailed,
 			Args: &types.EventArgs{"err": fmt.Errorf("failed to stat %s, error: %s", file.Filename, err)},
 		}
+		l.WithError(err).Error("[readFile] Error statting")
 		return backoffState
 	}
 
@@ -103,6 +109,7 @@ func (f *FsMachine) readFile(file *types.OutputFile) StateFn {
 			Name: types.EventNameReadFailed,
 			Args: &types.EventArgs{"err": fmt.Errorf("failed to read file, error: %s", err)},
 		}
+		l.WithError(err).Error("[readFile] Error opening")
 		return backoffState
 	}
 	defer func() {
@@ -120,6 +127,7 @@ func (f *FsMachine) readFile(file *types.OutputFile) StateFn {
 			Name: types.EventNameReadFailed,
 			Args: &types.EventArgs{"err": fmt.Errorf("cannot stream file, error: %s", err)},
 		}
+		l.WithError(err).Error("[readFile] Error reading")
 		return backoffState
 	}
 
@@ -135,20 +143,28 @@ func (f *FsMachine) readDirectory(file *types.OutputFile) StateFn {
 
 	dirPath := filepath.Join(file.SnapshotMountPath, "__default__", file.Filename)
 
+	l := log.WithFields(log.Fields{
+		"filename": file.Filename,
+		"dirPath":  dirPath,
+	})
+
 	stat, err := os.Stat(dirPath)
 	if err != nil {
 		file.Response <- types.NewErrorEvent(types.EventNameReadFailed, fmt.Errorf("failed to stat dir '%s', error: %s ", file.Filename, err))
+		l.WithError(err).Error("[readDirectory] Error statting")
 		return backoffState
 	}
 
 	if !stat.IsDir() {
 		file.Response <- types.NewErrorEvent(types.EventNameReadFailed, fmt.Errorf("path '%s' is not a directory, error: %s ", file.Filename, err))
+		l.WithError(err).Error("[readDirectory] It isn't a directory")
 		return backoffState
 	}
 
 	err = archiver.NewTar().ArchiveToStream(file.Contents, []string{dirPath})
 	if err != nil {
 		file.Response <- types.NewErrorEvent(types.EventNameReadFailed, fmt.Errorf("path '%s' tar failed, error: %s ", file.Filename, err))
+		l.WithError(err).Error("[readDirectory] Cannot create tar stream")
 		return backoffState
 	}
 
