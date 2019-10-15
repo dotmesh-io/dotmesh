@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -63,6 +64,7 @@ type zfs struct {
 	// not sure if this is needed
 	mountZFS string
 	poolId   string
+	diffMu   sync.Mutex
 }
 
 func NewZFS(zfsPath, zpoolPath, poolName, mountZFS string) (ZFS, error) {
@@ -871,6 +873,8 @@ func (z *zfs) DestroyTmpSnapIfExists(filesystemID string) error {
 }
 
 func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types.ZFSFileDiff, error) {
+	z.diffMu.Lock()
+	defer z.diffMu.Unlock()
 	/*
 		Diff the default subdot of a given dot against the latest commit on
 		that dot.
@@ -880,7 +884,6 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 		   sometimes giving us a commit id which doesn't exist on the dot --
 		   possibly it existed on a fork origin.)
 		1. the snapshotOrFilesystem arg is ignored.
-		2. this function should not be run in parallel with itself.
 	*/
 
 	// NB: DiscoverSystem ignores the tmpSnapshotName
