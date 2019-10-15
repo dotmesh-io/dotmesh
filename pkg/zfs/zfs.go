@@ -50,7 +50,7 @@ type ZFS interface {
 	SetCanmount(filesystemId, snapshotId string) ([]byte, error)
 	Mount(filesystemId, snapshotId string, options string, mountPath string) ([]byte, error)
 	Fork(filesystemId, latestSnapshot, forkFilesystemId string) error
-	Diff(filesystemId, snapshot, snapshotOrFilesystem string) ([]types.ZFSFileDiff, error)
+	Diff(filesystemId string) ([]types.ZFSFileDiff, error)
 	// LastModified returns last modified temp snapshot, must be called after Diff
 	LastModified(filesystemID string) (*types.LastModified, error)
 	DestroyTmpSnapIfExists(filesystemId string) error
@@ -908,7 +908,7 @@ func parseSnapshotCreationTime(commandOutput string) (*time.Time, error) {
 	return &t, err
 }
 
-func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types.ZFSFileDiff, error) {
+func (z *zfs) Diff(filesystemID string) ([]types.ZFSFileDiff, error) {
 
 	/*
 		Diff the default subdot of a given dot against the latest commit on
@@ -930,7 +930,7 @@ func (z *zfs) Diff(filesystemID, snapshot, snapshotOrFilesystem string) ([]types
 	if len(filesystemInfo.Snapshots) == 0 {
 		return nil, fmt.Errorf("cannot diff against a filesystem with no snapshots")
 	}
-	snapshot = filesystemInfo.Snapshots[len(filesystemInfo.Snapshots)-1].Id
+	snapshot := filesystemInfo.Snapshots[len(filesystemInfo.Snapshots)-1].Id
 
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Minute)
 	defer cancel()
