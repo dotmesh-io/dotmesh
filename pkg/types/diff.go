@@ -60,8 +60,7 @@ func DecodeZFSFileDiff(data string) ([]ZFSFileDiff, error) {
 }
 
 type RPCDiffRequest struct {
-	FilesystemID string //
-	SnapshotID   string // snapshot (defaults to latest)
+	FilesystemID string
 }
 
 type RPCDiffResponse struct {
