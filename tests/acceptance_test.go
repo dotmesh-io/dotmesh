@@ -1553,6 +1553,9 @@ func checkDeletionWorked(t *testing.T, fsname string, delay time.Duration, node1
 	st = citools.OutputFromRunOnNode(t, node2, "dm list")
 	if strings.Contains(st, fsname) {
 		t.Error(fmt.Sprintf("The volume is still in 'dm list' on node2 (after %d seconds)", delay/time.Second))
+		t.Errorf("dm list: %s", st)
+		time.Sleep(delay)
+		t.Errorf("dm list again: %s", st)
 		return
 	}
 
