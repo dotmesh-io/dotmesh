@@ -94,9 +94,16 @@ func (f *FsMachine) readFile(file *types.OutputFile) StateFn {
 
 	fi, err := os.Stat(sourcePath)
 	if err != nil {
-		file.Response <- &types.Event{
-			Name: types.EventNameFileNotFound,
-			Args: &types.EventArgs{"err": fmt.Errorf("failed to stat %s, error: %s", file.Filename, err)},
+		if os.IsNotExist(err) {
+			file.Response <- &types.Event{
+				Name: types.EventNameFileNotFound,
+				Args: &types.EventArgs{"err": fmt.Errorf("failed to stat %s, error: %s", file.Filename, err)},
+			}
+		} else {
+			file.Response <- &types.Event{
+				Name: types.EventNameReadFailed,
+				Args: &types.EventArgs{"err": fmt.Errorf("failed to stat %s, error: %s", file.Filename, err)},
+			}
 		}
 		return backoffState
 	}
@@ -145,7 +152,11 @@ func (f *FsMachine) readDirectory(file *types.OutputFile) StateFn {
 
 	stat, err := os.Stat(dirPath)
 	if err != nil {
-		file.Response <- types.NewErrorEvent(types.EventNameFileNotFound, fmt.Errorf("failed to stat dir '%s', error: %s ", file.Filename, err))
+		if os.IsNotExist(err) {
+			file.Response <- types.NewErrorEvent(types.EventNameFileNotFound, fmt.Errorf("failed to stat dir '%s', error: %s ", file.Filename, err))
+		} else {
+			file.Response <- types.NewErrorEvent(types.EventNameReadFailed, fmt.Errorf("failed to stat dir '%s', error: %s ", file.Filename, err))
+		}
 		return backoffState
 	}
 

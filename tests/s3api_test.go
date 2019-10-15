@@ -341,7 +341,7 @@ func TestS3Api(t *testing.T) {
 			t.Errorf("expected file contents 'helloworld1', got: '%s'", string(bts))
 		}
 
-		s3Endpoint2 = fmt.Sprintf("http://%s:32607/s3/admin:%s/snapshot/%s/nonexistant", host.IP, dotName, firstCommitId)
+		s3Endpoint2 := fmt.Sprintf("http://%s:32607/s3/admin:%s/snapshot/%s/nonexistant", host.IP, dotName, firstCommitId)
 
 		t.Logf("running (nonexistant directory): '%s'", s3Endpoint2)
 		_, status, err := call("GET", s3Endpoint2, host, nil)
