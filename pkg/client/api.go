@@ -1264,3 +1264,9 @@ func (dm *DotmeshAPI) DiffFromCommit(namespace, name, commitID string) ([]types.
 
 	return res, nil
 }
+
+func (dm *DotmeshAPI) LastModified(namespace, name string) (*types.LastModified, error) {
+	var lastModified types.LastModified
+	err := dm.CallRemote(context.Background(), "DotmeshRPC.LastModified", &types.VolumeName{Namespace: namespace, Name: name}, &lastModified)
+	return &lastModified, err
+}
