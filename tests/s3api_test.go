@@ -207,6 +207,15 @@ func TestS3Api(t *testing.T) {
 		if !strings.Contains(respBodySecond, expected2) {
 			t.Errorf("The second commit did not contain the correct file data (expected '%s', got: '%s')", expected2, respBodySecond)
 		}
+
+		t.Logf("running (nonexistant file): '%s'", fmt.Sprintf("http://127.0.0.1:32607/s3/admin:%s/snapshot/%s/nonexistant.txt", dotName, secondCommitId))
+		_, statusThird, err := call("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/nonexistant.txt", dotName, secondCommitId), host, nil)
+		if err != nil {
+			t.Errorf("S3 request failed, error: %s", err)
+		}
+		if statusThird != 404 {
+			t.Errorf("unexpected status code: %d", status)
+		}
 	})
 
 	t.Run("ReadFileAtSnapshotEmpty", func(t *testing.T) { // FIX
@@ -330,6 +339,17 @@ func TestS3Api(t *testing.T) {
 		}
 		if !strings.Contains(string(bts), "helloworld1") {
 			t.Errorf("expected file contents 'helloworld1', got: '%s'", string(bts))
+		}
+
+		s3Endpoint2 = fmt.Sprintf("http://%s:32607/s3/admin:%s/snapshot/%s/nonexistant", host.IP, dotName, firstCommitId)
+
+		t.Logf("running (nonexistant directory): '%s'", s3Endpoint2)
+		_, status, err := call("GET", s3Endpoint2, host, nil)
+		if err != nil {
+			t.Errorf("S3 request failed, error: %s", err)
+		}
+		if status != 404 {
+			t.Errorf("unexpected status code: %d", status)
 		}
 	})
 }

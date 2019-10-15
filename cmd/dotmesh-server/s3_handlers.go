@@ -249,6 +249,13 @@ func (s *S3Handler) readFile(resp http.ResponseWriter, req *http.Request, filesy
 				return
 			}
 			http.Error(resp, "read failed, could not retrieve actual error", 500)
+		case types.EventNameFileNotFound:
+			err := result.Error()
+			if err != nil {
+				http.Error(resp, err.Error(), 404)
+				return
+			}
+			http.Error(resp, "file not found, could not retrieve actual error", 404)
 		default:
 			resp.WriteHeader(200)
 		}

@@ -245,10 +245,11 @@ func (p Prelude) String() string {
 }
 
 const (
-	EventNameSaveFailed  = "save-failed"
-	EventNameSaveSuccess = "save-success"
-	EventNameReadFailed  = "read-failed"
-	EventNameReadSuccess = "read-success"
+	EventNameSaveFailed   = "save-failed"
+	EventNameSaveSuccess  = "save-success"
+	EventNameReadFailed   = "read-failed"
+	EventNameReadSuccess  = "read-success"
+	EventNameFileNotFound = "file-not-found"
 )
 
 type MountCommitRequest struct {
