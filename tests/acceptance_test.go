@@ -1609,8 +1609,6 @@ func checkDeletionWorkedWithRetries(t *testing.T, fsname string, deadline time.D
 				errStr = fmt.Sprintf("The volume is still in 'dm list' on node2 (after %d seconds)", deadline/time.Second)
 
 				t.Errorf("dm list: %s", st)
-				time.Sleep(10 * time.Second)
-				t.Errorf("dm list again: %s", st)
 
 				time.Sleep(1 * time.Second)
 				continue
