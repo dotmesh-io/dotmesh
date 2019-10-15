@@ -14,12 +14,7 @@ func (f *FsMachine) diff(e *types.Event) (responseEvent *types.Event, nextState 
 		return types.NewErrorEvent("cannot-diff", fmt.Errorf("filesystem_id not specified")), activeState
 	}
 
-	snapshotID, ok := getStringVal(*e.Args, "snapshot_id")
-	if !ok {
-		return types.NewErrorEvent("cannot-diff", fmt.Errorf("snapshot_id not specified")), activeState
-	}
-
-	diffFiles, err := f.zfs.Diff(e.FilesystemID, snapshotID, e.FilesystemID)
+	diffFiles, err := f.zfs.Diff(e.FilesystemID)
 	if err != nil {
 		return types.NewErrorEvent("zfs-diff-failed", fmt.Errorf("diff failed: %s", err)), activeState
 	}
