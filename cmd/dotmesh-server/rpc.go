@@ -3007,6 +3007,16 @@ func (d *DotmeshRPC) RestoreEtcd(r *http.Request, args *struct {
 	return nil
 }
 
+func (d *DotmeshRPC) LastModified(r *http.Request, q *types.RPCLastModifiedRequest, result *types.LastModified) error {
+	lastModified, err := d.state.zfs.LastModified(q.FilesystemID)
+	if err != nil {
+		return fmt.Errorf("failed to get last modified time: %s", err)
+	}
+
+	*result = *lastModified
+	return nil
+}
+
 func (d *DotmeshRPC) Diff(r *http.Request, q *types.RPCDiffRequest, result *types.RPCDiffResponse) error {
 
 	snapshots, err := d.state.SnapshotsForCurrentMaster(q.FilesystemID)
