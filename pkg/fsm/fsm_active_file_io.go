@@ -17,7 +17,12 @@ import (
 func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 	// create the default paths
 	destPath := fmt.Sprintf("%s/%s/%s", utils.Mnt(f.filesystemId), "__default__", file.Filename)
-	log.Printf("Saving file to %s", destPath)
+
+	l := log.WithFields(log.Fields{
+		"filename": file.Filename,
+		"destPath": destPath,
+	})
+
 	directoryPath := destPath[:strings.LastIndex(destPath, "/")]
 	err := os.MkdirAll(directoryPath, 0775)
 	if err != nil {
@@ -25,8 +30,8 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 			Name: types.EventNameSaveFailed,
 			Args: &types.EventArgs{"err": fmt.Errorf("failed to create directory, error: %s", err)},
 		}
+		l.WithField("directoryPath", directoryPath).WithError(err).Error("[saveFile] Error creating directory")
 		file.Response <- &e
-		log.WithFields(log.Fields{"event": e}).Error("s3 saveFile: backing off with error making directory")
 		return backoffState
 	}
 	out, err := os.Create(destPath)
@@ -35,8 +40,8 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 			Name: types.EventNameSaveFailed,
 			Args: &types.EventArgs{"err": fmt.Errorf("failed to create file, error: %s", err)},
 		}
+		l.WithError(err).Error("[saveFile] Error creating file")
 		file.Response <- &e
-		log.WithFields(log.Fields{"event": e}).Error("s3 saveFile: backing off with error creating file")
 		return backoffState
 	}
 
@@ -56,8 +61,8 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 			Name: types.EventNameSaveFailed,
 			Args: &types.EventArgs{"err": fmt.Errorf("cannot to create a file, error: %s", err)},
 		}
+		l.WithError(err).Error("[saveFile] Error writing file")
 		file.Response <- &e
-		log.WithFields(log.Fields{"event": e}).Error("s3 saveFile: backing off with error writing file")
 		return backoffState
 	}
 	response, _ := f.snapshot(&types.Event{Name: "snapshot",
@@ -74,8 +79,11 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 			Name: types.EventNameSaveFailed,
 			Args: &types.EventArgs{"err": "file snapshot failed"},
 		}
+		l.WithFields(log.Fields{
+			"responseName": response.Name,
+			"responseArgs": fmt.Sprintf("%#v", *(response.Args)),
+		}).Error("[saveFile] Error committing")
 		file.Response <- &e
-		log.WithFields(log.Fields{"event": e}).Error("s3 saveFile: backing off with error snapshotting")
 		return backoffState
 	}
 
@@ -92,6 +100,11 @@ func (f *FsMachine) readFile(file *types.OutputFile) StateFn {
 	// create the default paths
 	sourcePath := fmt.Sprintf("%s/%s/%s", file.SnapshotMountPath, "__default__", file.Filename)
 
+	l := log.WithFields(log.Fields{
+		"filename":   file.Filename,
+		"sourcePath": sourcePath,
+	})
+
 	fi, err := os.Stat(sourcePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -105,6 +118,7 @@ func (f *FsMachine) readFile(file *types.OutputFile) StateFn {
 				Args: &types.EventArgs{"err": fmt.Errorf("failed to stat %s, error: %s", file.Filename, err)},
 			}
 		}
+		l.WithError(err).Error("[readFile] Error statting")
 		return backoffState
 	}
 
@@ -118,6 +132,7 @@ func (f *FsMachine) readFile(file *types.OutputFile) StateFn {
 			Name: types.EventNameReadFailed,
 			Args: &types.EventArgs{"err": fmt.Errorf("failed to read file, error: %s", err)},
 		}
+		l.WithError(err).Error("[readFile] Error opening")
 		return backoffState
 	}
 	defer func() {
@@ -135,6 +150,7 @@ func (f *FsMachine) readFile(file *types.OutputFile) StateFn {
 			Name: types.EventNameReadFailed,
 			Args: &types.EventArgs{"err": fmt.Errorf("cannot stream file, error: %s", err)},
 		}
+		l.WithError(err).Error("[readFile] Error reading")
 		return backoffState
 	}
 
@@ -150,6 +166,11 @@ func (f *FsMachine) readDirectory(file *types.OutputFile) StateFn {
 
 	dirPath := filepath.Join(file.SnapshotMountPath, "__default__", file.Filename)
 
+	l := log.WithFields(log.Fields{
+		"filename": file.Filename,
+		"dirPath":  dirPath,
+	})
+
 	stat, err := os.Stat(dirPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -157,17 +178,20 @@ func (f *FsMachine) readDirectory(file *types.OutputFile) StateFn {
 		} else {
 			file.Response <- types.NewErrorEvent(types.EventNameReadFailed, fmt.Errorf("failed to stat dir '%s', error: %s ", file.Filename, err))
 		}
+		l.WithError(err).Error("[readDirectory] Error statting")
 		return backoffState
 	}
 
 	if !stat.IsDir() {
 		file.Response <- types.NewErrorEvent(types.EventNameReadFailed, fmt.Errorf("path '%s' is not a directory, error: %s ", file.Filename, err))
+		l.WithError(err).Error("[readDirectory] It isn't a directory")
 		return backoffState
 	}
 
 	err = archiver.NewTar().ArchiveToStream(file.Contents, []string{dirPath})
 	if err != nil {
 		file.Response <- types.NewErrorEvent(types.EventNameReadFailed, fmt.Errorf("path '%s' tar failed, error: %s ", file.Filename, err))
+		l.WithError(err).Error("[readDirectory] Cannot create tar stream")
 		return backoffState
 	}
 
