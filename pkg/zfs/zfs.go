@@ -58,6 +58,8 @@ type ZFS interface {
 
 var _ ZFS = &zfs{}
 
+var dotmeshDiffSnapshotName = "dotmesh-fastdiff"
+
 type zfs struct {
 	zfsPath   string
 	zpoolPath string
@@ -308,7 +310,7 @@ func (z *zfs) DiscoverSystem(fs string) (*types.Filesystem, error) {
 	for _, values := range listLines {
 		fsSnapshot := strings.Split(values, "\t")[0]
 		id := strings.Split(fsSnapshot, "@")[1]
-		if strings.HasPrefix(id, "dotmesh-fastdiff") {
+		if strings.HasPrefix(id, dotmeshDiffSnapshotName) {
 			continue
 		}
 		meta, ok := snapshotMeta[id]
@@ -472,7 +474,7 @@ func (z *zfs) getDirtyDeltaCheckLatestTmpSnapBothZeros(filesystemId, latestSnap 
 						return 0, 0, false, err
 					}
 				}
-			} else if shrap[0] == FQ(z.poolName, filesystemId)+"@"+tmpSnapshotName {
+			} else if shrap[0] == FQ(z.poolName, filesystemId)+"@"+dotmeshDiffSnapshotName {
 				foundTmpSnashot = true
 				// NB: tmpSnapshotName defined as package-level constant
 				if shrap[1] == "referenced" {
@@ -497,7 +499,7 @@ func (z *zfs) getDirtyDeltaCheckLatestTmpSnapBothZeros(filesystemId, latestSnap 
 		result += intDiff(referDataset, referLatestSnap) + usedLatestSnap
 	}
 	var checkLatestTmpSnapBothZeros bool = false
-	if foundTmpSnashot && latestSnap != tmpSnapshotName {
+	if foundTmpSnashot && latestSnap != dotmeshDiffSnapshotName {
 		//        deleted                               added
 		result += intDiff(referDataset, referTmpSnap) + usedTmpSnap
 		// are the last two snaps both zero "used"? if so, we might be falling foul
@@ -861,11 +863,9 @@ var diffSideCache = map[string]FilesystemDiffCache{}
 // zero size (no changes since last time it was run)
 var diffResultCache = map[string]FilesystemResultCache{}
 
-var tmpSnapshotName = "dotmesh-fastdiff"
-
 func (z *zfs) DestroyTmpSnapIfExists(filesystemID string) error {
 	// Don't accidentally include the dotmesh-fastdiff snapshot in a push stream.
-	tmp := z.FQ(FullIdWithSnapshot(filesystemID, tmpSnapshotName))
+	tmp := z.FQ(FullIdWithSnapshot(filesystemID, dotmeshDiffSnapshotName))
 
 	tmpExistsErr := exec.Command(z.zfsPath, "get", "name", tmp).Run()
 	if tmpExistsErr == nil {
@@ -880,7 +880,7 @@ func (z *zfs) LastModified(filesystemID string) (*types.LastModified, error) {
 	// Tue Oct 15 11:01 2019
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	bts, err := exec.CommandContext(ctx, z.zfsPath, "list", "-o", "creation", z.FQ(filesystemID)).CombinedOutput()
+	bts, err := exec.CommandContext(ctx, z.zfsPath, "list", "-o", "creation", z.FQ(FullIdWithSnapshot(filesystemID, dotmeshDiffSnapshotName))).CombinedOutput()
 	if err != nil {
 		return nil, err
 	}
@@ -940,7 +940,7 @@ func (z *zfs) Diff(filesystemID string) ([]types.ZFSFileDiff, error) {
 
 	// tmp is a new, temporary snapshot which is newer than the "latest"
 	// snapshot
-	tmp := z.FQ(FullIdWithSnapshot(filesystemID, tmpSnapshotName))
+	tmp := z.FQ(FullIdWithSnapshot(filesystemID, dotmeshDiffSnapshotName))
 
 	latestMnt := utils.Mnt("diff-latest-" + filesystemID)
 	tmpMnt := utils.Mnt("diff-tmp-" + filesystemID)
@@ -1000,7 +1000,7 @@ func (z *zfs) Diff(filesystemID string) ([]types.ZFSFileDiff, error) {
 	exec.CommandContext(ctx, "umount", tmpMnt).Run()
 	exec.CommandContext(ctx, z.zfsPath, "destroy", tmp).Run()
 
-	_, err = z.Snapshot(filesystemID, tmpSnapshotName, []string{})
+	_, err = z.Snapshot(filesystemID, dotmeshDiffSnapshotName, []string{})
 	if err != nil {
 		log.WithError(err).Error("[diff] error snapshot")
 		return nil, err
