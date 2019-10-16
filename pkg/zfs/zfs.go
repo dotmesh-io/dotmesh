@@ -898,7 +898,7 @@ func (z *zfs) LastModified(filesystemID string) (*types.LastModified, error) {
 func parseSnapshotCreationTime(commandOutput string) (*time.Time, error) {
 
 	lines := strings.Split(string(commandOutput), "\n")
-	if len(lines) != 2 {
+	if len(lines) < 2 {
 		return nil, fmt.Errorf("unexpected command output: %s", commandOutput)
 	}
 
