@@ -58,7 +58,7 @@ type ZFS interface {
 
 var _ ZFS = &zfs{}
 
-var dotmeshDiffSnapshotName = "dotmesh-fastdiff"
+const dotmeshDiffSnapshotName = "dotmesh-fastdiff"
 
 type zfs struct {
 	zfsPath   string
@@ -1023,13 +1023,7 @@ func (z *zfs) Diff(filesystemID string) ([]types.ZFSFileDiff, error) {
 	latestCache, ok := diffSideCache[filesystemID]
 	z.diffMu.Unlock()
 
-	if ok {
-		log.WithFields(log.Fields{
-			"filesystem_id":         filesystemID,
-			"lastCache_snapshot_id": latestCache.SnapshotID,
-			"current_snapshot":      snapshot,
-		}).Info("cached snapshot found")
-	} else {
+	if !ok {
 		log.WithFields(log.Fields{
 			"filesystem_id": filesystemID,
 		}).Info("cached snapshot not found")
@@ -1125,7 +1119,6 @@ func (z *zfs) Diff(filesystemID string) ([]types.ZFSFileDiff, error) {
 
 	// only try to clean up latest mount if we needed to mount it at all
 	if mountedLatest {
-		log.Infof("cleaning up %s", latestMnt)
 		out, err := exec.CommandContext(ctx, "umount", latestMnt).CombinedOutput()
 		if err != nil {
 			log.WithError(err).Errorf("[diff] failed unmounting latest: %s", string(out))
@@ -1138,7 +1131,6 @@ func (z *zfs) Diff(filesystemID string) ([]types.ZFSFileDiff, error) {
 		}
 	}
 
-	log.Infof("running umount %s", tmpMnt)
 	out, err := exec.CommandContext(ctx, "umount", tmpMnt).CombinedOutput()
 	if err != nil {
 		log.WithError(err).Errorf("[diff] failed unmounting tmp: %s", string(out))
@@ -1150,7 +1142,6 @@ func (z *zfs) Diff(filesystemID string) ([]types.ZFSFileDiff, error) {
 	// will get cleaned up if there is dirty data and a new tmp snap created
 	// then.
 
-	log.Infof("running rmdir %s", tmpMnt)
 	err = exec.CommandContext(ctx, "rmdir", tmpMnt).Run()
 	if err != nil {
 		log.WithError(err).Error("[diff] failed cleaning up tmp mount")
