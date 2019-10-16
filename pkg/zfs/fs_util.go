@@ -2,7 +2,6 @@ package zfs
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 	"path/filepath"
 	"strings"
@@ -12,7 +11,7 @@ import (
 
 // FQ - from filesystem id to a fully qualified ZFS filesystem
 func FQ(poolName, fs string) string {
-	return fmt.Sprintf("%s/%s/%s", poolName, types.RootFS, fs)
+	return filepath.Join(poolName, types.RootFS, fs)
 }
 
 // UnFQ - from fully qualified ZFS name to filesystem id, strip off prefix

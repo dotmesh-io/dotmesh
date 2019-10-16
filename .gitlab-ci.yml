@@ -139,6 +139,20 @@ linux_dot_diff:
         - extracted_logs
         when: always
 
+linux_dot_last_modified:
+    retry: 1
+    stage: test
+    dependencies:
+        - build_client_linux
+    tags:
+        - fast
+    script:
+        - bash ./scripts/test.sh -run TestGetLastModifiedTimeForDot
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
+
 linux_boltdb:
     retry: 2
     stage: test

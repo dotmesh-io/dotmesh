@@ -3007,21 +3007,28 @@ func (d *DotmeshRPC) RestoreEtcd(r *http.Request, args *struct {
 	return nil
 }
 
+func (d *DotmeshRPC) LastModified(r *http.Request, v *types.VolumeName, result *types.LastModified) error {
+
+	filesystemID, err := d.state.registry.IdFromName(VolumeName{
+		Namespace: v.Namespace,
+		Name:      v.Name,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to find filesystem %s/%s", v.Namespace, v.Name)
+	}
+
+	lastModified, err := d.state.zfs.LastModified(filesystemID)
+	if err != nil {
+		return fmt.Errorf("failed to get last modified time: %s", err)
+	}
+
+	*result = *lastModified
+	return nil
+}
+
 func (d *DotmeshRPC) Diff(r *http.Request, q *types.RPCDiffRequest, result *types.RPCDiffResponse) error {
 
-	snapshots, err := d.state.SnapshotsForCurrentMaster(q.FilesystemID)
-	if err != nil {
-		return fmt.Errorf("failed to retrieve snapshots: %s", err)
-	}
-	if len(snapshots) == 0 {
-		return fmt.Errorf("no snapshots found")
-	}
-
-	if q.SnapshotID == "" || q.SnapshotID == "latest" {
-		q.SnapshotID = snapshots[len(snapshots)-1].Id
-	}
-
-	diffFiles, err := d.state.zfs.Diff(q.FilesystemID, q.SnapshotID, q.FilesystemID)
+	diffFiles, err := d.state.zfs.Diff(q.FilesystemID)
 	if err != nil {
 		return fmt.Errorf("diff failed: %s", err)
 	}

@@ -147,7 +147,7 @@ func NewFilesystemMachine(cfg *FsConfig) *FsMachine {
 		transferUpdates: make(chan types.TransferUpdate),
 
 		filesystemMetadataTimeout: cfg.FilesystemMetadataTimeout,
-		zfs:                       zfsInter,
+		zfs: zfsInter,
 	}
 }
 
@@ -593,11 +593,6 @@ func (f *FsMachine) transitionedTo(state string, status string) {
 	f.snapshotsLock.Lock()
 	defer f.snapshotsLock.Unlock()
 	now := time.Now().UnixNano()
-	log.Printf(
-		"<transition> %s to %s %s (from %s %s, %.2fs ago)",
-		f.filesystemId, state, status, f.currentState, f.status,
-		float64(now-f.lastTransitionTimestamp)/float64(time.Second),
-	)
 
 	metrics.TransitionCounter.WithLabelValues(f.currentState, state, status).Add(1)
 

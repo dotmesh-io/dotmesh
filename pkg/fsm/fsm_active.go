@@ -9,7 +9,7 @@ import (
 
 func activeState(f *FsMachine) StateFn {
 	f.transitionedTo("active", "waiting")
-	log.Printf("entering active state for %s", f.filesystemId)
+
 	select {
 	case file := <-f.fileInputIO:
 		return f.saveFile(file)

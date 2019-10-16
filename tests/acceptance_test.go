@@ -247,6 +247,79 @@ func TestDotDiff(t *testing.T) {
 	})
 }
 
+func TestGetLastModifiedTimeForDot(t *testing.T) {
+	citools.TeardownFinishedTestRuns()
+
+	f := citools.Federation{citools.NewCluster(1)}
+	defer citools.TestMarkForCleanup(f)
+	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
+
+	citools.StartTiming()
+	err := f.Start(t)
+	if err != nil {
+		t.Fatalf("failed to start cluster, error: %s", err)
+	}
+	node1 := f[0].GetNode(0).Container
+
+	t.Run("LastModified", func(t *testing.T) {
+		dotName := citools.UniqName()
+
+		cleanup := func() {
+			// Clean up
+			checkTestContainerExits(t, node1)
+			citools.RunOnNode(t, node1, "dm dot delete -f "+dotName)
+		}
+
+		// adding a file
+		citools.RunOnNode(t, node1, citools.DockerRun(dotName)+" touch /foo/HELLO")
+		citools.RunOnNode(t, node1, "dm switch "+dotName)
+		citools.RunOnNode(t, node1, "dm commit -m 'hello'")
+
+		// touching another file again
+		citools.RunOnNode(t, node1, citools.DockerRun(dotName)+" touch /foo/FOOBAR")
+
+		remote := &client.DMRemote{
+			User:     "admin",
+			ApiKey:   f[0].GetNode(0).Password,
+			Hostname: f[0].GetNode(0).IP,
+			Port:     32607,
+		}
+
+		cfg := client.Configuration{
+			CurrentRemote: "default",
+			DMRemotes: map[string]*client.DMRemote{
+				"default": remote,
+			},
+		}
+
+		apiClient := client.DotmeshAPI{
+			Configuration: &cfg,
+		}
+
+		// !! README !!
+		// since LastModified is relying on 'dotmesh-fastdiff' snapshot name created by the diff func
+		// we always need to call LastModified after Diff is called. This is used by the dotscience-agent
+		// to detect changes every few seconds.
+
+		_, err := apiClient.Diff("admin", dotName)
+		if err != nil {
+			t.Errorf("failed to get diff from API: %s", err)
+		}
+
+		modified, err := apiClient.LastModified("admin", dotName)
+		if err != nil {
+			t.Errorf("failed to get last modified API: %s", err)
+		}
+
+		// we don't have resolution in seconds, only minutes
+		if time.Since(modified.Time) > 3*time.Minute {
+			t.Errorf("expected modified to be in the last 3 minutes, got: %s", modified.Time)
+		}
+
+		cleanup()
+	})
+}
+
 func TestBoltDBStoreWithDefaultDot(t *testing.T) {
 	// Test default dot select on a totally fresh cluster
 	citools.TeardownFinishedTestRuns()
