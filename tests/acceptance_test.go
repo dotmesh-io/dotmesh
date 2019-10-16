@@ -1676,7 +1676,9 @@ func checkDeletionWorkedWithRetries(t *testing.T, fsname string, deadline time.D
 
 			st = citools.OutputFromRunOnNode(t, node2, "dm list")
 			if strings.Contains(st, fsname) {
-				errStr = fmt.Sprintf("The volume is still in 'dm list' on node2 (after %d seconds)", deadline/time.Second)
+				citools.RunOnNode(t, node2, "dm switch "+fsname)
+				output := citools.OutputFromRunOnNode(t, node2, "dm dot show")
+				errStr = fmt.Sprintf("The volume is still in 'dm list' on node2 (after %d seconds) - show output: %s\n", deadline/time.Second, output)
 				time.Sleep(1 * time.Second)
 				continue
 			}
