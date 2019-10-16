@@ -311,8 +311,9 @@ func TestGetLastModifiedTimeForDot(t *testing.T) {
 			t.Errorf("failed to get last modified API: %s", err)
 		}
 
-		if time.Since(modified.Time) > 10*time.Second {
-			t.Errorf("expected modified to be in the last 10 seconds, got: %s", modified.Time)
+		// we don't have resolution in seconds, only minutes
+		if time.Since(modified.Time) > 3*time.Minute {
+			t.Errorf("expected modified to be in the last 3 minutes, got: %s", modified.Time)
 		}
 
 		cleanup()
