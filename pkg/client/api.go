@@ -50,6 +50,7 @@ type Dotmesh interface {
 	CommitsById(dotID string) ([]types.Snapshot, error)
 	Diff(namespace, name string) ([]types.ZFSFileDiff, error)
 	DiffFromCommit(namespace, name, commitID string) ([]types.ZFSFileDiff, error)
+	LastModified(namespace, name string) (*types.LastModified, error)
 	GetFsId(namespace, name, branch string) (string, error)
 	Get(fsId string) (types.DotmeshVolume, error)
 	Procure(data types.ProcureArgs) (string, error)
