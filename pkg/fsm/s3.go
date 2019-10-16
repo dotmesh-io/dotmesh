@@ -340,7 +340,7 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 				f.transferUpdates <- types.TransferUpdate{
 					Kind: types.TransferS3Failed,
 					Changes: types.TransferPollResult{
-						Status:  "S3 stuck!",
+						Status:  "error",
 						Message: innerError.Error(),
 					},
 				}
