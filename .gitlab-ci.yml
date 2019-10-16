@@ -230,6 +230,7 @@ linux_deletion_simple:
         - build_client_linux
     tags:
         - fast
+    allow_failure: true
     script:
         - bash ./scripts/test.sh -run TestDeletionSimple
     artifacts:
