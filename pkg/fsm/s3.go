@@ -310,6 +310,20 @@ func downloadPartialS3Bucket(f *FsMachine, svc *s3.S3, bucketName, destPath, tra
 		}
 		go func(item *s3.ObjectVersion) {
 			for i := 0; i < 5; i++ {
+				if strings.HasSuffix(aws.StringValue(item.Key), "/") {
+					// is a directory, create if not exists
+					fpath := fmt.Sprintf("%s/%s", destPath, aws.StringValue(item.Key))
+					directoryPath := fpath[:strings.LastIndex(fpath, "/")]
+					err := os.MkdirAll(directoryPath, 0666)
+					completed <- types.ItemData{
+						Name:      *item.Key,
+						VersionId: *item.VersionId,
+						Size:      *item.Size,
+						Err:       err,
+					}
+					<-sem
+					return
+				}
 				innerError = downloadS3Object(f.transferUpdates, downloader, sent, startTime, *item.Key, *item.VersionId, bucketName, destPath, *item.Size)
 				if innerError == nil {
 					f.transferUpdates <- types.TransferUpdate{
