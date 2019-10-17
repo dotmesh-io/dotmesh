@@ -83,8 +83,8 @@ func (state *InMemoryState) runServer() {
 	router.Handle("/s3/{namespace}:{name}", Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager))).Methods("GET")
 	// list files in a specific snapshot
 	router.Handle("/s3/{namespace}:{name}/snapshot/{snapshotId}", Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager))).Methods("GET")
-	// download a file from a specific snapshot
-	router.Handle("/s3/{namespace}:{name}/snapshot/{snapshotId}/{key:.*}", Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager))).Methods("GET")
+	// download a file from a specific snapshot, or just get its size
+	router.Handle("/s3/{namespace}:{name}/snapshot/{snapshotId}/{key:.*}", Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager))).Methods("GET", "HEAD")
 	// put file into master
 	router.Handle("/s3/{namespace}:{name}/{key:.*}", Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager))).Methods("PUT")
 	// put file into other branch

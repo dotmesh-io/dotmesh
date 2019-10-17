@@ -15,6 +15,8 @@ func activeState(f *FsMachine) StateFn {
 		return f.saveFile(file)
 	case file := <-f.fileOutputIO:
 		return f.readFile(file)
+	case file := <-f.fileStatIO:
+		return f.statFile(file)
 	case e := <-f.innerRequests:
 		if e.Name == "delete" {
 			err := f.state.DeleteFilesystem(f.filesystemId)

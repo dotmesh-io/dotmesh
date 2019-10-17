@@ -95,6 +95,44 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 	return activeState
 }
 
+func (f *FsMachine) statFile(file *types.StatFile) StateFn {
+
+	// create the default paths
+	sourcePath := fmt.Sprintf("%s/%s/%s", file.SnapshotMountPath, "__default__", file.Filename)
+
+	l := log.WithFields(log.Fields{
+		"filename":   file.Filename,
+		"sourcePath": sourcePath,
+	})
+
+	fi, err := os.Stat(sourcePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			file.Response <- &types.Event{
+				Name: types.EventNameFileNotFound,
+				Args: &types.EventArgs{"err": fmt.Errorf("failed to stat %s, error: %s", file.Filename, err)},
+			}
+		} else {
+			file.Response <- &types.Event{
+				Name: types.EventNameReadFailed,
+				Args: &types.EventArgs{"err": fmt.Errorf("failed to stat %s, error: %s", file.Filename, err)},
+			}
+		}
+		l.WithError(err).Error("[statFile] Error statting")
+		return backoffState
+	}
+
+	file.Response <- &types.Event{
+		Name: types.EventNameReadSuccess,
+		Args: &types.EventArgs{
+			"mode": fi.Mode(),
+			"size": fi.Size(),
+		},
+	}
+
+	return activeState
+}
+
 func (f *FsMachine) readFile(file *types.OutputFile) StateFn {
 
 	// create the default paths

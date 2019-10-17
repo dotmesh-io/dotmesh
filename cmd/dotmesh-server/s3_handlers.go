@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -166,6 +167,8 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	key, ok := vars["key"]
 	if ok {
 		switch req.Method {
+		case "HEAD":
+			s.headFile(resp, req, localFilesystemId, snapshotId, key)
 		case "GET":
 			s.readFile(resp, req, localFilesystemId, snapshotId, key)
 		case "PUT":
@@ -203,6 +206,82 @@ func (s *S3Handler) mountFilesystemSnapshot(filesystemId string, snapshotId stri
 
 	e := <-responseChan
 	return e
+}
+
+func (s *S3Handler) headFile(resp http.ResponseWriter, req *http.Request, filesystemId, snapshotId, filename string) {
+	log.Error("ABS DEBUG: Head request 1")
+
+	user := auth.GetUserFromCtx(req.Context())
+	fsm, err := s.state.InitFilesystemMachine(filesystemId)
+	if err != nil {
+		http.Error(resp, "failed to initialize filesystem", http.StatusInternalServerError)
+		return
+	}
+
+	log.Error("ABS DEBUG: Head request 2")
+	state := fsm.GetCurrentState()
+	if state != "active" {
+		http.Error(resp, fmt.Sprintf("please try again later, state was %s", state), http.StatusServiceUnavailable)
+		return
+	}
+	log.Error("ABS DEBUG: Head request 3")
+
+	// we must first mount the given snapshot before we try to read a file within it
+	// if snapshotId is not given then the latest snapshot id will be used
+	e := s.mountFilesystemSnapshot(filesystemId, snapshotId)
+	log.Error("ABS DEBUG: Head request 4")
+	// the snapshot has been mounted - pass the SnapshotMountPath via the
+	// OutputFile to the fileOutputIO channel to get handled
+	if e.Name == "mounted" {
+		log.Error("ABS DEBUG: Head request 5")
+		resp.Header().Set("Access-Control-Allow-Origin", "*")
+		resp.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+
+		respCh := make(chan *Event)
+		fsm.StatFile(&types.StatFile{
+			Filename:          filename,
+			User:              user.Name,
+			Response:          respCh,
+			SnapshotMountPath: (*e.Args)["mount-path"].(string),
+		})
+
+		log.Error("ABS DEBUG: Waiting")
+
+		result := <-respCh
+
+		log.Errorf("ABS DEBUG: Got result %#v / %#v", result, (*result.Args))
+
+		switch result.Name {
+		case types.EventNameReadFailed:
+			err := result.Error()
+			if err != nil {
+				http.Error(resp, err.Error(), 500)
+				return
+			}
+			http.Error(resp, "read failed, could not retrieve actual error", 500)
+		case types.EventNameFileNotFound:
+			err := result.Error()
+			if err != nil {
+				http.Error(resp, err.Error(), 404)
+				return
+			}
+			http.Error(resp, "file not found, could not retrieve actual error", 404)
+		default:
+			if (*result.Args)["mode"].(os.FileMode).IsRegular() {
+				resp.Header().Set("Content-Length", fmt.Sprintf("%d", (*result.Args)["size"].(int64)))
+			}
+			resp.WriteHeader(200)
+		}
+	} else {
+		log.Error("ABS DEBUG: Head request 6")
+		log.Println(e)
+		log.WithFields(log.Fields{
+			"event":      e,
+			"filesystem": filesystemId,
+		}).Error("mount failed, returned event is not 'mounted'")
+		http.Error(resp, fmt.Sprintf("failed to mount filesystem (%s), check logs", e.Name), 500)
+	}
+	log.Error("ABS DEBUG: Head request 7")
 }
 
 func (s *S3Handler) readFile(resp http.ResponseWriter, req *http.Request, filesystemId, snapshotId, filename string) {

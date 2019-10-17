@@ -34,6 +34,10 @@ func (f *FsMachine) WriteFile(source *types.InputFile) {
 	f.fileInputIO <- source
 }
 
+func (f *FsMachine) StatFile(source *types.StatFile) {
+	f.fileStatIO <- source
+}
+
 func (f *FsMachine) getLastNonMetadataSnapshot() (*types.Snapshot, error) {
 	// for all the snapshots we have, start from the latest, work backwards until we find a snapshot which isn't just a metadata change (i.e a write of a json file about s3 versions)
 	// in theory, we should only ever go back to latest-1, but could potentially go back further if we've had multiple commits slip in there.

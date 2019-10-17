@@ -52,6 +52,7 @@ type FsMachine struct {
 	// channels for uploading and downloading file data
 	fileInputIO  chan *types.InputFile
 	fileOutputIO chan *types.OutputFile
+	fileStatIO   chan *types.StatFile
 
 	// channel of requests going in to the state machine
 	requests chan *types.Event

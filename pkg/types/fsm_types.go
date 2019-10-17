@@ -26,6 +26,14 @@ type OutputFile struct {
 	Response          chan *Event
 }
 
+// StatFile is used to request the attributes of a file
+type StatFile struct {
+	Filename          string
+	SnapshotMountPath string
+	User              string
+	Response          chan *Event
+}
+
 // request when calling s3.GetKeysForDirLimit
 type ListFileRequest struct {
 	Base               string // the root of the dot we are listing

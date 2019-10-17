@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dotmesh-io/dotmesh/pkg/archiver"
 	"github.com/dotmesh-io/dotmesh/pkg/client"
@@ -208,6 +209,14 @@ func TestS3Api(t *testing.T) {
 			t.Errorf("The second commit did not contain the correct file data (expected '%s', got: '%s')", expected2, respBodySecond)
 		}
 
+		_, statusSecondHead, err := call("HEAD", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file.txt", dotName, secondCommitId), host, nil)
+		if err != nil {
+			t.Errorf("S3 HEAD request failed, error: %s", err)
+		}
+		if statusSecondHead != 200 {
+			t.Errorf("unexpected HEAD status code: %d", statusSecondHead)
+		}
+
 		t.Logf("running (nonexistant file): '%s'", fmt.Sprintf("http://127.0.0.1:32607/s3/admin:%s/snapshot/%s/nonexistant.txt", dotName, secondCommitId))
 		_, statusThird, err := call("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/nonexistant.txt", dotName, secondCommitId), host, nil)
 		if err != nil {
@@ -215,6 +224,14 @@ func TestS3Api(t *testing.T) {
 		}
 		if statusThird != 404 {
 			t.Errorf("unexpected status code: %d", status)
+		}
+
+		_, statusThirdHead, err := call("HEAD", fmt.Sprintf("/s3/admin:%s/snapshot/%s/nonexistant.txt", dotName, secondCommitId), host, nil)
+		if err != nil {
+			t.Errorf("S3 HEAD request failed, error: %s", err)
+		}
+		if statusThirdHead != 404 {
+			t.Errorf("unexpected HEAD status code: %d", statusThirdHead)
 		}
 	})
 
@@ -290,6 +307,19 @@ func TestS3Api(t *testing.T) {
 		// t.Logf("running (first commit): '%s'", fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/subpath", host.Password, dotName, firstCommitId))
 		// respFirstCommit := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/subpath", host.Password, dotName, firstCommitId))
 		s3Endpoint := fmt.Sprintf("http://%s:32607/s3/admin:%s/snapshot/%s/subpath", host.IP, dotName, firstCommitId)
+
+		// HEAD it
+
+		_, status, err := call("HEAD", s3Endpoint, host, nil)
+		if err != nil {
+			t.Errorf("S3 request failed, error: %s", err)
+		}
+		if status != 200 {
+			t.Errorf("unexpected status code from HEAD: %d", status)
+		}
+
+		// Now GET
+
 		req, _ := http.NewRequest("GET", s3Endpoint, nil)
 
 		req.SetBasicAuth("admin", host.Password)
@@ -344,12 +374,20 @@ func TestS3Api(t *testing.T) {
 		s3Endpoint2 := fmt.Sprintf("http://%s:32607/s3/admin:%s/snapshot/%s/nonexistant", host.IP, dotName, firstCommitId)
 
 		t.Logf("running (nonexistant directory): '%s'", s3Endpoint2)
-		_, status, err := call("GET", s3Endpoint2, host, nil)
+		_, status, err = call("GET", s3Endpoint2, host, nil)
 		if err != nil {
 			t.Errorf("S3 request failed, error: %s", err)
 		}
 		if status != 404 {
-			t.Errorf("unexpected status code: %d", status)
+			t.Errorf("unexpected status code from GET: %d", status)
+		}
+
+		_, status, err = call("HEAD", s3Endpoint2, host, nil)
+		if err != nil {
+			t.Errorf("S3 request failed, error: %s", err)
+		}
+		if status != 404 {
+			t.Errorf("unexpected status code from HEAD: %d", status)
 		}
 	})
 }
@@ -373,30 +411,39 @@ func OSReadDir(root string) ([]string, error) {
 }
 
 func call(method string, path string, node citools.Node, body io.Reader) (respBody string, statusCode int, err error) {
+	for retries := 10; retries > 0; retries-- {
+		if node.Port == 0 {
+			node.Port = 32607
+		}
 
-	if node.Port == 0 {
-		node.Port = 32607
+		url := fmt.Sprintf("http://%s:%d/%s", node.IP, node.Port, path)
+
+		req, err := http.NewRequest(method, url, body)
+		if err != nil {
+			return err.Error(), 0, err
+		}
+		req.SetBasicAuth("admin", node.Password)
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err.Error(), 0, err
+		}
+
+		defer resp.Body.Close()
+
+		bts, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return err.Error(), 0, err
+		}
+
+		if resp.StatusCode == http.StatusServiceUnavailable {
+			fmt.Printf("Got a %d return, retrying...\n", resp.StatusCode)
+			time.Sleep(time.Second)
+			continue
+		}
+
+		return string(bts), resp.StatusCode, nil
 	}
 
-	url := fmt.Sprintf("http://%s:%d/%s", node.IP, node.Port, path)
-
-	req, err := http.NewRequest(method, url, body)
-	if err != nil {
-		return
-	}
-	req.SetBasicAuth("admin", node.Password)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err.Error(), 0, err
-	}
-
-	defer resp.Body.Close()
-
-	bts, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return
-	}
-
-	return string(bts), resp.StatusCode, nil
+	return "Gave up retrying", 0, fmt.Errorf("Gave up retrying")
 }
