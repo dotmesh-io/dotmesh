@@ -306,13 +306,14 @@ func TestS3Api(t *testing.T) {
 
 		// t.Logf("running (first commit): '%s'", fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/subpath", host.Password, dotName, firstCommitId))
 		// respFirstCommit := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/subpath", host.Password, dotName, firstCommitId))
-		s3Endpoint := fmt.Sprintf("http://%s:32607/s3/admin:%s/snapshot/%s/subpath", host.IP, dotName, firstCommitId)
+		path := fmt.Sprintf("s3/admin:%s/snapshot/%s/subpath", dotName, firstCommitId)
+		s3Endpoint := fmt.Sprintf("http://%s:32607/%s", host.IP, path)
 
 		// HEAD it
 
-		_, status, err := call("HEAD", s3Endpoint, host, nil)
+		_, status, err := call("HEAD", path, host, nil)
 		if err != nil {
-			t.Errorf("S3 request failed, error: %s", err)
+			t.Errorf("S3 HEAD request failed, error: %s", err)
 		}
 		if status != 200 {
 			t.Errorf("unexpected status code from HEAD: %d", status)
