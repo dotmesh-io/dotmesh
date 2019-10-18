@@ -265,8 +265,12 @@ func (s *S3Handler) headFile(resp http.ResponseWriter, req *http.Request, filesy
 			}
 			http.Error(resp, "file not found, could not retrieve actual error", 404)
 		default:
-			if (*result.Args)["mode"].(os.FileMode).IsRegular() {
-				resp.Header().Set("Content-Length", fmt.Sprintf("%d", (*result.Args)["size"].(int64)))
+			mode, ok := (*result.Args)["mode"]
+			if ok && mode.(os.FileMode).IsRegular() {
+				size, ok := (*result.Args)["size"]
+				if ok {
+					resp.Header().Set("Content-Length", fmt.Sprintf("%d", size.(int64)))
+				}
 			}
 			resp.WriteHeader(200)
 		}
