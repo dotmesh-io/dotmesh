@@ -227,7 +227,15 @@ func (s *S3Handler) headFile(resp http.ResponseWriter, req *http.Request, filesy
 	e := s.mountFilesystemSnapshot(filesystemId, snapshotId)
 	// the snapshot has been mounted - pass the SnapshotMountPath via the
 	// OutputFile to the fileOutputIO channel to get handled
-	if e.Name == "mounted" {
+	if e.Name != "mounted" {
+		log.Println(e)
+		log.WithFields(log.Fields{
+			"event":      e,
+			"filesystem": filesystemId,
+		}).Error("mount failed, returned event is not 'mounted'")
+		http.Error(resp, fmt.Sprintf("failed to mount filesystem (%s), check logs", e.Name), 500)
+		return
+	} else {
 		resp.Header().Set("Access-Control-Allow-Origin", "*")
 		resp.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
 
@@ -240,7 +248,6 @@ func (s *S3Handler) headFile(resp http.ResponseWriter, req *http.Request, filesy
 		})
 
 		result := <-respCh
-
 
 		switch result.Name {
 		case types.EventNameReadFailed:
@@ -263,13 +270,6 @@ func (s *S3Handler) headFile(resp http.ResponseWriter, req *http.Request, filesy
 			}
 			resp.WriteHeader(200)
 		}
-	} else {
-		log.Println(e)
-		log.WithFields(log.Fields{
-			"event":      e,
-			"filesystem": filesystemId,
-		}).Error("mount failed, returned event is not 'mounted'")
-		http.Error(resp, fmt.Sprintf("failed to mount filesystem (%s), check logs", e.Name), 500)
 	}
 }
 
