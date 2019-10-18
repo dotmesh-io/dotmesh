@@ -16,7 +16,7 @@ import (
 
 func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 	// create the default paths
-	destPath := fmt.Sprintf("%s/%s/%s", utils.Mnt(f.filesystemId), "__default__", file.Filename)
+	destPath := filepath.Join(utils.Mnt(f.filesystemId), "__default__", file.Filename)
 
 	l := log.WithFields(log.Fields{
 		"filename": file.Filename,
@@ -98,7 +98,7 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 func (f *FsMachine) statFile(file *types.StatFile) StateFn {
 
 	// create the default paths
-	sourcePath := fmt.Sprintf("%s/%s/%s", file.SnapshotMountPath, "__default__", file.Filename)
+	sourcePath := filepath.Join(file.SnapshotMountPath, "__default__", file.Filename)
 
 	l := log.WithFields(log.Fields{
 		"filename":   file.Filename,
@@ -136,7 +136,7 @@ func (f *FsMachine) statFile(file *types.StatFile) StateFn {
 func (f *FsMachine) readFile(file *types.OutputFile) StateFn {
 
 	// create the default paths
-	sourcePath := fmt.Sprintf("%s/%s/%s", file.SnapshotMountPath, "__default__", file.Filename)
+	sourcePath := filepath.Join(file.SnapshotMountPath, "__default__", file.Filename)
 
 	l := log.WithFields(log.Fields{
 		"filename":   file.Filename,
