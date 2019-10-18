@@ -1053,7 +1053,7 @@ func TestSingleNode(t *testing.T) {
 			t.Error("unable to find commit message in log output")
 		}
 
-		responseBody, status, err := call("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file-y.txt", fsname, "latest"), host, nil)
+		responseBody, status, err := callWithRetries("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file-y.txt", fsname, "latest"), host, nil)
 		if err != nil {
 			t.Errorf("S3 request failed, error: %s", err)
 		}
@@ -2472,7 +2472,7 @@ func TestTwoSingleNodeClusters(t *testing.T) {
 		citools.RunOnNode(t, node2, "dm push cluster_0")
 
 		// s3 read from node1, will cause a snapshot to be mounted
-		responseBody, status, err := call("GET", fmt.Sprintf("s3/admin:%s/snapshot/%s/foo/file.txt", fsname, "latest"), cluster2Node, nil)
+		responseBody, status, err := callWithRetries("GET", fmt.Sprintf("s3/admin:%s/snapshot/%s/foo/file.txt", fsname, "latest"), cluster2Node, nil)
 		if err != nil {
 			t.Errorf("S3 request failed, error: %s", err)
 		}

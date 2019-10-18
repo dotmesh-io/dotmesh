@@ -182,7 +182,7 @@ func TestS3Api(t *testing.T) {
 
 		t.Logf("running (first commit): '%s'", fmt.Sprintf("http://127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", dotName, firstCommitId))
 
-		respBody, status, err := call("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file.txt", dotName, firstCommitId), host, nil)
+		respBody, status, err := callWithRetries("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file.txt", dotName, firstCommitId), host, nil)
 		if err != nil {
 			t.Errorf("S3 request failed, error: %s", err)
 		}
@@ -196,7 +196,7 @@ func TestS3Api(t *testing.T) {
 		}
 
 		t.Logf("running (second commit): '%s'", fmt.Sprintf("http://127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", dotName, secondCommitId))
-		respBodySecond, statusSecond, err := call("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file.txt", dotName, secondCommitId), host, nil)
+		respBodySecond, statusSecond, err := callWithRetries("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file.txt", dotName, secondCommitId), host, nil)
 		if err != nil {
 			t.Errorf("S3 request failed, error: %s", err)
 		}
@@ -209,7 +209,7 @@ func TestS3Api(t *testing.T) {
 			t.Errorf("The second commit did not contain the correct file data (expected '%s', got: '%s')", expected2, respBodySecond)
 		}
 
-		_, statusSecondHead, err := call("HEAD", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file.txt", dotName, secondCommitId), host, nil)
+		_, statusSecondHead, err := callWithRetries("HEAD", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file.txt", dotName, secondCommitId), host, nil)
 		if err != nil {
 			t.Errorf("S3 HEAD request failed, error: %s", err)
 		}
@@ -218,7 +218,7 @@ func TestS3Api(t *testing.T) {
 		}
 
 		t.Logf("running (nonexistant file): '%s'", fmt.Sprintf("http://127.0.0.1:32607/s3/admin:%s/snapshot/%s/nonexistant.txt", dotName, secondCommitId))
-		_, statusThird, err := call("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/nonexistant.txt", dotName, secondCommitId), host, nil)
+		_, statusThird, err := callWithRetries("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/nonexistant.txt", dotName, secondCommitId), host, nil)
 		if err != nil {
 			t.Errorf("S3 request failed, error: %s", err)
 		}
@@ -226,7 +226,7 @@ func TestS3Api(t *testing.T) {
 			t.Errorf("unexpected status code: %d", status)
 		}
 
-		_, statusThirdHead, err := call("HEAD", fmt.Sprintf("/s3/admin:%s/snapshot/%s/nonexistant.txt", dotName, secondCommitId), host, nil)
+		_, statusThirdHead, err := callWithRetries("HEAD", fmt.Sprintf("/s3/admin:%s/snapshot/%s/nonexistant.txt", dotName, secondCommitId), host, nil)
 		if err != nil {
 			t.Errorf("S3 HEAD request failed, error: %s", err)
 		}
@@ -254,7 +254,7 @@ func TestS3Api(t *testing.T) {
 
 		t.Logf("running (first commit): '%s'", fmt.Sprintf("http://127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", dotName, firstCommitId))
 
-		respBody, status, err := call("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file.txt", dotName, firstCommitId), host, nil)
+		respBody, status, err := callWithRetries("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file.txt", dotName, firstCommitId), host, nil)
 		if err != nil {
 			t.Errorf("S3 request failed, error: %s", err)
 		}
@@ -268,7 +268,7 @@ func TestS3Api(t *testing.T) {
 		}
 
 		t.Logf("running (second commit): '%s'", fmt.Sprintf("http://127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", dotName, secondCommitId))
-		respBodySecond, statusSecond, err := call("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file.txt", dotName, secondCommitId), host, nil)
+		respBodySecond, statusSecond, err := callWithRetries("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file.txt", dotName, secondCommitId), host, nil)
 		if err != nil {
 			t.Errorf("S3 request failed, error: %s", err)
 		}
@@ -311,7 +311,7 @@ func TestS3Api(t *testing.T) {
 
 		// HEAD it
 
-		_, status, err := call("HEAD", path, host, nil)
+		_, status, err := callWithRetries("HEAD", path, host, nil)
 		if err != nil {
 			t.Errorf("S3 HEAD request failed, error: %s", err)
 		}
@@ -375,7 +375,7 @@ func TestS3Api(t *testing.T) {
 		s3Endpoint2 := fmt.Sprintf("http://%s:32607/s3/admin:%s/snapshot/%s/nonexistant", host.IP, dotName, firstCommitId)
 
 		t.Logf("running (nonexistant directory): '%s'", s3Endpoint2)
-		_, status, err = call("GET", s3Endpoint2, host, nil)
+		_, status, err = callWithRetries("GET", s3Endpoint2, host, nil)
 		if err != nil {
 			t.Errorf("S3 request failed, error: %s", err)
 		}
@@ -383,7 +383,7 @@ func TestS3Api(t *testing.T) {
 			t.Errorf("unexpected status code from GET: %d", status)
 		}
 
-		_, status, err = call("HEAD", s3Endpoint2, host, nil)
+		_, status, err = callWithRetries("HEAD", s3Endpoint2, host, nil)
 		if err != nil {
 			t.Errorf("S3 request failed, error: %s", err)
 		}
@@ -411,7 +411,7 @@ func OSReadDir(root string) ([]string, error) {
 	return files, nil
 }
 
-func call(method string, path string, node citools.Node, body io.Reader) (respBody string, statusCode int, err error) {
+func callWithRetries(method string, path string, node citools.Node, body io.Reader) (respBody string, statusCode int, err error) {
 	for retries := 10; retries > 0; retries-- {
 		if node.Port == 0 {
 			node.Port = 32607
