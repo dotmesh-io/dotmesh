@@ -180,6 +180,13 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 			s.listBucket(resp, req, bucketName, localFilesystemId, snapshotId)
 		}
 	}
+
+	log.WithFields(log.Fields{
+		"method":     req.Method,
+		"filesystem": localFilesystemId,
+		"snapshot":   snapshotId,
+		"path":       key,
+	}).Info("S3 Request")
 }
 
 func (s *S3Handler) mountFilesystemSnapshot(filesystemId string, snapshotId string) *Event {
