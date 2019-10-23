@@ -165,7 +165,7 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 			l.WithError(err).Error("[S3Handler.ServeHTTP] Can't establish URL to proxy")
 			return
 		}
-		l.Infof("[S3Handler.ServeHTTP] proxying PUT request to node: %s", target)
+		l.WithField("target", target).Info("[S3Handler.ServeHTTP] proxying PUT request")
 		s.ReverseProxy.ServeHTTP(resp, req.WithContext(ctxSetAddress(req.Context(), target)))
 		return
 	}
@@ -188,8 +188,6 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 			s.listBucket(l, resp, req, bucketName, localFilesystemId, snapshotId)
 		}
 	}
-
-	l.Info("[S3Handler.ServeHTTP] Request completed")
 }
 
 func (s *S3Handler) mountFilesystemSnapshot(filesystemId string, snapshotId string) *Event {
@@ -393,7 +391,7 @@ func (s *S3Handler) putObject(l *log.Entry, resp http.ResponseWriter, req *http.
 		e, ok := (*result.Args)["err"].(string)
 		if ok {
 			http.Error(resp, e, 500)
-			l.Errorf("[S3Handler.putObject] put failed: %s", e)
+			l.WithField("error", e).Error("[S3Handler.putObject] put failed")
 			return
 		}
 		l.Error("[S3Handler.putObject] put failed")
