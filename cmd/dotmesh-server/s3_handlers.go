@@ -189,7 +189,7 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	l.Info("S3 Request completed")
+	l.Info("[S3Handler.ServeHTTP] Request completed")
 }
 
 func (s *S3Handler) mountFilesystemSnapshot(filesystemId string, snapshotId string) *Event {
