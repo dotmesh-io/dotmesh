@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -232,6 +233,41 @@ func TestS3Api(t *testing.T) {
 		}
 		if statusThirdHead != 404 {
 			t.Errorf("unexpected HEAD status code: %d", statusThirdHead)
+		}
+	})
+
+	t.Run("CheckSnapshot", func(t *testing.T) { // FIX
+		dotName := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm init "+dotName)
+
+		req, err := http.NewRequest("POST", fmt.Sprintf("http://%s:%d/s3/admin:%s/uploaded.txt", host.IP, host.Port, dotName), bytes.NewBufferString("contentz"))
+		if err != nil {
+			t.Errorf("failed to create req: %s", err)
+			return
+		}
+		req.SetBasicAuth("admin", host.Password)
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Errorf("S3 Upload request failed: %s", err)
+			return
+		}
+
+		defer resp.Body.Close()
+
+		commits, err := dm.ListCommits(fmt.Sprintf("admin/%s", dotName), "")
+
+		if err != nil {
+			t.Error(err.Error())
+		}
+		// first commit (index 0) is always an "init" commit now
+		firstCommitId := commits[1].Id
+
+		snapshotIDHeader := resp.Header.Get("Snapshot-Id")
+		t.Logf("snapshotID from header: %s", snapshotIDHeader)
+
+		if firstCommitId != snapshotIDHeader {
+			t.Errorf("snapshot IDs don't match, header: %s, from dm list: %s", snapshotIDHeader, firstCommitId)
 		}
 	})
 
