@@ -236,7 +236,7 @@ func TestS3Api(t *testing.T) {
 		}
 	})
 
-	t.Run("CheckSnapshot", func(t *testing.T) { // FIX
+	t.Run("CheckSnapshot", func(t *testing.T) {
 		dotName := citools.UniqName()
 		citools.RunOnNode(t, node1, "dm init "+dotName)
 
