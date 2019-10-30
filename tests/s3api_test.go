@@ -240,7 +240,12 @@ func TestS3Api(t *testing.T) {
 		dotName := citools.UniqName()
 		citools.RunOnNode(t, node1, "dm init "+dotName)
 
-		req, err := http.NewRequest("POST", fmt.Sprintf("http://%s:%d/s3/admin:%s/uploaded.txt", host.IP, host.Port, dotName), bytes.NewBufferString("contentz"))
+		port := 32607
+		if host.Port != 0 {
+			port = host.Port
+		}
+
+		req, err := http.NewRequest("POST", fmt.Sprintf("http://%s:%d/s3/admin:%s/uploaded.txt", host.IP, port, dotName), bytes.NewBufferString("contentz"))
 		if err != nil {
 			t.Errorf("failed to create req: %s", err)
 			return
