@@ -262,6 +262,11 @@ func TestS3Api(t *testing.T) {
 		snapshotIDHeader := resp.Header.Get("Snapshot-Id")
 		t.Logf("snapshotID from header: %s", snapshotIDHeader)
 
+		t.Log("headers:")
+		for k, vv := range resp.Header {
+			t.Logf("%s: [%s]", k, strings.Join(vv, ", "))
+		}
+
 		// wait for the snapshot to propage
 		time.Sleep(3 * time.Second)
 
