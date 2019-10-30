@@ -265,6 +265,11 @@ func TestS3Api(t *testing.T) {
 		if err != nil {
 			t.Error(err.Error())
 		}
+
+		if len(commits) != 1 {
+			t.Errorf("expected to find %d commits", len(commits))
+			return
+		}
 		// first commit (index 0) is always an "init" commit now
 		firstCommitId := commits[1].Id
 
