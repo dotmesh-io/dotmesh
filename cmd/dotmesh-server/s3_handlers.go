@@ -378,9 +378,10 @@ func (s *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, files
 		log.WithFields(log.Fields{
 			"filename":    filename,
 			"user":        user.Name,
-			"snapshot_id": result.Args.Get("SnapshotId"),
+			"snapshot_id": result.Args.GetString("SnapshotId"),
 		}).Info("file uploaded successfully")
 		resp.WriteHeader(200)
+		resp.Header().Set("Snapshot-Id", result.Args.GetString("SnapshotId"))
 		resp.Header().Set("Access-Control-Allow-Origin", "*")
 	default:
 		log.WithFields(log.Fields{

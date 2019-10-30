@@ -83,10 +83,14 @@ func (ea EventArgs) String() string {
 	return strings.Join(aggr, ", ")
 }
 
-func (ea EventArgs) Get(key string) interface{} {
+func (ea EventArgs) GetString(key string) string {
 	val, ok := ea[key]
-	if ok {
-		return val
+	if !ok {
+		return ""
 	}
-	return nil
+	s, ok := val.(string)
+	if ok {
+		return s
+	}
+	return fmt.Sprintf("%+v", s)
 }

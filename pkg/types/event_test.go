@@ -41,6 +41,17 @@ func TestGetErrorFromNilArgsEvent(t *testing.T) {
 	}
 }
 
+func TestGetArgString(t *testing.T) {
+	e := &Event{
+		Name: "foo",
+		Args: &EventArgs{"snapshot": "bar"},
+	}
+
+	if e.Args.GetString("snapshot") != "bar" {
+		t.Errorf("expected 'bar', got: %s", e.Args.GetString("snapshot"))
+	}
+}
+
 func TestEncodeDecode(t *testing.T) {
 	diffFiles := []ZFSFileDiff{
 		{
