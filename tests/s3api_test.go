@@ -259,6 +259,11 @@ func TestS3Api(t *testing.T) {
 		}
 
 		defer resp.Body.Close()
+		snapshotIDHeader := resp.Header.Get("Snapshot-Id")
+		t.Logf("snapshotID from header: %s", snapshotIDHeader)
+
+		// wait for the snapshot to propage
+		time.Sleep(3 * time.Second)
 
 		commits, err := dm.ListCommits(fmt.Sprintf("admin/%s", dotName), "")
 
@@ -272,9 +277,6 @@ func TestS3Api(t *testing.T) {
 		}
 		// first commit (index 0) is always an "init" commit now
 		firstCommitId := commits[1].Id
-
-		snapshotIDHeader := resp.Header.Get("Snapshot-Id")
-		t.Logf("snapshotID from header: %s", snapshotIDHeader)
 
 		if firstCommitId != snapshotIDHeader {
 			t.Errorf("snapshot IDs don't match, header: %s, from dm list: %s", snapshotIDHeader, firstCommitId)
