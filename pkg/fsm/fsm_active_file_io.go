@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/dotmesh-io/dotmesh/pkg/archiver"
@@ -72,7 +73,7 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 			"type":         "upload",
 			"upload.type":  "S3",
 			"upload.file":  file.Filename,
-			"upload.bytes": fmt.Sprintf("%d", bytes),
+			"upload.bytes": strconv.FormatInt(bytes, 10),
 		}}})
 	if response.Name != "snapshotted" {
 		e := types.Event{
