@@ -245,7 +245,7 @@ func TestS3Api(t *testing.T) {
 			port = host.Port
 		}
 
-		req, err := http.NewRequest("POST", fmt.Sprintf("http://%s:%d/s3/admin:%s/uploaded.txt", host.IP, port, dotName), bytes.NewBufferString("contentz"))
+		req, err := http.NewRequest("PUT", fmt.Sprintf("http://%s:%d/s3/admin:%s/uploaded.txt", host.IP, port, dotName), bytes.NewBufferString("contentz"))
 		if err != nil {
 			t.Errorf("failed to create req: %s", err)
 			return
@@ -256,6 +256,9 @@ func TestS3Api(t *testing.T) {
 		if err != nil {
 			t.Errorf("S3 Upload request failed: %s", err)
 			return
+		}
+		if resp.StatusCode != 200 {
+			t.Errorf("unexpected status code: %d", resp.StatusCode)
 		}
 
 		defer resp.Body.Close()
