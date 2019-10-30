@@ -375,6 +375,11 @@ func (s *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, files
 		}
 		http.Error(resp, "upload failed", 500)
 	case types.EventNameSaveSuccess:
+		log.WithFields(log.Fields{
+			"filename":    filename,
+			"user":        user.Name,
+			"snapshot_id": result.Args.Get("SnapshotId"),
+		}).Info("file uploaded successfully")
 		resp.WriteHeader(200)
 		resp.Header().Set("Access-Control-Allow-Origin", "*")
 	default:
@@ -382,6 +387,7 @@ func (s *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, files
 			"error":    "unexpected event type returned",
 			"filename": filename,
 			"user":     user.Name,
+			"args":     result.Args,
 		}).Error("unexpected event type after uploading file")
 		resp.WriteHeader(200)
 		resp.Header().Set("Access-Control-Allow-Origin", "*")

@@ -82,3 +82,11 @@ func (ea EventArgs) String() string {
 	}
 	return strings.Join(aggr, ", ")
 }
+
+func (ea EventArgs) Get(key string) interface{} {
+	val, ok := ea[key]
+	if ok {
+		return val
+	}
+	return nil
+}

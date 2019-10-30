@@ -90,7 +90,8 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 
 	file.Response <- &types.Event{
 		Name: types.EventNameSaveSuccess,
-		Args: &types.EventArgs{},
+		// returning snapshot ID
+		Args: response.Args,
 	}
 
 	return activeState
