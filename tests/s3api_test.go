@@ -279,8 +279,8 @@ func TestS3Api(t *testing.T) {
 			t.Error(err.Error())
 		}
 
-		if len(commits) != 1 {
-			t.Errorf("expected to find %d commits", len(commits))
+		if len(commits) != 2 {
+			t.Errorf("expected to find 2 commit, got: %d commits", len(commits))
 			return
 		}
 		// first commit (index 0) is always an "init" commit now
