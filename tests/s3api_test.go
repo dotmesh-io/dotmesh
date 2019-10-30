@@ -262,7 +262,7 @@ func TestS3Api(t *testing.T) {
 		}
 
 		defer resp.Body.Close()
-		snapshotIDHeader := resp.Header.Get("Snapshot-Id")
+		snapshotIDHeader := resp.Header.Get("Snapshot")
 		t.Logf("snapshotID from header: %s", snapshotIDHeader)
 
 		t.Log("headers:")
