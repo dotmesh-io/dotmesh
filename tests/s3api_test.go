@@ -276,7 +276,7 @@ func TestS3Api(t *testing.T) {
 			return
 		}
 		// first commit (index 0) is always an "init" commit now
-		firstCommitId := commits[1].Id
+		firstCommitId := commits[0].Id
 
 		if firstCommitId != snapshotIDHeader {
 			t.Errorf("snapshot IDs don't match, header: %s, from dm list: %s", snapshotIDHeader, firstCommitId)
