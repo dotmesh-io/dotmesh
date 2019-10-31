@@ -12,6 +12,7 @@ import (
 
 	"github.com/dotmesh-io/dotmesh/pkg/archiver"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
+	log "github.com/sirupsen/logrus"
 )
 
 func createTestFile(testDir, filePath string, fileContent []byte) (err error) {
@@ -167,4 +168,78 @@ func TestFsmActiveReadDir(t *testing.T) {
 		}
 	})
 
+}
+
+func TestFsmActiveWriteContents(t *testing.T) {
+
+	outputDir, err := ioutil.TempDir("", "outputDir")
+	if err != nil {
+		t.Fatalf("Making temporary directory: %v", err)
+	}
+	defer os.RemoveAll(outputDir)
+
+	f, err := os.Open("./testdata/test-file.txt")
+	if err != nil {
+		t.Fatalf("failed to open test file: %s", err)
+	}
+
+	file := &types.InputFile{
+		Contents: f,
+	}
+
+	l := log.WithFields(log.Fields{
+		"filename": file.Filename,
+		"destPath": outputDir,
+	})
+
+	_, err = writeContents(l, file, outputDir+"/file.txt")
+	if err != nil {
+		t.Fatalf("failed to write contents: %s", err)
+	}
+
+	contents, err := ioutil.ReadFile(outputDir + "/file.txt")
+	if err != nil {
+		t.Errorf("failed to read saved contents: %s", err)
+		return
+	}
+	if strings.TrimSpace(string(contents)) != "some contents here" {
+		t.Errorf("expected 'some contents here', got: %s", strings.TrimSpace(string(contents)))
+	}
+}
+
+func TestFsmActiveWriteDirectoryContents(t *testing.T) {
+
+	outputDir, err := ioutil.TempDir("", "outputDir")
+	if err != nil {
+		t.Fatalf("Making temporary directory: %v", err)
+	}
+	defer os.RemoveAll(outputDir)
+
+	f, err := os.Open("./testdata/archived-test-file_tar")
+	if err != nil {
+		t.Fatalf("failed to open test file: %s", err)
+	}
+
+	file := &types.InputFile{
+		Contents: f,
+		Extract:  true,
+	}
+
+	l := log.WithFields(log.Fields{
+		"destPath": outputDir,
+	})
+
+	_, err = writeContents(l, file, outputDir+"/extracted")
+	if err != nil {
+		t.Fatalf("failed to write contents: %s", err)
+	}
+
+	contents, err := ioutil.ReadFile(outputDir + "/extracted/test-file.txt")
+	if err != nil {
+		t.Errorf("failed to read saved contents: %s", err)
+		return
+	}
+	if strings.TrimSpace(string(contents)) != "some contents here" {
+		t.Errorf("expected 'some contents here', got: %s", strings.TrimSpace(string(contents)))
+	}
 }
