@@ -357,11 +357,13 @@ func (s *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, files
 
 	defer req.Body.Close()
 	respCh := make(chan *Event)
+
 	fsm.WriteFile(&types.InputFile{
 		Filename: filename,
 		Contents: req.Body,
 		User:     user.Name,
 		Response: respCh,
+		Extract:  req.Header.Get("Extract") == "true",
 	})
 
 	result := <-respCh

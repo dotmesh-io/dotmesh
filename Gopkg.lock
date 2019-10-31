@@ -20,6 +20,12 @@
   version = "v1.17.0"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/andybalholm/brotli"
+  packages = ["."]
+  revision = "b60f0d972eeb79a5fba5fb60f1e0568bc8c97e42"
+
+[[projects]]
   name = "github.com/apache/thrift"
   packages = ["lib/go/thrift"]
   revision = "84d6af4cf903571319e0ebddd7beb12bc93fb752"
@@ -217,6 +223,19 @@
   name = "github.com/dotmesh-io/go-checkpoint"
   packages = ["."]
   revision = "edad9decbae8e2e2e58a64b18f7bd5efa76deb5a"
+
+[[projects]]
+  name = "github.com/dsnet/compress"
+  packages = [
+    ".",
+    "bzip2",
+    "bzip2/internal/sais",
+    "internal",
+    "internal/errors",
+    "internal/prefix"
+  ]
+  revision = "da652975a8eea9fa0735aba8056747a751db0bd3"
+  version = "v0.0.1"
 
 [[projects]]
   name = "github.com/dustin/go-humanize"
@@ -554,6 +573,25 @@
   version = "1.0.1"
 
 [[projects]]
+  name = "github.com/klauspost/compress"
+  packages = [
+    "flate",
+    "fse",
+    "huff0",
+    "snappy",
+    "zstd",
+    "zstd/internal/xxhash"
+  ]
+  revision = "16a4d3d7137cdefd94d420f22b5c20260674b95c"
+  version = "v1.9.1"
+
+[[projects]]
+  name = "github.com/klauspost/pgzip"
+  packages = ["."]
+  revision = "083b1c3f84dd6486588802e5ce295de3a7f41a8b"
+  version = "v1.2.1"
+
+[[projects]]
   name = "github.com/konsorten/go-windows-terminal-sequences"
   packages = ["."]
   revision = "f55edac94c9bbba5d6182a4be46d86a2c9b5b50e"
@@ -590,6 +628,12 @@
   packages = ["pbutil"]
   revision = "c12348ce28de40eed0136aa2b644d0ee0650e56c"
   version = "v1.0.1"
+
+[[projects]]
+  name = "github.com/mholt/archiver"
+  packages = ["."]
+  revision = "33320f6f730664f9896b05b777e53ae4c917f572"
+  version = "v3.2.0"
 
 [[projects]]
   name = "github.com/miekg/dns"
@@ -655,6 +699,12 @@
   name = "github.com/nu7hatch/gouuid"
   packages = ["."]
   revision = "179d4d0c4d8d407a32af483c2354df1d2c91e6c3"
+
+[[projects]]
+  name = "github.com/nwaples/rardecode"
+  packages = ["."]
+  revision = "cc3e4b2381762c56dbcdf9f93be03349a1dc1c14"
+  version = "v1.0.0"
 
 [[projects]]
   name = "github.com/opentracing/opentracing-go"
@@ -813,6 +863,23 @@
   packages = ["codec"]
   revision = "b4c50a2b199d93b13dc15e78929cfb23bfdf21ab"
   version = "v1.1.1"
+
+[[projects]]
+  name = "github.com/ulikunitz/xz"
+  packages = [
+    ".",
+    "internal/hash",
+    "internal/xlog",
+    "lzma"
+  ]
+  revision = "6f934d456d51e742b4eeab20d925a827ef22320a"
+  version = "v0.5.6"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/xi2/xz"
+  packages = ["."]
+  revision = "48954b6210f8d154cb5f8484d3a3e1f83489309e"
 
 [[projects]]
   name = "github.com/xiang90/probing"
@@ -1123,6 +1190,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "ead6dee2674ef39f87f6791f6407ea1024456cac3f13371473be2762c815d599"
+  inputs-digest = "1ddd23d36d7a250e2ce161c6938d723e576463c20acb3eb73d79047ada2010bc"
   solver-name = "gps-cdcl"
   solver-version = 1
