@@ -74,11 +74,11 @@ func (f *FsMachine) writeMetadata(meta map[string]string, filesystemId, snapshot
 	}
 	metaFile := fmt.Sprintf("%s/dotmesh.metadata/%s.json", pathToFs, snapshotId)
 	log.WithField("meta_file", metaFile).WithField("path", pathToFs).Debug("Writing metadata to file")
-	err = os.MkdirAll(filepath.Dir(metaFile), 0666)
+	err = os.MkdirAll(filepath.Dir(metaFile), os.ModePerm)
 	if err != nil {
 		return err
 	}
-	err = ioutil.WriteFile(metaFile, data, 0666)
+	err = ioutil.WriteFile(metaFile, data, os.ModePerm)
 	if err != nil {
 		return err
 	}

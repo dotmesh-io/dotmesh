@@ -13,6 +13,7 @@ type InputFile struct {
 	Contents io.Reader
 	User     string
 	Response chan *Event
+	Extract  bool
 }
 
 // OutputFile is used to read files from the disk on the local node

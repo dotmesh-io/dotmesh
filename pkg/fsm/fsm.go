@@ -2,6 +2,7 @@ package fsm
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -152,7 +153,7 @@ func NewFilesystemMachine(cfg *FsConfig) *FsMachine {
 		transferUpdates: make(chan types.TransferUpdate),
 
 		filesystemMetadataTimeout: cfg.FilesystemMetadataTimeout,
-		zfs:                       zfsInter,
+		zfs: zfsInter,
 	}
 }
 
@@ -713,7 +714,7 @@ func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextSt
 	} else {
 		meta = map[string]string{}
 	}
-	meta["timestamp"] = fmt.Sprintf("%d", time.Now().UnixNano())
+	meta["timestamp"] = strconv.FormatInt(time.Now().UnixNano(), 10)
 	var snapshotId string
 	snapshotIdInter, ok := (*e.Args)["snapshotId"]
 	if !ok {
@@ -729,7 +730,7 @@ func (f *FsMachine) snapshot(e *types.Event) (responseEvent *types.Event, nextSt
 			Name: "failed-writing-metadata", Args: &types.EventArgs{"err": err.Error()},
 		}, backoffState
 	}
-	output, err := f.zfs.Snapshot(f.filesystemId, snapshotId, make([]string, 0))
+	output, err := f.zfs.Snapshot(f.filesystemId, snapshotId, []string{})
 	if err != nil {
 		return &types.Event{
 			Name: "failed-snapshot",
