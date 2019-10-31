@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -233,6 +234,114 @@ func TestS3Api(t *testing.T) {
 		if statusThirdHead != 404 {
 			t.Errorf("unexpected HEAD status code: %d", statusThirdHead)
 		}
+	})
+
+	t.Run("CheckSnapshot", func(t *testing.T) {
+		dotName := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm init "+dotName)
+
+		port := 32607
+		if host.Port != 0 {
+			port = host.Port
+		}
+
+		req, err := http.NewRequest("PUT", fmt.Sprintf("http://%s:%d/s3/admin:%s/uploaded.txt", host.IP, port, dotName), bytes.NewBufferString("contentz"))
+		if err != nil {
+			t.Errorf("failed to create req: %s", err)
+			return
+		}
+		req.SetBasicAuth("admin", host.Password)
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Errorf("S3 Upload request failed: %s", err)
+			return
+		}
+		if resp.StatusCode != 200 {
+			t.Errorf("unexpected status code: %d", resp.StatusCode)
+		}
+
+		defer resp.Body.Close()
+		snapshotIDHeader := resp.Header.Get("Snapshot")
+		t.Logf("snapshotID from header: %s", snapshotIDHeader)
+
+		t.Log("headers:")
+		for k, vv := range resp.Header {
+			t.Logf("%s: [%s]", k, strings.Join(vv, ", "))
+		}
+
+		// wait for the snapshot to propage
+		time.Sleep(3 * time.Second)
+
+		commits, err := dm.ListCommits(fmt.Sprintf("admin/%s", dotName), "")
+
+		if err != nil {
+			t.Error(err.Error())
+		}
+
+		if len(commits) != 2 {
+			t.Errorf("expected to find 2 commit, got: %d commits", len(commits))
+			return
+		}
+		// first commit (index 0) is always an "init" commit now
+		firstCommitId := commits[1].Id
+
+		if firstCommitId != snapshotIDHeader {
+			t.Errorf("snapshot IDs don't match, header: %s, from dm list: %s", snapshotIDHeader, firstCommitId)
+		}
+	})
+
+	t.Run("TestUploadTarAndExtract", func(t *testing.T) {
+		dotName := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm init "+dotName)
+
+		port := 32607
+		if host.Port != 0 {
+			port = host.Port
+		}
+
+		f, err := os.Open("./testdata/archived-test-file_tar")
+		if err != nil {
+			t.Fatalf("failed to open test file: %s", err)
+		}
+
+		req, err := http.NewRequest("PUT", fmt.Sprintf("http://%s:%d/s3/admin:%s/mydata", host.IP, port, dotName), f)
+		if err != nil {
+			t.Errorf("failed to create req: %s", err)
+			return
+		}
+		// setting Extract header to inform dotmesh that it should extract
+		// tar file contents into the specified directory
+		req.Header.Set("Extract", "true")
+		// auth
+		req.SetBasicAuth("admin", host.Password)
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Errorf("S3 Upload request failed: %s", err)
+			return
+		}
+		if resp.StatusCode != 200 {
+			t.Errorf("unexpected status code: %d", resp.StatusCode)
+		}
+
+		defer resp.Body.Close()
+		snapshotIDHeader := resp.Header.Get("Snapshot")
+		t.Logf("snapshotID from header: %s", snapshotIDHeader)
+
+		respBody, status, err := callWithRetries("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/mydata/test-file.txt", dotName, snapshotIDHeader), host, nil)
+		if err != nil {
+			t.Errorf("S3 request failed, error: %s", err)
+		}
+		if status != 200 {
+			t.Errorf("unexpected status code: %d", status)
+		}
+
+		expected2 := "some-things-here"
+		if !strings.Contains(respBody, expected2) {
+			t.Errorf("The commit did not contain the correct file data (expected '%s', got: '%s')", expected2, respBody)
+		}
+
 	})
 
 	t.Run("ReadFileAtSnapshotEmpty", func(t *testing.T) { // FIX

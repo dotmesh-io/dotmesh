@@ -2,9 +2,10 @@ package utils
 
 import (
 	"fmt"
-	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"os"
 	"strings"
+
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 )
 
 // random bits of code I couldn't find a good place for

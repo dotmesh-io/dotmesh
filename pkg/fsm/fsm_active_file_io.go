@@ -3,8 +3,10 @@ package fsm
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/dotmesh-io/dotmesh/pkg/archiver"
@@ -34,28 +36,8 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 		file.Response <- &e
 		return backoffState
 	}
-	out, err := os.Create(destPath)
-	if err != nil {
-		e := types.Event{
-			Name: types.EventNameSaveFailed,
-			Args: &types.EventArgs{"err": fmt.Errorf("failed to create file, error: %s", err)},
-		}
-		l.WithError(err).Error("[saveFile] Error creating file")
-		file.Response <- &e
-		return backoffState
-	}
 
-	defer func() {
-		err := out.Close()
-		if err != nil {
-			log.WithFields(log.Fields{
-				"error": err,
-				"file":  destPath,
-			}).Error("s3 saveFile: got error while closing output file")
-		}
-	}()
-
-	bytes, err := io.Copy(out, file.Contents)
+	bytes, err := writeContents(l, file, destPath)
 	if err != nil {
 		e := types.Event{
 			Name: types.EventNameSaveFailed,
@@ -65,6 +47,7 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 		file.Response <- &e
 		return backoffState
 	}
+
 	response, _ := f.snapshot(&types.Event{Name: "snapshot",
 		Args: &types.EventArgs{"metadata": map[string]string{
 			"message":      "Uploaded " + file.Filename + " (" + formatBytes(bytes) + ")",
@@ -72,7 +55,7 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 			"type":         "upload",
 			"upload.type":  "S3",
 			"upload.file":  file.Filename,
-			"upload.bytes": fmt.Sprintf("%d", bytes),
+			"upload.bytes": strconv.FormatInt(bytes, 10),
 		}}})
 	if response.Name != "snapshotted" {
 		e := types.Event{
@@ -89,10 +72,63 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 
 	file.Response <- &types.Event{
 		Name: types.EventNameSaveSuccess,
-		Args: &types.EventArgs{},
+		// returning snapshot ID
+		Args: response.Args,
 	}
 
 	return activeState
+}
+
+func writeContents(l *log.Entry, file *types.InputFile, destinationPath string) (int64, error) {
+
+	if file.Extract {
+		return 0, writeAndExtractContents(l, file, destinationPath)
+	}
+
+	out, err := os.Create(destinationPath)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create file, error: %s", err)
+	}
+
+	defer func() {
+		err := out.Close()
+		if err != nil {
+			l.WithFields(log.Fields{
+				"error": err,
+			}).Error("s3 saveFile: got error while closing output file")
+		}
+	}()
+
+	bytes, err := io.Copy(out, file.Contents)
+	if err != nil {
+		l.WithError(err).Error("[saveFile] Error writing file")
+		return 0, fmt.Errorf("cannot to create a file, error: %s", err)
+	}
+
+	return bytes, nil
+}
+
+// TODO: calculate written bytes if we want it
+func writeAndExtractContents(l *log.Entry, file *types.InputFile, destinationPath string) error {
+	tDir, err := ioutil.TempDir(os.TempDir(), "s3_dir_upload")
+	if err != nil {
+		return fmt.Errorf("failed to create temporary dir for unarchiving: %s", err)
+	}
+	defer os.RemoveAll(tDir)
+
+	archiveFilepath := filepath.Join(tDir, "archive.tar")
+
+	archived, err := os.Create(archiveFilepath)
+	if err != nil {
+		return fmt.Errorf("failed to create file, error: %s", err)
+	}
+	_, err = io.Copy(archived, file.Contents)
+	if err != nil {
+		l.WithError(err).Error("[saveFile] Error writing file")
+		return fmt.Errorf("cannot to create a file, error: %s", err)
+	}
+
+	return archiver.Unarchive(archiveFilepath, destinationPath)
 }
 
 func (f *FsMachine) statFile(file *types.StatFile) StateFn {
