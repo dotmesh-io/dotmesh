@@ -401,7 +401,7 @@ func TestS3Api(t *testing.T) {
 			return
 		}
 
-		respBody, status, err := callWithRetries("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/mydata/test-file.txt", dotName, snapshotIDHeader), host, nil)
+		respBody, status, err := callWithRetries("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/mydata/second-file.txt", dotName, snapshotIDHeader), host, nil)
 		if err != nil {
 			t.Errorf("S3 request failed, error: %s", err)
 		}
