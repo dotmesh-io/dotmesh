@@ -128,7 +128,19 @@ func writeAndExtractContents(l *log.Entry, file *types.InputFile, destinationPat
 		return fmt.Errorf("cannot to create a file, error: %s", err)
 	}
 
-	return archiver.Unarchive(archiveFilepath, destinationPath)
+	// cleaning up destination
+	err = os.RemoveAll(destinationPath)
+	if err != nil {
+		l.WithError(err).Error("failed to clean dir")
+		return err
+	}
+
+	err = archiver.Unarchive(archiveFilepath, destinationPath)
+	if err != nil {
+		l.WithError(err).Error("failed to unarchive")
+		return err
+	}
+	return nil
 }
 
 func (f *FsMachine) statFile(file *types.StatFile) StateFn {
