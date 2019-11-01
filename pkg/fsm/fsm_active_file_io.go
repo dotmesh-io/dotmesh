@@ -128,7 +128,28 @@ func writeAndExtractContents(l *log.Entry, file *types.InputFile, destinationPat
 		return fmt.Errorf("cannot to create a file, error: %s", err)
 	}
 
-	return archiver.Unarchive(archiveFilepath, destinationPath)
+	// creating staging dir to extract our uploads
+	stagingDir, err := ioutil.TempDir(os.TempDir(), "s3_staging")
+	if err != nil {
+		return fmt.Errorf("failed to create temporary dir for staging: %s", err)
+	}
+	defer os.RemoveAll(stagingDir)
+
+	err = archiver.Unarchive(archiveFilepath, stagingDir)
+	if err != nil {
+		l.WithError(err).Error("failed to unarchive")
+		return err
+	}
+
+	// cleaning up destination
+	err = os.RemoveAll(destinationPath)
+	if err != nil {
+		l.WithError(err).Error("failed to clean dir")
+		return err
+	}
+
+	return os.Rename(stagingDir, destinationPath)
+
 }
 
 func (f *FsMachine) statFile(file *types.StatFile) StateFn {
