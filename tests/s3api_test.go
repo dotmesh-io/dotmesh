@@ -344,6 +344,78 @@ func TestS3Api(t *testing.T) {
 
 	})
 
+	t.Run("TestUploadAndOverwriteTarAndExtract", func(t *testing.T) {
+		dotName := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm init "+dotName)
+
+		port := 32607
+		if host.Port != 0 {
+			port = host.Port
+		}
+
+		uploadFile := func(file string) (string, error) {
+
+			f, err := os.Open(file)
+			if err != nil {
+				t.Fatalf("failed to open test file: %s", err)
+				return "", err
+			}
+			defer f.Close()
+
+			req, err := http.NewRequest("PUT", fmt.Sprintf("http://%s:%d/s3/admin:%s/mydata", host.IP, port, dotName), f)
+			if err != nil {
+				t.Errorf("failed to create req: %s", err)
+				return "", err
+			}
+			// setting Extract header to inform dotmesh that it should extract
+			// tar file contents into the specified directory
+			req.Header.Set("Extract", "true")
+			// auth
+			req.SetBasicAuth("admin", host.Password)
+
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Errorf("S3 Upload request failed: %s", err)
+				return "", err
+			}
+			if resp.StatusCode != 200 {
+				t.Errorf("unexpected status code: %d", resp.StatusCode)
+				return "", err
+			}
+
+			defer resp.Body.Close()
+			snapshotIDHeader := resp.Header.Get("Snapshot")
+			t.Logf("snapshotID from header: %s", snapshotIDHeader)
+			return snapshotIDHeader, nil
+		}
+
+		_, err = uploadFile("./testdata/archived-test-file_tar")
+		if err != nil {
+			t.Errorf("upload failed for the first file: %s", err)
+			return
+		}
+
+		snapshotIDHeader, err := uploadFile("./testdata/archived-second-file_tar")
+		if err != nil {
+			t.Errorf("upload failed for second file: %s", err)
+			return
+		}
+
+		respBody, status, err := callWithRetries("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/mydata/test-file.txt", dotName, snapshotIDHeader), host, nil)
+		if err != nil {
+			t.Errorf("S3 request failed, error: %s", err)
+		}
+		if status != 200 {
+			t.Errorf("unexpected status code: %d", status)
+		}
+
+		expected2 := "second-thing-here"
+		if !strings.Contains(respBody, expected2) {
+			t.Errorf("The commit did not contain the correct file data (expected '%s', got: '%s')", expected2, respBody)
+		}
+
+	})
+
 	t.Run("ReadFileAtSnapshotEmpty", func(t *testing.T) { // FIX
 		dotName := citools.UniqName()
 		citools.RunOnNode(t, node1, "dm init "+dotName)
