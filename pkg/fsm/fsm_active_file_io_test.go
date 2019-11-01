@@ -243,3 +243,62 @@ func TestFsmActiveWriteDirectoryContents(t *testing.T) {
 		t.Errorf("expected 'some contents here', got: %s", strings.TrimSpace(string(contents)))
 	}
 }
+
+func TestFsmActiveOverwriteDirectoryContents(t *testing.T) {
+
+	outputDir, err := ioutil.TempDir("", "outputDir")
+	if err != nil {
+		t.Fatalf("Making temporary directory: %v", err)
+	}
+	defer os.RemoveAll(outputDir)
+
+	t.Logf("output dir: '%s'", outputDir)
+
+	f, err := os.Open("./testdata/archived-test-file_tar")
+	if err != nil {
+		t.Fatalf("failed to open test file: %s", err)
+	}
+	file := &types.InputFile{
+		Contents: f,
+		Extract:  true,
+	}
+	l := log.WithFields(log.Fields{
+		"destPath": outputDir,
+	})
+
+	_, err = writeContents(l, file, outputDir+"/extracted")
+	if err != nil {
+		t.Fatalf("failed to write first archive contents: %s", err)
+	}
+	f.Close()
+
+	// now, overwrite it
+	f2, err := os.Open("./testdata/updated-file_tar")
+	if err != nil {
+		t.Fatalf("failed to open test file: %s", err)
+	}
+	secondFile := &types.InputFile{
+		Contents: f2,
+		Extract:  true,
+	}
+
+	_, err = writeContents(l, secondFile, outputDir+"/extracted")
+	if err != nil {
+		t.Fatalf("failed to write second archive contents: %s", err)
+	}
+	f2.Close()
+
+	// _, err = os.Stat(outputDir + "/extracted/test-file.txt")
+	// if err == nil {
+	// 	t.Errorf("didn't expect to find first file there")
+	// }
+
+	contents, err := ioutil.ReadFile(outputDir + "/extracted/test-file.txt")
+	if err != nil {
+		t.Errorf("failed to read saved contents: %s", err)
+		return
+	}
+	if strings.TrimSpace(string(contents)) != "updated contents" {
+		t.Errorf("expected 'updated contents', got: %s", strings.TrimSpace(string(contents)))
+	}
+}
