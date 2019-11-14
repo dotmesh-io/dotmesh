@@ -1,6 +1,7 @@
 package zfs
 
 import (
+	"fmt"
 	"testing"
 	"time"
 )
@@ -28,5 +29,32 @@ func TestParseCreationOutput(t *testing.T) {
 	}
 	if t1.Minute() != 1 {
 		t.Errorf("expected 1 Minute, got: %d", t1.Minute())
+	}
+}
+
+func TestZFSDiffCaching(t *testing.T) {
+	// TODO presupposes pool named test was already created...
+	z, err := NewZFS("zfs", "zpool", "test", "test")
+	if err != nil || z == nil {
+		t.Fatalf("Error creating pool: %s", err)
+	}
+	z.FindFilesystemIdsOnSystem()
+	output, err := z.Create("mytestfs")
+	if err != nil {
+		t.Fatalf("Error creating fs: %s\n%s", err, output)
+	}
+	defer z.DeleteFilesystemInZFS("mytestfs")
+	output, err = z.Snapshot("mytestfs", "myfirstsnapshot", []string{})
+	if err != nil {
+		t.Fatalf("Error snapshotting: %s\n%s", err, output)
+	}
+	fmt.Printf("DIFF TIME!\n")
+	_, err = z.Diff("mytestfs")
+	if err != nil {
+		t.Fatalf("Error diffing: %s\n", err)
+	}
+	_, err = z.Diff("mytestfs")
+	if err != nil {
+		t.Fatalf("Error diffing second time: %s\n", err)
 	}
 }

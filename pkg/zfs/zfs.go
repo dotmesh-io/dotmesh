@@ -978,14 +978,20 @@ func (z *zfs) Diff(filesystemID string) ([]types.ZFSFileDiff, error) {
 	// on it, and we have a cached diffResultCache, return it
 	tmpExistsErr := exec.CommandContext(ctx, z.zfsPath, "get", "name", tmp).Run()
 	if tmpExistsErr == nil {
+		fmt.Printf("TMP EXISTS!\n")
 		if dirty == 0 {
+			fmt.Printf("NOT DIRTY!\n")
 			// try to use the cache
 			if result, ok := diffResultCache[filesystemID]; ok {
+				fmt.Printf("SNAPSHOT IN CACHE!\n")
 				if result.SnapshotID == snapshot {
+					fmt.Printf("CACHE!\n")
 					return result.Result, nil
 				}
 			}
 		}
+	} else {
+		fmt.Printf("ERROR %s\n", tmpExistsErr)
 	}
 
 	err = os.MkdirAll(tmpMnt, 0775)
