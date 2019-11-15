@@ -2,8 +2,10 @@ package zfs
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -55,6 +57,8 @@ func mustRun(t *testing.T, program string, args ...string) {
 }
 
 func createPoolAndFilesystem(t *testing.T) (z ZFS, fsName, fsMountPath string, cleanup cleanupFunc) {
+	os.Setenv("MOUNT_PREFIX", "/tmp/zfstest")
+
 	// Delete any pre-existing pool-id.
 	os.Remove("/dotmesh-pool-id")
 
@@ -64,14 +68,14 @@ func createPoolAndFilesystem(t *testing.T) (z ZFS, fsName, fsMountPath string, c
 	if err != nil {
 		t.Fatalf("Can't get working directory!? %s", err)
 	}
-	poolPath := wd + "/" + poolName + ".zpool"
+	poolPath := filepath.Join(wd, poolName+".zpool")
 	mustRun(t, "truncate", "-s", "100M", poolPath)
 	mustRun(t, "zpool", "create", poolName, poolPath)
 	fsName = "mytestfs"
-	fsMountPath = "/" + poolName + "/dmfs/" + fsName + "/"
+	fsMountPath = filepath.Join("/tmp/zfstest", poolName, "dmfs", fsName)
 
 	// Create the zfs object
-	z, err = NewZFS("zfs", "zpool", poolName, poolName)
+	z, err = NewZFS("zfs", "zpool", poolName, "mount.zfs")
 	if err != nil || z == nil {
 		t.Fatalf("Error creating pool: %s", err)
 	}
@@ -80,9 +84,15 @@ func createPoolAndFilesystem(t *testing.T) (z ZFS, fsName, fsMountPath string, c
 	z.FindFilesystemIdsOnSystem()
 
 	// Create the filesystem
-	output, err := z.Create("mytestfs")
+	output, err := z.Create(fsName)
 	if err != nil {
 		t.Fatalf("Error creating fs: %s\n%s", err, output)
+	}
+
+	// Mount the filesystem
+	output, err = z.Mount(fsName, "", "", fsMountPath)
+	if err != nil {
+		t.Fatalf("Error mounting fs: %s\n%s", err, output)
 	}
 
 	cleanup = func() {
@@ -94,6 +104,51 @@ func createPoolAndFilesystem(t *testing.T) (z ZFS, fsName, fsMountPath string, c
 		}
 	}
 	return z, fsName, fsMountPath, cleanup
+}
+
+// No changes since last snapshot, diff is empty
+func TestZFSDiffNoChanges(t *testing.T) {
+	z, fsName, _, cleanup := createPoolAndFilesystem(t)
+	defer cleanup()
+	output, err := z.Snapshot(fsName, "myfirstsnapshot", []string{})
+	if err != nil {
+		t.Fatalf("Error snapshotting: %s\n%s", err, output)
+	}
+	changes, err := z.Diff(fsName)
+	if err != nil {
+		t.Fatalf("Error diffing: %s\n", err)
+	}
+	if len(changes) != 0 {
+		t.Errorf("Changes happened, should have none?! %#v", changes)
+	}
+}
+
+// File added since last snapshot, diff has it:
+func TestZFSDiffFileAdded(t *testing.T) {
+	z, fsName, fsPath, cleanup := createPoolAndFilesystem(t)
+	defer cleanup()
+	output, err := z.Snapshot(fsName, "myfirstsnapshot", []string{})
+	if err != nil {
+		t.Fatalf("Error snapshotting: %s\n%s", err, output)
+	}
+
+	filePath := filepath.Join(fsPath, "myfile.txt")
+	err = ioutil.WriteFile(filePath, []byte("woo"), 0644)
+	if err != nil {
+		t.Fatalf("Error creating file: %s", err)
+	}
+	changes, err := z.Diff(fsName)
+	if err != nil {
+		t.Fatalf("Error diffing: %s\n", err)
+	}
+	if len(changes) == 0 {
+		t.Errorf("No changes recorded.")
+	}
+	fmt.Printf("%#v\n", changes)
+}
+
+// File deleted since last snapshot, diff has it:
+func TestZFSDiffFileDeleted(t *testing.T) {
 }
 
 func TestZFSDiffCaching(t *testing.T) {
