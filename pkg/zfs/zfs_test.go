@@ -6,9 +6,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
+	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/uuid"
 )
 
@@ -56,7 +58,7 @@ func mustRun(t *testing.T, program string, args ...string) {
 	}
 }
 
-func createPoolAndFilesystem(t *testing.T) (z ZFS, fsName, fsMountPath string, cleanup cleanupFunc) {
+func createPoolAndFilesystem(t *testing.T) (z ZFS, fsName, defaultDotPath string, cleanup cleanupFunc) {
 	os.Setenv("MOUNT_PREFIX", "/tmp/zfstest")
 
 	// Delete any pre-existing pool-id.
@@ -72,7 +74,8 @@ func createPoolAndFilesystem(t *testing.T) (z ZFS, fsName, fsMountPath string, c
 	mustRun(t, "truncate", "-s", "100M", poolPath)
 	mustRun(t, "zpool", "create", poolName, poolPath)
 	fsName = "mytestfs"
-	fsMountPath = filepath.Join("/tmp/zfstest", poolName, "dmfs", fsName)
+	fsMountPath := filepath.Join("/tmp/zfstest", poolName, "dmfs", fsName)
+	defaultDotPath = filepath.Join(fsMountPath, "__default__")
 
 	// Create the zfs object
 	z, err = NewZFS("zfs", "zpool", poolName, "mount.zfs")
@@ -95,6 +98,12 @@ func createPoolAndFilesystem(t *testing.T) (z ZFS, fsName, fsMountPath string, c
 		t.Fatalf("Error mounting fs: %s\n%s", err, output)
 	}
 
+	// Create the default dot (__default__):
+	err = os.MkdirAll(defaultDotPath, 0775)
+	if err != nil {
+		t.Fatalf("Failed to create __default__: %s", err)
+	}
+
 	cleanup = func() {
 		// If env variable is set, don't destroy the pool at end of test, for easier
 		// debugging.
@@ -103,7 +112,7 @@ func createPoolAndFilesystem(t *testing.T) (z ZFS, fsName, fsMountPath string, c
 			os.Remove(poolPath)
 		}
 	}
-	return z, fsName, fsMountPath, cleanup
+	return z, fsName, defaultDotPath, cleanup
 }
 
 // No changes since last snapshot, diff is empty
@@ -141,14 +150,20 @@ func TestZFSDiffFileAdded(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error diffing: %s\n", err)
 	}
-	if len(changes) == 0 {
-		t.Errorf("No changes recorded.")
+	if len(changes) != 1 {
+		t.Fatalf("Wrong # changes recorded: %#v", changes)
 	}
-	fmt.Printf("%#v\n", changes)
+	if !reflect.DeepEqual(changes[0], types.ZFSFileDiff{Change: types.FileChangeAdded, Filename: "myfile.txt"}) {
+		t.Fatalf("Wrong change: %#v\n", changes[0])
+	}
 }
 
 // File deleted since last snapshot, diff has it:
 func TestZFSDiffFileDeleted(t *testing.T) {
+}
+
+// File modified since last snapshot, diff has it:
+func TestZFSDiffFileModified(t *testing.T) {
 }
 
 func TestZFSDiffCaching(t *testing.T) {
