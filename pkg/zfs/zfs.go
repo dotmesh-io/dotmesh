@@ -1111,7 +1111,7 @@ func (z *zfs) Diff(filesystemID string) ([]types.ZFSFileDiff, error) {
 		}
 	}
 	for filename, _ := range mapLatest {
-		if _, ok := mapLatest[filename]; !ok {
+		if _, ok := mapTmp[filename]; !ok {
 			// exists in latest but not tmp, must have been deleted
 			resultFiles = append(resultFiles, filename)
 			result[filename] = types.ZFSFileDiff{
