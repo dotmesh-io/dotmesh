@@ -72,7 +72,7 @@ func createPoolAndFilesystem(t *testing.T) (z ZFS, fsName, defaultDotPath string
 	poolPath := filepath.Join(wd, poolName+".zpool")
 	mustRun(t, "truncate", "-s", "100M", poolPath)
 	mustRun(t, "zpool", "create", poolName, poolPath)
-	fsName = "mytestfs"
+	fsName = "fs" + uuid.New().String()
 	fsMountPath := filepath.Join("/tmp/zfstest", poolName, "dmfs", fsName)
 	defaultDotPath = filepath.Join(fsMountPath, "__default__")
 
