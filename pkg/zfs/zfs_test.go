@@ -132,6 +132,20 @@ func TestZFSDiffNoChanges(t *testing.T) {
 	}
 }
 
+// Assert a particular ZFSFileDiff is expected from zfs.Diff
+func expectChangeFromDiff(t *testing.T, z ZFS, fsName string, expectedChange types.ZFSFileDiff) {
+	changes, err := z.Diff(fsName)
+	if err != nil {
+		t.Fatalf("Error diffing: %s\n", err)
+	}
+	if len(changes) != 1 {
+		t.Fatalf("Wrong # changes recorded: %#v", changes)
+	}
+	if !reflect.DeepEqual(changes[0], expectedChange) {
+		t.Fatalf("Wrong change: %#v\n", changes[0])
+	}
+}
+
 // File added since last snapshot, diff has it:
 func TestZFSDiffFileAdded(t *testing.T) {
 	z, fsName, fsPath, cleanup := createPoolAndFilesystem(t)
@@ -146,24 +160,53 @@ func TestZFSDiffFileAdded(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error creating file: %s", err)
 	}
-	changes, err := z.Diff(fsName)
-	if err != nil {
-		t.Fatalf("Error diffing: %s\n", err)
-	}
-	if len(changes) != 1 {
-		t.Fatalf("Wrong # changes recorded: %#v", changes)
-	}
-	if !reflect.DeepEqual(changes[0], types.ZFSFileDiff{Change: types.FileChangeAdded, Filename: "myfile.txt"}) {
-		t.Fatalf("Wrong change: %#v\n", changes[0])
-	}
+	expectChangeFromDiff(t, z, fsName, types.ZFSFileDiff{Change: types.FileChangeAdded, Filename: "myfile.txt"})
 }
 
 // File deleted since last snapshot, diff has it:
 func TestZFSDiffFileDeleted(t *testing.T) {
+	z, fsName, fsPath, cleanup := createPoolAndFilesystem(t)
+	defer cleanup()
+
+	filePath := filepath.Join(fsPath, "myfile.txt")
+	err := ioutil.WriteFile(filePath, []byte("woo"), 0644)
+	if err != nil {
+		t.Fatalf("Error creating file: %s", err)
+	}
+
+	output, err := z.Snapshot(fsName, "myfirstsnapshot", []string{})
+	if err != nil {
+		t.Fatalf("Error snapshotting: %s\n%s", err, output)
+	}
+	err = os.Remove(filePath)
+	if err != nil {
+		t.Fatalf("Error removing: %s\n", err)
+	}
+
+	expectChangeFromDiff(t, z, fsName, types.ZFSFileDiff{Change: types.FileChangeRemoved, Filename: "myfile.txt"})
 }
 
 // File modified since last snapshot, diff has it:
 func TestZFSDiffFileModified(t *testing.T) {
+	z, fsName, fsPath, cleanup := createPoolAndFilesystem(t)
+	defer cleanup()
+
+	filePath := filepath.Join(fsPath, "myfile.txt")
+	err := ioutil.WriteFile(filePath, []byte("woo"), 0644)
+	if err != nil {
+		t.Fatalf("Error creating file: %s", err)
+	}
+
+	output, err := z.Snapshot(fsName, "myfirstsnapshot", []string{})
+	if err != nil {
+		t.Fatalf("Error snapshotting: %s\n%s", err, output)
+	}
+	err = ioutil.WriteFile(filePath, []byte("abc"), 0644)
+	if err != nil {
+		t.Fatalf("Error changing file: %s", err)
+	}
+
+	expectChangeFromDiff(t, z, fsName, types.ZFSFileDiff{Change: types.FileChangeModified, Filename: "myfile.txt"})
 }
 
 func TestZFSDiffCaching(t *testing.T) {
