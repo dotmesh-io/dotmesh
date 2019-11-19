@@ -130,17 +130,14 @@ func TestZFSDiffNoChanges(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error snapshotting: %s\n%s", err, output)
 	}
-	changes, err := z.Diff(fsName)
-	if err != nil {
-		t.Fatalf("Error diffing: %s\n", err)
-	}
-	if len(changes) != 0 {
-		t.Errorf("Changes happened, should have none?! %#v", changes)
-	}
+	expectChangesFromDiff(t, z, fsName)
 }
 
 // Assert a particular ZFSFileDiff is expected from zfs.Diff
-func expectChangeFromDiff(t *testing.T, z ZFS, fsName string, expectedChange types.ZFSFileDiff) {
+func expectChangesFromDiff(t *testing.T, z ZFS, fsName string, expectedChanges ...types.ZFSFileDiff) {
+	if expectedChanges == nil {
+		expectedChanges = []types.ZFSFileDiff{}
+	}
 	check := func(expectFromCache bool) {
 		currentLogLevel := logrus.StandardLogger().GetLevel()
 		logrus.SetLevel(logrus.DebugLevel)
@@ -150,11 +147,11 @@ func expectChangeFromDiff(t *testing.T, z ZFS, fsName string, expectedChange typ
 		if err != nil {
 			t.Fatalf("Error diffing: %s\n", err)
 		}
-		if len(changes) != 1 {
+		if len(changes) != len(expectedChanges) {
 			t.Fatalf("Wrong # changes recorded: %#v", changes)
 		}
-		if !reflect.DeepEqual(changes[0], expectedChange) {
-			t.Fatalf("Wrong change: %#v\n", changes[0])
+		if !reflect.DeepEqual(changes, expectedChanges) {
+			t.Fatalf("Wrong changes: %#v != %#v\n", changes, expectedChanges)
 		}
 		for _, entry := range hook.Entries {
 			if entry.Data["diff_used_cache"] == nil {
@@ -193,7 +190,7 @@ func TestZFSDiffFileAdded(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error creating file: %s", err)
 	}
-	expectChangeFromDiff(t, z, fsName, types.ZFSFileDiff{Change: types.FileChangeAdded, Filename: "myfile.txt"})
+	expectChangesFromDiff(t, z, fsName, types.ZFSFileDiff{Change: types.FileChangeAdded, Filename: "myfile.txt"})
 }
 
 // File deleted since last snapshot, diff has it:
@@ -216,7 +213,7 @@ func TestZFSDiffFileDeleted(t *testing.T) {
 		t.Fatalf("Error removing: %s\n", err)
 	}
 
-	expectChangeFromDiff(t, z, fsName, types.ZFSFileDiff{Change: types.FileChangeRemoved, Filename: "myfile.txt"})
+	expectChangesFromDiff(t, z, fsName, types.ZFSFileDiff{Change: types.FileChangeRemoved, Filename: "myfile.txt"})
 }
 
 // File modified since last snapshot, diff has it:
@@ -239,5 +236,5 @@ func TestZFSDiffFileModified(t *testing.T) {
 		t.Fatalf("Error changing file: %s", err)
 	}
 
-	expectChangeFromDiff(t, z, fsName, types.ZFSFileDiff{Change: types.FileChangeModified, Filename: "myfile.txt"})
+	expectChangesFromDiff(t, z, fsName, types.ZFSFileDiff{Change: types.FileChangeModified, Filename: "myfile.txt"})
 }
