@@ -951,7 +951,6 @@ func (z *zfs) Diff(filesystemID string) ([]types.ZFSFileDiff, error) {
 	// we'll fail to detect changes to the filesystem in the dirty data
 	// algorithm. in this case, we need to clean up the tmp snapshot before
 	// proceeding, otherwise we risk missing filesystem changes.
-	// TODO this is probably where it's going wrong
 	dirty, _, checkLatestTmpSnapBothZeros, err := z.getDirtyDeltaCheckLatestTmpSnapBothZeros(filesystemID, snapshot, true)
 	if err != nil {
 		log.WithError(err).Error("[diff] error get dirty delta")
@@ -981,20 +980,14 @@ func (z *zfs) Diff(filesystemID string) ([]types.ZFSFileDiff, error) {
 	cmd.Stdout = os.Stdout
 	tmpExistsErr := cmd.Run()
 	if tmpExistsErr == nil {
-		fmt.Printf("TMP EXISTS!\n")
 		if dirty == 0 {
-			fmt.Printf("NOT DIRTY!\n")
 			// try to use the cache
 			if result, ok := diffResultCache[filesystemID]; ok {
-				fmt.Printf("SNAPSHOT IN CACHE!\n")
 				if result.SnapshotID == snapshot {
-					fmt.Printf("CACHE!\n")
 					return result.Result, nil
 				}
 			}
 		}
-	} else {
-		fmt.Printf("ERROR getting %s: %s\n", tmp, tmpExistsErr)
 	}
 
 	err = os.MkdirAll(tmpMnt, 0775)
