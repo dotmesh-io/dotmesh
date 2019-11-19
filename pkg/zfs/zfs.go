@@ -951,7 +951,6 @@ func (z *zfs) Diff(filesystemID string) ([]types.ZFSFileDiff, error) {
 	// we'll fail to detect changes to the filesystem in the dirty data
 	// algorithm. in this case, we need to clean up the tmp snapshot before
 	// proceeding, otherwise we risk missing filesystem changes.
-
 	dirty, _, checkLatestTmpSnapBothZeros, err := z.getDirtyDeltaCheckLatestTmpSnapBothZeros(filesystemID, snapshot, true)
 	if err != nil {
 		log.WithError(err).Error("[diff] error get dirty delta")
@@ -976,7 +975,10 @@ func (z *zfs) Diff(filesystemID string) ([]types.ZFSFileDiff, error) {
 
 	// First, if the dotmesh-fastdiff snapshot exists and there's no dirty data
 	// on it, and we have a cached diffResultCache, return it
-	tmpExistsErr := exec.CommandContext(ctx, z.zfsPath, "get", "name", tmp).Run()
+	cmd := exec.CommandContext(ctx, z.zfsPath, "get", "name", tmp)
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stdout
+	tmpExistsErr := cmd.Run()
 	if tmpExistsErr == nil {
 		if dirty == 0 {
 			// try to use the cache
@@ -1102,7 +1104,7 @@ func (z *zfs) Diff(filesystemID string) ([]types.ZFSFileDiff, error) {
 		}
 	}
 	for filename, _ := range mapLatest {
-		if _, ok := mapLatest[filename]; !ok {
+		if _, ok := mapTmp[filename]; !ok {
 			// exists in latest but not tmp, must have been deleted
 			resultFiles = append(resultFiles, filename)
 			result[filename] = types.ZFSFileDiff{
