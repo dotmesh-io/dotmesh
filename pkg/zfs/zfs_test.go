@@ -58,6 +58,11 @@ func mustRun(t *testing.T, program string, args ...string) {
 }
 
 func createPoolAndFilesystem(t *testing.T) (z ZFS, fsName, defaultDotPath string, cleanup cleanupFunc) {
+	err := exec.Command("zpool", "events").Run()
+	if err != nil {
+		t.Skipf("Failed to run zpool, you typically need to run as root to run this test: %s", err)
+	}
+
 	os.Setenv("MOUNT_PREFIX", "/tmp/zfstest")
 
 	// Delete any pre-existing pool-id.
