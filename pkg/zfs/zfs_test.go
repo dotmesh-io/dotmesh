@@ -9,6 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sirupsen/logrus"
+	logtest "github.com/sirupsen/logrus/hooks/test"
+
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/uuid"
 )
@@ -138,16 +141,42 @@ func TestZFSDiffNoChanges(t *testing.T) {
 
 // Assert a particular ZFSFileDiff is expected from zfs.Diff
 func expectChangeFromDiff(t *testing.T, z ZFS, fsName string, expectedChange types.ZFSFileDiff) {
-	changes, err := z.Diff(fsName)
-	if err != nil {
-		t.Fatalf("Error diffing: %s\n", err)
+	check := func(expectFromCache bool) {
+		currentLogLevel := logrus.StandardLogger().GetLevel()
+		logrus.SetLevel(logrus.DebugLevel)
+		defer logrus.SetLevel(currentLogLevel)
+		hook := logtest.NewGlobal()
+		changes, err := z.Diff(fsName)
+		if err != nil {
+			t.Fatalf("Error diffing: %s\n", err)
+		}
+		if len(changes) != 1 {
+			t.Fatalf("Wrong # changes recorded: %#v", changes)
+		}
+		if !reflect.DeepEqual(changes[0], expectedChange) {
+			t.Fatalf("Wrong change: %#v\n", changes[0])
+		}
+		for _, entry := range hook.Entries {
+			if entry.Data["diff_used_cache"] == nil {
+				continue
+			}
+			if entry.Data["diff_used_cache"] == expectFromCache {
+				// What we expected, great!
+				return
+			} else {
+				t.Errorf("Cache usage was not as expected: expected %#v != actual %#v", expectFromCache, entry.Data["diff_used_cache"])
+			}
+		}
+		t.Errorf("Couldn't find entry in logs about caching mode?!")
 	}
-	if len(changes) != 1 {
-		t.Fatalf("Wrong # changes recorded: %#v", changes)
-	}
-	if !reflect.DeepEqual(changes[0], expectedChange) {
-		t.Fatalf("Wrong change: %#v\n", changes[0])
-	}
+
+	// The first time we don't expect the cache to be used:
+	check(false)
+
+	// If we do diff a second time, we should:
+	// 1. Get the same result.
+	// 2. Use the fast path using cached results.
+	check(true)
 }
 
 // File added since last snapshot, diff has it:

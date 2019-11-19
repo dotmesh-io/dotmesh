@@ -14,8 +14,6 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/sirupsen/logrus"
-
 	"encoding/base64"
 	"io"
 	"os"
@@ -23,6 +21,7 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/metrics"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/utils"
+	log "github.com/sirupsen/logrus"
 )
 
 // this should be a coverall interface for the usage of zfs.
@@ -984,11 +983,13 @@ func (z *zfs) Diff(filesystemID string) ([]types.ZFSFileDiff, error) {
 			// try to use the cache
 			if result, ok := diffResultCache[filesystemID]; ok {
 				if result.SnapshotID == snapshot {
+					log.WithFields(log.Fields{"diff_used_cache": true}).Debug("Used cache")
 					return result.Result, nil
 				}
 			}
 		}
 	}
+	log.WithFields(log.Fields{"diff_used_cache": false}).Debug("Didn't use the cache")
 
 	err = os.MkdirAll(tmpMnt, 0775)
 	if err != nil {
