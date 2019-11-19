@@ -1,7 +1,6 @@
 package zfs
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -207,27 +206,4 @@ func TestZFSDiffFileModified(t *testing.T) {
 	}
 
 	expectChangeFromDiff(t, z, fsName, types.ZFSFileDiff{Change: types.FileChangeModified, Filename: "myfile.txt"})
-}
-
-func TestZFSDiffCaching(t *testing.T) {
-	z, fsName, _, cleanup := createPoolAndFilesystem(t)
-	defer cleanup()
-
-	output, err := z.Snapshot(fsName, "myfirstsnapshot", []string{})
-	if err != nil {
-		t.Fatalf("Error snapshotting: %s\n%s", err, output)
-	}
-	fmt.Printf("DIFF TIME!\n")
-	_, err = z.Diff(fsName)
-	if err != nil {
-		t.Fatalf("Error diffing: %s\n", err)
-	}
-	_, err = z.Diff(fsName)
-	if err != nil {
-		t.Fatalf("Error diffing second time: %s\n", err)
-	}
-	_, err = z.Diff(fsName)
-	if err != nil {
-		t.Fatalf("Error diffing second time: %s\n", err)
-	}
 }
