@@ -33,7 +33,13 @@ type ZFS interface {
 	ReportZpoolCapacity() error
 	FindFilesystemIdsOnSystem() []string
 	DeleteFilesystemInZFS(fs string) error
-	GetDirtyDelta(filesystemId, latestSnap string) (int64, int64, error)
+	// Return:
+	// 1. How many bytes changed since the given filesystem snapshot.
+	// 2. The total number of bytes used by the filesystem. Specifically the
+	//    "referenced" attribute, which means if two filesystems share some data,
+	//    it'll be double-counted. Which is fine, probably, ZFS being smart is an
+	//    implementation detail.
+	GetDirtyDelta(filesystemId, latestSnap string) (dirtyBytes int64, usedBytes int64, err error)
 	Snapshot(filesystemId, snapshotId string, meta []string) ([]byte, error)
 	List(filesystemId, snapshotId string) ([]byte, error)
 	FQ(filesystemId string) string
@@ -411,8 +417,47 @@ func (z *zfs) DeleteFilesystemInZFS(fs string) error {
 }
 
 func (z *zfs) GetDirtyDelta(filesystemId, latestSnap string) (int64, int64, error) {
-	dirty, total, _, err := z.getDirtyDeltaCheckLatestTmpSnapBothZeros(filesystemId, latestSnap, false)
-	return dirty, total, err
+	// Use "referenced" as the size of the filesystem, use
+	// "written@<snapshotname>" for bytes written since that snapshot. See
+	// https://zfsonlinux.org/manpages/0.8.1/man8/zfs.8.html
+	o, err := exec.Command(
+		z.zfsPath, "get", "-pH", "referenced,written@"+latestSnap, FQ(z.poolName, filesystemId),
+	).CombinedOutput()
+	if err != nil {
+		return 0, 0, fmt.Errorf(
+			"[pollDirty] 'zfs get -pH referenced,written@%s %s' errored with: %s %s",
+			FQ(z.poolName, filesystemId), latestSnap, err, o,
+		)
+	}
+
+	/* Output we parse should now look this:
+
+	   poolname/dmfs/fsname  referenced       25088   -
+	   poolname/dmfs/fsname  written@myfirstsnapshot  12800   local
+	*/
+	var dirty int64
+	var total int64
+	lines := strings.Split(string(o), "\n")
+	for _, line := range lines {
+		shrap := strings.Fields(line)
+		if len(shrap) >= 3 {
+			if shrap[0] == FQ(z.poolName, filesystemId) {
+				if shrap[1] == "referenced" {
+					total, err = strconv.ParseInt(shrap[2], 10, 64)
+					if err != nil {
+						return 0, 0, err
+					}
+				} else if shrap[1] == ("written@" + latestSnap) {
+					dirty, err = strconv.ParseInt(shrap[2], 10, 64)
+					if err != nil {
+						return 0, 0, err
+					}
+				}
+			}
+		}
+	}
+
+	return dirty, total, nil
 }
 
 func (z *zfs) getDirtyDeltaCheckLatestTmpSnapBothZeros(filesystemId, latestSnap string, dirtyFromTmpSnap bool) (
