@@ -131,6 +131,7 @@ func TestZFSDiffNoChanges(t *testing.T) {
 		t.Fatalf("Error snapshotting: %s\n%s", err, output)
 	}
 	expectChangesFromDiff(t, z, fsName)
+	checkDirtyDelta(t, z, fsName, "myfirstsnapshot", false, true)
 }
 
 // Assert a particular ZFSFileDiff is expected from zfs.Diff
@@ -177,6 +178,21 @@ func expectChangesFromDiff(t *testing.T, z ZFS, fsName string, expectedChanges .
 	check(true)
 }
 
+// Call GetDirtyDelta, check whether or not we expect dirty bytes to be bigger
+// than 0.
+func checkDirtyDelta(t *testing.T, z ZFS, filesystemId, snapshotName string, expectDirty, expectTotal bool) {
+	dirty, total, err := z.GetDirtyDelta(filesystemId, snapshotName)
+	if err != nil {
+		t.Fatalf("Failed to calculate delta: %s", err)
+	}
+	if expectTotal != (total > 0) {
+		t.Errorf("Expect total to be bigger than 0? %#v, actually it's %d", expectTotal, total)
+	}
+	if expectDirty != (dirty > 0) {
+		t.Errorf("Expect dirty to be bigger than 0? %#v, actually it's %d", expectDirty, dirty)
+	}
+}
+
 // File added since last snapshot, diff has it:
 func TestZFSDiffFileAdded(t *testing.T) {
 	z, fsName, fsPath, cleanup := createPoolAndFilesystem(t)
@@ -192,6 +208,7 @@ func TestZFSDiffFileAdded(t *testing.T) {
 		t.Fatalf("Error creating file: %s", err)
 	}
 	expectChangesFromDiff(t, z, fsName, types.ZFSFileDiff{Change: types.FileChangeAdded, Filename: "myfile.txt"})
+	checkDirtyDelta(t, z, fsName, "myfirstsnapshot", true, true)
 }
 
 // File deleted since last snapshot, diff has it:
@@ -215,6 +232,7 @@ func TestZFSDiffFileDeleted(t *testing.T) {
 	}
 
 	expectChangesFromDiff(t, z, fsName, types.ZFSFileDiff{Change: types.FileChangeRemoved, Filename: "myfile.txt"})
+	checkDirtyDelta(t, z, fsName, "myfirstsnapshot", true, true)
 }
 
 // File modified since last snapshot, diff has it:
@@ -238,4 +256,5 @@ func TestZFSDiffFileModified(t *testing.T) {
 	}
 
 	expectChangesFromDiff(t, z, fsName, types.ZFSFileDiff{Change: types.FileChangeModified, Filename: "myfile.txt"})
+	checkDirtyDelta(t, z, fsName, "myfirstsnapshot", true, true)
 }
