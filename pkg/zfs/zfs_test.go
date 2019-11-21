@@ -162,6 +162,7 @@ func expectChangesFromDiff(t *testing.T, z ZFS, fsName string, expectedChanges .
 				return
 			} else {
 				t.Errorf("Cache usage was not as expected: expected %#v != actual %#v", expectFromCache, entry.Data["diff_used_cache"])
+				return
 			}
 		}
 		t.Errorf("Couldn't find entry in logs about caching mode?!")
