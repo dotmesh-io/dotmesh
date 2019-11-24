@@ -10,7 +10,7 @@ RUN cd cmd/dm && go install -ldflags="-s -X main.clientVersion=${VERSION} -X mai
 RUN cd cmd/flexvolume && go install
 
 FROM ubuntu:bionic
-ENV SECURITY_UPDATES 2019-11-24
+ENV SECURITY_UPDATES 2019-11-24a
 # (echo 'search ...') Merge kernel module search paths from CentOS and Ubuntu :-O
 RUN apt-get -y update && apt-get -y install iproute2 kmod curl && \
     echo 'search updates extra ubuntu built-in weak-updates' > /etc/depmod.d/ubuntu.conf && \
