@@ -23,7 +23,8 @@ RUN apt-get -y update && apt-get -y install iproute2 kmod curl && \
     chmod +x /usr/local/bin/docker && \
     rm -rf /tmp/d && \
     cd /opt && curl https://get.dotmesh.io/zfs-userland/zfs-0.6.tar.gz |tar xzf - && \
-    curl https://get.dotmesh.io/zfs-userland/zfs-0.7.tar.gz |tar xzf -
+    curl https://get.dotmesh.io/zfs-userland/zfs-0.7.tar.gz |tar xzf - && \
+    curl https://get.dotmesh.io/zfs-userland/zfs-0.8.tar.gz |tar xzf -
 COPY ./cmd/dotmesh-server/require_zfs.sh /require_zfs.sh
 COPY --from=build-env /usr/local/go/bin/flexvolume /usr/local/bin/
 COPY --from=build-env /usr/local/go/bin/dotmesh-server /usr/local/bin/

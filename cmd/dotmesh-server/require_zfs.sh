@@ -182,8 +182,11 @@ if [[ "$KERNEL_ZFS_VERSION" == "0.6"* ]]; then
 elif [[ "$KERNEL_ZFS_VERSION" == "0.7"* ]]; then
     echo "Detected ZFS 0.7 kernel modules ($KERNEL_ZFS_VERSION), using matching userland"
     export ZFS_USERLAND_ROOT=/opt/zfs-0.7
+elif [[ "$KERNEL_ZFS_VERSION" == "0.8"* ]]; then
+    echo "Detected ZFS 0.8 kernel modules ($KERNEL_ZFS_VERSION), using matching userland"
+    export ZFS_USERLAND_ROOT=/opt/zfs-0.8
 else
-    echo "Kernel ZFS version ($KERNEL_ZFS_VERSION) doesn't match 0.6 or 0.7, not supported"
+    echo "Kernel ZFS version ($KERNEL_ZFS_VERSION) doesn't match 0.6, 0.7 or 0.8, not supported"
     echo
     echo "Trying to download kernel modules again and then restarting in case we're hitting"
     echo "https://github.com/dotmesh-io/dotmesh/issues/542"
