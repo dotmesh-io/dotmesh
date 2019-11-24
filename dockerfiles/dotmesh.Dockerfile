@@ -9,14 +9,14 @@ RUN cd cmd/dotmesh-server && go install -ldflags="-X main.serverVersion=${VERSIO
 RUN cd cmd/dm && go install -ldflags="-s -X main.clientVersion=${VERSION} -X main.stableDockerTag=${STABLE_DOCKER_TAG}"
 RUN cd cmd/flexvolume && go install
 
-FROM ubuntu:bionic
+FROM ubuntu:eoan
 ENV SECURITY_UPDATES 2019-11-24a
 # (echo 'search ...') Merge kernel module search paths from CentOS and Ubuntu :-O
 RUN apt-get -y update && apt-get -y install iproute2 kmod curl && \
     echo 'search updates extra ubuntu built-in weak-updates' > /etc/depmod.d/ubuntu.conf && \
     mkdir /tmp/d && \
     curl -o /tmp/d/docker.tgz \
-        https://download.docker.com/linux/static/edge/x86_64/docker-17.10.0-ce.tgz && \
+        https://download.docker.com/linux/static/stable/x86_64/docker-19.03.5.tgz && \
     cd /tmp/d && \
     tar zxfv /tmp/d/docker.tgz && \
     cp /tmp/d/docker/docker /usr/local/bin && \
