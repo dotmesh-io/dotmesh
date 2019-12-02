@@ -9,6 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sirupsen/logrus"
+	logtest "github.com/sirupsen/logrus/hooks/test"
+
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/uuid"
 )
@@ -127,26 +130,66 @@ func TestZFSDiffNoChanges(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error snapshotting: %s\n%s", err, output)
 	}
-	changes, err := z.Diff(fsName)
-	if err != nil {
-		t.Fatalf("Error diffing: %s\n", err)
-	}
-	if len(changes) != 0 {
-		t.Errorf("Changes happened, should have none?! %#v", changes)
-	}
+	expectChangesFromDiff(t, z, fsName)
+	checkDirtyDelta(t, z, fsName, "myfirstsnapshot", false, true)
 }
 
 // Assert a particular ZFSFileDiff is expected from zfs.Diff
-func expectChangeFromDiff(t *testing.T, z ZFS, fsName string, expectedChange types.ZFSFileDiff) {
-	changes, err := z.Diff(fsName)
+func expectChangesFromDiff(t *testing.T, z ZFS, fsName string, expectedChanges ...types.ZFSFileDiff) {
+	if expectedChanges == nil {
+		expectedChanges = []types.ZFSFileDiff{}
+	}
+	check := func(expectFromCache bool) {
+		currentLogLevel := logrus.StandardLogger().GetLevel()
+		logrus.SetLevel(logrus.DebugLevel)
+		defer logrus.SetLevel(currentLogLevel)
+		hook := logtest.NewGlobal()
+		changes, err := z.Diff(fsName)
+		if err != nil {
+			t.Fatalf("Error diffing: %s\n", err)
+		}
+		if len(changes) != len(expectedChanges) {
+			t.Fatalf("Wrong # changes recorded: %#v", changes)
+		}
+		if !reflect.DeepEqual(changes, expectedChanges) {
+			t.Fatalf("Wrong changes: %#v != %#v\n", changes, expectedChanges)
+		}
+		for _, entry := range hook.Entries {
+			if entry.Data["diff_used_cache"] == nil {
+				continue
+			}
+			if entry.Data["diff_used_cache"] == expectFromCache {
+				// What we expected, great!
+				return
+			} else {
+				t.Errorf("Cache usage was not as expected: expected %#v != actual %#v", expectFromCache, entry.Data["diff_used_cache"])
+				return
+			}
+		}
+		t.Errorf("Couldn't find entry in logs about caching mode?!")
+	}
+
+	// The first time we don't expect the cache to be used:
+	check(false)
+
+	// If we do diff a second time, we should:
+	// 1. Get the same result.
+	// 2. Use the fast path using cached results.
+	check(true)
+}
+
+// Call GetDirtyDelta, check whether or not we expect dirty bytes to be bigger
+// than 0.
+func checkDirtyDelta(t *testing.T, z ZFS, filesystemId, snapshotName string, expectDirty, expectTotal bool) {
+	dirty, total, err := z.GetDirtyDelta(filesystemId, snapshotName)
 	if err != nil {
-		t.Fatalf("Error diffing: %s\n", err)
+		t.Fatalf("Failed to calculate delta: %s", err)
 	}
-	if len(changes) != 1 {
-		t.Fatalf("Wrong # changes recorded: %#v", changes)
+	if expectTotal != (total > 0) {
+		t.Errorf("Expect total to be bigger than 0? %#v, actually it's %d", expectTotal, total)
 	}
-	if !reflect.DeepEqual(changes[0], expectedChange) {
-		t.Fatalf("Wrong change: %#v\n", changes[0])
+	if expectDirty != (dirty > 0) {
+		t.Errorf("Expect dirty to be bigger than 0? %#v, actually it's %d", expectDirty, dirty)
 	}
 }
 
@@ -164,7 +207,8 @@ func TestZFSDiffFileAdded(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error creating file: %s", err)
 	}
-	expectChangeFromDiff(t, z, fsName, types.ZFSFileDiff{Change: types.FileChangeAdded, Filename: "myfile.txt"})
+	expectChangesFromDiff(t, z, fsName, types.ZFSFileDiff{Change: types.FileChangeAdded, Filename: "myfile.txt"})
+	checkDirtyDelta(t, z, fsName, "myfirstsnapshot", true, true)
 }
 
 // File deleted since last snapshot, diff has it:
@@ -187,7 +231,8 @@ func TestZFSDiffFileDeleted(t *testing.T) {
 		t.Fatalf("Error removing: %s\n", err)
 	}
 
-	expectChangeFromDiff(t, z, fsName, types.ZFSFileDiff{Change: types.FileChangeRemoved, Filename: "myfile.txt"})
+	expectChangesFromDiff(t, z, fsName, types.ZFSFileDiff{Change: types.FileChangeRemoved, Filename: "myfile.txt"})
+	checkDirtyDelta(t, z, fsName, "myfirstsnapshot", true, true)
 }
 
 // File modified since last snapshot, diff has it:
@@ -210,5 +255,6 @@ func TestZFSDiffFileModified(t *testing.T) {
 		t.Fatalf("Error changing file: %s", err)
 	}
 
-	expectChangeFromDiff(t, z, fsName, types.ZFSFileDiff{Change: types.FileChangeModified, Filename: "myfile.txt"})
+	expectChangesFromDiff(t, z, fsName, types.ZFSFileDiff{Change: types.FileChangeModified, Filename: "myfile.txt"})
+	checkDirtyDelta(t, z, fsName, "myfirstsnapshot", true, true)
 }

@@ -14,8 +14,6 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/sirupsen/logrus"
-
 	"encoding/base64"
 	"io"
 	"os"
@@ -23,6 +21,7 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/metrics"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/utils"
+	log "github.com/sirupsen/logrus"
 )
 
 // this should be a coverall interface for the usage of zfs.
@@ -34,7 +33,13 @@ type ZFS interface {
 	ReportZpoolCapacity() error
 	FindFilesystemIdsOnSystem() []string
 	DeleteFilesystemInZFS(fs string) error
-	GetDirtyDelta(filesystemId, latestSnap string) (int64, int64, error)
+	// Return:
+	// 1. How many bytes changed since the given filesystem snapshot.
+	// 2. The total number of bytes used by the filesystem. Specifically the
+	//    "referenced" attribute, which means if two filesystems share some data,
+	//    it'll be double-counted. Which is fine, probably, ZFS being smart is an
+	//    implementation detail.
+	GetDirtyDelta(filesystemId, latestSnap string) (dirtyBytes int64, usedBytes int64, err error)
 	Snapshot(filesystemId, snapshotId string, meta []string) ([]byte, error)
 	List(filesystemId, snapshotId string) ([]byte, error)
 	FQ(filesystemId string) string
@@ -412,126 +417,47 @@ func (z *zfs) DeleteFilesystemInZFS(fs string) error {
 }
 
 func (z *zfs) GetDirtyDelta(filesystemId, latestSnap string) (int64, int64, error) {
-	dirty, total, _, err := z.getDirtyDeltaCheckLatestTmpSnapBothZeros(filesystemId, latestSnap, false)
-	return dirty, total, err
-}
-
-func (z *zfs) getDirtyDeltaCheckLatestTmpSnapBothZeros(filesystemId, latestSnap string, dirtyFromTmpSnap bool) (
-	// the bool flag returned indicates whether the tmp snapshot and the latest
-	// snapshot both have zero "used", which is a hint that they might both be
-	// using the same blocks (i.e. are same snapshot logically); in this case,
-	// the used value for both is reported as zero.  catch this case so that we
-	// can clean up the tmp snapshot in this case, otherwise dirty delta is
-	// incorrectly returned as zero, when in fact there is dirty data on the
-	// filesystem!
-	//
-	// dirty, total, tmp snap used == latest snap used == 0, err
-	int64, int64, bool, error,
-) {
+	// Use "referenced" as the size of the filesystem, use
+	// "written@<snapshotname>" for bytes written since that snapshot. See
+	// https://zfsonlinux.org/manpages/0.8.1/man8/zfs.8.html
 	o, err := exec.Command(
-		z.zfsPath, "get", "-pHr", "referenced,used", FQ(z.poolName, filesystemId),
+		z.zfsPath, "get", "-pH", "referenced,written@"+latestSnap, FQ(z.poolName, filesystemId),
 	).CombinedOutput()
 	if err != nil {
-		return 0, 0, false, fmt.Errorf(
-			"[pollDirty] 'zfs get -pHr referenced,used %s' errored with: %s %s",
-			FQ(z.poolName, filesystemId), err, o,
+		return 0, 0, fmt.Errorf(
+			"[pollDirty] 'zfs get -pH referenced,written@%s %s' errored with: %s %s",
+			FQ(z.poolName, filesystemId), latestSnap, err, o,
 		)
 	}
-	/*
-		pool/y  referenced      104948736       -
-		pool/y  used    209887232       -
-		pool/y@now      referenced      104948736       -
-		pool/y@now      used    104938496       -
+
+	/* Output we parse should now look this:
+
+	   poolname/dmfs/fsname  referenced       25088   -
+	   poolname/dmfs/fsname  written@myfirstsnapshot  12800   local
 	*/
-	var referDataset, referLatestSnap, usedLatestSnap, usedDataset int64
-	var referTmpSnap, usedTmpSnap int64
-	var foundTmpSnashot bool
+	var dirty int64
+	var total int64
 	lines := strings.Split(string(o), "\n")
 	for _, line := range lines {
 		shrap := strings.Fields(line)
 		if len(shrap) >= 3 {
 			if shrap[0] == FQ(z.poolName, filesystemId) {
 				if shrap[1] == "referenced" {
-					referDataset, err = strconv.ParseInt(shrap[2], 10, 64)
+					total, err = strconv.ParseInt(shrap[2], 10, 64)
 					if err != nil {
-						return 0, 0, false, err
+						return 0, 0, err
 					}
-				} else if shrap[1] == "used" {
-					usedDataset, err = strconv.ParseInt(shrap[2], 10, 64)
+				} else if shrap[1] == ("written@" + latestSnap) {
+					dirty, err = strconv.ParseInt(shrap[2], 10, 64)
 					if err != nil {
-						return 0, 0, false, err
-					}
-				}
-			} else if shrap[0] == FQ(z.poolName, filesystemId)+"@"+latestSnap {
-				if shrap[1] == "referenced" {
-					referLatestSnap, err = strconv.ParseInt(shrap[2], 10, 64)
-					if err != nil {
-						return 0, 0, false, err
-					}
-				} else if shrap[1] == "used" {
-					usedLatestSnap, err = strconv.ParseInt(shrap[2], 10, 64)
-					if err != nil {
-						return 0, 0, false, err
-					}
-				}
-			} else if shrap[0] == FQ(z.poolName, filesystemId)+"@"+dotmeshDiffSnapshotName {
-				foundTmpSnashot = true
-				// NB: tmpSnapshotName defined as package-level constant
-				if shrap[1] == "referenced" {
-					referTmpSnap, err = strconv.ParseInt(shrap[2], 10, 64)
-					if err != nil {
-						return 0, 0, false, err
-					}
-				} else if shrap[1] == "used" {
-					usedTmpSnap, err = strconv.ParseInt(shrap[2], 10, 64)
-					if err != nil {
-						return 0, 0, false, err
+						return 0, 0, err
 					}
 				}
 			}
 		}
 	}
-	var result int64 = 0
-	// if we're only counting dirty data from the tmp snapshot, don't count
-	// dirty data wrt the latest snapshot
-	if !dirtyFromTmpSnap {
-		//        deleted                                + added
-		result += intDiff(referDataset, referLatestSnap) + usedLatestSnap
-	}
-	var checkLatestTmpSnapBothZeros bool = false
-	if foundTmpSnashot && latestSnap != dotmeshDiffSnapshotName {
-		//        deleted                               added
-		result += intDiff(referDataset, referTmpSnap) + usedTmpSnap
-		// are the last two snaps both zero "used"? if so, we might be falling foul
-		// of the zfs space accounting uniqueness rule.
-		checkLatestTmpSnapBothZeros = usedLatestSnap == 0 && usedTmpSnap == 0
-	}
 
-	// log.WithFields(log.Fields{
-	// 	"filesystemId":                filesystemId,
-	// 	"referDataset":                referDataset,
-	// 	"referLatestSnap":             referLatestSnap,
-	// 	"usedLatestSnap":              usedLatestSnap,
-	// 	"foundTmpSnashot":             foundTmpSnashot,
-	// 	"latestSnap":                  latestSnap,
-	// 	"referTmpSnap":                referTmpSnap,
-	// 	"usedTmpSnap":                 usedTmpSnap,
-	// 	"usedDataset":                 usedDataset,
-	// 	"result":                      result,
-	// 	"checkLatestTmpSnapBothZeros": checkLatestTmpSnapBothZeros,
-	// 	"dirtyFromTmpSnap":            dirtyFromTmpSnap,
-	// }).Info("calculated dirty data")
-
-	// dirty delta, total size, checkLatestTmpSnapBothZeros, error
-	return result, usedDataset, checkLatestTmpSnapBothZeros, nil
-}
-
-func intDiff(a, b int64) int64 {
-	if a-b < 0 {
-		return b - a
-	} else {
-		return a - b
-	}
+	return dirty, total, nil
 }
 
 func (z *zfs) StashBranch(existingFs string, newFs string, rollbackTo string) error {
@@ -945,34 +871,6 @@ func (z *zfs) Diff(filesystemID string) ([]types.ZFSFileDiff, error) {
 	latestMnt := utils.Mnt("diff-latest-" + filesystemID)
 	tmpMnt := utils.Mnt("diff-tmp-" + filesystemID)
 
-	// check if we're in the case where both the latest snapshots both have a
-	// zero "used" value. in this case, because zfs space accounting for "used"
-	// values for snapshots only reports blocks _unique_ to that snapshot,
-	// we'll fail to detect changes to the filesystem in the dirty data
-	// algorithm. in this case, we need to clean up the tmp snapshot before
-	// proceeding, otherwise we risk missing filesystem changes.
-	dirty, _, checkLatestTmpSnapBothZeros, err := z.getDirtyDeltaCheckLatestTmpSnapBothZeros(filesystemID, snapshot, true)
-	if err != nil {
-		log.WithError(err).Error("[diff] error get dirty delta")
-		return nil, err
-	}
-
-	if checkLatestTmpSnapBothZeros {
-		// clean up tmp snap and try again
-		exec.CommandContext(ctx, "umount", tmpMnt).Run()
-		exec.CommandContext(ctx, z.zfsPath, "destroy", tmp).Run()
-
-		dirty, _, checkLatestTmpSnapBothZeros, err = z.getDirtyDeltaCheckLatestTmpSnapBothZeros(filesystemID, snapshot, true)
-		if err != nil {
-			log.WithError(err).Error("[diff] error get dirty delta (second try after tmp cleanup)")
-			return nil, err
-		}
-
-		if checkLatestTmpSnapBothZeros {
-			return nil, fmt.Errorf("tmp snapshot was stick around after trying to delete it")
-		}
-	}
-
 	// First, if the dotmesh-fastdiff snapshot exists and there's no dirty data
 	// on it, and we have a cached diffResultCache, return it
 	cmd := exec.CommandContext(ctx, z.zfsPath, "get", "name", tmp)
@@ -980,15 +878,24 @@ func (z *zfs) Diff(filesystemID string) ([]types.ZFSFileDiff, error) {
 	cmd.Stdout = os.Stdout
 	tmpExistsErr := cmd.Run()
 	if tmpExistsErr == nil {
+		dirty, _, err := z.GetDirtyDelta(filesystemID, tmp)
+		if err != nil {
+			log.WithError(err).Error("[diff] error get dirty delta")
+			return nil, err
+		}
 		if dirty == 0 {
 			// try to use the cache
 			if result, ok := diffResultCache[filesystemID]; ok {
 				if result.SnapshotID == snapshot {
+					// Don't delete this, it's used by tests:
+					log.WithFields(log.Fields{"diff_used_cache": true}).Debug("Used cache")
 					return result.Result, nil
 				}
 			}
 		}
 	}
+	// Don't delete this, it's used by tests:
+	log.WithFields(log.Fields{"diff_used_cache": false}).Debug("Didn't use the cache")
 
 	err = os.MkdirAll(tmpMnt, 0775)
 	if err != nil {
