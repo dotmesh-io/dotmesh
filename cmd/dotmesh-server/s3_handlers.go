@@ -133,13 +133,21 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	l := log.WithFields(log.Fields{
+		"method":     req.Method,
+		"filesystem": localFilesystemId,
+		"snapshot":   snapshotId,
+		"bucket":     bucketName,
+		"branch":     branch,
+	})
+
+	l.Info("[S3Handler.ServeHTTP] Request received")
+
 	// ensure any of these requests end up on the current master node for
 	// this filesystem
 	master, err := s.state.registry.CurrentMasterNode(localFilesystemId)
 	if err != nil {
-		log.WithFields(log.Fields{
-			"error": err,
-		}).Error("[S3Handler.ServeHTTP] master node for filesystem not found")
+		l.WithError(err).Error("[S3Handler.ServeHTTP] master node for filesystem not found")
 		http.Error(resp, fmt.Sprintf("master node for filesystem %s not found", localFilesystemId), 500)
 		return
 	}
@@ -147,17 +155,17 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		admin, err := s.state.userManager.Get(&user.Query{Ref: "admin"})
 		if err != nil {
 			http.Error(resp, fmt.Sprintf("Can't get API key to proxy s3 request: %+v.\n", err), 500)
-			log.Errorf("can't get API key to proxy s3: %+v.", err)
+			l.WithError(err).Error("[S3Handler.ServeHTTP] Can't get API key to proxy s3")
 			return
 		}
 		addresses := s.state.AddressesForServer(master)
 		target, err := dmclient.DeduceUrl(context.Background(), addresses, "internal", "admin", admin.ApiKey) // FIXME, need master->name mapping, see how handover works normally
 		if err != nil {
 			http.Error(resp, err.Error(), 500)
-			log.Errorf("can't establish URL to proxy s3: %+v.", err)
+			l.WithError(err).Error("[S3Handler.ServeHTTP] Can't establish URL to proxy")
 			return
 		}
-		log.Infof("[S3Handler.ServeHTTP] proxying PUT request to node: %s", target)
+		l.WithField("target", target).Info("[S3Handler.ServeHTTP] proxying PUT request")
 		s.ReverseProxy.ServeHTTP(resp, req.WithContext(ctxSetAddress(req.Context(), target)))
 		return
 	}
@@ -168,16 +176,16 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	if ok {
 		switch req.Method {
 		case "HEAD":
-			s.headFile(resp, req, localFilesystemId, snapshotId, key)
+			s.headFile(l, resp, req, localFilesystemId, snapshotId, key)
 		case "GET":
-			s.readFile(resp, req, localFilesystemId, snapshotId, key)
+			s.readFile(l, resp, req, localFilesystemId, snapshotId, key)
 		case "PUT":
-			s.putObject(resp, req, localFilesystemId, key)
+			s.putObject(l, resp, req, localFilesystemId, key)
 		}
 	} else {
 		switch req.Method {
 		case "GET":
-			s.listBucket(resp, req, bucketName, localFilesystemId, snapshotId)
+			s.listBucket(l, resp, req, bucketName, localFilesystemId, snapshotId)
 		}
 	}
 }
@@ -208,17 +216,19 @@ func (s *S3Handler) mountFilesystemSnapshot(filesystemId string, snapshotId stri
 	return e
 }
 
-func (s *S3Handler) headFile(resp http.ResponseWriter, req *http.Request, filesystemId, snapshotId, filename string) {
+func (s *S3Handler) headFile(l *log.Entry, resp http.ResponseWriter, req *http.Request, filesystemId, snapshotId, filename string) {
 	user := auth.GetUserFromCtx(req.Context())
 	fsm, err := s.state.InitFilesystemMachine(filesystemId)
 	if err != nil {
 		http.Error(resp, "failed to initialize filesystem", http.StatusInternalServerError)
+		l.WithError(err).Error("[S3Handler.headFile] failed to initialize filesystem")
 		return
 	}
 
 	state := fsm.GetCurrentState()
 	if state != "active" {
 		http.Error(resp, fmt.Sprintf("please try again later, state was %s", state), http.StatusServiceUnavailable)
+		l.WithField("state", state).Error("[S3Handler.headFile] FSM is not in active state")
 		return
 	}
 
@@ -234,6 +244,7 @@ func (s *S3Handler) headFile(resp http.ResponseWriter, req *http.Request, filesy
 			"filesystem": filesystemId,
 		}).Error("mount failed, returned event is not 'mounted'")
 		http.Error(resp, fmt.Sprintf("failed to mount filesystem (%s), check logs", e.Name), 500)
+		l.WithField("event", fmt.Sprintf("%#v", e)).Error("[S3Handler.headFile] failed to mount filesystem")
 		return
 	} else {
 		resp.Header().Set("Access-Control-Allow-Origin", "*")
@@ -252,6 +263,7 @@ func (s *S3Handler) headFile(resp http.ResponseWriter, req *http.Request, filesy
 		switch result.Name {
 		case types.EventNameReadFailed:
 			err := result.Error()
+			l.WithError(err).Error("[S3Handler.headFile] failed to read")
 			if err != nil {
 				http.Error(resp, err.Error(), 500)
 				return
@@ -259,6 +271,7 @@ func (s *S3Handler) headFile(resp http.ResponseWriter, req *http.Request, filesy
 			http.Error(resp, "read failed, could not retrieve actual error", 500)
 		case types.EventNameFileNotFound:
 			err := result.Error()
+			l.WithError(err).Error("[S3Handler.headFile] failed to find file")
 			if err != nil {
 				http.Error(resp, err.Error(), 404)
 				return
@@ -277,17 +290,19 @@ func (s *S3Handler) headFile(resp http.ResponseWriter, req *http.Request, filesy
 	}
 }
 
-func (s *S3Handler) readFile(resp http.ResponseWriter, req *http.Request, filesystemId, snapshotId, filename string) {
+func (s *S3Handler) readFile(l *log.Entry, resp http.ResponseWriter, req *http.Request, filesystemId, snapshotId, filename string) {
 	user := auth.GetUserFromCtx(req.Context())
 	fsm, err := s.state.InitFilesystemMachine(filesystemId)
 	if err != nil {
 		http.Error(resp, "failed to initialize filesystem", http.StatusInternalServerError)
+		l.WithError(err).Error("[S3Handler.readFile] failed to initialize filesystem")
 		return
 	}
 
 	state := fsm.GetCurrentState()
 	if state != "active" {
 		http.Error(resp, fmt.Sprintf("please try again later, state was %s", state), http.StatusServiceUnavailable)
+		l.WithField("state", state).Error("[S3Handler.readFile] FSM is not in active state")
 		return
 	}
 
@@ -316,6 +331,7 @@ func (s *S3Handler) readFile(resp http.ResponseWriter, req *http.Request, filesy
 		switch result.Name {
 		case types.EventNameReadFailed:
 			err := result.Error()
+			l.WithError(err).Error("[S3Handler.readFile] failed to read")
 			if err != nil {
 				http.Error(resp, err.Error(), 500)
 				return
@@ -323,6 +339,7 @@ func (s *S3Handler) readFile(resp http.ResponseWriter, req *http.Request, filesy
 			http.Error(resp, "read failed, could not retrieve actual error", 500)
 		case types.EventNameFileNotFound:
 			err := result.Error()
+			l.WithError(err).Error("[S3Handler.readFile] failed to find file")
 			if err != nil {
 				http.Error(resp, err.Error(), 404)
 				return
@@ -338,20 +355,23 @@ func (s *S3Handler) readFile(resp http.ResponseWriter, req *http.Request, filesy
 			"filesystem": filesystemId,
 		}).Error("mount failed, returned event is not 'mounted'")
 		http.Error(resp, fmt.Sprintf("failed to mount filesystem (%s), check logs", e.Name), 500)
+		l.WithError(err).Error("[S3Handler.readFile] failed to mount filesystem")
 	}
 }
 
-func (s *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, filesystemId, filename string) {
+func (s *S3Handler) putObject(l *log.Entry, resp http.ResponseWriter, req *http.Request, filesystemId, filename string) {
 	user := auth.GetUserFromCtx(req.Context())
 	fsm, err := s.state.InitFilesystemMachine(filesystemId)
 	if err != nil {
 		http.Error(resp, "failed to initialize filesystem", http.StatusInternalServerError)
+		l.WithError(err).Error("[S3Handler.putObject] failed to initialize filesystem")
 		return
 	}
 
 	state := fsm.GetCurrentState()
 	if state != "active" {
 		http.Error(resp, fmt.Sprintf("please try again later, state was %s", state), http.StatusServiceUnavailable)
+		l.WithField("state", state).Error("[S3Handler.putObject] FSM is not in active state")
 		return
 	}
 
@@ -373,8 +393,10 @@ func (s *S3Handler) putObject(resp http.ResponseWriter, req *http.Request, files
 		e, ok := (*result.Args)["err"].(string)
 		if ok {
 			http.Error(resp, e, 500)
+			l.WithField("error", e).Error("[S3Handler.putObject] put failed")
 			return
 		}
+		l.Error("[S3Handler.putObject] put failed")
 		http.Error(resp, "upload failed", 500)
 	case types.EventNameSaveSuccess:
 		log.WithFields(log.Fields{
@@ -405,15 +427,13 @@ type ListBucketResult struct {
 	TotalResults int64                `json:"total_results"`
 }
 
-func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name string, filesystemId string, snapshotId string) {
+func (s *S3Handler) listBucket(l *log.Entry, resp http.ResponseWriter, req *http.Request, name string, filesystemId string, snapshotId string) {
 
 	start := time.Now()
 	e := s.mountFilesystemSnapshot(filesystemId, snapshotId)
 	if time.Since(start) > 2*time.Second {
-		log.WithFields(log.Fields{
-			"filesystem_id": filesystemId,
-			"snapshot_id":   snapshotId,
-			"duration":      time.Since(start),
+		l.WithFields(log.Fields{
+			"duration": time.Since(start),
 		}).Warn("s3Handler.listBucket: listing bucket contents is getting slow")
 	}
 
@@ -475,6 +495,7 @@ func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name
 		listFilesResponse, err := fsm.GetKeysForDirLimit(listFileRequest)
 		if err != nil {
 			http.Error(resp, "failed to get keys for dir: "+err.Error(), 500)
+			l.WithError(err).Error("[S3Handler.listBucket] failed to get keys for dir")
 			return
 		}
 
@@ -506,6 +527,7 @@ func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name
 			err = enc.Encode(&bucket)
 			if err != nil {
 				http.Error(resp, fmt.Sprintf("failed to marshal response body: %s", err), 500)
+				l.WithError(err).Error("[S3Handler.listBucket] failed to marshal response body")
 			}
 		}
 
@@ -513,11 +535,13 @@ func (s *S3Handler) listBucket(resp http.ResponseWriter, req *http.Request, name
 
 	case "no-snapshots-found":
 		http.Error(resp, "No snaps to mount - commit before listing.", 400)
+		l.Error("[S3Handler.listBucket] No snaps to mount")
 	default:
 		log.WithFields(log.Fields{
 			"event":      e,
 			"filesystem": filesystemId,
 		}).Error("mount failed, returned event is not 'mounted'")
+		l.WithField("event", fmt.Sprintf("%#v", e)).Error("[S3Handler.listBucket] failed to mount")
 		http.Error(resp, fmt.Sprintf("failed to mount filesystem (%s), error: %s", e.Name, e.Error()), 500)
 	}
 }
