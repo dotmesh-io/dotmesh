@@ -162,7 +162,7 @@ func TestS3Api(t *testing.T) {
 		}
 	})
 
-	t.Run("ReadFileAtSnapshot", func(t *testing.T) { // FIX
+	t.Run("ReadFileAtSnapshotThenDelete", func(t *testing.T) { // FIX
 		dotName := citools.UniqName()
 		citools.RunOnNode(t, node1, "dm init "+dotName)
 		cmdFile1 := fmt.Sprintf("curl -T file.txt -u admin:%s 127.0.0.1:32607/s3/admin:%s/file.txt", host.Password, dotName)
@@ -233,6 +233,22 @@ func TestS3Api(t *testing.T) {
 		}
 		if statusThirdHead != 404 {
 			t.Errorf("unexpected HEAD status code: %d", statusThirdHead)
+		}
+
+		// Next, we delete one of the files, it should now 404:
+		respBody, status, err = callWithRetries("DELETE", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file.txt", dotName, firstCommitId), host, nil)
+		if err != nil {
+			t.Errorf("S3 request failed, error: %s", err)
+		}
+		if status != 200 {
+			t.Errorf("unexpected status code: %d", status)
+		}
+		respBody, status, err = callWithRetries("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file.txt", dotName, firstCommitId), host, nil)
+		if err != nil {
+			t.Errorf("S3 request failed, error: %s", err)
+		}
+		if status != 404 {
+			t.Errorf("unexpected status code: %d", status)
 		}
 	})
 

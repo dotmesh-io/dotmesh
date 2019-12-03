@@ -181,6 +181,8 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 			s.readFile(l, resp, req, localFilesystemId, snapshotId, key)
 		case "PUT":
 			s.putObject(l, resp, req, localFilesystemId, key)
+		case "DELETE":
+			s.deleteObject(l, resp, req, localFilesystemId, key)
 		}
 	} else {
 		switch req.Method {
@@ -418,6 +420,12 @@ func (s *S3Handler) putObject(l *log.Entry, resp http.ResponseWriter, req *http.
 		resp.Header().Set("Access-Control-Allow-Origin", "*")
 		resp.WriteHeader(200)
 	}
+}
+
+// TODO: delete files
+// TODO: delete directories recursively
+func (s *S3Handler) deleteObject(l *log.Entry, resp http.ResponseWriter, req *http.Request, filesystemId, filename string) {
+	http.Error(resp, "NOT IMPLEMENTED", 200)
 }
 
 type ListBucketResult struct {

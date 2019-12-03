@@ -90,6 +90,11 @@ func (state *InMemoryState) runServer() {
 	// put file into other branch
 	router.Handle("/s3/{namespace}:{name}@{branch}/{key:.*}", Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager))).Methods("PUT")
 
+	// delete file on master
+	router.Handle("/s3/{namespace}:{name}/{key:.*}", Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager))).Methods("DELETE")
+	// delete file on another branch
+	router.Handle("/s3/{namespace}:{name}@{branch}/{key:.*}", Instrument(state)(NewAuthHandler(NewS3Handler(state), state.userManager))).Methods("DELETE")
+
 	router.HandleFunc("/check",
 		func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "OK")
