@@ -97,7 +97,7 @@ func (f *FsMachine) deleteFile(file *types.InputFile) StateFn {
 	}
 	// TODO if fi.IsDir() case
 
-	err = os.Remove(DestPath)
+	err = os.Remove(destPath)
 	if err != nil {
 		e := types.Event{
 			Name: types.EventNameDeleteFailed,

@@ -250,8 +250,8 @@ const (
 	EventNameReadFailed    = "read-failed"
 	EventNameReadSuccess   = "read-success"
 	EventNameFileNotFound  = "file-not-found"
-	EventNameDeleteFailed  = "save-failed"
-	EventNameDeleteSuccess = "save-success"
+	EventNameDeleteFailed  = "delete-failed"
+	EventNameDeleteSuccess = "delete-success"
 )
 
 type MountCommitRequest struct {
