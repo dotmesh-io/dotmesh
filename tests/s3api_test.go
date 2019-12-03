@@ -236,14 +236,14 @@ func TestS3Api(t *testing.T) {
 		}
 
 		// Next, we delete one of the files, it should now 404:
-		respBody, status, err = callWithRetries("DELETE", fmt.Sprintf("/s3/admin:%s/file.txt", dotName, firstCommitId), host, nil)
+		respBody, status, err = callWithRetries("DELETE", fmt.Sprintf("/s3/admin:%s/file.txt", dotName), host, nil)
 		if err != nil {
 			t.Errorf("S3 request failed, error: %s", err)
 		}
 		if status != 200 {
 			t.Errorf("unexpected status code: %d", status)
 		}
-		respBody, status, err = callWithRetries("GET", fmt.Sprintf("/s3/admin:%s/file.txt", dotName, firstCommitId), host, nil)
+		respBody, status, err = callWithRetries("GET", fmt.Sprintf("/s3/admin:%s/file.txt", dotName), host, nil)
 		if err != nil {
 			t.Errorf("S3 request failed, error: %s", err)
 		}
