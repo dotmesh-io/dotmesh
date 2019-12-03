@@ -470,6 +470,14 @@ func (s *S3Handler) deleteObject(l *log.Entry, resp http.ResponseWriter, req *ht
 		resp.Header().Set("Snapshot", result.Args.GetString("SnapshotId"))
 		resp.Header().Set("Access-Control-Allow-Origin", "*")
 		resp.WriteHeader(200)
+	case types.EventNameFileNotFound:
+		err := result.Error()
+		l.WithError(err).Error("[S3Handler.deleteFile] failed to find file")
+		if err != nil {
+			http.Error(resp, err.Error(), 404)
+			return
+		}
+		http.Error(resp, "file not found", 404)
 
 	default:
 		log.WithFields(log.Fields{
