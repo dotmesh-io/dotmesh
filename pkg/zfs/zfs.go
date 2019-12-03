@@ -806,7 +806,7 @@ func (z *zfs) LastModified(filesystemID string) (*types.LastModified, error) {
 	// Tue Oct 15 11:01 2019
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	bts, err := exec.CommandContext(ctx, z.zfsPath, "list", "-o", "creation", z.FQ(FullIdWithSnapshot(filesystemID, dotmeshDiffSnapshotName))).CombinedOutput()
+	bts, err := exec.CommandContext(ctx, z.zfsPath, "list", "-p", "-o", "creation", z.FQ(FullIdWithSnapshot(filesystemID, dotmeshDiffSnapshotName))).CombinedOutput()
 	if err != nil {
 		return nil, err
 	}
@@ -828,9 +828,11 @@ func parseSnapshotCreationTime(commandOutput string) (*time.Time, error) {
 		return nil, fmt.Errorf("unexpected command output: %s", commandOutput)
 	}
 
-	// example output: Tue Oct 15 11:01 2019
-	t, err := time.Parse("Mon Jan _2 15:04 2006", lines[1])
-
+	timestamp, err := strconv.ParseInt(lines[1], 10, 64)
+	if err != nil {
+		return nil, err
+	}
+	t := time.Unix(timestamp, 0).UTC()
 	return &t, err
 }
 
