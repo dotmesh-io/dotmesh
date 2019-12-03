@@ -243,7 +243,14 @@ func TestS3Api(t *testing.T) {
 		if status != 200 {
 			t.Errorf("unexpected status code: %d", status)
 		}
-		respBody, status, err = callWithRetries("GET", fmt.Sprintf("/s3/admin:%s/file.txt", dotName), host, nil)
+		// Figure out new snapshot commit:
+		commits, err = dm.ListCommits(fmt.Sprintf("admin/%s", dotName), "")
+		if err != nil {
+			t.Error(err.Error())
+		}
+		deleteCommitId := commits[3].Id
+
+		respBody, status, err = callWithRetries("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file.txt", dotName, deleteCommitId), host, nil)
 		if err != nil {
 			t.Errorf("S3 request failed, error: %s", err)
 		}
@@ -257,7 +264,7 @@ func TestS3Api(t *testing.T) {
 			t.Errorf("S3 DELETE request failed, error: %s", err)
 		}
 		if statusUnknownDelete != 404 {
-			t.Errorf("unexpected DELETE status code: %d", statusThirdHead)
+			t.Errorf("unexpected DELETE status code: %d", statusUnknownDelete)
 		}
 
 	})
