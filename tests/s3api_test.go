@@ -252,7 +252,7 @@ func TestS3Api(t *testing.T) {
 		}
 
 		// Unknown file deletion:
-		_, statusUnknownDelete, err := callWithRetries("DELETE", fmt.Sprintf("/s3/admin:%s/snapshot/%s/nonexistant.txt", dotName, secondCommitId), host, nil)
+		_, statusUnknownDelete, err := callWithRetries("DELETE", fmt.Sprintf("/s3/admin:%s/nonexistant.txt", dotName), host, nil)
 		if err != nil {
 			t.Errorf("S3 DELETE request failed, error: %s", err)
 		}
