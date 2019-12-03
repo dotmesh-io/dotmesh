@@ -17,7 +17,7 @@ import (
 )
 
 var out = `CREATION
-Tue Oct 15 11:01 2019`
+1575386313`
 
 func TestParseCreationOutput(t *testing.T) {
 	t1, err := parseSnapshotCreationTime(out)
@@ -28,17 +28,20 @@ func TestParseCreationOutput(t *testing.T) {
 	if t1.Year() != 2019 {
 		t.Errorf("expected 2019, got: %d", t1.Year())
 	}
-	if t1.Month() != time.October {
-		t.Errorf("expected October, got: %s", t1.Month())
+	if t1.Month() != time.December {
+		t.Errorf("expected December, got: %s", t1.Month())
 	}
-	if t1.Day() != 15 {
-		t.Errorf("expected 15 day, got: %d", t1.Day())
+	if t1.Day() != 3 {
+		t.Errorf("expected 3 day, got: %d", t1.Day())
 	}
-	if t1.Hour() != 11 {
-		t.Errorf("expected 11 hour, got: %d", t1.Hour())
+	if t1.Hour() != 15 {
+		t.Errorf("expected 15 hour, got: %d", t1.Hour())
 	}
-	if t1.Minute() != 1 {
-		t.Errorf("expected 1 Minute, got: %d", t1.Minute())
+	if t1.Minute() != 18 {
+		t.Errorf("expected 18 Minute, got: %d", t1.Minute())
+	}
+	if t1.Second() != 33 {
+		t.Errorf("expected 33 Second, got: %d", t1.Second())
 	}
 }
 
@@ -139,7 +142,7 @@ func expectChangesFromDiff(t *testing.T, z ZFS, fsName string, expectedChanges .
 	if expectedChanges == nil {
 		expectedChanges = []types.ZFSFileDiff{}
 	}
-	check := func(expectFromCache bool) {
+	check := func(expectFromCache bool) (*types.LastModified, error) {
 		currentLogLevel := logrus.StandardLogger().GetLevel()
 		logrus.SetLevel(logrus.DebugLevel)
 		defer logrus.SetLevel(currentLogLevel)
@@ -160,22 +163,40 @@ func expectChangesFromDiff(t *testing.T, z ZFS, fsName string, expectedChanges .
 			}
 			if entry.Data["diff_used_cache"] == expectFromCache {
 				// What we expected, great!
-				return
+				return z.LastModified(fsName)
 			} else {
 				t.Errorf("Cache usage was not as expected: expected %#v != actual %#v", expectFromCache, entry.Data["diff_used_cache"])
-				return
+				return z.LastModified(fsName)
 			}
 		}
 		t.Errorf("Couldn't find entry in logs about caching mode?!")
+		return z.LastModified(fsName)
 	}
 
 	// The first time we don't expect the cache to be used:
-	check(false)
+	lastModified1, err := check(false)
+	if err != nil {
+		t.Fatalf("Got error doing LastModified: %s", err)
+	}
+	if lastModified1 == nil {
+		t.Errorf("LastModified returned nil.")
+	}
+	// Sleep for a couple of seconds, to ensure LastModified changes if it's
+	// buggy:
+	time.Sleep(time.Second * 2)
 
 	// If we do diff a second time, we should:
 	// 1. Get the same result.
 	// 2. Use the fast path using cached results.
-	check(true)
+	// 3. Get the same LastModified time.
+	lastModified2, err := check(true)
+	if err != nil {
+		t.Fatalf("Got error doing LastModified: %s", err)
+	}
+
+	if !reflect.DeepEqual(lastModified1, lastModified2) {
+		t.Errorf("zfs.LastModified value changed, %#v != %#v", lastModified1, lastModified2)
+	}
 }
 
 // Call GetDirtyDelta, check whether or not we expect dirty bytes to be bigger
