@@ -250,6 +250,16 @@ func TestS3Api(t *testing.T) {
 		if status != 404 {
 			t.Errorf("unexpected status code: %d", status)
 		}
+
+		// Unknown file deletion:
+		_, statusUnknownDelete, err := callWithRetries("DELETE", fmt.Sprintf("/s3/admin:%s/snapshot/%s/nonexistant.txt", dotName, secondCommitId), host, nil)
+		if err != nil {
+			t.Errorf("S3 DELETE request failed, error: %s", err)
+		}
+		if statusUnknownDelete != 404 {
+			t.Errorf("unexpected DELETE status code: %d", statusThirdHead)
+		}
+
 	})
 
 	t.Run("CheckSnapshot", func(t *testing.T) {
