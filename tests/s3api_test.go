@@ -513,7 +513,7 @@ func TestS3Api(t *testing.T) {
 
 		// t.Logf("running (first commit): '%s'", fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/subpath", host.Password, dotName, firstCommitId))
 		// respFirstCommit := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/subpath", host.Password, dotName, firstCommitId))
-		path := fmt.Sprintf("s3/admin:%s/snapshot/%s/subpath", dotName, firstCommitId)
+		path := fmt.Sprintf("/s3/admin:%s/snapshot/%s/subpath", dotName, firstCommitId)
 		s3Endpoint := fmt.Sprintf("http://%s:32607/%s", host.IP, path)
 
 		// HEAD it
@@ -579,7 +579,7 @@ func TestS3Api(t *testing.T) {
 			t.Errorf("expected file contents 'helloworld1', got: '%s'", string(bts))
 		}
 
-		s3Endpoint2 := fmt.Sprintf("http://%s:32607/s3/admin:%s/snapshot/%s/nonexistant", host.IP, dotName, firstCommitId)
+		s3Endpoint2 := fmt.Sprintf("/s3/admin:%s/snapshot/%s/nonexistant", dotName, firstCommitId)
 
 		t.Logf("running (nonexistant directory): '%s'", s3Endpoint2)
 		_, status, err = callWithRetries("GET", s3Endpoint2, host, nil)
@@ -624,7 +624,7 @@ func callWithRetries(method string, path string, node citools.Node, body io.Read
 			node.Port = 32607
 		}
 
-		url := fmt.Sprintf("http://%s:%d/%s", node.IP, node.Port, path)
+		url := fmt.Sprintf("http://%s:%d%s", node.IP, node.Port, path)
 
 		req, err := http.NewRequest(method, url, body)
 		if err != nil {
