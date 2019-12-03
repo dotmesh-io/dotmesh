@@ -422,10 +422,65 @@ func (s *S3Handler) putObject(l *log.Entry, resp http.ResponseWriter, req *http.
 	}
 }
 
-// TODO: delete files
 // TODO: delete directories recursively
 func (s *S3Handler) deleteObject(l *log.Entry, resp http.ResponseWriter, req *http.Request, filesystemId, filename string) {
-	http.Error(resp, "NOT IMPLEMENTED", 200)
+	user := auth.GetUserFromCtx(req.Context())
+	fsm, err := s.state.InitFilesystemMachine(filesystemId)
+	if err != nil {
+		http.Error(resp, "failed to initialize filesystem", http.StatusInternalServerError)
+		l.WithError(err).Error("[S3Handler.deleteObject] failed to initialize filesystem")
+		return
+	}
+
+	state := fsm.GetCurrentState()
+	if state != "active" {
+		http.Error(resp, fmt.Sprintf("please try again later, state was %s", state), http.StatusServiceUnavailable)
+		l.WithField("state", state).Error("[S3Handler.deleteObject] FSM is not in active state")
+		return
+	}
+
+	defer req.Body.Close()
+	respCh := make(chan *Event)
+
+	fsm.WriteFile(&types.InputFile{
+		Filename: filename,
+		Contents: nil,
+		User:     user.Name,
+		Response: respCh,
+	})
+
+	result := <-respCh
+
+	switch result.Name {
+	case types.EventNameDeleteFailed:
+		e, ok := (*result.Args)["err"].(string)
+		if ok {
+			http.Error(resp, e, 500)
+			l.WithField("error", e).Error("[S3Handler.deleteObject] put failed")
+			return
+		}
+		l.Error("[S3Handler.deleteObject] delete failed")
+		http.Error(resp, "delete failed", 500)
+	case types.EventNameDeleteSuccess:
+		log.WithFields(log.Fields{
+			"filename":    filename,
+			"user":        user.Name,
+			"snapshot_id": result.Args.GetString("SnapshotId"),
+		}).Info("file deleted successfully")
+		resp.Header().Set("Snapshot", result.Args.GetString("SnapshotId"))
+		resp.Header().Set("Access-Control-Allow-Origin", "*")
+		resp.WriteHeader(200)
+
+	default:
+		log.WithFields(log.Fields{
+			"error":    "unexpected event type returned",
+			"filename": filename,
+			"user":     user.Name,
+			"args":     result.Args,
+		}).Error("unexpected event type after delete file")
+		resp.Header().Set("Access-Control-Allow-Origin", "*")
+		resp.WriteHeader(200)
+	}
 }
 
 type ListBucketResult struct {

@@ -12,7 +12,11 @@ func activeState(f *FsMachine) StateFn {
 
 	select {
 	case file := <-f.fileInputIO:
-		return f.saveFile(file)
+		if file.Contents == nil {
+			return f.deleteFile(file)
+		} else {
+			return f.saveFile(file)
+		}
 	case file := <-f.fileOutputIO:
 		return f.readFile(file)
 	case file := <-f.fileStatIO:

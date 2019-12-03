@@ -7,9 +7,11 @@ import (
 	"time"
 )
 
-// InputFile is used to write files to the disk on the local node.
+// InputFile is used to write files to the disk on the local node,
+// or to delete files if Contents are nil.
 type InputFile struct {
 	Filename string
+	// If this is nil, this will delete the file:
 	Contents io.Reader
 	User     string
 	Response chan *Event

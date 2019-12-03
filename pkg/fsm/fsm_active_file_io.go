@@ -79,6 +79,65 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 	return activeState
 }
 
+// Delete a file at the given path.
+// TODO: Recursive deletion of directories.
+func (f *FsMachine) deleteFile(file *types.InputFile) StateFn {
+	// create the default paths
+	destPath := filepath.Join(utils.Mnt(f.filesystemId), "__default__", file.Filename)
+
+	l := log.WithFields(log.Fields{
+		"filename": file.Filename,
+		"destPath": destPath,
+	})
+
+	_, err := statFile(file.Filename, destPath, file.Response)
+	if err != nil {
+		l.WithError(err).Error("[deleteFile] Error statting")
+		return backoffState
+	}
+	// TODO if fi.IsDir() case
+
+	err = os.Remove(DestPath)
+	if err != nil {
+		e := types.Event{
+			Name: types.EventNameDeleteFailed,
+			Args: &types.EventArgs{"err": fmt.Errorf("cannot to delete the file, error: %s", err)},
+		}
+		l.WithError(err).Error("[deleteFile] Error deleting file")
+		file.Response <- &e
+		return backoffState
+	}
+
+	response, _ := f.snapshot(&types.Event{Name: "snapshot",
+		Args: &types.EventArgs{"metadata": map[string]string{
+			"message":     "Delete " + file.Filename,
+			"author":      file.User,
+			"type":        "delete",
+			"delete.type": "S3",
+			"delete.file": file.Filename,
+		}}})
+	if response.Name != "snapshotted" {
+		e := types.Event{
+			Name: types.EventNameDeleteFailed,
+			Args: &types.EventArgs{"err": "file snapshot failed"},
+		}
+		l.WithFields(log.Fields{
+			"responseName": response.Name,
+			"responseArgs": fmt.Sprintf("%#v", *(response.Args)),
+		}).Error("[saveFile] Error committing")
+		file.Response <- &e
+		return backoffState
+	}
+
+	file.Response <- &types.Event{
+		Name: types.EventNameDeleteSuccess,
+		// returning snapshot ID
+		Args: response.Args,
+	}
+
+	return activeState
+}
+
 func writeContents(l *log.Entry, file *types.InputFile, destinationPath string) (int64, error) {
 
 	if file.Extract {
@@ -181,6 +240,26 @@ func (f *FsMachine) statFile(file *types.StatFile) StateFn {
 	return activeState
 }
 
+// Run Stat() on a file, if error is return then an appropriate event will be
+// pushed into the response channel.
+func statFile(filename, sourcePath string, response chan *types.Event) (os.FileInfo, error) {
+	fi, err := os.Stat(sourcePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			response <- &types.Event{
+				Name: types.EventNameFileNotFound,
+				Args: &types.EventArgs{"err": fmt.Errorf("failed to stat %s, error: %s", filename, err)},
+			}
+		} else {
+			response <- &types.Event{
+				Name: types.EventNameReadFailed,
+				Args: &types.EventArgs{"err": fmt.Errorf("failed to stat %s, error: %s", filename, err)},
+			}
+		}
+	}
+	return fi, err
+}
+
 func (f *FsMachine) readFile(file *types.OutputFile) StateFn {
 
 	// create the default paths
@@ -191,19 +270,8 @@ func (f *FsMachine) readFile(file *types.OutputFile) StateFn {
 		"sourcePath": sourcePath,
 	})
 
-	fi, err := os.Stat(sourcePath)
+	fi, err := statFile(file.Filename, sourcePath, file.Response)
 	if err != nil {
-		if os.IsNotExist(err) {
-			file.Response <- &types.Event{
-				Name: types.EventNameFileNotFound,
-				Args: &types.EventArgs{"err": fmt.Errorf("failed to stat %s, error: %s", file.Filename, err)},
-			}
-		} else {
-			file.Response <- &types.Event{
-				Name: types.EventNameReadFailed,
-				Args: &types.EventArgs{"err": fmt.Errorf("failed to stat %s, error: %s", file.Filename, err)},
-			}
-		}
 		l.WithError(err).Error("[readFile] Error statting")
 		return backoffState
 	}
