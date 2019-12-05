@@ -3,8 +3,11 @@ package types
 import (
 	"fmt"
 	"io"
+	"path/filepath"
 	"reflect"
 	"time"
+
+	securejoin "github.com/cyphar/filepath-securejoin"
 )
 
 // InputFile is used to write files to the disk on the local node,
@@ -20,7 +23,8 @@ type InputFile struct {
 
 // OutputFile is used to read files from the disk on the local node
 // this is always done against a specific, already mounted snapshotId
-// the mount path of the snapshot is passed through via SnapshotMountPath
+// the mount path of the snapshot is passed through via SnapshotMountPath.
+// Can also be used for stating a file, in which case Contents will be nil.
 type OutputFile struct {
 	Filename          string
 	SnapshotMountPath string
@@ -29,12 +33,10 @@ type OutputFile struct {
 	Response          chan *Event
 }
 
-// StatFile is used to request the attributes of a file
-type StatFile struct {
-	Filename          string
-	SnapshotMountPath string
-	User              string
-	Response          chan *Event
+// Return the path of the file on the host in a secure way.
+func (o OutputFile) GetFilePath() (string, error) {
+	rootPath := filepath.Join(o.SnapshotMountPath, "__default__")
+	return securejoin.SecureJoin(rootPath, o.Filename)
 }
 
 // request when calling s3.GetKeysForDirLimit

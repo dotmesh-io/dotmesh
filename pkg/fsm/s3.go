@@ -34,7 +34,7 @@ func (f *FsMachine) WriteFile(source *types.InputFile) {
 	f.fileInputIO <- source
 }
 
-func (f *FsMachine) StatFile(source *types.StatFile) {
+func (f *FsMachine) StatFile(source *types.OutputFile) {
 	f.fileStatIO <- source
 }
 

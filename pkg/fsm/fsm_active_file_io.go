@@ -226,15 +226,24 @@ func writeAndExtractContents(l *log.Entry, file *types.InputFile, destinationPat
 	return nil
 }
 
-func (f *FsMachine) statFile(file *types.StatFile) StateFn {
+func (f *FsMachine) statFile(file *types.OutputFile) StateFn {
 
 	// create the default paths
-	sourcePath := filepath.Join(file.SnapshotMountPath, "__default__", file.Filename)
+	sourcePath, err := file.GetFilePath()
 
 	l := log.WithFields(log.Fields{
 		"filename":   file.Filename,
 		"sourcePath": sourcePath,
 	})
+
+	if err != nil {
+		file.Response <- &types.Event{
+			Name: types.EventNameReadFailed,
+			Args: &types.EventArgs{"err": fmt.Errorf("failed to get path %s, error: %s", file.Filename, err)},
+		}
+		l.WithError(err).Error("[statFile] Error statting, insecure path")
+		return backoffState
+	}
 
 	fi, err := os.Stat(sourcePath)
 	if err != nil {
@@ -287,12 +296,22 @@ func statFile(filename, sourcePath string, response chan *types.Event) (os.FileI
 func (f *FsMachine) readFile(file *types.OutputFile) StateFn {
 
 	// create the default paths
-	sourcePath := filepath.Join(file.SnapshotMountPath, "__default__", file.Filename)
+	sourcePath, err := file.GetFilePath()
 
 	l := log.WithFields(log.Fields{
 		"filename":   file.Filename,
 		"sourcePath": sourcePath,
 	})
+
+	if err != nil {
+		if err != nil {
+			file.Response <- &types.Event{
+				Name: types.EventNameReadFailed,
+				Args: &types.EventArgs{"err": fmt.Errorf("failed to read file, error: %s", err)},
+			}
+			l.WithError(err).Error("[readFile] Error opening, insecure path")
+			return backoffState
+	}
 
 	fi, err := statFile(file.Filename, sourcePath, file.Response)
 	if err != nil {

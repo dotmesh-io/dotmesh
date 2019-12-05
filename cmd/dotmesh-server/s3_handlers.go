@@ -253,7 +253,7 @@ func (s *S3Handler) headFile(l *log.Entry, resp http.ResponseWriter, req *http.R
 		resp.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
 
 		respCh := make(chan *Event)
-		fsm.StatFile(&types.StatFile{
+		fsm.StatFile(&types.OutputFile{
 			Filename:          filename,
 			User:              user.Name,
 			Response:          respCh,
