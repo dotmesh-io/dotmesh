@@ -14,6 +14,7 @@ import (
 	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
+	"github.com/dotmesh-io/dotmesh/pkg/validator"
 
 	"github.com/gorilla/mux"
 
@@ -72,6 +73,12 @@ func (h *DiffHandler) Director(req *http.Request) {
 
 func (s *DiffHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
+	if !validator.EnsureValid(vars["namespace"], validator.IsValidVolumeNamespace, resp) {
+		return
+	}
+	if !validator.EnsureValid(vars["name"], validator.IsValidVolumeName, resp) {
+		return
+	}
 
 	volName := VolumeName{
 		Name:      vars["name"],
@@ -140,6 +147,9 @@ func (s *DiffHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		}
 
 		snapshotID = snapshots[len(snapshots)-1].Id
+	}
+	if !validator.EnsureValid(snapshotID, validator.IsValidSnapshotName, resp) {
+		return
 	}
 
 	// node is local, proceed with zfs diff

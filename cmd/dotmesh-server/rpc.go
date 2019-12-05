@@ -780,6 +780,10 @@ func (d *DotmeshRPC) StashAfter(
 	args *types.StashRequest,
 	newBranch *string,
 ) error {
+	err := validator.IsValidSnapshotName(args.SnapshotId)
+	if err != nil {
+		return err
+	}
 	responseChan, err := d.state.globalFsRequest(
 		args.FilesystemId,
 		&Event{Name: "stash",
@@ -964,6 +968,11 @@ func (d *DotmeshRPC) Rollback(
 	}
 
 	err = validator.IsValidBranchName(args.Branch)
+	if err != nil {
+		return err
+	}
+
+	err = validator.IsValidSnapshotName(args.SnapshotId)
 	if err != nil {
 		return err
 	}

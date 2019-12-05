@@ -3,7 +3,10 @@ package validator
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // url checking consts
@@ -16,6 +19,7 @@ const (
 	VolumeNamespacePattern string = `^[a-zA-Z0-9_\-]{1,64}$`
 	BranchPattern          string = `^[a-zA-Z0-9_\-]{1,64}$`
 	SubDotPattern          string = `^[a-zA-Z0-9_\-]{1,64}$`
+	SnapshotPattern        string = `^[a-zA-Z0-9_\-]{1,64}$`
 )
 
 var (
@@ -26,6 +30,7 @@ var (
 	rxName        = regexp.MustCompile(VolumeNamePattern)
 	rxBranch      = regexp.MustCompile(BranchPattern)
 	rxSubdot      = regexp.MustCompile(SubDotPattern)
+	rxSnapshot    = regexp.MustCompile(SnapshotPattern)
 )
 
 // errors
@@ -33,10 +38,12 @@ var (
 	ErrEmptyName            = errors.New("name cannot be empty")
 	ErrEmptyNamespace       = errors.New("namespace cannot be empty")
 	ErrEmptySubdot          = errors.New("subdot cannot be empty")
+	ErrEmptySnapshot        = errors.New("snapshot cannot be empty")
 	ErrInvalidVolumeName    = fmt.Errorf("invalid dot name, should match pattern: %s", VolumeNamePattern)
 	ErrInvalidNamespaceName = fmt.Errorf("invalid namespace name, should match pattern: %s", VolumeNamespacePattern)
 	ErrInvalidBranchName    = fmt.Errorf("invalid branch name, should match pattern: %s", BranchPattern)
 	ErrInvalidSubdotName    = fmt.Errorf("invalid subdot name, should match pattern: %s", SubDotPattern)
+	ErrInvalidSnapshotName  = fmt.Errorf("invalid snapshot name, should match pattern: %s", SnapshotPattern)
 )
 
 // IsUUID check if the string is a UUID (version 3, 4 or 5).
@@ -115,7 +122,32 @@ func IsValidSubdotName(str string) error {
 	return nil
 }
 
+func IsValidSnapshotName(str string) error {
+	if str == "" {
+		return ErrEmptySnapshot
+	}
+
+	if !rxSubdot.MatchString(str) {
+		return ErrInvalidSnapshotName
+	}
+
+	return nil
+}
+
 // ReplaceUUID replace UUID in string
 func ReplaceUUID(str, replace string) string {
 	return rxUUIDPattern.ReplaceAllString(str, replace)
+}
+
+type ValidatorFunc func(string) error
+
+// Return false (and respond with HTTP error) if the value doesn't validate.
+func EnsureValid(value string, validator ValidatorFunc, resp http.ResponseWriter) bool {
+	err := validator(value)
+	if err == nil {
+		return true
+	}
+	log.Warn("[HTTP Validation] " + err.Error())
+	http.Error(resp, err.Error(), 400)
+	return false
 }
