@@ -88,7 +88,7 @@ type FSM interface {
 
 	// StatFile - reads type and size of a file,
 	// response will be sent to a provided Response channel
-	StatFile(destination *types.StatFile)
+	StatFile(destination *types.OutputFile)
 
 	// DumpState is used for diagnostics
 	DumpState() *FSMStateDump
@@ -114,7 +114,7 @@ func NewFilesystemMachine(cfg *FsConfig) *FsMachine {
 		innerResponses:          make(chan *types.Event),
 		fileInputIO:             make(chan *types.InputFile),
 		fileOutputIO:            make(chan *types.OutputFile),
-		fileStatIO:              make(chan *types.StatFile),
+		fileStatIO:              make(chan *types.OutputFile),
 		responses:               map[string]chan *types.Event{},
 		responsesLock:           &sync.Mutex{},
 		snapshotsModified:       make(chan bool),
@@ -153,7 +153,7 @@ func NewFilesystemMachine(cfg *FsConfig) *FsMachine {
 		transferUpdates: make(chan types.TransferUpdate),
 
 		filesystemMetadataTimeout: cfg.FilesystemMetadataTimeout,
-		zfs: zfsInter,
+		zfs:                       zfsInter,
 	}
 }
 

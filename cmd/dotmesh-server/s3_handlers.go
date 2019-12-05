@@ -181,6 +181,8 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 			s.readFile(l, resp, req, localFilesystemId, snapshotId, key)
 		case "PUT":
 			s.putObject(l, resp, req, localFilesystemId, key)
+		case "DELETE":
+			s.deleteObject(l, resp, req, localFilesystemId, key)
 		}
 	} else {
 		switch req.Method {
@@ -251,7 +253,7 @@ func (s *S3Handler) headFile(l *log.Entry, resp http.ResponseWriter, req *http.R
 		resp.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
 
 		respCh := make(chan *Event)
-		fsm.StatFile(&types.StatFile{
+		fsm.StatFile(&types.OutputFile{
 			Filename:          filename,
 			User:              user.Name,
 			Response:          respCh,
@@ -415,6 +417,74 @@ func (s *S3Handler) putObject(l *log.Entry, resp http.ResponseWriter, req *http.
 			"user":     user.Name,
 			"args":     result.Args,
 		}).Error("unexpected event type after uploading file")
+		resp.Header().Set("Access-Control-Allow-Origin", "*")
+		resp.WriteHeader(200)
+	}
+}
+
+func (s *S3Handler) deleteObject(l *log.Entry, resp http.ResponseWriter, req *http.Request, filesystemId, filename string) {
+	user := auth.GetUserFromCtx(req.Context())
+	fsm, err := s.state.InitFilesystemMachine(filesystemId)
+	if err != nil {
+		http.Error(resp, "failed to initialize filesystem", http.StatusInternalServerError)
+		l.WithError(err).Error("[S3Handler.deleteObject] failed to initialize filesystem")
+		return
+	}
+
+	state := fsm.GetCurrentState()
+	if state != "active" {
+		http.Error(resp, fmt.Sprintf("please try again later, state was %s", state), http.StatusServiceUnavailable)
+		l.WithField("state", state).Error("[S3Handler.deleteObject] FSM is not in active state")
+		return
+	}
+
+	defer req.Body.Close()
+	respCh := make(chan *Event)
+
+	fsm.WriteFile(&types.InputFile{
+		Filename: filename,
+		Contents: nil,
+		User:     user.Name,
+		Response: respCh,
+	})
+
+	result := <-respCh
+
+	switch result.Name {
+	case types.EventNameDeleteFailed:
+		e, ok := (*result.Args)["err"].(string)
+		if ok {
+			http.Error(resp, e, 500)
+			l.WithField("error", e).Error("[S3Handler.deleteObject] put failed")
+			return
+		}
+		l.Error("[S3Handler.deleteObject] delete failed")
+		http.Error(resp, "delete failed", 500)
+	case types.EventNameDeleteSuccess:
+		log.WithFields(log.Fields{
+			"filename":    filename,
+			"user":        user.Name,
+			"snapshot_id": result.Args.GetString("SnapshotId"),
+		}).Info("file deleted successfully")
+		resp.Header().Set("Snapshot", result.Args.GetString("SnapshotId"))
+		resp.Header().Set("Access-Control-Allow-Origin", "*")
+		resp.WriteHeader(200)
+	case types.EventNameFileNotFound:
+		err := result.Error()
+		l.WithError(err).Error("[S3Handler.deleteFile] failed to find file")
+		if err != nil {
+			http.Error(resp, err.Error(), 404)
+			return
+		}
+		http.Error(resp, "file not found", 404)
+
+	default:
+		log.WithFields(log.Fields{
+			"error":    "unexpected event type returned",
+			"filename": filename,
+			"user":     user.Name,
+			"args":     result.Args,
+		}).Error("unexpected event type after delete file")
 		resp.Header().Set("Access-Control-Allow-Origin", "*")
 		resp.WriteHeader(200)
 	}

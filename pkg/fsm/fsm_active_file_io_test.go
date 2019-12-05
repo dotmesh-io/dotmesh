@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/dotmesh-io/dotmesh/pkg/archiver"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	log "github.com/sirupsen/logrus"
@@ -354,5 +356,45 @@ func TestFsmActiveCleanDuringUploadDir(t *testing.T) {
 	}
 	if strings.TrimSpace(string(contents)) != "second-thing-here" {
 		t.Errorf("expected 'second-thing-here', got: %s", strings.TrimSpace(string(contents)))
+	}
+}
+
+type cleanupFunc func()
+
+func ensureMountPrefix(mountPrefix string) cleanupFunc {
+	old := os.Getenv("MOUNT_PREFIX")
+	os.Setenv("MOUNT_PREFIX", mountPrefix)
+	return func() {
+		os.Setenv("MOUNT_PREFIX", old)
+	}
+}
+
+// FsmMachine.getPathInFilesystem is secure to directory traversal attacks.
+func TestSecureGetPathInFilesystem(t *testing.T) {
+	cleanup := ensureMountPrefix("/mymnt")
+	defer cleanup()
+
+	fs := &FsMachine{filesystemId: "myfs"}
+
+	// Single part path
+	path, err := fs.getPathInFilesystem("ok")
+	if assert.NoError(t, err) {
+		assert.Equal(t, path, "/mymnt/dmfs/myfs/__default__/ok")
+	}
+
+	// Multi-path path
+	path, err = fs.getPathInFilesystem("foo/bar")
+	if assert.NoError(t, err) {
+		assert.Equal(t, path, "/mymnt/dmfs/myfs/__default__/foo/bar")
+	}
+
+	// Insecure paths can't breach the root directory:
+	path, err = fs.getPathInFilesystem("../..")
+	if assert.NoError(t, err) {
+		assert.Equal(t, path, "/mymnt/dmfs/myfs/__default__")
+	}
+	path, err = fs.getPathInFilesystem("..")
+	if assert.NoError(t, err) {
+		assert.Equal(t, path, "/mymnt/dmfs/myfs/__default__")
 	}
 }
