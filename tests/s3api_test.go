@@ -269,6 +269,61 @@ func TestS3Api(t *testing.T) {
 
 	})
 
+	t.Run("DeleteDirectory", func(t *testing.T) { // FIX
+		dotName := citools.UniqName()
+		citools.RunOnNode(t, node1, "dm init "+dotName)
+		citools.RunOnNode(t, node1, "echo helloworld1 > file.txt")
+		// Add a file in a directory:
+		cmdFile1 := fmt.Sprintf("curl -T file.txt -u admin:%s 127.0.0.1:32607/s3/admin:%s/dir/file.txt", host.Password, dotName)
+		citools.RunOnNode(t, node1, cmdFile1)
+
+		commits, err := dm.ListCommits(fmt.Sprintf("admin/%s", dotName), "")
+
+		if err != nil {
+			t.Error(err.Error())
+		}
+		// first commit (index 0) is always an "init" commit now
+		firstCommitId := commits[1].Id
+
+		t.Logf("running (first commit): '%s'", fmt.Sprintf("http://127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", dotName, firstCommitId))
+
+		respBody, status, err := callWithRetries("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file.txt", dotName, firstCommitId), host, nil)
+		if err != nil {
+			t.Errorf("S3 request failed, error: %s", err)
+		}
+		if status != 200 {
+			t.Errorf("unexpected status code: %d", status)
+		}
+		// respFirstCommit := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", host.Password, dotName, firstCommitId))
+		expected1 := "helloworld1"
+		if !strings.Contains(respBody, expected1) {
+			t.Errorf("The first commit did not contain the correct file data (expected '%s', got: '%s')", expected1, respBody)
+		}
+
+		// Next, we delete the directory, the file it contains it should now 404:
+		respBody, status, err = callWithRetries("DELETE", fmt.Sprintf("/s3/admin:%s/dir/", dotName), host, nil)
+		if err != nil {
+			t.Errorf("S3 request failed, error: %s", err)
+		}
+		if status != 200 {
+			t.Errorf("unexpected status code: %d", status)
+		}
+		// Figure out new snapshot commit:
+		commits, err = dm.ListCommits(fmt.Sprintf("admin/%s", dotName), "")
+		if err != nil {
+			t.Error(err.Error())
+		}
+		deleteCommitId := commits[2].Id
+
+		respBody, status, err = callWithRetries("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/dir/file.txt", dotName, deleteCommitId), host, nil)
+		if err != nil {
+			t.Errorf("S3 request failed, error: %s", err)
+		}
+		if status != 404 {
+			t.Errorf("unexpected status code: %d", status)
+		}
+	})
+
 	t.Run("CheckSnapshot", func(t *testing.T) {
 		dotName := citools.UniqName()
 		citools.RunOnNode(t, node1, "dm init "+dotName)
