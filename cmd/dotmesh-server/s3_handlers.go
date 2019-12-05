@@ -422,7 +422,6 @@ func (s *S3Handler) putObject(l *log.Entry, resp http.ResponseWriter, req *http.
 	}
 }
 
-// TODO: delete directories recursively
 func (s *S3Handler) deleteObject(l *log.Entry, resp http.ResponseWriter, req *http.Request, filesystemId, filename string) {
 	user := auth.GetUserFromCtx(req.Context())
 	fsm, err := s.state.InitFilesystemMachine(filesystemId)

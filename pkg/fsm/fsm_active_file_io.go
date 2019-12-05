@@ -80,7 +80,6 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 }
 
 // Delete a file at the given path.
-// TODO: Recursive deletion of directories.
 func (f *FsMachine) deleteFile(file *types.InputFile) StateFn {
 	// create the default paths
 	destPath := filepath.Join(utils.Mnt(f.filesystemId), "__default__", file.Filename)
@@ -95,9 +94,7 @@ func (f *FsMachine) deleteFile(file *types.InputFile) StateFn {
 		l.WithError(err).Error("[deleteFile] Error statting")
 		return backoffState
 	}
-	// TODO if fi.IsDir() case
-
-	err = os.Remove(destPath)
+	err = os.RemoveAll(destPath)
 	if err != nil {
 		e := types.Event{
 			Name: types.EventNameDeleteFailed,
