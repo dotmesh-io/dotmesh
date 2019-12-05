@@ -304,13 +304,12 @@ func (f *FsMachine) readFile(file *types.OutputFile) StateFn {
 	})
 
 	if err != nil {
-		if err != nil {
-			file.Response <- &types.Event{
-				Name: types.EventNameReadFailed,
-				Args: &types.EventArgs{"err": fmt.Errorf("failed to read file, error: %s", err)},
-			}
-			l.WithError(err).Error("[readFile] Error opening, insecure path")
-			return backoffState
+		file.Response <- &types.Event{
+			Name: types.EventNameReadFailed,
+			Args: &types.EventArgs{"err": fmt.Errorf("failed to read file, error: %s", err)},
+		}
+		l.WithError(err).Error("[readFile] Error opening, insecure path")
+		return backoffState
 	}
 
 	fi, err := statFile(file.Filename, sourcePath, file.Response)
@@ -361,12 +360,21 @@ func (f *FsMachine) readFile(file *types.OutputFile) StateFn {
 
 func (f *FsMachine) readDirectory(file *types.OutputFile) StateFn {
 
-	dirPath := filepath.Join(file.SnapshotMountPath, "__default__", file.Filename)
+	dirPath, err := file.GetFilePath()
 
 	l := log.WithFields(log.Fields{
 		"filename": file.Filename,
 		"dirPath":  dirPath,
 	})
+
+	if err != nil {
+		file.Response <- &types.Event{
+			Name: types.EventNameReadFailed,
+			Args: &types.EventArgs{"err": fmt.Errorf("failed to read directory, error: %s", err)},
+		}
+		l.WithError(err).Error("[readDirectory] Error opening, insecure path")
+		return backoffState
+	}
 
 	stat, err := os.Stat(dirPath)
 	if err != nil {
