@@ -287,14 +287,13 @@ func TestS3Api(t *testing.T) {
 
 		t.Logf("running (first commit): '%s'", fmt.Sprintf("http://127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", dotName, firstCommitId))
 
-		respBody, status, err := callWithRetries("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/file.txt", dotName, firstCommitId), host, nil)
+		respBody, status, err := callWithRetries("GET", fmt.Sprintf("/s3/admin:%s/snapshot/%s/dir/file.txt", dotName, firstCommitId), host, nil)
 		if err != nil {
 			t.Errorf("S3 request failed, error: %s", err)
 		}
 		if status != 200 {
 			t.Errorf("unexpected status code: %d", status)
 		}
-		// respFirstCommit := citools.OutputFromRunOnNode(t, node1, fmt.Sprintf("curl -u admin:%s 127.0.0.1:32607/s3/admin:%s/snapshot/%s/file.txt", host.Password, dotName, firstCommitId))
 		expected1 := "helloworld1"
 		if !strings.Contains(respBody, expected1) {
 			t.Errorf("The first commit did not contain the correct file data (expected '%s', got: '%s')", expected1, respBody)
