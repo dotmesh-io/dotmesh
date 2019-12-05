@@ -230,6 +230,14 @@
   version = "v4"
 
 [[projects]]
+  digest = "1:ec66ad050342a3573ed2f5a4337d51b4c6d5d2a717cc6c9ecf86b081235a5759"
+  name = "github.com/cyphar/filepath-securejoin"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "a261ee33d7a517f054effbf451841abaafe3e0fd"
+  version = "v0.2.2"
+
+[[projects]]
   digest = "1:a2c1d0e43bd3baaa071d1b9ed72c27d78169b2b269f71c105ac4ba34b1be4a39"
   name = "github.com/davecgh/go-spew"
   packages = ["spew"]
@@ -935,6 +943,14 @@
   version = "v2.0.3"
 
 [[projects]]
+  digest = "1:cf31692c14422fa27c83a05292eb5cbe0fb2775972e8f1f8446a71549bd8980b"
+  name = "github.com/pkg/errors"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "ba968bfe8b2f7e042a574c888954fccecfa385b4"
+  version = "v0.8.1"
+
+[[projects]]
   digest = "1:0028cb19b2e4c3112225cd871870f2d9cf49b9b4276531f03438a88e94be86fe"
   name = "github.com/pmezard/go-difflib"
   packages = ["difflib"]
@@ -1454,6 +1470,7 @@
     "github.com/blang/semver",
     "github.com/coreos/etcd/client",
     "github.com/coreos/etcd/embed",
+    "github.com/cyphar/filepath-securejoin",
     "github.com/dotmesh-io/go-checkpoint",
     "github.com/fsouza/go-dockerclient",
     "github.com/golang/glog",
@@ -1482,6 +1499,7 @@
     "github.com/sirupsen/logrus",
     "github.com/sirupsen/logrus/hooks/test",
     "github.com/spf13/cobra",
+    "github.com/stretchr/testify/assert",
     "golang.org/x/crypto/scrypt",
     "golang.org/x/net/context",
     "golang.org/x/sys/unix",

@@ -13,20 +13,37 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/utils"
 
+	securejoin "github.com/cyphar/filepath-securejoin"
 	log "github.com/sirupsen/logrus"
 )
 
+// Given a file's path inside the dot default branch, return its actual path on
+// the host filesystem, securely.
+func (f *FsMachine) getPathInFilesystem(pathInDot string) (string, error) {
+	rootPath := filepath.Join(utils.Mnt(f.filesystemId), "__default__")
+	return securejoin.SecureJoin(rootPath, pathInDot)
+}
+
 func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 	// create the default paths
-	destPath := filepath.Join(utils.Mnt(f.filesystemId), "__default__", file.Filename)
+	destPath, err := f.getPathInFilesystem(file.Filename)
 
 	l := log.WithFields(log.Fields{
 		"filename": file.Filename,
 		"destPath": destPath,
 	})
+	if err != nil {
+		e := types.Event{
+			Name: types.EventNameSaveFailed,
+			Args: &types.EventArgs{"err": fmt.Errorf("insecure path, error: %s", err)},
+		}
+		l.WithError(err).Error("[saveFile] insecure path")
+		file.Response <- &e
+		return backoffState
+	}
 
 	directoryPath := destPath[:strings.LastIndex(destPath, "/")]
-	err := os.MkdirAll(directoryPath, 0775)
+	err = os.MkdirAll(directoryPath, 0775)
 	if err != nil {
 		e := types.Event{
 			Name: types.EventNameSaveFailed,
@@ -82,14 +99,24 @@ func (f *FsMachine) saveFile(file *types.InputFile) StateFn {
 // Delete a file at the given path.
 func (f *FsMachine) deleteFile(file *types.InputFile) StateFn {
 	// create the default paths
-	destPath := filepath.Join(utils.Mnt(f.filesystemId), "__default__", file.Filename)
+	destPath, err := f.getPathInFilesystem(file.Filename)
 
 	l := log.WithFields(log.Fields{
 		"filename": file.Filename,
 		"destPath": destPath,
 	})
 
-	_, err := statFile(file.Filename, destPath, file.Response)
+	if err != nil {
+		e := types.Event{
+			Name: types.EventNameDeleteFailed,
+			Args: &types.EventArgs{"err": fmt.Errorf("cannot delete the file, error: %s", err)},
+		}
+		l.WithError(err).Error("[deleteFile] Error deleting file, insecure path")
+		file.Response <- &e
+		return backoffState
+	}
+
+	_, err = statFile(file.Filename, destPath, file.Response)
 	if err != nil {
 		l.WithError(err).Error("[deleteFile] Error statting")
 		return backoffState
