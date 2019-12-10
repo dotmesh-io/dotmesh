@@ -142,7 +142,7 @@ func ReplaceUUID(str, replace string) string {
 type ValidatorFunc func(string) error
 
 // Return false (and respond with HTTP error) if the value doesn't validate.
-func EnsureValid(value string, validator ValidatorFunc, resp http.ResponseWriter) bool {
+func EnsureValidOrRespond(value string, validator ValidatorFunc, resp http.ResponseWriter) bool {
 	err := validator(value)
 	if err == nil {
 		return true

@@ -95,10 +95,10 @@ func ctxGetAddress(ctx context.Context) (string, bool) {
 
 func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
-	if !validator.EnsureValid(vars["namespace"], validator.IsValidVolumeNamespace, resp) {
+	if !validator.EnsureValidOrRespond(vars["namespace"], validator.IsValidVolumeNamespace, resp) {
 		return
 	}
-	if !validator.EnsureValid(vars["name"], validator.IsValidVolumeName, resp) {
+	if !validator.EnsureValidOrRespond(vars["name"], validator.IsValidVolumeName, resp) {
 		return
 	}
 	volName := VolumeName{
@@ -123,7 +123,7 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	if !ok || branch == "master" {
 		branch = ""
 	} else {
-		if !validator.EnsureValid(branch, validator.IsValidBranchName, resp) {
+		if !validator.EnsureValidOrRespond(branch, validator.IsValidBranchName, resp) {
 			return
 		}
 		bucketName += "-" + branch
@@ -132,7 +132,7 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 
 	snapshotId, ok := vars["snapshotId"]
 	if ok {
-		if !validator.EnsureValid(snapshotId, validator.IsValidSnapshotName, resp) {
+		if !validator.EnsureValidOrRespond(snapshotId, validator.IsValidSnapshotName, resp) {
 			return
 		}
 	} else {

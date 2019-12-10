@@ -73,10 +73,10 @@ func (h *DiffHandler) Director(req *http.Request) {
 
 func (s *DiffHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
-	if !validator.EnsureValid(vars["namespace"], validator.IsValidVolumeNamespace, resp) {
+	if !validator.EnsureValidOrRespond(vars["namespace"], validator.IsValidVolumeNamespace, resp) {
 		return
 	}
-	if !validator.EnsureValid(vars["name"], validator.IsValidVolumeName, resp) {
+	if !validator.EnsureValidOrRespond(vars["name"], validator.IsValidVolumeName, resp) {
 		return
 	}
 
@@ -148,7 +148,7 @@ func (s *DiffHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 
 		snapshotID = snapshots[len(snapshots)-1].Id
 	}
-	if !validator.EnsureValid(snapshotID, validator.IsValidSnapshotName, resp) {
+	if !validator.EnsureValidOrRespond(snapshotID, validator.IsValidSnapshotName, resp) {
 		return
 	}
 
