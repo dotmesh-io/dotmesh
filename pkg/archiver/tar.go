@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	securejoin "github.com/cyphar/filepath-securejoin"
 )
 
 // Tar provides facilities for operating TAR archives.
@@ -243,7 +245,11 @@ func (t *Tar) untarNext(to string) error {
 	if !ok {
 		return fmt.Errorf("expected header to be *tar.Header but was %T", f.Header)
 	}
-	return t.untarFile(f, filepath.Join(to, header.Name))
+	destPath, err := securejoin.SecureJoin(to, header.Name)
+	if err != nil {
+		return fmt.Errorf("Insecure path error: %s", err)
+	}
+	return t.untarFile(f, destPath)
 }
 
 func (t *Tar) untarFile(f File, to string) error {
@@ -263,9 +269,17 @@ func (t *Tar) untarFile(f File, to string) error {
 	case tar.TypeReg, tar.TypeRegA, tar.TypeChar, tar.TypeBlock, tar.TypeFifo:
 		return writeNewFile(to, f, f.Mode())
 	case tar.TypeSymlink:
-		return writeNewSymbolicLink(to, hdr.Linkname)
+		destPath := filepath.Clean(hdr.Linkname)
+		if strings.HasPrefix(destPath, "/") {
+			fmt.Errorf("Symlinking to absolute path is insecure: %s", destPath)
+		}
+		return writeNewSymbolicLink(to, destPath)
 	case tar.TypeLink:
-		return writeNewHardLink(to, filepath.Join(to, hdr.Linkname))
+		destPath, err := securejoin.SecureJoin(to, hdr.Linkname)
+		if err != nil {
+			return fmt.Errorf("Insecure path error for hardlink: %s", err)
+		}
+		return writeNewHardLink(to, destPath)
 	case tar.TypeXGlobalHeader:
 		return nil // ignore the pax global header from git-generated tarballs
 	default:
