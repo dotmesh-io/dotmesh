@@ -19,6 +19,7 @@ import (
 	"github.com/dotmesh-io/dotmesh/pkg/fsm"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
+	"github.com/dotmesh-io/dotmesh/pkg/validator"
 	"github.com/gorilla/mux"
 
 	log "github.com/sirupsen/logrus"
@@ -94,6 +95,12 @@ func ctxGetAddress(ctx context.Context) (string, bool) {
 
 func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
+	if !validator.EnsureValidOrRespond(vars["namespace"], validator.IsValidVolumeNamespace, resp) {
+		return
+	}
+	if !validator.EnsureValidOrRespond(vars["name"], validator.IsValidVolumeName, resp) {
+		return
+	}
 	volName := VolumeName{
 		Name:      vars["name"],
 		Namespace: vars["namespace"],
@@ -116,12 +123,19 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	if !ok || branch == "master" {
 		branch = ""
 	} else {
+		if !validator.EnsureValidOrRespond(branch, validator.IsValidBranchName, resp) {
+			return
+		}
 		bucketName += "-" + branch
 	}
 	localFilesystemId := s.state.registry.Exists(volName, branch)
 
 	snapshotId, ok := vars["snapshotId"]
-	if !ok {
+	if ok {
+		if !validator.EnsureValidOrRespond(snapshotId, validator.IsValidSnapshotName, resp) {
+			return
+		}
+	} else {
 		snapshotId = ""
 	}
 
