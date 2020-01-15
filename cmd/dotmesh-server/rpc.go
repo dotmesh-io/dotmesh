@@ -754,9 +754,16 @@ func (d *DotmeshRPC) Commits(
 	if err != nil {
 		return err
 	}
-	snapshots, err := d.state.SnapshotsForCurrentMaster(filesystemId)
-	if err != nil {
-		return err
+
+	var snapshots []Snapshot
+	for {
+		snapshots, err = d.state.SnapshotsForCurrentMaster(filesystemId)
+		if err != nil {
+			return err
+		}
+		if len(snapshots) == 0 {
+			time.Sleep(time.Second)
+		}
 	}
 	*result = snapshots
 	return nil
