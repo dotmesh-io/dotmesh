@@ -1390,6 +1390,39 @@ func TestSingleNode(t *testing.T) {
 		}
 	})
 
+	t.Run("Empty initial commit", func(t *testing.T) {
+		apiKey := f[0].GetNode(0).ApiKey
+		fsname := citools.UniqName()
+
+		// make a dot with a second commit that has a file we can test the mount for
+		citools.RunOnNode(t, node1, "dm init "+fsname)
+
+		// get a list of commits so we have the id of the commit we will mount
+		var commitIds []struct {
+			Id string
+		}
+
+		err = citools.DoRPC(f[0].GetNode(0).IP, "admin", apiKey,
+			"DotmeshRPC.Commits",
+			struct {
+				Namespace string
+				Name      string
+			}{
+				Namespace: "admin",
+				Name:      fsname,
+			},
+			&commitIds)
+
+		if err != nil {
+			t.Error(err)
+		}
+
+		if len(commitIds) != 1 {
+			t.Errorf("Expected 1 commit ids, got %d", len(commitIds))
+		}
+
+	})
+
 	t.Run("MountCommit", func(t *testing.T) {
 		apiKey := f[0].GetNode(0).ApiKey
 		fsname := citools.UniqName()
