@@ -763,6 +763,8 @@ func (d *DotmeshRPC) Commits(
 		}
 		if len(snapshots) == 0 {
 			time.Sleep(time.Second)
+		} else {
+			break
 		}
 	}
 	*result = snapshots
