@@ -756,13 +756,18 @@ func (d *DotmeshRPC) Commits(
 	}
 
 	var snapshots []Snapshot
+	tries := 0
 	for {
+		if tries > 10 {
+			return fmt.Errorf("Timed out waiting for initial snapshot to appear")
+		}
 		snapshots, err = d.state.SnapshotsForCurrentMaster(filesystemId)
 		if err != nil {
 			return err
 		}
 		if len(snapshots) == 0 {
 			time.Sleep(time.Second)
+			tries += 1
 		} else {
 			break
 		}
