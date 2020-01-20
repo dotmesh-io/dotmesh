@@ -8,7 +8,7 @@ variables:
 
     RELEASE_DOCKER_REGISTRY: quay.io
     RELEASE_DOCKER_REPOSITORY: dotmesh
-    CI_SERVICE_BEING_TESTED: dotmesh-server
+    CI_SERVICE_BEING_TESTED: dotmesh
 
     DOTMESH_TEST_CLEANUP: later
     DOTMESH_TEST_TIMEOUT: 10m
