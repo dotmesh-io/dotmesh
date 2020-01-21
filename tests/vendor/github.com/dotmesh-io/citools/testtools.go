@@ -471,7 +471,7 @@ DNS_SERVICE="${DNS_SERVICE:-kube-dns}"
 			}
 
 			// if the CI_SERVICE_BEING_TESTED is empty it means we are in local testing mode
-			if serviceBeingTested == "dotmesh-server" || serviceBeingTested == "" {
+			if serviceBeingTested == "dotmesh" || serviceBeingTested == "" {
 				// use the dm binary we have as part of the CI build
 				getDmCommand += "docker cp ../binaries/Linux/dm $NODE:/usr/local/bin/dm"
 			} else {
@@ -1002,7 +1002,7 @@ func LocalImage(service string) string {
 	// use the GIT_HASH from CI for that service and 'latest-passing-tests' for everything else
 	// (which is the last build of that repo that passed the tests on master)
 	serviceBeingTested := os.Getenv("CI_SERVICE_BEING_TESTED")
-	if serviceBeingTested != "" && serviceBeingTested != "dotmesh-server" {
+	if serviceBeingTested != "" && serviceBeingTested != "dotmesh" {
 		tag = "test-latest"
 	}
 	img := fmt.Sprintf("%s:%s", service, tag)
