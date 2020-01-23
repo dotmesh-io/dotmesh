@@ -312,21 +312,7 @@ func (f *FsMachine) pull(
 	log.Printf("Successfully received %s => %s for %s", fromSnapshotId, toSnapshotId, toFilesystemId)
 	return &types.Event{
 		Name: "finished-pull",
-	}, discoveringAfterPullInitiatorState
-}
-
-// If we initiated pull and then did discovery, we additionally need to set
-// transfer state.
-func discoveringAfterPullInitiatorState(f *FsMachine) StateFn {
-	result := discoveringState(f)
-	f.transferUpdates <- types.TransferUpdate{
-		Kind: types.TransferStatus,
-		Changes: types.TransferPollResult{
-			Status:  "finished",
-			Message: "",
-		},
-	}
-	return result
+	}, discoveringAfterTransferInitiatorState
 }
 
 func (f *FsMachine) retryPull(
