@@ -353,19 +353,11 @@ func (f *FsMachine) push(
 
 	pipeReader.Close()
 
-	f.transferUpdates <- types.TransferUpdate{
-		Kind: types.TransferStatus,
-		Changes: types.TransferPollResult{
-			Status:  "finished",
-			Message: "",
-		},
-	}
-
 	// TODO update the transfer record, release the peer state machines
 	return &types.Event{
 		Name: "finished-push",
 		Args: &types.EventArgs{},
-	}, discoveringState
+	}, discoveringAfterTransferInitiatorState
 }
 
 func stash(filesystemId, snapId string, client *dmclient.JsonRpcClient, ctx context.Context) (*types.Event, StateFn) {

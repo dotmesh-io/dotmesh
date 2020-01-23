@@ -309,18 +309,10 @@ func (f *FsMachine) pull(
 		}, backoffState
 	}
 
-	f.transferUpdates <- types.TransferUpdate{
-		Kind: types.TransferStatus,
-		Changes: types.TransferPollResult{
-			Status:  "finished",
-			Message: "",
-		},
-	}
-
 	log.Printf("Successfully received %s => %s for %s", fromSnapshotId, toSnapshotId, toFilesystemId)
 	return &types.Event{
 		Name: "finished-pull",
-	}, discoveringState
+	}, discoveringAfterTransferInitiatorState
 }
 
 func (f *FsMachine) retryPull(

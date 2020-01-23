@@ -239,14 +239,20 @@ func missingState(f *FsMachine) StateFn {
 					}
 					return backoffState
 				} else {
-					f.innerResponses <- &types.Event{Name: "created"}
-					f.snapshot(&types.Event{Name: "snapshot",
+					responseEvent, nextState := f.snapshot(&types.Event{Name: "snapshot",
 						Args: &types.EventArgs{"metadata": map[string]string{
 							"type":    "dotmesh.initial",
 							"message": "Initial commit",
 							"author":  "admin",
 						}}})
-					return activeState
+					if responseEvent.Name == "snapshotted" {
+						f.innerResponses <- &types.Event{Name: "created"}
+						return activeState
+					} else {
+						// Error snapshotting:
+						f.innerResponses <- responseEvent
+						return nextState
+					}
 				}
 			} else {
 				f.innerResponses <- responseEvent
