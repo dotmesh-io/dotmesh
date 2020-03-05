@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -278,4 +279,39 @@ func TestZFSDiffFileModified(t *testing.T) {
 
 	expectChangesFromDiff(t, z, fsName, types.ZFSFileDiff{Change: types.FileChangeModified, Filename: "myfile.txt"})
 	checkDirtyDelta(t, z, fsName, "myfirstsnapshot", true, true)
+}
+
+// Snapshots can be deleted:
+func TestZFSSnapshotDelete(t *testing.T) {
+	z, fsName, fsPath, cleanup := createPoolAndFilesystem(t)
+	defer cleanup()
+
+	filePath := filepath.Join(fsPath, "myfile.txt")
+	err := ioutil.WriteFile(filePath, []byte("woo"), 0644)
+	if err != nil {
+		t.Fatalf("Error creating file: %s", err)
+	}
+
+	output, err := z.Snapshot(fsName, "myfirstsnapshot", []string{})
+	if err != nil {
+		t.Fatalf("Error snapshotting: %s\n%s", err, output)
+	}
+
+	output, err = z.List(fsName, "myfirstsnapshot")
+	if err != nil {
+		t.Fatalf("Error listing: %s\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "myfirstsnapshot") {
+		t.Fatalf("Where's the snapshot? %s", output)
+	}
+
+	output, err = z.DeleteSnapshot(fsName, "myfirstsnapshot")
+	if err != nil {
+		t.Fatalf("Error deleting: %s\n%s", err, output)
+	}
+
+	output, err = z.List(fsName, "myfirstsnapshot")
+	if err == nil {
+		t.Fatalf("Filesystem still exists: %s", output)
+	}
 }
