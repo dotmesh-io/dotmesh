@@ -916,6 +916,27 @@ func TestSingleNode(t *testing.T) {
 		}
 	})
 
+	// When an autosave commit is created, previous autosaves are deleted.
+	t.Run("AutoSaveCommits", func(t *testing.T) {
+		fsname := citools.UniqName()
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/X")
+		citools.RunOnNode(t, node1, "dm switch "+fsname)
+		citools.RunOnNode(t, node1, "dm commit -d '#autosave=1' -m 'firstcommit'")
+		resp := citools.OutputFromRunOnNode(t, node1, "dm log")
+		if !strings.Contains(resp, "firstcommit") {
+			t.Error("unable to find commit message in log output")
+		}
+		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/Y")
+		citools.RunOnNode(t, node1, "dm commit -d '#autosave=1' -m 'secondcommit'")
+		resp = citools.OutputFromRunOnNode(t, node1, "dm log")
+		if !strings.Contains(resp, "secondcommit") {
+			t.Error("unable to find commit message in log output")
+		}
+		if strings.Contains(resp, "firstcommit") {
+			t.Error("the first commit wasn't deleted")
+		}
+	})
+
 	t.Run("CommitIdOverride", func(t *testing.T) {
 		fsname := citools.UniqName()
 		citools.RunOnNode(t, node1, citools.DockerRun(fsname)+" touch /foo/X")
