@@ -2008,7 +2008,7 @@ func (d *DotmeshRPC) AddCollaborator(
 
 	user := auth.GetUser(r)
 
-	authorized, err := crappyTlf.AuthorizeOwner(user)
+	authorized, err := d.state.config.UserManager.Authorize(user, false, &crappyTlf)
 	if err != nil {
 		return err
 	}
@@ -2050,7 +2050,7 @@ func (d *DotmeshRPC) RemoveCollaborator(
 		)
 	}
 	user := auth.GetUser(r)
-	authorized, err := crappyTlf.AuthorizeOwner(user)
+	authorized, err := d.state.config.UserManager.Authorize(user, false, &crappyTlf)
 	if err != nil {
 		return err
 	}
@@ -2222,7 +2222,7 @@ func (d *DotmeshRPC) Delete(r *http.Request, args *VolumeName, result *bool) err
 		return err
 	}
 
-	authorized, err := filesystem.AuthorizeOwner(user)
+	authorized, err := d.state.config.UserManager.Authorize(user, false, &filesystem)
 	if err != nil {
 		return err
 	}

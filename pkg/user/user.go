@@ -76,6 +76,10 @@ type UserManager interface {
 	// Authenticate user, if successful returns User struct and
 	// authentication type or error if unsuccessful
 	Authenticate(username, password string) (*User, AuthenticationType, error)
+
+	// Authorize user action on a tlf, returns (true, nil) for OK, (false, nil) for not OK,
+	// and (false, error) for an error happened (so not OK).
+	Authorize(user *User, ownerAction bool, tlf *types.TopLevelFilesystem) (bool, error)
 }
 
 type DefaultManager struct {
@@ -385,4 +389,24 @@ func (m *DefaultManager) List(selector string) ([]*User, error) {
 	}
 
 	return users, nil
+}
+
+func (m *DefaultManager) Authorize(user *User, collabsAllowed bool, tlf *types.TopLevelFilesystem) (bool, error) {
+	// admin user is always authorized (e.g. docker daemon). users and auth are
+	// only really meaningful over the network for data synchronization, when a
+	// dotmesh cluster is being used like a hub.
+	if user.Id == ADMIN_USER_UUID {
+		return true, nil
+	}
+	if user.Id == tlf.Owner.Id {
+		return true, nil
+	}
+	if collabsAllowed {
+		for _, other := range tlf.Collaborators {
+			if user.Id == other.Id {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }

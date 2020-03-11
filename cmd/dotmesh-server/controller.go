@@ -209,7 +209,8 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 	}
 
 	if tlf, clone, err := s.registry.LookupFilesystemById(fs); err == nil {
-		authorized, err := tlf.Authorize(auth.GetUserFromCtx(ctx))
+		authorized, err := s.config.UserManager.Authorize(auth.GetUserFromCtx(ctx), true, &tlf)
+
 		if err != nil {
 			return DotmeshVolume{}, err
 		}
