@@ -166,6 +166,8 @@ func main() {
 	config.ZPoolPath = ZPOOL
 	config.PoolName = POOL
 
+	config.ExternalUserManagerURL = os.Getenv("EXTERNAL_USER_MANAGER_URL")
+
 	if os.Getenv("DOTMESH_SERVER_PORT") != "" {
 		config.APIServerPort = os.Getenv("DOTMESH_SERVER_PORT")
 	} else {
@@ -173,7 +175,11 @@ func main() {
 	}
 
 	// kvClient := kv.New(etcdClient, ETCD_PREFIX)
-	config.UserManager = user.New(usersIdxStore)
+	if config.ExternalUserManagerURL != "" {
+		config.UserManager = user.NewExternal(config.ExternalUserManagerURL)
+	} else {
+		config.UserManager = user.NewInternal(usersIdxStore)
+	}
 
 	s := NewInMemoryState(config)
 

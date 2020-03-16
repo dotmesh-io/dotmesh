@@ -103,6 +103,9 @@ type Config struct {
 	APIServerPort string
 
 	NatsConfig *nats.Config
+
+	// External user manager base URL (optional)
+	ExternalUserManagerURL string
 }
 
 type containerInfo struct {
