@@ -54,22 +54,23 @@ const DISCOVERY_API_KEY = "...ADMIN_API_KEY"
 const DISCOVERY_PASSWORD = "...ADMIN_PASSWORD"
 
 var (
-	serverCount        int
-	traceAddr          string
-	logAddr            string
-	etcdInitialCluster string
-	offline            bool
-	dotmeshDockerImage string
-	checkpointUrl      string
-	checkpointInterval int
-	etcdDockerImage    string
-	dockerApiVersion   string
-	usePoolDir         string
-	usePoolName        string
-	poolSize           string
-	discoveryUrl       string
-	port               int
-	kernelZFSVersion   string
+	serverCount            int
+	traceAddr              string
+	logAddr                string
+	etcdInitialCluster     string
+	offline                bool
+	dotmeshDockerImage     string
+	checkpointUrl          string
+	checkpointInterval     int
+	etcdDockerImage        string
+	dockerApiVersion       string
+	usePoolDir             string
+	usePoolName            string
+	poolSize               string
+	discoveryUrl           string
+	externalUserManagerUrl string
+	port                   int
+	kernelZFSVersion       string
 )
 
 // names of environment variables we pass from the content of `dm cluster {init,join}`
@@ -178,6 +179,10 @@ another.`,
 		"https://discovery.dotmesh.io", "URL of discovery service. "+
 			"Use one you trust. Use HTTPS otherwise your private key will"+
 			"be transmitted in plain text!",
+	)
+	cmd.PersistentFlags().StringVar(
+		&externalUserManagerUrl, "external-user-manager-url",
+		"", "URL of optional external user management server",
 	)
 	cmd.PersistentFlags().BoolVar(
 		&offline, "offline", false,
@@ -638,6 +643,7 @@ func startDotmeshContainer(pkiPath, adminKey, adminPassword string, storage *dot
 		"-e", fmt.Sprintf("DOTMESH_DOCKER_IMAGE=%s", dotmeshDockerImage),
 		"-e", fmt.Sprintf("DOTMESH_UPGRADES_URL=%s", checkpointUrl),
 		"-e", fmt.Sprintf("DOTMESH_UPGRADES_INTERVAL_SECONDS=%d", checkpointInterval),
+		"-e", fmt.Sprintf("EXTERNAL_USER_MANAGER_URL=%s", externalUserManagerUrl),
 	}
 
 	switch storage.storageBackend {

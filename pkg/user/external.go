@@ -32,13 +32,13 @@ func (m *ExternalManager) call(operation string, method string, body interface{}
 		"body":      fmt.Sprintf("%#v", body),
 	})
 
-	l.Debug("[internalManager] call")
+	l.Debug("[externalManager] call")
 
 	var bodyReader io.Reader
 	if body != nil {
 		bodyEncoded, err := json.Marshal(body)
 		if err != nil {
-			l.WithError(err).Error("[internalManager] Error encoding body")
+			l.WithError(err).Error("[externalManager] Error encoding body")
 			return err
 		}
 		bodyReader = bytes.NewBuffer(bodyEncoded)
@@ -48,7 +48,7 @@ func (m *ExternalManager) call(operation string, method string, body interface{}
 
 	req, err := http.NewRequest(method, m.url+"/"+operation, bodyReader)
 	if err != nil {
-		l.WithError(err).Error("[internalManager] Error creating HTTP request")
+		l.WithError(err).Error("[externalManager] Error creating HTTP request")
 		return err
 	}
 
@@ -56,7 +56,7 @@ func (m *ExternalManager) call(operation string, method string, body interface{}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		l.WithError(err).Error("[internalManager] Error performing HTTP request")
+		l.WithError(err).Error("[externalManager] Error performing HTTP request")
 		return err
 	}
 	defer resp.Body.Close()
@@ -65,11 +65,11 @@ func (m *ExternalManager) call(operation string, method string, body interface{}
 	case 200, 201:
 		// All is well, proceed
 	default:
-		l.WithField("http_status", resp.Status).Error("[internalManager] HTTP error")
+		l.WithField("http_status", resp.Status).Error("[externalManager] HTTP error")
 
 		b, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			l.WithError(err).Error("[internalManager] Error reading response body")
+			l.WithError(err).Error("[externalManager] Error reading response body")
 			return fmt.Errorf("HTTP Error: %d error reading body: %s", resp.StatusCode, err.Error())
 		}
 
@@ -79,13 +79,13 @@ func (m *ExternalManager) call(operation string, method string, body interface{}
 	if result != nil {
 		b, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			l.WithError(err).Error("[internalManager] Error reading response body")
+			l.WithError(err).Error("[externalManager] Error reading response body")
 			return err
 		}
 
 		err = json.Unmarshal(b, result)
 		if err != nil {
-			l.WithError(err).Error("[internalManager] Error decoding response body")
+			l.WithError(err).Error("[externalManager] Error decoding response body")
 			return err
 		}
 	}
@@ -109,7 +109,7 @@ func (m *ExternalManager) New(name, email, password string) (*User, error) {
 		Name:     name,
 		Email:    email,
 		Password: password,
-	}, u)
+	}, &u)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +119,7 @@ func (m *ExternalManager) New(name, email, password string) (*User, error) {
 
 func (m *ExternalManager) Get(q *Query) (*User, error) {
 	var u User
-	err := m.call("user", http.MethodGet, q, u)
+	err := m.call("user", http.MethodGet, q, &u)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +129,7 @@ func (m *ExternalManager) Get(q *Query) (*User, error) {
 
 func (m *ExternalManager) Update(user *User) (*User, error) {
 	var u User
-	err := m.call("user", http.MethodPost, user, u)
+	err := m.call("user", http.MethodPost, user, &u)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +152,7 @@ func (m *ExternalManager) UpdatePassword(id string, password string) (*User, err
 	err := m.call("user/password", http.MethodPost, UpdatePasswordRequest{
 		UserID:      id,
 		NewPassword: password,
-	}, u)
+	}, &u)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +168,7 @@ func (m *ExternalManager) ResetAPIKey(id string) (*User, error) {
 	var u User
 	err := m.call("user/api-key", http.MethodPost, ResetAPIKeyRequest{
 		UserID: id,
-	}, u)
+	}, &u)
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +211,7 @@ func (m *ExternalManager) Authenticate(username, password string) (*User, Authen
 	err := m.call("user/authenticate", http.MethodPost, AuthenticateRequest{
 		Username: username,
 		Password: password,
-	}, ar)
+	}, &ar)
 	if err != nil {
 		return nil, AuthenticationTypeNone, err
 	}
@@ -240,7 +240,7 @@ func (m *ExternalManager) Authorize(user *User, ownerAction bool, tlf *types.Top
 		User:               *user,
 		OwnerAction:        ownerAction,
 		TopLevelFilesystem: *tlf,
-	}, ar)
+	}, &ar)
 	if err != nil {
 		return false, err
 	}
