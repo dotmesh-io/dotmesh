@@ -14,7 +14,9 @@ import (
 )
 
 type DummyUserManager struct {
-	log log.FieldLogger
+	allowStuff  bool
+	theValidKey string
+	log         log.FieldLogger
 }
 
 func (m *DummyUserManager) NewAdmin(user *user.User) error {
@@ -88,27 +90,32 @@ func (m *DummyUserManager) List(selector string) ([]*user.User, error) {
 
 func (m *DummyUserManager) Authenticate(username, password string) (*user.User, user.AuthenticationType, error) {
 	m.log.Infof("Authenticate: %s / %q", username, password)
+
 	if username == "admin" {
 		return &user.User{
 			Id:   "00000000-0000-0000-0000-000000000000",
 			Name: username,
 		}, user.AuthenticationTypePassword, nil
 	} else {
-		return &user.User{
-			Id:   "id-of-user-" + username,
-			Name: username,
-		}, user.AuthenticationTypePassword, nil
+		if password == m.theValidKey {
+			return &user.User{
+				Id:   "id-of-user-" + username,
+				Name: username,
+			}, user.AuthenticationTypePassword, nil
+		} else {
+			return nil, user.AuthenticationTypeNone, nil
+		}
 	}
 }
 
 func (m *DummyUserManager) Authorize(user *user.User, ownerAction bool, tlf *types.TopLevelFilesystem) (bool, error) {
 	m.log.Infof("Authorize: %#v / %t / %#v", *user, ownerAction, *tlf)
-	return false, nil
+	return m.allowStuff, nil
 }
 
 func (m *DummyUserManager) UserIsNamespaceAdministrator(user *user.User, namespace string) (bool, error) {
 	m.log.Infof("UserIsNamespaceAdministrator: %#v / %s", *user, namespace)
-	return false, nil
+	return m.allowStuff, nil
 }
 
 func TestExternalUserManager(t *testing.T) {
@@ -149,37 +156,92 @@ func TestExternalUserManager(t *testing.T) {
 		t.Fatalf("failed to start cluster, error: %s", err)
 	}
 
+	// node1 has the external user manager
+
 	// node1 := f[0].GetNode(0).Container
 	cluster1Node := f[0].GetNode(0)
+
+	// node2 is normal
 
 	node2 := f[1].GetNode(0).Container
 	// cluster2Node := f[1].GetNode(0)
 
+	bobKey := "bob is great"
+
+	// Create user bob on node 1
+	err = citools.RegisterUser(cluster1Node, "bob", "bob@bob.com", bobKey)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// tell second node about bob on the first node... our user manager accepts bobKey
+	um.theValidKey = bobKey
+	citools.RunOnNode(t, node2, "echo '"+bobKey+"' | dm remote add bob bob@"+cluster1Node.IP)
+
+	t.Run("WrongAPIKey", func(t *testing.T) {
+		// use wrong apikey
+		citools.RunOnNode(t, node2, "if echo 'bob is a bit weird' | dm remote add bob bob@"+cluster1Node.IP+"; then false; else true; fi")
+	})
+
 	t.Run("ComputerSaysNo", func(t *testing.T) {
-
-		bobKey := "bob is great"
-
-		// Create user bob on the first node
-		err := citools.RegisterUser(cluster1Node, "bob", "bob@bob.com", bobKey)
-		if err != nil {
-			t.Error(err)
-		}
-
-		// tell second node about bob on the first node
-		citools.RunOnNode(t, node2, "echo '"+bobKey+"' | dm remote add bob bob@"+cluster1Node.IP)
+		fsName := citools.UniqName()
+		um.allowStuff = false
+		citools.RunOnNode(t, node2, "dm remote switch local")
 
 		// push to bob on node 1
-		citools.RunOnNode(t, node2, citools.DockerRun("bananas")+" touch /foo/bananas")
-		citools.RunOnNode(t, node2, "dm switch bananas")
+		citools.RunOnNode(t, node2, citools.DockerRun(fsName)+" touch /foo/bananas")
+		citools.RunOnNode(t, node2, "dm switch "+fsName)
 		citools.RunOnNode(t, node2, "dm commit -m'This is bananas'")
 
 		// Can't push as dummy user manager always says no
-		citools.RunOnNode(t, node2, "if dm push bob bananas; then false; else true; fi")
+		citools.RunOnNode(t, node2, "if dm push bob "+fsName+"; then false; else true; fi")
 
 		// Can't delete it even though you own it, because dummy user manager always says no
 		citools.RunOnNode(t, node2, "dm remote switch bob")
-		citools.RunOnNode(t, node2, "if dm dot delete -f bob/bananas; then false; else true; fi")
+		citools.RunOnNode(t, node2, "if dm dot delete -f bob/"+fsName+"; then false; else true; fi")
 	})
 
-	// ABS TODO: Test dump and restore etcd, see BackupAndRestore in acceptance_test.go
+	t.Run("ComputerSaysYes", func(t *testing.T) {
+		fsName := citools.UniqName()
+		um.allowStuff = true
+		citools.RunOnNode(t, node2, "dm remote switch local")
+
+		// push to bob on node 1
+		citools.RunOnNode(t, node2, citools.DockerRun(fsName)+" touch /foo/bananas")
+		citools.RunOnNode(t, node2, "dm switch "+fsName)
+		citools.RunOnNode(t, node2, "dm commit -m'This is bananas'")
+
+		citools.RunOnNode(t, node2, "dm push bob "+fsName)
+		citools.RunOnNode(t, node2, "dm pull bob")
+
+		citools.RunOnNode(t, node2, "dm remote switch bob")
+		citools.RunOnNode(t, node2, "dm dot delete -f bob/"+fsName)
+	})
+
+	t.Run("BackupAndRestore", func(t *testing.T) {
+		// We're not so interested in the backup/restore correctly restoring users,
+		// as most external user managers will be interfaces to things that are
+		// backed up elsewhere - just want to make sure we don't break
+		// backup/restore of everything else
+		fsName := citools.UniqName()
+		um.allowStuff = true
+		citools.RunOnNode(t, node2, "dm remote switch local")
+
+		// Push something to back up
+		citools.RunOnNode(t, node2, citools.DockerRun(fsName)+" touch /foo/bananas")
+		citools.RunOnNode(t, node2, "dm switch "+fsName)
+		citools.RunOnNode(t, node2, "dm commit -m'This is bananas'")
+
+		citools.RunOnNode(t, node2, "dm push bob "+fsName)
+
+		// Pull a backup
+		citools.RunOnNode(t, node2, "dm remote switch cluster_0_node_0")
+		citools.RunOnNode(t, node2, "dm cluster backup-etcd > backup.json")
+
+		// Restore it
+		citools.RunOnNode(t, node2, "dm cluster restore-etcd < backup.json")
+
+		// Pull back
+		citools.RunOnNode(t, node2, "dm pull bob")
+	})
 }
