@@ -84,4 +84,7 @@ type UserManager interface {
 	// Authorize user action on a tlf, returns (true, nil) for OK, (false, nil) for not OK,
 	// and (false, error) for an error happened (so not OK).
 	Authorize(user *User, ownerAction bool, tlf *types.TopLevelFilesystem) (bool, error)
+
+	// Is the user the administrator for this namespace?
+	UserIsNamespaceAdministrator(user *User, namespace string) (bool, error)
 }

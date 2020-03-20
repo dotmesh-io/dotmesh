@@ -116,6 +116,40 @@ func StartExternalServer(listenAddr string, stop <-chan struct{}, um UserManager
 						}
 					}
 				}
+			case "POST /authorize":
+				var ar AuthorizeRequest
+				err := readRequestBody(req, &ar)
+				if err != nil {
+					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
+					http.Error(rw, err.Error(), http.StatusBadRequest)
+				} else {
+					allowed, err := um.Authorize(&ar.User, ar.OwnerAction, &ar.TopLevelFilesystem)
+					if err != nil {
+						l.WithError(err).Error("[ExternalUserManagerServer] Authorize failure")
+						http.Error(rw, err.Error(), http.StatusInternalServerError)
+					} else {
+						sendResponse(rw, http.StatusOK, &AuthorizeResponse{
+							Allowed: allowed,
+						})
+					}
+				}
+			case "POST /authorize-namespace-admin":
+				var ar AuthorizeNamespaceAdminRequest
+				err := readRequestBody(req, &ar)
+				if err != nil {
+					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
+					http.Error(rw, err.Error(), http.StatusBadRequest)
+				} else {
+					allowed, err := um.UserIsNamespaceAdministrator(&ar.User, ar.Namespace)
+					if err != nil {
+						l.WithError(err).Error("[ExternalUserManagerServer] Authorize failure")
+						http.Error(rw, err.Error(), http.StatusInternalServerError)
+					} else {
+						sendResponse(rw, http.StatusOK, &AuthorizeResponse{
+							Allowed: allowed,
+						})
+					}
+				}
 			default:
 				l.Error("Path not found")
 				http.Error(rw, "Not Found", http.StatusNotFound)

@@ -53,12 +53,18 @@ func (m *DummyUserManager) Import(user *user.User) error {
 
 func (m *DummyUserManager) UpdatePassword(id string, password string) (*user.User, error) {
 	m.log.Infof("UpdatePassword: %s <- %q", id, password)
-	return nil, nil
+	return &user.User{
+		Id:       id,
+		Password: []byte(password),
+	}, nil
 }
 
 func (m *DummyUserManager) ResetAPIKey(id string) (*user.User, error) {
 	m.log.Infof("ResetAPIKey: %s", id)
-	return nil, nil
+	return &user.User{
+		Id:     id,
+		ApiKey: "456",
+	}, nil
 }
 
 func (m *DummyUserManager) Delete(id string) error {
@@ -68,7 +74,16 @@ func (m *DummyUserManager) Delete(id string) error {
 
 func (m *DummyUserManager) List(selector string) ([]*user.User, error) {
 	m.log.Infof("List: %s", selector)
-	return nil, nil
+	return []*user.User{
+		&user.User{
+			Id:   "00000000-0000-0000-0000-000000000000",
+			Name: "admin",
+		},
+		&user.User{
+			Id:   "id-of-user-bob",
+			Name: "bob",
+		},
+	}, nil
 }
 
 func (m *DummyUserManager) Authenticate(username, password string) (*user.User, user.AuthenticationType, error) {
@@ -88,6 +103,11 @@ func (m *DummyUserManager) Authenticate(username, password string) (*user.User, 
 
 func (m *DummyUserManager) Authorize(user *user.User, ownerAction bool, tlf *types.TopLevelFilesystem) (bool, error) {
 	m.log.Infof("Authorize: %#v / %t / %#v", *user, ownerAction, *tlf)
+	return false, nil
+}
+
+func (m *DummyUserManager) UserIsNamespaceAdministrator(user *user.User, namespace string) (bool, error) {
+	m.log.Infof("UserIsNamespaceAdministrator: %#v / %s", *user, namespace)
 	return false, nil
 }
 
@@ -135,7 +155,7 @@ func TestExternalUserManager(t *testing.T) {
 	node2 := f[1].GetNode(0).Container
 	// cluster2Node := f[1].GetNode(0)
 
-	t.Run("BasicUserAdmin", func(t *testing.T) {
+	t.Run("ComputerSaysNo", func(t *testing.T) {
 
 		bobKey := "bob is great"
 
@@ -152,6 +172,14 @@ func TestExternalUserManager(t *testing.T) {
 		citools.RunOnNode(t, node2, citools.DockerRun("bananas")+" touch /foo/bananas")
 		citools.RunOnNode(t, node2, "dm switch bananas")
 		citools.RunOnNode(t, node2, "dm commit -m'This is bananas'")
-		citools.RunOnNode(t, node2, "dm push bob bananas")
+
+		// Can't push as dummy user manager always says no
+		citools.RunOnNode(t, node2, "if dm push bob bananas; then false; else true; fi")
+
+		// Can't delete it even though you own it, because dummy user manager always says no
+		citools.RunOnNode(t, node2, "dm remote switch bob")
+		citools.RunOnNode(t, node2, "if dm dot delete -f bob/bananas; then false; else true; fi")
 	})
+
+	// ABS TODO: Test dump and restore etcd, see BackupAndRestore in acceptance_test.go
 }

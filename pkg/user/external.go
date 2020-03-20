@@ -246,3 +246,20 @@ func (m *ExternalManager) Authorize(user *User, ownerAction bool, tlf *types.Top
 	}
 	return ar.Allowed, nil
 }
+
+type AuthorizeNamespaceAdminRequest struct {
+	User      User
+	Namespace string
+}
+
+func (m *ExternalManager) UserIsNamespaceAdministrator(user *User, namespace string) (bool, error) {
+	var ar AuthorizeResponse
+	err := m.call("authorize-namespace-admin", http.MethodPost, AuthorizeNamespaceAdminRequest{
+		User:      *user,
+		Namespace: namespace,
+	}, &ar)
+	if err != nil {
+		return false, err
+	}
+	return ar.Allowed, nil
+}

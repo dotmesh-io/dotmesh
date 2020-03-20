@@ -1260,7 +1260,7 @@ func (d *DotmeshRPC) RegisterFilesystem(
 ) error {
 	log.Printf("[RegisterFilesystem] called with args: %+v", args)
 
-	isAdmin, err := AuthenticatedUserIsNamespaceAdministrator(r.Context(), args.Namespace)
+	isAdmin, err := AuthenticatedUserIsNamespaceAdministrator(r.Context(), args.Namespace, d.usersManager)
 	if err != nil {
 		return err
 	}
@@ -2008,7 +2008,7 @@ func (d *DotmeshRPC) AddCollaborator(
 
 	user := auth.GetUser(r)
 
-	authorized, err := d.state.config.UserManager.Authorize(user, false, &crappyTlf)
+	authorized, err := d.usersManager.Authorize(user, false, &crappyTlf)
 	if err != nil {
 		return err
 	}
@@ -2050,7 +2050,7 @@ func (d *DotmeshRPC) RemoveCollaborator(
 		)
 	}
 	user := auth.GetUser(r)
-	authorized, err := d.state.config.UserManager.Authorize(user, false, &crappyTlf)
+	authorized, err := d.usersManager.Authorize(user, false, &crappyTlf)
 	if err != nil {
 		return err
 	}
@@ -2222,7 +2222,7 @@ func (d *DotmeshRPC) Delete(r *http.Request, args *VolumeName, result *bool) err
 		return err
 	}
 
-	authorized, err := d.state.config.UserManager.Authorize(user, false, &filesystem)
+	authorized, err := d.usersManager.Authorize(user, false, &filesystem)
 	if err != nil {
 		return err
 	}

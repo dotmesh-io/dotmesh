@@ -343,3 +343,17 @@ func (m *InternalManager) Authorize(user *User, collabsAllowed bool, tlf *types.
 	}
 	return false, nil
 }
+
+func (m *InternalManager) UserIsNamespaceAdministrator(user *User, namespace string) (bool, error) {
+	// Admin gets to administer every namespace
+	if user.Id == ADMIN_USER_UUID {
+		return true, nil
+	}
+
+	// ...and see if their name matches the namespace name.
+	if user.Name == namespace {
+		return true, nil
+	} else {
+		return false, nil
+	}
+}
