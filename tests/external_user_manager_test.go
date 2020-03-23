@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -121,9 +122,10 @@ func (m *DummyUserManager) UserIsNamespaceAdministrator(user *user.User, namespa
 func TestExternalUserManager(t *testing.T) {
 	citools.TeardownFinishedTestRuns()
 
-	serverPort := 12345
-	// FIXME: find our actual IP
-	serverUrl := fmt.Sprintf("http://%s:%d", "192.168.1.33", serverPort)
+	// Pick a random port
+	serverPort := rand.Intn(1000) + 12000
+	hostIP, err := citools.FindAHostIP()
+	serverUrl := fmt.Sprintf("http://%s:%d", hostIP, serverPort)
 
 	stop := make(chan struct{})
 	defer func() {
@@ -151,7 +153,7 @@ func TestExternalUserManager(t *testing.T) {
 	citools.AddFuncToCleanups(func() { citools.TestMarkForCleanup(f) })
 
 	citools.StartTiming()
-	err := f.Start(t)
+	err = f.Start(t)
 	if err != nil {
 		t.Fatalf("failed to start cluster, error: %s", err)
 	}

@@ -2283,6 +2283,10 @@ func (c *Cluster) Start(t *testing.T, now int64, i int) error {
 		dmInitCommand = dmInitCommand + " --zfs " + kzv
 	}
 
+	if eum, ok := c.Env["EXTERNAL_USER_MANAGER_URL"]; ok {
+		dmInitCommand = dmInitCommand + " --external-user-manager-url " + eum
+	}
+
 	dmInitCommand = dmInitCommand + c.ClusterArgs
 
 	RegisterCleanupAction(50, fmt.Sprintf(
