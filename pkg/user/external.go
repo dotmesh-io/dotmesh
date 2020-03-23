@@ -139,7 +139,7 @@ func (m *ExternalManager) Update(user *User) (*User, error) {
 
 // Import user without hashing password or generating API key
 func (m *ExternalManager) Import(user *User) error {
-	return m.call("user", http.MethodPut, user, nil)
+	return m.call("user/import", http.MethodPut, user, nil)
 }
 
 type UpdatePasswordRequest struct {
@@ -176,8 +176,14 @@ func (m *ExternalManager) ResetAPIKey(id string) (*User, error) {
 	return &u, nil
 }
 
+type DeleteRequest struct {
+	UserID string
+}
+
 func (m *ExternalManager) Delete(id string) error {
-	return m.call("user/"+id, http.MethodDelete, nil, nil)
+	return m.call("user", http.MethodDelete, DeleteRequest{
+		UserID: id,
+	}, nil)
 }
 
 type ListRequest struct {
@@ -186,7 +192,7 @@ type ListRequest struct {
 
 func (m *ExternalManager) List(selector string) ([]*User, error) {
 	var u []*User
-	err := m.call("user/api-key", http.MethodPost, ListRequest{
+	err := m.call("user/list", http.MethodGet, ListRequest{
 		Selector: selector,
 	}, u)
 	if err != nil {

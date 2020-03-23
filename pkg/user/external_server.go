@@ -94,6 +94,96 @@ func StartExternalServer(listenAddr string, stop <-chan struct{}, um UserManager
 						sendResponse(rw, http.StatusOK, u)
 					}
 				}
+			case "POST /user":
+				var u User
+				err := readRequestBody(req, &u)
+				if err != nil {
+					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
+					http.Error(rw, err.Error(), http.StatusBadRequest)
+				} else {
+					nu, err := um.Update(&u)
+					if err != nil {
+						l.WithError(err).Error("[ExternalUserManagerServer] User update failure")
+						http.Error(rw, err.Error(), http.StatusInternalServerError)
+					} else {
+						sendResponse(rw, http.StatusOK, nu)
+					}
+				}
+			case "PUT /user/import":
+				var u User
+				err := readRequestBody(req, &u)
+				if err != nil {
+					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
+					http.Error(rw, err.Error(), http.StatusBadRequest)
+				} else {
+					err := um.Import(&u)
+					if err != nil {
+						l.WithError(err).Error("[ExternalUserManagerServer] User import failure")
+						http.Error(rw, err.Error(), http.StatusInternalServerError)
+					} else {
+						sendResponse(rw, http.StatusOK, nil)
+					}
+				}
+			case "POST /user/password":
+				var r UpdatePasswordRequest
+				err := readRequestBody(req, &r)
+				if err != nil {
+					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
+					http.Error(rw, err.Error(), http.StatusBadRequest)
+				} else {
+					nu, err := um.UpdatePassword(r.UserID, r.NewPassword)
+					if err != nil {
+						l.WithError(err).Error("[ExternalUserManagerServer] User password update failure")
+						http.Error(rw, err.Error(), http.StatusInternalServerError)
+					} else {
+						sendResponse(rw, http.StatusOK, nu)
+					}
+				}
+			case "POST /user/api-key":
+				var r ResetAPIKeyRequest
+				err := readRequestBody(req, &r)
+				if err != nil {
+					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
+					http.Error(rw, err.Error(), http.StatusBadRequest)
+				} else {
+					nu, err := um.ResetAPIKey(r.UserID)
+					if err != nil {
+						l.WithError(err).Error("[ExternalUserManagerServer] User API key reset failure")
+						http.Error(rw, err.Error(), http.StatusInternalServerError)
+					} else {
+						sendResponse(rw, http.StatusOK, nu)
+					}
+				}
+			case "DELETE /user":
+				var r DeleteRequest
+				err := readRequestBody(req, &r)
+				if err != nil {
+					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
+					http.Error(rw, err.Error(), http.StatusBadRequest)
+				} else {
+					err := um.Delete(r.UserID)
+					if err != nil {
+						l.WithError(err).Error("[ExternalUserManagerServer] User delete failure")
+						http.Error(rw, err.Error(), http.StatusInternalServerError)
+					} else {
+						sendResponse(rw, http.StatusOK, nil)
+					}
+				}
+			case "GET /user/list":
+				var r ListRequest
+				err := readRequestBody(req, &r)
+				if err != nil {
+					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
+					http.Error(rw, err.Error(), http.StatusBadRequest)
+				} else {
+					us, err := um.List(r.Selector)
+					if err != nil {
+						l.WithError(err).Error("[ExternalUserManagerServer] User list failure")
+						http.Error(rw, err.Error(), http.StatusInternalServerError)
+					} else {
+						sendResponse(rw, http.StatusOK, us)
+					}
+				}
 			case "POST /user/authenticate":
 				var ar AuthenticateRequest
 				err := readRequestBody(req, &ar)

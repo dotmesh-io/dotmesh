@@ -336,6 +336,20 @@ linux_s3api:
         - extracted_logs
         when: always
 
+linux_external_user_manager:
+    retry: 2
+    stage: test
+    dependencies:
+        - build_client_linux
+    tags:
+        - fast
+    script:
+        - bash ./scripts/test.sh -run TestExternalUserManager
+    artifacts:
+        paths:
+        - extracted_logs
+        when: always
+
 linux_forks:
     retry: 2
     stage: test
