@@ -32,7 +32,7 @@ func (m *ExternalManager) call(operation string, method string, body interface{}
 		"body":      fmt.Sprintf("%#v", body),
 	})
 
-	l.Debug("[externalManager] call")
+	//	l.Debug("[externalManager] ABS DEBUG call")
 
 	var bodyReader io.Reader
 	if body != nil {
@@ -88,6 +88,8 @@ func (m *ExternalManager) call(operation string, method string, body interface{}
 			l.WithError(err).Error("[externalManager] Error decoding response body")
 			return err
 		}
+
+		//		l.WithField("response", fmt.Sprintf("%#v", result)).Debug("ABS DEBUG response")
 	}
 
 	return nil
@@ -194,7 +196,7 @@ func (m *ExternalManager) List(selector string) ([]*User, error) {
 	var u []*User
 	err := m.call("user/list", http.MethodGet, ListRequest{
 		Selector: selector,
-	}, u)
+	}, &u)
 	if err != nil {
 		return nil, err
 	}

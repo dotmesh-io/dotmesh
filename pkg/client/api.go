@@ -123,6 +123,10 @@ func (dm *DotmeshAPI) CallRemote(
 	}
 }
 
+func (dm *DotmeshAPI) SetVerboseFlag(verbose bool) {
+	dm.verbose = verbose
+}
+
 func (dm *DotmeshAPI) List() (map[string]map[string]types.DotmeshVolume, error) {
 	filesystems := make(map[string]map[string]types.DotmeshVolume)
 	err := dm.CallRemote(

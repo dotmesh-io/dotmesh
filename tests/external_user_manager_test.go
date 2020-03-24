@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"testing"
 	"time"
 
+	"github.com/dotmesh-io/dotmesh/pkg/client"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
 
@@ -15,13 +17,15 @@ import (
 )
 
 type DummyUserManager struct {
-	allowStuff  bool
-	theValidKey string
-	log         log.FieldLogger
+	allowStuff       bool
+	theValidAdminKey string
+	theValidKey      string
+	log              log.FieldLogger
 }
 
 func (m *DummyUserManager) NewAdmin(user *user.User) error {
-	m.log.Infof("NewAdmin: %#v", *user)
+	m.log.Infof("NewAdmin: %#v (%s)", *user, string(user.Password))
+	m.theValidAdminKey = user.ApiKey
 	return nil
 }
 
@@ -46,7 +50,7 @@ func (m *DummyUserManager) Get(q *user.Query) (*user.User, error) {
 
 func (m *DummyUserManager) Update(user *user.User) (*user.User, error) {
 	m.log.Infof("Update: %#v", *user)
-	return nil, nil
+	return user, nil
 }
 
 func (m *DummyUserManager) Import(user *user.User) error {
@@ -59,6 +63,7 @@ func (m *DummyUserManager) UpdatePassword(id string, password string) (*user.Use
 	return &user.User{
 		Id:       id,
 		Password: []byte(password),
+		Name:     password,
 	}, nil
 }
 
@@ -76,7 +81,7 @@ func (m *DummyUserManager) Delete(id string) error {
 }
 
 func (m *DummyUserManager) List(selector string) ([]*user.User, error) {
-	m.log.Infof("List: %s", selector)
+	m.log.Infof("List: %q", selector)
 	return []*user.User{
 		&user.User{
 			Id:   "00000000-0000-0000-0000-000000000000",
@@ -93,10 +98,14 @@ func (m *DummyUserManager) Authenticate(username, password string) (*user.User, 
 	m.log.Infof("Authenticate: %s / %q", username, password)
 
 	if username == "admin" {
-		return &user.User{
-			Id:   "00000000-0000-0000-0000-000000000000",
-			Name: username,
-		}, user.AuthenticationTypePassword, nil
+		if password == m.theValidAdminKey {
+			return &user.User{
+				Id:   "00000000-0000-0000-0000-000000000000",
+				Name: username,
+			}, user.AuthenticationTypeAPIKey, nil
+		} else {
+			return nil, user.AuthenticationTypeNone, nil
+		}
 	} else {
 		if password == m.theValidKey {
 			return &user.User{
@@ -176,7 +185,9 @@ func TestExternalUserManager(t *testing.T) {
 		t.Error(err)
 	}
 
-	// tell second node about bob on the first node... our user manager accepts bobKey
+	// Set up users on first cluster, and add a remote on the second
+	// cluster... our user manager accepts bobKey and the already-chosen admin
+	// password
 	um.theValidKey = bobKey
 	citools.RunOnNode(t, node2, "echo '"+bobKey+"' | dm remote add bob bob@"+cluster1Node.IP)
 
@@ -224,7 +235,7 @@ func TestExternalUserManager(t *testing.T) {
 		// We're not so interested in the backup/restore correctly restoring users,
 		// as most external user managers will be interfaces to things that are
 		// backed up elsewhere - just want to make sure we don't break
-		// backup/restore of everything else
+		// backup/restore of everything else.
 		fsName := citools.UniqName()
 		um.allowStuff = true
 		citools.RunOnNode(t, node2, "dm remote switch local")
@@ -236,14 +247,101 @@ func TestExternalUserManager(t *testing.T) {
 
 		citools.RunOnNode(t, node2, "dm push bob "+fsName)
 
-		// Pull a backup
+		// Pull a backup; calls List
 		citools.RunOnNode(t, node2, "dm remote switch cluster_0_node_0")
 		citools.RunOnNode(t, node2, "dm cluster backup-etcd > backup.json")
 
-		// Restore it
+		// Restore it; calls Import
 		citools.RunOnNode(t, node2, "dm cluster restore-etcd < backup.json")
 
 		// Pull back
 		citools.RunOnNode(t, node2, "dm pull bob")
 	})
+
+	t.Run("UserSelfManagementAPICalls", func(t *testing.T) {
+		remote := &client.DMRemote{
+			User:     "bob",
+			ApiKey:   bobKey,
+			Hostname: f[0].GetNode(0).IP,
+			Port:     32607,
+		}
+
+		cfg := client.Configuration{
+			CurrentRemote: "default",
+			DMRemotes: map[string]*client.DMRemote{
+				"default": remote,
+			},
+		}
+
+		apiClient := client.DotmeshAPI{
+			Configuration: &cfg,
+		}
+
+		apiClient.SetVerboseFlag(true)
+
+		// Reset API Key
+
+		var r1 struct {
+			APIKey string
+		}
+		apiClient.CallRemote(
+			context.Background(), "DotmeshRPC.ResetApiKey", nil, &r1,
+		)
+		if r1.APIKey != "456" {
+			t.Errorf("ResetApiKey: wanted 456, got %q", r1.APIKey)
+		}
+
+		// Update Password
+		var r2 user.User
+		apiClient.CallRemote(
+			context.Background(), "DotmeshRPC.UpdatePassword", struct{ NewPassword string }{NewPassword: "new-password"}, &r2,
+		)
+		if r2.Name != "new-password" {
+			t.Errorf("Update password call didn't work: got %#v back", r2)
+		}
+	})
+
+	t.Run("UserAdminManagementAPICalls", func(t *testing.T) {
+		remote := &client.DMRemote{
+			User:     "admin",
+			ApiKey:   um.theValidAdminKey,
+			Hostname: f[0].GetNode(0).IP,
+			Port:     32607,
+		}
+
+		cfg := client.Configuration{
+			CurrentRemote: "default",
+			DMRemotes: map[string]*client.DMRemote{
+				"default": remote,
+			},
+		}
+
+		apiClient := client.DotmeshAPI{
+			Configuration: &cfg,
+		}
+
+		apiClient.SetVerboseFlag(true)
+
+		// Set User Email (calls Update, same as SetUserMetadataField etc, so no need to test those too).
+		// Needs to be admin user now.
+		remote.User = "admin"
+		remote.ApiKey = um.theValidAdminKey
+		var r3 user.User
+		apiClient.CallRemote(
+			context.Background(), "DotmeshRPC.SetUserEmail", struct {
+				Id    string
+				Email string
+			}{
+				Id:    "id-of-user-bob",
+				Email: "bob@dotscience.com",
+			}, &r3,
+		)
+		if r3.Email != "bob@dotscience.com" {
+			t.Errorf("Update email call didn't work: got %#v back", r3)
+		}
+
+	})
+
+	// Still to test, via API
+	// Is Delete called ANYWHERE?!?
 }

@@ -204,20 +204,11 @@ func (d *DotmeshRPC) GetApiKey(r *http.Request, args *struct{}, result *struct{ 
 // the user must have authenticated correctly with their old password in order
 // to run this method
 func (d *DotmeshRPC) UpdatePassword(r *http.Request, args *struct{ NewPassword string }, result *SafeUser) error {
-	// user, err := GetUserById(auth.GetUserID(r))
-	// if err != nil {
-	// return err
-	// }
-
 	user, err := d.usersManager.UpdatePassword(auth.GetUserID(r), args.NewPassword)
 	if err != nil {
 		return err
 	}
-	// user.UpdatePassword(args.NewPassword)
-	// err = user.Save()
-	// if err != nil {
-	// 	return err
-	// }
+
 	*result = user.SafeUser()
 	return nil
 }
