@@ -14,17 +14,21 @@ import (
 )
 
 type ExternalManager struct {
-	url string
+	url        string
+	httpClient *http.Client
 }
 
-func NewExternal(url string) *ExternalManager {
+func NewExternal(url string, httpClient *http.Client) *ExternalManager {
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
 	return &ExternalManager{
-		url: url,
+		url:        url,
+		httpClient: httpClient,
 	}
 }
 
 func (m *ExternalManager) call(operation string, method string, body interface{}, result interface{}) error {
-	client := &http.Client{}
 	l := log.WithFields(log.Fields{
 		"base_url":  m.url,
 		"operation": operation,
@@ -54,7 +58,7 @@ func (m *ExternalManager) call(operation string, method string, body interface{}
 
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := client.Do(req)
+	resp, err := m.httpClient.Do(req)
 	if err != nil {
 		l.WithError(err).Error("[externalManager] Error performing HTTP request")
 		return err

@@ -176,7 +176,7 @@ func main() {
 
 	// kvClient := kv.New(etcdClient, ETCD_PREFIX)
 	if config.ExternalUserManagerURL != "" {
-		config.UserManager = user.NewExternal(config.ExternalUserManagerURL)
+		config.UserManager = user.NewExternal(config.ExternalUserManagerURL, nil)
 	} else {
 		config.UserManager = user.NewInternal(usersIdxStore)
 	}
