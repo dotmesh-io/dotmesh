@@ -11,11 +11,13 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func readRequestBody(req *http.Request, body interface{}) error {
+func readRequestBody(l log.FieldLogger, rw http.ResponseWriter, req *http.Request, body interface{}) bool {
 	if err := json.NewDecoder(req.Body).Decode(body); err != nil {
-		return err
+		l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
+		http.Error(rw, err.Error(), http.StatusBadRequest)
+		return false
 	}
-	return nil
+	return true
 }
 
 func sendResponse(rw http.ResponseWriter, status int, body interface{}) {
@@ -43,35 +45,25 @@ func sendResponse(rw http.ResponseWriter, status int, body interface{}) {
 
 func StartExternalServer(listenAddr string, stop <-chan struct{}, um UserManager) error {
 	ctx := context.Background()
-	s := &http.Server{
-		Addr: listenAddr,
-		Handler: http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-			l := log.WithField("path", req.URL.Path).WithField("method", req.Method)
-			l.Debug("[ExternalUserManagerServer] request received")
-			switch fmt.Sprintf("%s %s", req.Method, req.URL.Path) {
-			case "PUT /user/admin":
-				var u User
-				err := readRequestBody(req, &u)
-				if err != nil {
-					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
-					http.Error(rw, err.Error(), http.StatusBadRequest)
-					return
-				}
-				err = um.NewAdmin(&u)
+
+	handler := func(rw http.ResponseWriter, req *http.Request) {
+		l := log.WithField("path", req.URL.Path).WithField("method", req.Method)
+		l.Debug("[ExternalUserManagerServer] request received")
+		switch fmt.Sprintf("%s %s", req.Method, req.URL.Path) {
+		case "PUT /user/admin":
+			var u User
+			if readRequestBody(l, rw, req, &u) {
+				err := um.NewAdmin(&u)
 				if err != nil {
 					l.WithError(err).Error("[ExternalUserManagerServer] Admin user creation failure")
 					http.Error(rw, err.Error(), http.StatusInternalServerError)
 					return
 				}
 				sendResponse(rw, http.StatusOK, nil)
-			case "PUT /user":
-				var u NewUserRequest
-				err := readRequestBody(req, &u)
-				if err != nil {
-					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
-					http.Error(rw, err.Error(), http.StatusBadRequest)
-					return
-				}
+			}
+		case "PUT /user":
+			var u NewUserRequest
+			if readRequestBody(l, rw, req, &u) {
 				nu, err := um.New(u.Name, u.Email, u.Password)
 				if err != nil {
 					l.WithError(err).Error("[ExternalUserManagerServer] Admin user creation failure")
@@ -79,14 +71,10 @@ func StartExternalServer(listenAddr string, stop <-chan struct{}, um UserManager
 					return
 				}
 				sendResponse(rw, http.StatusOK, nu)
-			case "GET /user":
-				var q Query
-				err := readRequestBody(req, &q)
-				if err != nil {
-					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
-					http.Error(rw, err.Error(), http.StatusBadRequest)
-					return
-				}
+			}
+		case "GET /user":
+			var q Query
+			if readRequestBody(l, rw, req, &q) {
 				u, err := um.Get(&q)
 				if err != nil {
 					l.WithError(err).Error("[ExternalUserManagerServer] User query")
@@ -94,14 +82,10 @@ func StartExternalServer(listenAddr string, stop <-chan struct{}, um UserManager
 					return
 				}
 				sendResponse(rw, http.StatusOK, u)
-			case "POST /user":
-				var u User
-				err := readRequestBody(req, &u)
-				if err != nil {
-					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
-					http.Error(rw, err.Error(), http.StatusBadRequest)
-					return
-				}
+			}
+		case "POST /user":
+			var u User
+			if readRequestBody(l, rw, req, &u) {
 				nu, err := um.Update(&u)
 				if err != nil {
 					l.WithError(err).Error("[ExternalUserManagerServer] User update failure")
@@ -109,29 +93,21 @@ func StartExternalServer(listenAddr string, stop <-chan struct{}, um UserManager
 					return
 				}
 				sendResponse(rw, http.StatusOK, nu)
-			case "PUT /user/import":
-				var u User
-				err := readRequestBody(req, &u)
-				if err != nil {
-					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
-					http.Error(rw, err.Error(), http.StatusBadRequest)
-					return
-				}
-				err = um.Import(&u)
+			}
+		case "PUT /user/import":
+			var u User
+			if readRequestBody(l, rw, req, &u) {
+				err := um.Import(&u)
 				if err != nil {
 					l.WithError(err).Error("[ExternalUserManagerServer] User import failure")
 					http.Error(rw, err.Error(), http.StatusInternalServerError)
 					return
 				}
 				sendResponse(rw, http.StatusOK, nil)
-			case "POST /user/password":
-				var r UpdatePasswordRequest
-				err := readRequestBody(req, &r)
-				if err != nil {
-					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
-					http.Error(rw, err.Error(), http.StatusBadRequest)
-					return
-				}
+			}
+		case "POST /user/password":
+			var r UpdatePasswordRequest
+			if readRequestBody(l, rw, req, &r) {
 				nu, err := um.UpdatePassword(r.UserID, r.NewPassword)
 				if err != nil {
 					l.WithError(err).Error("[ExternalUserManagerServer] User password update failure")
@@ -139,14 +115,10 @@ func StartExternalServer(listenAddr string, stop <-chan struct{}, um UserManager
 					return
 				}
 				sendResponse(rw, http.StatusOK, nu)
-			case "POST /user/api-key":
-				var r ResetAPIKeyRequest
-				err := readRequestBody(req, &r)
-				if err != nil {
-					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
-					http.Error(rw, err.Error(), http.StatusBadRequest)
-					return
-				}
+			}
+		case "POST /user/api-key":
+			var r ResetAPIKeyRequest
+			if readRequestBody(l, rw, req, &r) {
 				nu, err := um.ResetAPIKey(r.UserID)
 				if err != nil {
 					l.WithError(err).Error("[ExternalUserManagerServer] User API key reset failure")
@@ -154,29 +126,21 @@ func StartExternalServer(listenAddr string, stop <-chan struct{}, um UserManager
 					return
 				}
 				sendResponse(rw, http.StatusOK, nu)
-			case "DELETE /user":
-				var r DeleteRequest
-				err := readRequestBody(req, &r)
-				if err != nil {
-					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
-					http.Error(rw, err.Error(), http.StatusBadRequest)
-					return
-				}
-				err = um.Delete(r.UserID)
+			}
+		case "DELETE /user":
+			var r DeleteRequest
+			if readRequestBody(l, rw, req, &r) {
+				err := um.Delete(r.UserID)
 				if err != nil {
 					l.WithError(err).Error("[ExternalUserManagerServer] User delete failure")
 					http.Error(rw, err.Error(), http.StatusInternalServerError)
 					return
 				}
 				sendResponse(rw, http.StatusOK, nil)
-			case "GET /user/list":
-				var r ListRequest
-				err := readRequestBody(req, &r)
-				if err != nil {
-					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
-					http.Error(rw, err.Error(), http.StatusBadRequest)
-					return
-				}
+			}
+		case "GET /user/list":
+			var r ListRequest
+			if readRequestBody(l, rw, req, &r) {
 				us, err := um.List(r.Selector)
 				if err != nil {
 					l.WithError(err).Error("[ExternalUserManagerServer] User list failure")
@@ -184,14 +148,10 @@ func StartExternalServer(listenAddr string, stop <-chan struct{}, um UserManager
 					return
 				}
 				sendResponse(rw, http.StatusOK, us)
-			case "POST /user/authenticate":
-				var ar AuthenticateRequest
-				err := readRequestBody(req, &ar)
-				if err != nil {
-					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
-					http.Error(rw, err.Error(), http.StatusBadRequest)
-					return
-				}
+			}
+		case "POST /user/authenticate":
+			var ar AuthenticateRequest
+			if readRequestBody(l, rw, req, &ar) {
 				u, at, err := um.Authenticate(ar.Username, ar.Password)
 				if err != nil {
 					l.WithError(err).Error("[ExternalUserManagerServer] Authentication failure")
@@ -206,14 +166,10 @@ func StartExternalServer(listenAddr string, stop <-chan struct{}, um UserManager
 					User: *u,
 					Type: at.String(),
 				})
-			case "POST /authorize":
-				var ar AuthorizeRequest
-				err := readRequestBody(req, &ar)
-				if err != nil {
-					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
-					http.Error(rw, err.Error(), http.StatusBadRequest)
-					return
-				}
+			}
+		case "POST /authorize":
+			var ar AuthorizeRequest
+			if readRequestBody(l, rw, req, &ar) {
 				allowed, err := um.Authorize(&ar.User, ar.OwnerAction, &ar.TopLevelFilesystem)
 				if err != nil {
 					l.WithError(err).Error("[ExternalUserManagerServer] Authorize failure")
@@ -223,14 +179,10 @@ func StartExternalServer(listenAddr string, stop <-chan struct{}, um UserManager
 				sendResponse(rw, http.StatusOK, &AuthorizeResponse{
 					Allowed: allowed,
 				})
-			case "POST /authorize-namespace-admin":
-				var ar AuthorizeNamespaceAdminRequest
-				err := readRequestBody(req, &ar)
-				if err != nil {
-					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
-					http.Error(rw, err.Error(), http.StatusBadRequest)
-					return
-				}
+			}
+		case "POST /authorize-namespace-admin":
+			var ar AuthorizeNamespaceAdminRequest
+			if readRequestBody(l, rw, req, &ar) {
 				allowed, err := um.UserIsNamespaceAdministrator(&ar.User, ar.Namespace)
 				if err != nil {
 					l.WithError(err).Error("[ExternalUserManagerServer] Authorize failure")
@@ -240,12 +192,17 @@ func StartExternalServer(listenAddr string, stop <-chan struct{}, um UserManager
 				sendResponse(rw, http.StatusOK, &AuthorizeResponse{
 					Allowed: allowed,
 				})
-			default:
-				l.Error("Path not found")
-				http.Error(rw, "Not Found", http.StatusNotFound)
-				return
 			}
-		}),
+		default:
+			l.Error("Path not found")
+			http.Error(rw, "Not Found", http.StatusNotFound)
+			return
+		}
+	}
+
+	s := &http.Server{
+		Addr:         listenAddr,
+		Handler:      http.HandlerFunc(handler),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}
