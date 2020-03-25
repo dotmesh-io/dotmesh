@@ -49,6 +49,12 @@ func StartExternalServer(listenAddr string, stop <-chan struct{}, um UserManager
 	handler := func(rw http.ResponseWriter, req *http.Request) {
 		l := log.WithField("path", req.URL.Path).WithField("method", req.Method)
 		l.Debug("[ExternalUserManagerServer] request received")
+		defer func() {
+			if r := recover(); r != nil {
+				l.WithField("panic", r).Error("[ExternalUserManagerServer] panic recovered")
+				http.Error(rw, fmt.Sprintf("%v", r), http.StatusInternalServerError)
+			}
+		}()
 		switch fmt.Sprintf("%s %s", req.Method, req.URL.Path) {
 		case "PUT /user/admin":
 			var u User

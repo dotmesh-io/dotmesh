@@ -339,9 +339,8 @@ func TestExternalUserManager(t *testing.T) {
 		if r3.Email != "bob@dotscience.com" {
 			t.Errorf("Update email call didn't work: got %#v back", r3)
 		}
-
 	})
 
-	// Still to test, via API
+	// FIXME: Still to test, via API:
 	// Is Delete called ANYWHERE?!?
 }
