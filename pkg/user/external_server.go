@@ -55,194 +55,195 @@ func StartExternalServer(listenAddr string, stop <-chan struct{}, um UserManager
 				if err != nil {
 					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
 					http.Error(rw, err.Error(), http.StatusBadRequest)
-				} else {
-					err := um.NewAdmin(&u)
-					if err != nil {
-						l.WithError(err).Error("[ExternalUserManagerServer] Admin user creation failure")
-						http.Error(rw, err.Error(), http.StatusInternalServerError)
-					} else {
-						sendResponse(rw, http.StatusOK, nil)
-					}
+					return
 				}
+				err = um.NewAdmin(&u)
+				if err != nil {
+					l.WithError(err).Error("[ExternalUserManagerServer] Admin user creation failure")
+					http.Error(rw, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				sendResponse(rw, http.StatusOK, nil)
 			case "PUT /user":
 				var u NewUserRequest
 				err := readRequestBody(req, &u)
 				if err != nil {
 					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
 					http.Error(rw, err.Error(), http.StatusBadRequest)
-				} else {
-					nu, err := um.New(u.Name, u.Email, u.Password)
-					if err != nil {
-						l.WithError(err).Error("[ExternalUserManagerServer] Admin user creation failure")
-						http.Error(rw, err.Error(), http.StatusInternalServerError)
-					} else {
-						sendResponse(rw, http.StatusOK, nu)
-					}
+					return
 				}
+				nu, err := um.New(u.Name, u.Email, u.Password)
+				if err != nil {
+					l.WithError(err).Error("[ExternalUserManagerServer] Admin user creation failure")
+					http.Error(rw, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				sendResponse(rw, http.StatusOK, nu)
 			case "GET /user":
 				var q Query
 				err := readRequestBody(req, &q)
 				if err != nil {
 					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
 					http.Error(rw, err.Error(), http.StatusBadRequest)
-				} else {
-					u, err := um.Get(&q)
-					if err != nil {
-						l.WithError(err).Error("[ExternalUserManagerServer] User query")
-						http.Error(rw, err.Error(), http.StatusInternalServerError)
-					} else {
-						sendResponse(rw, http.StatusOK, u)
-					}
+					return
 				}
+				u, err := um.Get(&q)
+				if err != nil {
+					l.WithError(err).Error("[ExternalUserManagerServer] User query")
+					http.Error(rw, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				sendResponse(rw, http.StatusOK, u)
 			case "POST /user":
 				var u User
 				err := readRequestBody(req, &u)
 				if err != nil {
 					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
 					http.Error(rw, err.Error(), http.StatusBadRequest)
-				} else {
-					nu, err := um.Update(&u)
-					if err != nil {
-						l.WithError(err).Error("[ExternalUserManagerServer] User update failure")
-						http.Error(rw, err.Error(), http.StatusInternalServerError)
-					} else {
-						sendResponse(rw, http.StatusOK, nu)
-					}
+					return
 				}
+				nu, err := um.Update(&u)
+				if err != nil {
+					l.WithError(err).Error("[ExternalUserManagerServer] User update failure")
+					http.Error(rw, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				sendResponse(rw, http.StatusOK, nu)
 			case "PUT /user/import":
 				var u User
 				err := readRequestBody(req, &u)
 				if err != nil {
 					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
 					http.Error(rw, err.Error(), http.StatusBadRequest)
-				} else {
-					err := um.Import(&u)
-					if err != nil {
-						l.WithError(err).Error("[ExternalUserManagerServer] User import failure")
-						http.Error(rw, err.Error(), http.StatusInternalServerError)
-					} else {
-						sendResponse(rw, http.StatusOK, nil)
-					}
+					return
 				}
+				err = um.Import(&u)
+				if err != nil {
+					l.WithError(err).Error("[ExternalUserManagerServer] User import failure")
+					http.Error(rw, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				sendResponse(rw, http.StatusOK, nil)
 			case "POST /user/password":
 				var r UpdatePasswordRequest
 				err := readRequestBody(req, &r)
 				if err != nil {
 					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
 					http.Error(rw, err.Error(), http.StatusBadRequest)
-				} else {
-					nu, err := um.UpdatePassword(r.UserID, r.NewPassword)
-					if err != nil {
-						l.WithError(err).Error("[ExternalUserManagerServer] User password update failure")
-						http.Error(rw, err.Error(), http.StatusInternalServerError)
-					} else {
-						sendResponse(rw, http.StatusOK, nu)
-					}
+					return
 				}
+				nu, err := um.UpdatePassword(r.UserID, r.NewPassword)
+				if err != nil {
+					l.WithError(err).Error("[ExternalUserManagerServer] User password update failure")
+					http.Error(rw, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				sendResponse(rw, http.StatusOK, nu)
 			case "POST /user/api-key":
 				var r ResetAPIKeyRequest
 				err := readRequestBody(req, &r)
 				if err != nil {
 					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
 					http.Error(rw, err.Error(), http.StatusBadRequest)
-				} else {
-					nu, err := um.ResetAPIKey(r.UserID)
-					if err != nil {
-						l.WithError(err).Error("[ExternalUserManagerServer] User API key reset failure")
-						http.Error(rw, err.Error(), http.StatusInternalServerError)
-					} else {
-						sendResponse(rw, http.StatusOK, nu)
-					}
+					return
 				}
+				nu, err := um.ResetAPIKey(r.UserID)
+				if err != nil {
+					l.WithError(err).Error("[ExternalUserManagerServer] User API key reset failure")
+					http.Error(rw, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				sendResponse(rw, http.StatusOK, nu)
 			case "DELETE /user":
 				var r DeleteRequest
 				err := readRequestBody(req, &r)
 				if err != nil {
 					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
 					http.Error(rw, err.Error(), http.StatusBadRequest)
-				} else {
-					err := um.Delete(r.UserID)
-					if err != nil {
-						l.WithError(err).Error("[ExternalUserManagerServer] User delete failure")
-						http.Error(rw, err.Error(), http.StatusInternalServerError)
-					} else {
-						sendResponse(rw, http.StatusOK, nil)
-					}
+					return
 				}
+				err = um.Delete(r.UserID)
+				if err != nil {
+					l.WithError(err).Error("[ExternalUserManagerServer] User delete failure")
+					http.Error(rw, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				sendResponse(rw, http.StatusOK, nil)
 			case "GET /user/list":
 				var r ListRequest
 				err := readRequestBody(req, &r)
 				if err != nil {
 					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
 					http.Error(rw, err.Error(), http.StatusBadRequest)
-				} else {
-					us, err := um.List(r.Selector)
-					if err != nil {
-						l.WithError(err).Error("[ExternalUserManagerServer] User list failure")
-						http.Error(rw, err.Error(), http.StatusInternalServerError)
-					} else {
-						sendResponse(rw, http.StatusOK, us)
-					}
+					return
 				}
+				us, err := um.List(r.Selector)
+				if err != nil {
+					l.WithError(err).Error("[ExternalUserManagerServer] User list failure")
+					http.Error(rw, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				sendResponse(rw, http.StatusOK, us)
 			case "POST /user/authenticate":
 				var ar AuthenticateRequest
 				err := readRequestBody(req, &ar)
 				if err != nil {
 					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
 					http.Error(rw, err.Error(), http.StatusBadRequest)
-				} else {
-					u, at, err := um.Authenticate(ar.Username, ar.Password)
-					if err != nil {
-						l.WithError(err).Error("[ExternalUserManagerServer] Authentication failure")
-						http.Error(rw, err.Error(), http.StatusInternalServerError)
-					} else {
-						if u == nil {
-							http.Error(rw, "Authentication failed", http.StatusBadRequest)
-						} else {
-							sendResponse(rw, http.StatusOK, &AuthenticateResponse{
-								User: *u,
-								Type: at.String(),
-							})
-						}
-					}
+					return
 				}
+				u, at, err := um.Authenticate(ar.Username, ar.Password)
+				if err != nil {
+					l.WithError(err).Error("[ExternalUserManagerServer] Authentication failure")
+					http.Error(rw, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				if u == nil {
+					http.Error(rw, "Authentication failed", http.StatusBadRequest)
+					return
+				}
+				sendResponse(rw, http.StatusOK, &AuthenticateResponse{
+					User: *u,
+					Type: at.String(),
+				})
 			case "POST /authorize":
 				var ar AuthorizeRequest
 				err := readRequestBody(req, &ar)
 				if err != nil {
 					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
 					http.Error(rw, err.Error(), http.StatusBadRequest)
-				} else {
-					allowed, err := um.Authorize(&ar.User, ar.OwnerAction, &ar.TopLevelFilesystem)
-					if err != nil {
-						l.WithError(err).Error("[ExternalUserManagerServer] Authorize failure")
-						http.Error(rw, err.Error(), http.StatusInternalServerError)
-					} else {
-						sendResponse(rw, http.StatusOK, &AuthorizeResponse{
-							Allowed: allowed,
-						})
-					}
+					return
 				}
+				allowed, err := um.Authorize(&ar.User, ar.OwnerAction, &ar.TopLevelFilesystem)
+				if err != nil {
+					l.WithError(err).Error("[ExternalUserManagerServer] Authorize failure")
+					http.Error(rw, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				sendResponse(rw, http.StatusOK, &AuthorizeResponse{
+					Allowed: allowed,
+				})
 			case "POST /authorize-namespace-admin":
 				var ar AuthorizeNamespaceAdminRequest
 				err := readRequestBody(req, &ar)
 				if err != nil {
 					l.WithError(err).Error("[ExternalUserManagerServer] Bad request")
 					http.Error(rw, err.Error(), http.StatusBadRequest)
-				} else {
-					allowed, err := um.UserIsNamespaceAdministrator(&ar.User, ar.Namespace)
-					if err != nil {
-						l.WithError(err).Error("[ExternalUserManagerServer] Authorize failure")
-						http.Error(rw, err.Error(), http.StatusInternalServerError)
-					} else {
-						sendResponse(rw, http.StatusOK, &AuthorizeResponse{
-							Allowed: allowed,
-						})
-					}
+					return
 				}
+				allowed, err := um.UserIsNamespaceAdministrator(&ar.User, ar.Namespace)
+				if err != nil {
+					l.WithError(err).Error("[ExternalUserManagerServer] Authorize failure")
+					http.Error(rw, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				sendResponse(rw, http.StatusOK, &AuthorizeResponse{
+					Allowed: allowed,
+				})
 			default:
 				l.Error("Path not found")
 				http.Error(rw, "Not Found", http.StatusNotFound)
+				return
 			}
 		}),
 		ReadTimeout:  10 * time.Second,
