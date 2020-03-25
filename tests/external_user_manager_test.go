@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,6 +16,8 @@ import (
 
 	log "github.com/sirupsen/logrus"
 )
+
+const veryInvalidPasswordThatWillCauseAPanic = "actually-just-panic"
 
 type DummyUserManager struct {
 	allowStuff       bool
@@ -59,12 +62,16 @@ func (m *DummyUserManager) Import(user *user.User) error {
 }
 
 func (m *DummyUserManager) UpdatePassword(id string, password string) (*user.User, error) {
-	m.log.Infof("UpdatePassword: %s <- %q", id, password)
-	return &user.User{
-		Id:       id,
-		Password: []byte(password),
-		Name:     password,
-	}, nil
+	if password == veryInvalidPasswordThatWillCauseAPanic {
+		panic("Eargh, a panic in UpdatePassword!")
+	} else {
+		m.log.Infof("UpdatePassword: %s <- %q", id, password)
+		return &user.User{
+			Id:       id,
+			Password: []byte(password),
+			Name:     password,
+		}, nil
+	}
 }
 
 func (m *DummyUserManager) ResetAPIKey(id string) (*user.User, error) {
@@ -338,6 +345,39 @@ func TestExternalUserManager(t *testing.T) {
 		)
 		if r3.Email != "bob@dotscience.com" {
 			t.Errorf("Update email call didn't work: got %#v back", r3)
+		}
+	})
+
+	t.Run("PanicRecover", func(t *testing.T) {
+		remote := &client.DMRemote{
+			User:     "bob",
+			ApiKey:   bobKey,
+			Hostname: f[0].GetNode(0).IP,
+			Port:     32607,
+		}
+
+		cfg := client.Configuration{
+			CurrentRemote: "default",
+			DMRemotes: map[string]*client.DMRemote{
+				"default": remote,
+			},
+		}
+
+		apiClient := client.DotmeshAPI{
+			Configuration: &cfg,
+		}
+
+		apiClient.SetVerboseFlag(true)
+
+		// Trigger a panic through "invalid" input to UpdatePassword (the dummy user manager knows to cause a panic in this case)
+		var r user.User
+		err = apiClient.CallRemote(
+			context.Background(), "DotmeshRPC.UpdatePassword", struct{ NewPassword string }{NewPassword: veryInvalidPasswordThatWillCauseAPanic}, &r,
+		)
+		if err == nil {
+			t.Error("Didn't get an HTTP error from panic")
+		} else if !strings.Contains(err.Error(), "Eargh") {
+			t.Errorf("Got the wrong HTTP error from panic, got: %q", err.Error())
 		}
 	})
 
