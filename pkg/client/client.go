@@ -155,6 +155,7 @@ func DeduceUrl(ctx context.Context, hostnames []string, mode, user, apiKey strin
 			urlsToTry = []string{
 				fmt.Sprintf("https://%s:443", hostname),
 				fmt.Sprintf("http://%s:80", hostname),
+				fmt.Sprintf("http://%s:%s", hostname, SERVER_PORT),
 			}
 		} else {
 			urlsToTry = []string{
