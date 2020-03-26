@@ -23,6 +23,7 @@ type DummyUserManager struct {
 	allowStuff       bool
 	theValidAdminKey string
 	theValidKey      string
+	deletedId        string
 	log              log.FieldLogger
 }
 
@@ -84,6 +85,7 @@ func (m *DummyUserManager) ResetAPIKey(id string) (*user.User, error) {
 
 func (m *DummyUserManager) Delete(id string) error {
 	m.log.Infof("Delete: %s", id)
+	m.deletedId = id
 	return nil
 }
 
@@ -148,6 +150,7 @@ func TestExternalUserManager(t *testing.T) {
 		stop <- struct{}{}
 	}()
 
+	log.SetLevel(log.DebugLevel)
 	um := DummyUserManager{
 		log: log.StandardLogger(),
 	}
@@ -381,6 +384,13 @@ func TestExternalUserManager(t *testing.T) {
 		}
 	})
 
-	// FIXME: Still to test, via API:
-	// Is Delete called ANYWHERE?!?
+	t.Run("TestDelete", func(t *testing.T) {
+		// Delete doesn't seem to be called inside the Dotmesh codebase anywhere, so
+		// to test ExternalServer's support for delete, let's trigger it directly
+		em := user.NewExternal(serverUrl, nil)
+		em.Delete("some-user-id")
+		if um.deletedId != "some-user-id" {
+			t.Errorf("Delete didn't work, expected some-user-id got %q", um.deletedId)
+		}
+	})
 }
