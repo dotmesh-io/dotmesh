@@ -29,27 +29,12 @@ const SCRYPT_N = 32768
 const SCRYPT_R = 8
 const SCRYPT_P = 1
 
-func UserIsNamespaceAdministrator(user *user.User, namespace string) (bool, error) {
-	// Admin gets to administer every namespace
-	if user.Id == ADMIN_USER_UUID {
-		return true, nil
-	}
-
-	// ...and see if their name matches the namespace name. In future,
-	// this can be extended to cover more configurable rules.
-	if user.Name == namespace {
-		return true, nil
-	} else {
-		return false, nil
-	}
-}
-
-func AuthenticatedUserIsNamespaceAdministrator(ctx context.Context, namespace string) (bool, error) {
+func AuthenticatedUserIsNamespaceAdministrator(ctx context.Context, namespace string, um user.UserManager) (bool, error) {
 	u := auth.GetUserFromCtx(ctx)
 	if u == nil {
 		return false, fmt.Errorf("No user found in context.")
 	}
 
-	a, err := UserIsNamespaceAdministrator(u, namespace)
+	a, err := um.UserIsNamespaceAdministrator(u, namespace)
 	return a, err
 }

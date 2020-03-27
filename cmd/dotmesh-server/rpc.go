@@ -204,20 +204,11 @@ func (d *DotmeshRPC) GetApiKey(r *http.Request, args *struct{}, result *struct{ 
 // the user must have authenticated correctly with their old password in order
 // to run this method
 func (d *DotmeshRPC) UpdatePassword(r *http.Request, args *struct{ NewPassword string }, result *SafeUser) error {
-	// user, err := GetUserById(auth.GetUserID(r))
-	// if err != nil {
-	// return err
-	// }
-
 	user, err := d.usersManager.UpdatePassword(auth.GetUserID(r), args.NewPassword)
 	if err != nil {
 		return err
 	}
-	// user.UpdatePassword(args.NewPassword)
-	// err = user.Save()
-	// if err != nil {
-	// 	return err
-	// }
+
 	*result = user.SafeUser()
 	return nil
 }
@@ -1260,7 +1251,7 @@ func (d *DotmeshRPC) RegisterFilesystem(
 ) error {
 	log.Printf("[RegisterFilesystem] called with args: %+v", args)
 
-	isAdmin, err := AuthenticatedUserIsNamespaceAdministrator(r.Context(), args.Namespace)
+	isAdmin, err := AuthenticatedUserIsNamespaceAdministrator(r.Context(), args.Namespace, d.usersManager)
 	if err != nil {
 		return err
 	}
@@ -2008,7 +1999,7 @@ func (d *DotmeshRPC) AddCollaborator(
 
 	user := auth.GetUser(r)
 
-	authorized, err := crappyTlf.AuthorizeOwner(user)
+	authorized, err := d.usersManager.Authorize(user, false, &crappyTlf)
 	if err != nil {
 		return err
 	}
@@ -2050,7 +2041,7 @@ func (d *DotmeshRPC) RemoveCollaborator(
 		)
 	}
 	user := auth.GetUser(r)
-	authorized, err := crappyTlf.AuthorizeOwner(user)
+	authorized, err := d.usersManager.Authorize(user, false, &crappyTlf)
 	if err != nil {
 		return err
 	}
@@ -2222,7 +2213,7 @@ func (d *DotmeshRPC) Delete(r *http.Request, args *VolumeName, result *bool) err
 		return err
 	}
 
-	authorized, err := filesystem.AuthorizeOwner(user)
+	authorized, err := d.usersManager.Authorize(user, false, &filesystem)
 	if err != nil {
 		return err
 	}
