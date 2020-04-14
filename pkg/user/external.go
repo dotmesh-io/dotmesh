@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"time"
 
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 
@@ -29,14 +30,24 @@ func NewExternal(url string, httpClient *http.Client) *ExternalManager {
 }
 
 func (m *ExternalManager) call(operation string, method string, body interface{}, result interface{}) error {
+	var err error
+	for retries := 60; retries > 0; retries-- {
+		err = m.tryCall(operation, method, body, result)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+	return err
+}
+
+func (m *ExternalManager) tryCall(operation string, method string, body interface{}, result interface{}) error {
 	l := log.WithFields(log.Fields{
 		"base_url":  m.url,
 		"operation": operation,
 		"method":    method,
 		"body":      fmt.Sprintf("%#v", body),
 	})
-
-	//	l.Debug("[externalManager] ABS DEBUG call")
 
 	var bodyReader io.Reader
 	if body != nil {
