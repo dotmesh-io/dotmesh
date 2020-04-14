@@ -30,18 +30,6 @@ func NewExternal(url string, httpClient *http.Client) *ExternalManager {
 }
 
 func (m *ExternalManager) call(operation string, method string, body interface{}, result interface{}) error {
-	var err error
-	for retries := 60; retries > 0; retries-- {
-		err = m.tryCall(operation, method, body, result)
-		if err == nil {
-			break
-		}
-		time.Sleep(time.Second)
-	}
-	return err
-}
-
-func (m *ExternalManager) tryCall(operation string, method string, body interface{}, result interface{}) error {
 	l := log.WithFields(log.Fields{
 		"base_url":  m.url,
 		"operation": operation,
@@ -49,65 +37,82 @@ func (m *ExternalManager) tryCall(operation string, method string, body interfac
 		"body":      fmt.Sprintf("%#v", body),
 	})
 
-	var bodyReader io.Reader
-	if body != nil {
-		bodyEncoded, err := json.Marshal(body)
-		if err != nil {
-			l.WithError(err).Error("[externalManager] Error encoding body")
-			return err
-		}
-		bodyReader = bytes.NewBuffer(bodyEncoded)
-	} else {
-		bodyReader = nil
-	}
-
-	req, err := http.NewRequest(method, m.url+"/"+operation, bodyReader)
-	if err != nil {
-		l.WithError(err).Error("[externalManager] Error creating HTTP request")
-		return err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := m.httpClient.Do(req)
-	if err != nil {
-		l.WithError(err).Error("[externalManager] Error performing HTTP request")
-		return err
-	}
-	defer resp.Body.Close()
-
-	switch resp.StatusCode {
-	case 200, 201:
-		// All is well, proceed
-	default:
-		l.WithField("http_status", resp.Status).Error("[externalManager] HTTP error")
-
-		b, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			l.WithError(err).Error("[externalManager] Error reading response body")
-			return fmt.Errorf("HTTP Error: %d error reading body: %s", resp.StatusCode, err.Error())
+	var err error
+	for retries := 60; retries > 0; retries-- {
+		var bodyReader io.Reader
+		if body != nil {
+			bodyEncoded, err := json.Marshal(body)
+			if err != nil {
+				l.WithError(err).Error("[externalManager] Error encoding body")
+				// No sense retrying this
+				return err
+			}
+			bodyReader = bytes.NewBuffer(bodyEncoded)
+		} else {
+			bodyReader = nil
 		}
 
-		return fmt.Errorf("HTTP Error: %d body: %q", resp.StatusCode, string(b))
-	}
-
-	if result != nil {
-		b, err := ioutil.ReadAll(resp.Body)
+		req, err := http.NewRequest(method, m.url+"/"+operation, bodyReader)
 		if err != nil {
-			l.WithError(err).Error("[externalManager] Error reading response body")
+			l.WithError(err).Error("[externalManager] Error creating HTTP request")
+			// No sense retrying this
 			return err
 		}
 
-		err = json.Unmarshal(b, result)
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := m.httpClient.Do(req)
 		if err != nil {
-			l.WithError(err).Error("[externalManager] Error decoding response body")
-			return err
+			l.WithError(err).Error("[externalManager] Error performing HTTP request")
+			// Retry
+			time.Sleep(time.Second)
+			continue
+		}
+		defer resp.Body.Close()
+
+		switch resp.StatusCode {
+		case 200, 201:
+			// All is well, proceed
+		default:
+			l.WithField("http_status", resp.Status).Error("[externalManager] HTTP error")
+
+			b, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				l.WithError(err).Error("[externalManager] Error reading response body")
+				// Retry
+				time.Sleep(time.Second)
+				continue
+			}
+
+			// No sense retrying if we got a reply, but it was an error
+			return fmt.Errorf("HTTP Error: %d body: %q", resp.StatusCode, string(b))
 		}
 
-		//		l.WithField("response", fmt.Sprintf("%#v", result)).Debug("ABS DEBUG response")
+		if result != nil {
+			b, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				l.WithError(err).Error("[externalManager] Error reading response body")
+				// Retry
+				time.Sleep(time.Second)
+				continue
+			}
+
+			err = json.Unmarshal(b, result)
+			if err != nil {
+				l.WithError(err).Error("[externalManager] Error decoding response body")
+				// Retry
+				time.Sleep(time.Second)
+				continue
+			}
+
+			//		l.WithField("response", fmt.Sprintf("%#v", result)).Debug("ABS DEBUG response")
+		}
+
+		return nil
 	}
 
-	return nil
+	// We keep the last error encountered, to return it if the retry loop runs out
+	return err
 }
 
 func (m *ExternalManager) NewAdmin(user *User) error {
