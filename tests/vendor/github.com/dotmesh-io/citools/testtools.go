@@ -816,12 +816,10 @@ func FindAHostIP() (string, error) {
 
 	// The intention is to find an IP that we can bind servers to on the
 	// host, that things running in Docker containers can connect to.
-	c := exec.Command("sh", "-c", "ip addr show `ifconfig -a | grep '^[a-z0-9]*:' | sed 's/:.*$//' | egrep -v 'docker|br-|lo|veth' | tail -n +2 | head -n 1` | grep -w inet | awk '{ print $2 }' | sed 's,/.*,,'")
+	c := exec.Command("sh", "-c", "ip addr show `ifconfig -a | grep '^[a-z0-9]*:' | sed 's/:.*$//' | egrep -v 'docker|br-|lo|veth' | head -n 1` | grep -w inet | awk '{ print $2 }' | sed 's,/.*,,'")
 	out, err := c.CombinedOutput()
 
 	ip := strings.TrimRight(string(out), " \n")
-
-	fmt.Printf("ABS DEBUG: '%s' '%s' %#v\n", string(out), ip, err)
 
 	return ip, err
 }
