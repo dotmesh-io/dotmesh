@@ -19,7 +19,7 @@ func TestCreateUser(t *testing.T) {
 	}
 	kvClient := store.NewKVDBStoreWithIndex(client, UsersPrefix)
 
-	um := New(kvClient)
+	um := NewInternal(kvClient)
 
 	stored, err := um.New("harrypotter", "harry@wizzard.works", "verysecret")
 	if err != nil {
@@ -49,7 +49,7 @@ func TestImportUser(t *testing.T) {
 	}
 	kvClient := store.NewKVDBStoreWithIndex(client, UsersPrefix)
 
-	um := New(kvClient)
+	um := NewInternal(kvClient)
 
 	id, _ := uuid.NewV4()
 
@@ -101,7 +101,7 @@ func TestGetWithIndex(t *testing.T) {
 	}
 	kvClient := store.NewKVDBStoreWithIndex(client, UsersPrefix)
 
-	um := New(kvClient)
+	um := NewInternal(kvClient)
 
 	_, err = um.New("foo", "foo@bar.works", "verysecret")
 	if err != nil {
@@ -127,7 +127,7 @@ func TestGetWithoutIndex(t *testing.T) {
 	}
 	kvClient := store.NewKVDBStoreWithIndex(client, UsersPrefix)
 
-	um := New(kvClient)
+	um := NewInternal(kvClient)
 
 	_, err = um.New("foo", "foo@bar.works", "verysecret")
 	if err != nil {
@@ -158,7 +158,7 @@ func TestAuthenticateWithoutIndex(t *testing.T) {
 		t.Fatalf("failed to init kv store: %s", err)
 	}
 	kvClient := store.NewKVDBStoreWithIndex(client, UsersPrefix)
-	um := New(kvClient)
+	um := NewInternal(kvClient)
 
 	_, err = um.New("foo", "foo@bar.works", "verysecret")
 	if err != nil {
@@ -189,7 +189,7 @@ func TestAuthenticateUserByPassword(t *testing.T) {
 	}
 	kvClient := store.NewKVDBStoreWithIndex(client, UsersPrefix)
 
-	um := New(kvClient)
+	um := NewInternal(kvClient)
 
 	_, err = um.New("joe", "joe@joe.com", "verysecret")
 	if err != nil {
@@ -215,7 +215,7 @@ func TestAuthenticateUserByAPIKey(t *testing.T) {
 	}
 	kvClient := store.NewKVDBStoreWithIndex(client, UsersPrefix)
 
-	um := New(kvClient)
+	um := NewInternal(kvClient)
 
 	stored, err := um.New("joe", "joe@joe.com", "verysecret")
 	if err != nil {

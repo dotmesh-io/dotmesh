@@ -21,7 +21,7 @@ func TestUpdateFilesystemFromEtcdA(t *testing.T) {
 	}
 	idxStore := store.NewKVDBStoreWithIndex(client, "users")
 
-	um := user.New(idxStore)
+	um := user.NewInternal(idxStore)
 	kvClient := store.NewKVDBFilesystemStore(client)
 
 	registry := NewRegistry(um, kvClient)
@@ -68,7 +68,7 @@ func TestUpdateCollaborators(t *testing.T) {
 	}
 	idxStore := store.NewKVDBStoreWithIndex(client, "users")
 
-	um := user.New(idxStore)
+	um := user.NewInternal(idxStore)
 	kvClient := store.NewKVDBFilesystemStore(client)
 
 	registry := NewRegistry(um, kvClient)
@@ -145,7 +145,7 @@ func TestDumpInternalState(t *testing.T) {
 	}
 	idxStore := store.NewKVDBStoreWithIndex(client, "users")
 
-	um := user.New(idxStore)
+	um := user.NewInternal(idxStore)
 	kvClient := store.NewKVDBFilesystemStore(client)
 	registry := NewRegistry(um, kvClient)
 
@@ -186,7 +186,7 @@ func TestGetFilesystemByID(t *testing.T) {
 	}
 	idxStore := store.NewKVDBStoreWithIndex(client, "users")
 
-	um := user.New(idxStore)
+	um := user.NewInternal(idxStore)
 	kvClient := store.NewKVDBFilesystemStore(client)
 	registry := NewRegistry(um, kvClient)
 
