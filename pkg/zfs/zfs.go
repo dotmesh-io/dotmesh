@@ -443,14 +443,22 @@ func (z *zfs) GetDirtyDelta(filesystemId, latestSnap string) (int64, int64, erro
 		if len(shrap) >= 3 {
 			if shrap[0] == FQ(z.poolName, filesystemId) {
 				if shrap[1] == "referenced" {
-					total, err = strconv.ParseInt(shrap[2], 10, 64)
-					if err != nil {
-						return 0, 0, err
+					if shrap[2] == "-" {
+						total = 0
+					} else {
+						total, err = strconv.ParseInt(shrap[2], 10, 64)
+						if err != nil {
+							return 0, 0, err
+						}
 					}
 				} else if shrap[1] == ("written@" + latestSnap) {
-					dirty, err = strconv.ParseInt(shrap[2], 10, 64)
-					if err != nil {
-						return 0, 0, err
+					if shrap[2] == "-" {
+						total = 0
+					} else {
+						dirty, err = strconv.ParseInt(shrap[2], 10, 64)
+						if err != nil {
+							return 0, 0, err
+						}
 					}
 				}
 			}
