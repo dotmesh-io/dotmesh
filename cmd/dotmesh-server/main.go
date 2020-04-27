@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/dotmesh-io/dotmesh/pkg/client"
+	"github.com/dotmesh-io/dotmesh/pkg/config"
 	"github.com/dotmesh-io/dotmesh/pkg/messaging/nats"
 	"github.com/dotmesh-io/dotmesh/pkg/types"
 	"github.com/dotmesh-io/dotmesh/pkg/user"
@@ -71,8 +72,6 @@ func main() {
 		return
 	}
 
-	var config Config
-
 	FILESYSTEM_METADATA_TIMEOUT_STRING := os.Getenv("FILESYSTEM_METADATA_TIMEOUT")
 
 	if len(FILESYSTEM_METADATA_TIMEOUT_STRING) == 0 {
@@ -85,8 +84,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	// TODO: remove the different domains concept and have a proxy to services
-	config = Config{
+	serverConfig, err := config.Load()
+	if err != nil {
+		fmt.Println("failed to load configuration, error: ", err)
+		os.Exit(1)
+	}
+
+	inMemoryStateOpts := Opts{
+		Config:                    serverConfig,
 		FilesystemMetadataTimeout: FILESYSTEM_METADATA_TIMEOUT_INT,
 		NatsConfig:                nats.DefaultConfig(),
 	}
@@ -123,7 +128,7 @@ func main() {
 		opentracing.InitGlobalTracer(tracer)
 	}
 	if len(os.Args) > 1 && os.Args[1] == "--temporary-error-plugin" {
-		s := NewInMemoryState(config)
+		s := NewInMemoryState(inMemoryStateOpts)
 		s.runErrorPlugin()
 		return
 	}
@@ -151,52 +156,37 @@ func main() {
 	ips, _ := guessIPv4Addresses()
 	log.Printf("Detected my node IPs as %s", ips)
 
-	// etcdClient, err := getEtcdKeysApi()
-	// if err != nil {
-	// 	log.Fatalf("Unable to get Etcd client: '%s'", err)
-	// }
-	// config.EtcdClient = etcdClient
-
 	fsStore, regStore, serverStore, usersIdxStore := getKVDBStores()
-	config.FilesystemStore = fsStore
-	config.RegistryStore = regStore
-	config.ServerStore = serverStore
+	inMemoryStateOpts.FilesystemStore = fsStore
+	inMemoryStateOpts.RegistryStore = regStore
+	inMemoryStateOpts.ServerStore = serverStore
 
-	config.ZFSExecPath = ZFS
-	config.ZPoolPath = ZPOOL
-	config.PoolName = POOL
+	inMemoryStateOpts.ZFSExecPath = ZFS
+	inMemoryStateOpts.ZPoolPath = ZPOOL
+	inMemoryStateOpts.PoolName = POOL
 
-	config.ExternalUserManagerURL = os.Getenv("EXTERNAL_USER_MANAGER_URL")
+	inMemoryStateOpts.ExternalUserManagerURL = os.Getenv("EXTERNAL_USER_MANAGER_URL")
 
 	if os.Getenv("DOTMESH_SERVER_PORT") != "" {
-		config.APIServerPort = os.Getenv("DOTMESH_SERVER_PORT")
+		inMemoryStateOpts.APIServerPort = os.Getenv("DOTMESH_SERVER_PORT")
 	} else {
-		config.APIServerPort = client.SERVER_PORT
+		inMemoryStateOpts.APIServerPort = client.SERVER_PORT
 	}
 
 	// kvClient := kv.New(etcdClient, ETCD_PREFIX)
-	if config.ExternalUserManagerURL != "" {
-		config.UserManager = user.NewExternal(config.ExternalUserManagerURL, nil)
+	if inMemoryStateOpts.ExternalUserManagerURL != "" {
+		inMemoryStateOpts.UserManager = user.NewExternal(inMemoryStateOpts.ExternalUserManagerURL, nil)
 	} else {
-		config.UserManager = user.NewInternal(usersIdxStore)
+		inMemoryStateOpts.UserManager = user.NewInternal(usersIdxStore)
 	}
 
-	s := NewInMemoryState(config)
+	s := NewInMemoryState(inMemoryStateOpts)
 
 	// Set the URL to an empty string (or leave it unset) to disable checkpoints
-	checkpointUrl := os.Getenv("DOTMESH_UPGRADES_URL")
-	if checkpointUrl != "" {
-		var checkInterval int
-		// If the URL is specified, a valid interval must also be specified
-		ci := os.Getenv("DOTMESH_UPGRADES_INTERVAL_SECONDS")
-		checkInterval, err = strconv.Atoi(ci)
-		if err != nil {
-			fmt.Printf("Error parsing DOTMESH_UPGRADES_INTERVAL_SECONDS value %+v: %+v\n", ci, err)
-			os.Exit(1)
-		}
-
+	if serverConfig.Upgrades.URL != "" {
+		checkInterval := serverConfig.Upgrades.IntervalSeconds
 		// This is the name that the checkpoint library looks for
-		os.Setenv("CHECKPOINT_URL", checkpointUrl)
+		os.Setenv("CHECKPOINT_URL", serverConfig.Upgrades.URL)
 
 		go runForever(
 			s.checkForUpdates, "checkForUpdates",

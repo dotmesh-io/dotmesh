@@ -108,7 +108,7 @@ dotmesh_unit_tests:
     tags:
         - fast
     script:
-        - sudo -E go test `go list ./... | egrep -v /tests`
+        - sudo -E go test `go list ./... | egrep -v /tests | egrep -v /cmd`
 
 # run full dind tests on linux
 linux_default_dot:

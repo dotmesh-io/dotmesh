@@ -120,7 +120,7 @@ func (d *DotmeshRPC) Procure(
 	return err
 }
 
-func safeConfig(c Config) SafeConfig {
+func safeConfig(c Opts) SafeConfig {
 	safe := SafeConfig{}
 	return safe
 }
@@ -133,7 +133,7 @@ func (d *DotmeshRPC) Config(
 		return err
 	}
 
-	*result = safeConfig(d.state.config)
+	*result = safeConfig(d.state.opts)
 	return nil
 }
 

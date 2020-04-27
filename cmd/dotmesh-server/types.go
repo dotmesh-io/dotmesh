@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/dotmesh-io/dotmesh/pkg/config"
 	"github.com/dotmesh-io/dotmesh/pkg/container"
 	"github.com/dotmesh-io/dotmesh/pkg/messaging/nats"
 	"github.com/dotmesh-io/dotmesh/pkg/store"
@@ -85,7 +86,10 @@ type Event = types.Event
 
 type TransferPollResult = types.TransferPollResult
 
-type Config struct {
+// Opts - InMemoryState options
+type Opts struct {
+	Config config.Config
+
 	FilesystemMetadataTimeout int64
 	UserManager               user.UserManager
 	// EtcdClient                client.KeysAPI

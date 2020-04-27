@@ -375,7 +375,7 @@ func (s *InMemoryState) MarkFilesystemAsLiveInEtcd(topLevelFilesystemId string) 
 		FilesystemID: topLevelFilesystemId,
 		NodeID:       s.NodeID(),
 	}, &store.SetOptions{
-		TTL: uint64(s.config.FilesystemMetadataTimeout),
+		TTL: uint64(s.opts.FilesystemMetadataTimeout),
 	})
 }
 

@@ -19,11 +19,11 @@ import (
 // known server list.
 func (s *InMemoryState) initializeMessaging() error {
 	// start NATS server
-	messagingServer, err := nats.NewServer(s.config.NatsConfig)
+	messagingServer, err := nats.NewServer(s.opts.NatsConfig)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error":       err,
-			"nats_config": s.config.NatsConfig,
+			"nats_config": s.opts.NatsConfig,
 		}).Error("[NATS] inMemoryState: failed to configure NATS server")
 		return err
 	}
@@ -32,15 +32,15 @@ func (s *InMemoryState) initializeMessaging() error {
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error":       err,
-			"nats_config": s.config.NatsConfig,
+			"nats_config": s.opts.NatsConfig,
 		}).Error("[NATS] inMemoryState: failed to start NATS server")
 		return err
 	} else {
 		log.WithFields(log.Fields{
-			"host":         s.config.NatsConfig.Host,
-			"port":         s.config.NatsConfig.Port,
-			"http_port":    s.config.NatsConfig.HTTPPort,
-			"cluster_port": s.config.NatsConfig.ClusterPort,
+			"host":         s.opts.NatsConfig.Host,
+			"port":         s.opts.NatsConfig.Port,
+			"http_port":    s.opts.NatsConfig.HTTPPort,
+			"cluster_port": s.opts.NatsConfig.ClusterPort,
 		}).Info("[NATS] inMemoryState: NATS server started")
 	}
 
@@ -58,7 +58,7 @@ func (s *InMemoryState) initializeMessaging() error {
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error":       err,
-			"nats_config": s.config.NatsConfig,
+			"nats_config": s.opts.NatsConfig,
 		}).Error("[NATS] inMemoryState: failed to initialize NATS client")
 		return err
 	} else {
@@ -145,7 +145,7 @@ func (s *InMemoryState) updateMessagingClusterConns() error {
 		wg.Wait()
 	}
 
-	current := strings.Split(s.config.NatsConfig.RoutesStr, ",")
+	current := strings.Split(s.opts.NatsConfig.RoutesStr, ",")
 	sort.Strings(new)
 	sort.Strings(current)
 
@@ -155,14 +155,14 @@ func (s *InMemoryState) updateMessagingClusterConns() error {
 			"current": current,
 		}).Info("[inMemoryState.updateMessagingClusterConns] NATS routes changed, updating...")
 
-		s.config.NatsConfig.RoutesStr = strings.Join(new, ",")
+		s.opts.NatsConfig.RoutesStr = strings.Join(new, ",")
 		s.messagingServer.Shutdown()
 
-		messagingServer, err := nats.NewServer(s.config.NatsConfig)
+		messagingServer, err := nats.NewServer(s.opts.NatsConfig)
 		if err != nil {
 			log.WithFields(log.Fields{
 				"error":       err,
-				"nats_config": s.config.NatsConfig,
+				"nats_config": s.opts.NatsConfig,
 			}).Error("inMemoryState: failed to configure NATS server")
 			return err
 		}
@@ -171,7 +171,7 @@ func (s *InMemoryState) updateMessagingClusterConns() error {
 		if err != nil {
 			log.WithFields(log.Fields{
 				"error":       err,
-				"nats_config": s.config.NatsConfig,
+				"nats_config": s.opts.NatsConfig,
 			}).Error("inMemoryState: failed to start NATS server")
 			return err
 		}
