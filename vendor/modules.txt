@@ -7,8 +7,11 @@ github.com/PuerkitoBio/urlesc
 # github.com/Shopify/sarama v1.17.0
 ## explicit
 github.com/Shopify/sarama
+# github.com/Shopify/toxiproxy v2.1.4+incompatible
+## explicit
 # github.com/andybalholm/brotli v1.0.0
 ## explicit
+github.com/andybalholm/brotli
 # github.com/apache/thrift v0.0.0-20161119155631-84d6af4cf903
 ## explicit
 github.com/apache/thrift/lib/go/thrift
@@ -187,6 +190,10 @@ github.com/emicklei/go-restful/log
 # github.com/emicklei/go-restful-swagger12 v0.0.0-20170208215640-dcef7f557305
 ## explicit
 github.com/emicklei/go-restful-swagger12
+# github.com/fatih/color v1.9.0
+## explicit
+# github.com/frankban/quicktest v1.9.0
+## explicit
 # github.com/fsouza/go-dockerclient v0.0.0-20160310013113-b87634a9d98e
 ## explicit
 github.com/fsouza/go-dockerclient
@@ -249,8 +256,7 @@ github.com/golang/glog
 # github.com/golang/groupcache v0.0.0-20180513044358-24b0969c4cb7
 ## explicit
 github.com/golang/groupcache/lru
-# github.com/golang/protobuf v1.1.0
-## explicit
+# github.com/golang/protobuf v1.2.0
 github.com/golang/protobuf/jsonpb
 github.com/golang/protobuf/proto
 github.com/golang/protobuf/ptypes
@@ -258,7 +264,7 @@ github.com/golang/protobuf/ptypes/any
 github.com/golang/protobuf/ptypes/duration
 github.com/golang/protobuf/ptypes/struct
 github.com/golang/protobuf/ptypes/timestamp
-# github.com/golang/snappy v0.0.0-20180518054509-2e65f85255db
+# github.com/golang/snappy v0.0.1
 ## explicit
 github.com/golang/snappy
 # github.com/google/btree v0.0.0-20180813153112-4030bb1f1f0c
@@ -347,10 +353,17 @@ github.com/juju/ratelimit
 # github.com/kelseyhightower/envconfig v1.4.0
 ## explicit
 github.com/kelseyhightower/envconfig
-# github.com/klauspost/compress v1.9.1
+# github.com/klauspost/compress v1.10.5
 ## explicit
-# github.com/klauspost/pgzip v1.2.1
+github.com/klauspost/compress/flate
+github.com/klauspost/compress/fse
+github.com/klauspost/compress/huff0
+github.com/klauspost/compress/snappy
+github.com/klauspost/compress/zstd
+github.com/klauspost/compress/zstd/internal/xxhash
+# github.com/klauspost/pgzip v1.2.3
 ## explicit
+github.com/klauspost/pgzip
 # github.com/konsorten/go-windows-terminal-sequences v1.0.2
 ## explicit
 github.com/konsorten/go-windows-terminal-sequences
@@ -364,6 +377,8 @@ github.com/kubernetes-incubator/external-storage/lib/leaderelection/resourcelock
 github.com/mailru/easyjson/buffer
 github.com/mailru/easyjson/jlexer
 github.com/mailru/easyjson/jwriter
+# github.com/mattn/go-colorable v0.1.6
+## explicit
 # github.com/mattn/go-runewidth v0.0.2
 ## explicit
 github.com/mattn/go-runewidth
@@ -372,7 +387,9 @@ github.com/mattn/go-runewidth
 github.com/matttproud/golang_protobuf_extensions/pbutil
 # github.com/mholt/archiver v2.1.0+incompatible
 ## explicit
-github.com/mholt/archiver
+# github.com/mholt/archiver/v3 v3.3.0+incompatible
+## explicit
+github.com/mholt/archiver/v3
 # github.com/miekg/dns v1.1.3
 ## explicit
 github.com/miekg/dns
@@ -407,9 +424,13 @@ github.com/nats-io/nuid
 # github.com/nu7hatch/gouuid v0.0.0-20131221200532-179d4d0c4d8d
 ## explicit
 github.com/nu7hatch/gouuid
-# github.com/nwaples/rardecode v1.0.0
+# github.com/nwaples/rardecode v1.1.0
 ## explicit
 github.com/nwaples/rardecode
+# github.com/onsi/ginkgo v1.12.0
+## explicit
+# github.com/onsi/gomega v1.9.0
+## explicit
 # github.com/opentracing/opentracing-go v1.0.1-0.20161011063414-902ca977fd85
 ## explicit
 github.com/opentracing/opentracing-go
@@ -429,7 +450,7 @@ github.com/openzipkin/zipkin-go-opentracing/wire
 github.com/pborman/uuid
 # github.com/petar/GoLLRB v0.0.0-20130427215148-53be0d36a84c
 ## explicit
-# github.com/pierrec/lz4 v2.0.3+incompatible
+# github.com/pierrec/lz4 v2.5.2+incompatible
 ## explicit
 github.com/pierrec/lz4
 github.com/pierrec/lz4/internal/xxh32
@@ -479,6 +500,8 @@ github.com/sean-/seed
 ## explicit
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/test
+# github.com/smartystreets/goconvey v1.6.4
+## explicit
 # github.com/soheilhy/cmux v0.1.4
 ## explicit
 github.com/soheilhy/cmux
@@ -488,6 +511,8 @@ github.com/spf13/cobra
 # github.com/spf13/pflag v1.0.1
 ## explicit
 github.com/spf13/pflag
+# github.com/stevvooe/resumable v0.0.0-20180830230917-22b14a53ba50
+## explicit
 # github.com/stretchr/testify v1.3.0
 ## explicit
 github.com/stretchr/testify/assert
@@ -498,7 +523,7 @@ github.com/tmc/grpc-websocket-proxy/wsproxy
 # github.com/ugorji/go v1.1.1
 ## explicit
 github.com/ugorji/go/codec
-# github.com/ulikunitz/xz v0.5.6
+# github.com/ulikunitz/xz v0.5.7
 ## explicit
 github.com/ulikunitz/xz
 github.com/ulikunitz/xz/internal/hash
@@ -506,10 +531,11 @@ github.com/ulikunitz/xz/internal/xlog
 github.com/ulikunitz/xz/lzma
 # github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8
 ## explicit
+github.com/xi2/xz
 # github.com/xiang90/probing v0.0.0-20160813154853-07dd2e8dfe18
 ## explicit
 github.com/xiang90/probing
-# golang.org/x/crypto v0.0.0-20181029021203-45a5f77698d3
+# golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2
 ## explicit
 golang.org/x/crypto/bcrypt
 golang.org/x/crypto/blowfish
@@ -518,7 +544,7 @@ golang.org/x/crypto/ed25519/internal/edwards25519
 golang.org/x/crypto/pbkdf2
 golang.org/x/crypto/scrypt
 golang.org/x/crypto/ssh/terminal
-# golang.org/x/net v0.0.0-20181023162649-9b4f9f5ad519
+# golang.org/x/net v0.0.0-20190311183353-d8887717615a
 ## explicit
 golang.org/x/net/bpf
 golang.org/x/net/context
@@ -532,7 +558,7 @@ golang.org/x/net/internal/timeseries
 golang.org/x/net/ipv4
 golang.org/x/net/ipv6
 golang.org/x/net/trace
-# golang.org/x/sys v0.0.0-20190422165155-953cdadca894
+# golang.org/x/sys v0.0.0-20200223170610-d5e6a3e2c0ae
 ## explicit
 golang.org/x/sys/unix
 golang.org/x/sys/windows
@@ -589,12 +615,13 @@ gopkg.in/cheggaaa/pb.v1
 # gopkg.in/inf.v0 v0.9.1
 ## explicit
 gopkg.in/inf.v0
+# gopkg.in/ini.v1 v1.55.0
+## explicit
 # gopkg.in/mgo.v2 v2.0.0-20160818020120-3f83fa500528
 ## explicit
 gopkg.in/mgo.v2/bson
 gopkg.in/mgo.v2/internal/json
-# gopkg.in/yaml.v2 v2.2.1
-## explicit
+# gopkg.in/yaml.v2 v2.2.4
 gopkg.in/yaml.v2
 # k8s.io/api v0.0.0-20180630051842-655e4e87cb5a
 ## explicit
