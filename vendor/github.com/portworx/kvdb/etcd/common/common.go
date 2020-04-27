@@ -47,11 +47,10 @@ type EtcdCommon interface {
 
 // EtcdLock combines Mutex and channel
 type EtcdLock struct {
-	Done            chan struct{}
-	Unlocked        bool
-	Err             error
-	Tag             string
-	AcquisitionTime time.Time
+	Done     chan struct{}
+	Unlocked bool
+	Err      error
+	Tag      string
 	sync.Mutex
 }
 

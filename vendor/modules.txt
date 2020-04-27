@@ -460,7 +460,7 @@ github.com/pkg/errors
 # github.com/pmezard/go-difflib v1.0.0
 ## explicit
 github.com/pmezard/go-difflib/difflib
-# github.com/portworx/kvdb v0.0.0-20200330200952-71ae616a5956
+# github.com/portworx/kvdb v0.0.0-20200330200952-71ae616a5956 => github.com/rusenask/kvdb v1.0.0+incompatible
 ## explicit
 github.com/portworx/kvdb
 github.com/portworx/kvdb/bolt
@@ -469,7 +469,6 @@ github.com/portworx/kvdb/etcd/common
 github.com/portworx/kvdb/etcd/v3
 github.com/portworx/kvdb/mem
 github.com/portworx/kvdb/test
-github.com/portworx/kvdb/wrappers
 # github.com/prometheus/client_golang v0.8.0
 ## explicit
 github.com/prometheus/client_golang/prometheus
@@ -760,3 +759,4 @@ k8s.io/kube-openapi/pkg/util/proto
 k8s.io/kubernetes/pkg/util/goroutinemap
 k8s.io/kubernetes/pkg/util/goroutinemap/exponentialbackoff
 k8s.io/kubernetes/pkg/util/version
+# github.com/portworx/kvdb => github.com/rusenask/kvdb v1.0.0+incompatible
