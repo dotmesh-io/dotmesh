@@ -292,7 +292,7 @@ func (f *FsMachine) Run() {
 		1*time.Second,
 		0*time.Second,
 	)
-	if os.Getenv("DISABLE_DIRTY_DATA_POLLING") != "" {
+	if os.Getenv("DISABLE_DIRTY_DATA_POLLING") == "" {
 		go f.runWhileFilesystemLives(
 			f.pollDirty,
 			"pollDirty",
