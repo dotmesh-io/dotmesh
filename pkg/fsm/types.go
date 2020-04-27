@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	dmclient "github.com/dotmesh-io/dotmesh/pkg/client"
+	"github.com/dotmesh-io/dotmesh/pkg/config"
 	"github.com/dotmesh-io/dotmesh/pkg/container"
 	"github.com/dotmesh-io/dotmesh/pkg/observer"
 	"github.com/dotmesh-io/dotmesh/pkg/registry"
@@ -45,6 +46,7 @@ type StateManager interface {
 
 // a "filesystem machine" or "filesystem state machine"
 type FsMachine struct {
+	config config.Config
 	// which ZFS filesystem this statemachine is operating on
 	filesystemId string
 	filesystem   *types.Filesystem
