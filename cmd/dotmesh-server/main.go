@@ -183,19 +183,10 @@ func main() {
 	s := NewInMemoryState(inMemoryStateOpts)
 
 	// Set the URL to an empty string (or leave it unset) to disable checkpoints
-	checkpointUrl := os.Getenv("DOTMESH_UPGRADES_URL")
-	if checkpointUrl != "" {
-		var checkInterval int
-		// If the URL is specified, a valid interval must also be specified
-		ci := os.Getenv("DOTMESH_UPGRADES_INTERVAL_SECONDS")
-		checkInterval, err = strconv.Atoi(ci)
-		if err != nil {
-			fmt.Printf("Error parsing DOTMESH_UPGRADES_INTERVAL_SECONDS value %+v: %+v\n", ci, err)
-			os.Exit(1)
-		}
-
+	if serverConfig.Upgrades.URL != "" {
+		checkInterval := serverConfig.Upgrades.IntervalSeconds
 		// This is the name that the checkpoint library looks for
-		os.Setenv("CHECKPOINT_URL", checkpointUrl)
+		os.Setenv("CHECKPOINT_URL", serverConfig.Upgrades.URL)
 
 		go runForever(
 			s.checkForUpdates, "checkForUpdates",

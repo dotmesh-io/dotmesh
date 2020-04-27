@@ -296,7 +296,7 @@ func (f *FsMachine) Run() {
 		1*time.Second,
 		0*time.Second,
 	)
-	if !f.config.PollDirty.Disabled {
+	if !f.config.DisableDirtyPolling {
 		go f.runWhileFilesystemLives(
 			f.pollDirty,
 			"pollDirty",

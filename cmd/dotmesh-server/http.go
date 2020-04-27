@@ -120,7 +120,7 @@ func (state *InMemoryState) runServer() {
 func (state *InMemoryState) runUnixDomainServer() {
 	// if we have disabled flexvolume then we are not running inside Kubernetes
 	// and do not need the unix domain socket
-	if os.Getenv("DISABLE_FLEXVOLUME") != "" {
+	if state.serverConfig.DisableFlexVolume {
 		return
 	}
 	r := rpc.NewServer()
