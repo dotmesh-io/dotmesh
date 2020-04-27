@@ -301,8 +301,8 @@ func (f *FsMachine) Run() {
 			f.pollDirty,
 			"pollDirty",
 			f.filesystemId,
-			f.config.PollDirty.ErrorTimeout,
-			f.config.PollDirty.SuccessTimeout,
+			f.config.PollDirty.ErrorTimeout.Duration(),
+			f.config.PollDirty.SuccessTimeout.Duration(),
 		)
 	}
 

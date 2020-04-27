@@ -57,3 +57,7 @@ func (b *DefaultDuration) Decode(value string) error {
 	*b = DefaultDuration(dur)
 	return nil
 }
+
+func (b *DefaultDuration) Duration() time.Duration {
+	return time.Duration(*b)
+}
