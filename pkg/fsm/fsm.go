@@ -2,12 +2,12 @@ package fsm
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/dotmesh-io/dotmesh/pkg/config"
 	"github.com/dotmesh-io/dotmesh/pkg/container"
 	"github.com/dotmesh-io/dotmesh/pkg/metrics"
 	"github.com/dotmesh-io/dotmesh/pkg/observer"
@@ -21,7 +21,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// FsConfig used to configure individual fsm
 type FsConfig struct {
+	Config config.Config
+
 	FilesystemID    string
 	StateManager    StateManager
 	Registry        registry.Registry
@@ -95,7 +98,7 @@ type FSM interface {
 	DumpState() *FSMStateDump
 }
 
-// core functions used by files ending `state` which I couldn't think of a good place for.
+// NewFilesystemMachine - core functions used by files ending `state` which I couldn't think of a good place for.
 func NewFilesystemMachine(cfg *FsConfig) *FsMachine {
 	// initialize the FsMachine with a filesystem struct that has bare minimum
 	// information (just the filesystem id) required to get started
@@ -104,6 +107,7 @@ func NewFilesystemMachine(cfg *FsConfig) *FsMachine {
 		log.Fatalf("Failed initialising zfs interface, %s", err.Error())
 	}
 	return &FsMachine{
+		config: cfg.Config,
 		filesystem: &types.Filesystem{
 			Id: cfg.FilesystemID,
 		},
@@ -292,13 +296,13 @@ func (f *FsMachine) Run() {
 		1*time.Second,
 		0*time.Second,
 	)
-	if os.Getenv("DISABLE_DIRTY_DATA_POLLING") == "" {
+	if !f.config.PollDirty.Disabled {
 		go f.runWhileFilesystemLives(
 			f.pollDirty,
 			"pollDirty",
 			f.filesystemId,
-			1*time.Second,
-			1*time.Second,
+			f.config.PollDirty.ErrorTimeout,
+			f.config.PollDirty.SuccessTimeout,
 		)
 	}
 
@@ -372,7 +376,7 @@ func (f *FsMachine) runWhileFilesystemLives(fn func() error, label string, files
 		default:
 			err := fn()
 			if err != nil {
-				log.Printf(
+				log.Errorf(
 					"Error in runWhileFilesystemLives(%s@%s), retrying in %s: %s",
 					label, filesystemId, errorBackoff, err)
 				time.Sleep(errorBackoff)
@@ -406,7 +410,6 @@ func (f *FsMachine) pollDirty() error {
 				SizeBytes:    sizeBytes,
 			}
 			err = f.filesystemStore.SetDirty(fd, &store.SetOptions{})
-			// _, err = f.etcdClient.Set(context.Background(), fmt.Sprintf("%s/filesystems/dirty/%s", types.EtcdPrefix, f.filesystemId), string(serialized), nil)
 			if err != nil {
 				return err
 			}
