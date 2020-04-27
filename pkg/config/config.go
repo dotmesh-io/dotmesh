@@ -1,14 +1,17 @@
 package config
 
-import "time"
+import (
+	"strconv"
+	"time"
+)
 
 type (
 	// Config stores the configuration settings.
 	Config struct {
 
 		// Disable filesystem polling, used by hub
-		DisableDirtyPolling bool `default:"false" envconfig:"DISABLE_DIRTY_POLLING"`
-		DisableFlexVolume   bool `default:"false" envconfig:"DISABLE_FLEXVOLUME"`
+		DisableDirtyPolling DefaultBool `default:"false" envconfig:"DISABLE_DIRTY_POLLING"`
+		DisableFlexVolume   DefaultBool `default:"false" envconfig:"DISABLE_FLEXVOLUME"`
 
 		DotmeshUpgradesURL string
 
@@ -23,3 +26,19 @@ type (
 		}
 	}
 )
+
+type DefaultBool bool
+
+func (b *DefaultBool) Decode(value string) error {
+	if value == "" {
+		*b = false
+		return nil
+	}
+	val, err := strconv.ParseBool(value)
+	if err != nil {
+		return err
+	}
+
+	*b = DefaultBool(val)
+	return nil
+}

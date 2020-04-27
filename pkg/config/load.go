@@ -1,6 +1,8 @@
 package config
 
 import (
+	"time"
+
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 )
@@ -15,6 +17,15 @@ func Load() (Config, error) {
 
 	config := Config{}
 	err = envconfig.Process("", &config)
+	if err != nil {
+		return config, err
+	}
+	if config.PollDirty.SuccessTimeout < time.Second {
+		config.PollDirty.SuccessTimeout = time.Second
+	}
+	if config.PollDirty.ErrorTimeout < time.Second {
+		config.PollDirty.ErrorTimeout = time.Second
+	}
 	return config, err
 }
 
