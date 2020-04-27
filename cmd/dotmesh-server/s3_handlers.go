@@ -106,7 +106,7 @@ func (s *S3Handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		Namespace: vars["namespace"],
 	}
 
-	isAdmin, err := AuthenticatedUserIsNamespaceAdministrator(req.Context(), volName.Namespace, s.state.config.UserManager)
+	isAdmin, err := AuthenticatedUserIsNamespaceAdministrator(req.Context(), volName.Namespace, s.state.opts.UserManager)
 	if err != nil {
 		log.Warn("[S3Handler.ServeHTTP] authentication failed")
 		http.Error(resp, err.Error(), 401)

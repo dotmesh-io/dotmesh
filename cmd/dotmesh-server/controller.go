@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/dotmesh-io/dotmesh/pkg/auth"
+	"github.com/dotmesh-io/dotmesh/pkg/config"
 	"github.com/dotmesh-io/dotmesh/pkg/uuid"
 
 	"os"
@@ -31,7 +32,10 @@ import (
 )
 
 type InMemoryState struct {
-	config          Config
+	// high level configuration from environment
+	serverConfig config.Config
+	// server options
+	opts            Opts
 	filesystems     map[string]fsm.FSM
 	filesystemsLock *sync.RWMutex
 
@@ -71,9 +75,8 @@ type InMemoryState struct {
 	zfs                              zfs.ZFS
 }
 
-// typically methods on the InMemoryState "god object"
-
-func NewInMemoryState(config Config) *InMemoryState {
+// NewInMemoryState returns new InMemoryState
+func NewInMemoryState(config Opts) *InMemoryState {
 	dockerClient, err := container.New(&container.Options{
 		ContainerMountPrefix:  CONTAINER_MOUNT_PREFIX,
 		ContainerMountDirLock: &containerMountDirLock,
@@ -94,7 +97,7 @@ func NewInMemoryState(config Config) *InMemoryState {
 	}
 
 	s := &InMemoryState{
-		config:                   config,
+		opts:                     config,
 		filesystems:              make(map[string]fsm.FSM),
 		filesystemsLock:          &sync.RWMutex{},
 		serverAddressesCache:     make(map[string][]string),
@@ -197,7 +200,7 @@ func (s *InMemoryState) subscribeToClusterEvents(ctx context.Context) error {
 }
 
 func (s *InMemoryState) resetRegistry() {
-	s.registry = registry.NewRegistry(s.userManager, s.config.RegistryStore)
+	s.registry = registry.NewRegistry(s.userManager, s.opts.RegistryStore)
 }
 
 func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, error) {
@@ -209,7 +212,7 @@ func (s *InMemoryState) getOne(ctx context.Context, fs string) (DotmeshVolume, e
 	}
 
 	if tlf, clone, err := s.registry.LookupFilesystemById(fs); err == nil {
-		authorized, err := s.config.UserManager.Authorize(auth.GetUserFromCtx(ctx), true, &tlf)
+		authorized, err := s.opts.UserManager.Authorize(auth.GetUserFromCtx(ctx), true, &tlf)
 
 		if err != nil {
 			return DotmeshVolume{}, err
@@ -307,8 +310,8 @@ func (s *InMemoryState) subscribeToFilesystemRequests(ctx context.Context) {
 				if err != nil {
 					log.WithFields(log.Fields{
 						"error": err,
-						"host":  s.config.NatsConfig.Host,
-						"port":  s.config.NatsConfig.Port,
+						"host":  s.opts.NatsConfig.Host,
+						"port":  s.opts.NatsConfig.Port,
 					}).Error("[NATS] failed to subscribe to filesystem events, retrying...")
 				}
 				time.Sleep(1 * time.Second)

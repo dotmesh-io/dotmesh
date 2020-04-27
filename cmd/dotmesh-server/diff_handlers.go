@@ -85,7 +85,7 @@ func (s *DiffHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		Namespace: vars["namespace"],
 	}
 
-	isAdmin, err := AuthenticatedUserIsNamespaceAdministrator(req.Context(), volName.Namespace, s.state.config.UserManager)
+	isAdmin, err := AuthenticatedUserIsNamespaceAdministrator(req.Context(), volName.Namespace, s.state.opts.UserManager)
 	if err != nil {
 		log.Warn("[DiffHandler.ServeHTTP] authentication failed")
 		http.Error(resp, err.Error(), 401)

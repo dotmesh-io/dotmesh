@@ -60,6 +60,7 @@ func (s *InMemoryState) InitFilesystemMachine(filesystemId string) (fsm.FSM, err
 		}
 
 		s.filesystems[filesystemId] = fsm.NewFilesystemMachine(&fsm.FsConfig{
+			Config:                    s.serverConfig,
 			FilesystemID:              filesystemId,
 			StateManager:              s,
 			Registry:                  s.registry,
@@ -71,7 +72,7 @@ func (s *InMemoryState) InitFilesystemMachine(filesystemId string) (fsm.FSM, err
 			LocalReceiveProgress:      s.localReceiveProgress,
 			NewSnapsOnMaster:          s.newSnapsOnMaster,
 			DeathObserver:             s.deathObserver,
-			FilesystemMetadataTimeout: s.config.FilesystemMetadataTimeout,
+			FilesystemMetadataTimeout: s.opts.FilesystemMetadataTimeout,
 			ZFSPath:                   ZFS,
 			ZPoolPath:                 ZPOOL,
 			MountZFS:                  MOUNT_ZFS,

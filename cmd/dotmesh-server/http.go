@@ -40,7 +40,7 @@ var rpcTracker = rpcTracking{rpcDuration: make(map[uuid.UUID]time.Time), mutex: 
 func (state *InMemoryState) runServer() {
 
 	log.WithFields(log.Fields{
-		"port": state.config.APIServerPort,
+		"port": state.opts.APIServerPort,
 	}).Info("[runServer] starting HTTP server")
 	defer log.Info("[runServer] stopping HTTP server")
 
@@ -106,14 +106,14 @@ func (state *InMemoryState) runServer() {
 	if os.Getenv("PRINT_HTTP_LOGS") != "" {
 		loggingRouter := handlers.LoggingHandler(getLogfile("requests"), router)
 		// TODO: take server port from the config
-		err = http.ListenAndServe(fmt.Sprintf(":%s", state.config.APIServerPort), loggingRouter)
+		err = http.ListenAndServe(fmt.Sprintf(":%s", state.opts.APIServerPort), loggingRouter)
 	} else {
-		err = http.ListenAndServe(fmt.Sprintf(":%s", state.config.APIServerPort), router)
+		err = http.ListenAndServe(fmt.Sprintf(":%s", state.opts.APIServerPort), router)
 	}
 
 	if err != nil {
-		utils.Out(fmt.Sprintf("Unable to listen on port %s: '%s'\n", state.config.APIServerPort, err))
-		log.Fatalf("Unable to listen on port %s: '%s'", state.config.APIServerPort, err)
+		utils.Out(fmt.Sprintf("Unable to listen on port %s: '%s'\n", state.opts.APIServerPort, err))
+		log.Fatalf("Unable to listen on port %s: '%s'", state.opts.APIServerPort, err)
 	}
 }
 
