@@ -20,11 +20,11 @@ func Load() (Config, error) {
 	if err != nil {
 		return config, err
 	}
-	if config.PollDirty.SuccessTimeout < time.Second {
-		config.PollDirty.SuccessTimeout = time.Second
+	if config.PollDirty.SuccessTimeout < DefaultDuration(time.Second) {
+		config.PollDirty.SuccessTimeout = DefaultDuration(time.Second)
 	}
-	if config.PollDirty.ErrorTimeout < time.Second {
-		config.PollDirty.ErrorTimeout = time.Second
+	if config.PollDirty.ErrorTimeout < DefaultDuration(time.Second) {
+		config.PollDirty.ErrorTimeout = DefaultDuration(time.Second)
 	}
 	return config, err
 }

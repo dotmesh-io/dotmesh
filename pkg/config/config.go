@@ -16,8 +16,8 @@ type (
 		DotmeshUpgradesURL string
 
 		PollDirty struct {
-			SuccessTimeout time.Duration `default:"1s" envconfig:"POLL_DIRTY_SUCCESS_TIMEOUT"`
-			ErrorTimeout   time.Duration `default:"1s" envconfig:"POLL_DIRTY_ERROR_TIMEOUT"`
+			SuccessTimeout DefaultDuration `default:"1s" envconfig:"POLL_DIRTY_SUCCESS_TIMEOUT"`
+			ErrorTimeout   DefaultDuration `default:"1s" envconfig:"POLL_DIRTY_ERROR_TIMEOUT"`
 		}
 
 		Upgrades struct {
@@ -40,5 +40,20 @@ func (b *DefaultBool) Decode(value string) error {
 	}
 
 	*b = DefaultBool(val)
+	return nil
+}
+
+type DefaultDuration time.Duration
+
+func (b *DefaultDuration) Decode(value string) error {
+	if value == "" {
+		*b = DefaultDuration(time.Second)
+		return nil
+	}
+	dur, err := time.ParseDuration(value)
+	if err != nil {
+		return err
+	}
+	*b = DefaultDuration(dur)
 	return nil
 }
