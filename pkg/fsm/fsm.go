@@ -2,6 +2,7 @@ package fsm
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -291,13 +292,15 @@ func (f *FsMachine) Run() {
 		1*time.Second,
 		0*time.Second,
 	)
-	go f.runWhileFilesystemLives(
-		f.pollDirty,
-		"pollDirty",
-		f.filesystemId,
-		1*time.Second,
-		1*time.Second,
-	)
+	if os.Getenv("DISABLE_DIRTY_DATA_POLLING") != "" {
+		go f.runWhileFilesystemLives(
+			f.pollDirty,
+			"pollDirty",
+			f.filesystemId,
+			1*time.Second,
+			1*time.Second,
+		)
+	}
 
 	go func() {
 
