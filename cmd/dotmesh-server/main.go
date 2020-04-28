@@ -184,7 +184,7 @@ func main() {
 
 	// Set the URL to an empty string (or leave it unset) to disable checkpoints
 	if serverConfig.Upgrades.URL != "" {
-		checkInterval := serverConfig.Upgrades.IntervalSeconds
+		checkInterval := serverConfig.Upgrades.IntervalSeconds.Value()
 		// This is the name that the checkpoint library looks for
 		os.Setenv("CHECKPOINT_URL", serverConfig.Upgrades.URL)
 
