@@ -21,8 +21,8 @@ type (
 		}
 
 		Upgrades struct {
-			URL             string `envconfig:"DOTMESH_UPGRADES_URL"`
-			IntervalSeconds int    `default:"300" envconfig:"DOTMESH_UPGRADES_INTERVAL_SECONDS"`
+			URL             string     `envconfig:"DOTMESH_UPGRADES_URL"`
+			IntervalSeconds DefaultInt `default:"300" envconfig:"DOTMESH_UPGRADES_INTERVAL_SECONDS"`
 		}
 	}
 )
@@ -60,4 +60,25 @@ func (b *DefaultDuration) Decode(value string) error {
 
 func (b *DefaultDuration) Duration() time.Duration {
 	return time.Duration(*b)
+}
+
+type DefaultInt int
+
+func (b *DefaultInt) Value() int {
+	return int(*b)
+}
+
+func (b *DefaultInt) Decode(value string) error {
+	if value == "" {
+		*b = DefaultInt(0)
+		return nil
+	}
+
+	i, err := strconv.Atoi(value)
+	if err != nil {
+		return err
+	}
+
+	*b = DefaultInt(i)
+	return nil
 }
