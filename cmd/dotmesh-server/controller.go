@@ -97,6 +97,7 @@ func NewInMemoryState(config Opts) *InMemoryState {
 	}
 
 	s := &InMemoryState{
+		serverConfig:             config.Config,
 		opts:                     config,
 		filesystems:              make(map[string]fsm.FSM),
 		filesystemsLock:          &sync.RWMutex{},
