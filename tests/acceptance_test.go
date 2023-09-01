@@ -1493,7 +1493,7 @@ func TestSingleNode(t *testing.T) {
 		// fail to commit a dot because we used an uppercase metadata fieldname
 		st := citools.OutputFromRunOnNode(t, node1, "if dm commit -m \"commit message\" --metadata Apples=green; then false; else true; fi")
 
-		if !strings.Contains(st, fmt.Sprintf("Metadata field names must start with lowercase characters: Apples")) {
+		if !strings.Contains(st, "Metadata field names must start with lowercase characters: Apples") {
 			t.Error(fmt.Sprintf("We didn't get an error when we used an uppercase metadata fieldname: %+v", st))
 		}
 	})
@@ -1507,7 +1507,7 @@ func TestSingleNode(t *testing.T) {
 		// fail to commit a dot because we used an uppercase metadata fieldname
 		st := citools.OutputFromRunOnNode(t, node1, "if dm commit -m \"commit message\" --metadata Applesgreen; then false; else true; fi")
 
-		if !strings.Contains(st, fmt.Sprintf("Each metadata value must be a name=value pair: Applesgreen")) {
+		if !strings.Contains(st, "Each metadata value must be a name=value pair: Applesgreen") {
 			t.Error(fmt.Sprintf("We didn't get an error when we didn't use an equals sign in the metadata string: %+v", st))
 		}
 	})
@@ -1745,7 +1745,7 @@ func TestDeletionSimple(t *testing.T) {
 		st := citools.OutputFromRunOnNode(t, node1, "if dm dot delete -f "+fsname+"; then false; else true; fi")
 
 		if !strings.Contains(st, "No such filesystem") {
-			t.Error(fmt.Sprintf("Deleting a nonexistant volume didn't fail"))
+			t.Error("Deleting a nonexistant volume didn't fail")
 		}
 	})
 
@@ -1769,7 +1769,7 @@ func TestDeletionSimple(t *testing.T) {
 		// Delete, while the container is running! Which should fail!
 		st := citools.OutputFromRunOnNode(t, node1, "if dm dot delete -f "+fsname+"; then false; else true; fi")
 		if !strings.Contains(st, "cannot delete the volume") {
-			t.Error(fmt.Sprintf("The presence of a running container failed to suppress volume deletion"))
+			t.Error("The presence of a running container failed to suppress volume deletion")
 		}
 
 	})
@@ -1782,13 +1782,13 @@ func TestDeletionSimple(t *testing.T) {
 
 		st := citools.OutputFromRunOnNode(t, node1, "dm list")
 		if strings.Contains(st, fsname) {
-			t.Error(fmt.Sprintf("The volume is still in 'dm list' on node1 (immediately after deletion)"))
+			t.Error("The volume is still in 'dm list' on node1 (immediately after deletion)")
 			return
 		}
 
 		st = citools.OutputFromRunOnNode(t, node1, citools.DockerRun(fsname)+" cat /foo/HELLO || true")
 		if strings.Contains(st, "WORLD") {
-			t.Error(fmt.Sprintf("The volume name wasn't immediately reusable after deletion on node 1..."))
+			t.Error("The volume name wasn't immediately reusable after deletion on node 1...")
 			return
 		}
 
@@ -3928,7 +3928,7 @@ func TestStressLotsOfCommits(t *testing.T) {
 			citools.RunOnNode(t, cluster0.Container, fmt.Sprintf("dm commit -m'Commit %d - the rain in spain falls mainly on the plain; the fox jumped over the dog and all that'", i))
 		}
 
-		citools.RunOnNode(t, cluster0.Container, fmt.Sprintf("dm push cluster_1"))
+		citools.RunOnNode(t, cluster0.Container, "dm push cluster_1")
 
 		// Now go to cluster1 and do dm list, dm log and look for all those commits
 
@@ -3981,7 +3981,7 @@ func TestStressLargeFiles(t *testing.T) {
 
 	t.Run("PushLargeFileTest", func(t *testing.T) {
 		// Push it... real good
-		citools.RunOnNode(t, cluster0.Container, fmt.Sprintf("dm push cluster_1"))
+		citools.RunOnNode(t, cluster0.Container, "dm push cluster_1")
 
 		// See if it got there OK
 		st := citools.OutputFromRunOnNode(t, cluster1.Container, "dm list")
@@ -4058,7 +4058,7 @@ func TestStressHandover(t *testing.T) {
 				runId := fmt.Sprintf("%d/%d", iteration, nid)
 				st := citools.OutputFromRunOnNode(t, node.Container, citools.DockerRun(fsname)+" sh -c 'echo "+runId+"; cat /foo/whatever'")
 				if !strings.Contains(st, "STUFF") {
-					t.Error(fmt.Sprintf("We didn't see the STUFF we expected"))
+					t.Error("We didn't see the STUFF we expected")
 				}
 			}
 		}

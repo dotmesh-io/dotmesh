@@ -22,7 +22,7 @@ func Mnt(fs string) string {
 	// from filesystem id to the path it would be mounted at if it were mounted
 	mountPrefix := os.Getenv("MOUNT_PREFIX")
 	if mountPrefix == "" {
-		panic(fmt.Sprintf("Environment variable MOUNT_PREFIX must be set\n"))
+		panic("Environment variable MOUNT_PREFIX must be set\n")
 	}
 	// carefully make this match...
 	// MOUNT_PREFIX will be like /dotmesh-test-pools/pool_123_1/mnt

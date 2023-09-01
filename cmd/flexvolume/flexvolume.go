@@ -245,7 +245,7 @@ func main() {
 
 func doRPC(socketPath, method string, args interface{}, result interface{}) error {
 
-	url := fmt.Sprintf("http://unix-socket/rpc")
+	url := "http://unix-socket/rpc"
 	message, err := json2.EncodeClientRequest(method, args)
 	if err != nil {
 		return err
